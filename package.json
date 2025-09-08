@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "deploy": "npm run build && node scripts/package.js"
   },
   "devDependencies": {
     "@churchtools/churchtools-client": "^1.4.0",
