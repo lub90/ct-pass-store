@@ -1,6 +1,10 @@
-import type { Person } from './ct-types';
-import './style.css';
+import type { Person } from './utils/ct-types';
 import { churchtoolsClient } from '@churchtools/churchtools-client';
+
+// only import reset.css in development mode to keep the production bundle small and to simulate CT environment
+if (import.meta.env.MODE === 'development') {
+    import('./utils/reset.css');
+}
 
 declare const window: Window &
     typeof globalThis & {
