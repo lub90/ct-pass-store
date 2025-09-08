@@ -24,7 +24,7 @@ export { KEY };
 const user = await churchtoolsClient.get<Person>(`/whoami`);
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div>
+  <div style="display: flex; place-content: center; place-items: center; height: 100vh;">
     <h1>Welcome ${[user.firstName, user.lastName].join(' ')}</h1>
   </div>
 `;
