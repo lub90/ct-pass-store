@@ -1,6 +1,6 @@
-# ChurchTools Plugin Boilerplate
+# ChurchTools Extension Boilerplate
 
-This project provides a boilerplate for building your own plugin for [ChurchTools](https://www.church.tools).
+This project provides a boilerplate for building your own extension for [ChurchTools](https://www.church.tools).
 
 ## Getting Started
 
