@@ -17,6 +17,17 @@ This project provides a boilerplate for building your own extension for [ChurchT
     npm install
     ```
 
+### Optional: Using Dev Container
+
+This project includes a dev container configuration. If you use VS Code with the "Dev Containers" extension, you can:
+
+1. Clone the repository
+2. Open it in VS Code
+3. Click the Remote Indicator in the bottom-left corner of VS Code status bar
+4. Select "Reopen in Container"
+
+The container includes the tools mentioned in the prerequisites pre-installed and also runs `npm install` on startup.
+
 ## Configuration
 
 Copy `.env-example` to `.env` and fill in your data.
