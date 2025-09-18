@@ -47,8 +47,18 @@ npm run dev
 > **Note:** For local development, make sure to configure CORS in your ChurchTools
 > instance to allow requests from your local development server
 > (typically `http://localhost:5173`).
-> This can be done in the ChurchTools admin settings under
-> "API Settings" > "Integration" > "Cross-Origin Resource Sharing"
+> This can be done in the ChurchTools admin settings under:
+> "System Settings" > "Integrations" > "API" > "Cross-Origin Resource Sharing"
+>
+> If login works in Chrome but not in Safari, the issue is usually that Safari has stricter cookie handling:
+> - Safari blocks `Secure; SameSite=None` cookies on `http://localhost` (Chrome allows them in dev).
+> - Safari also blocks cookies if the API is on another domain (third‑party cookies).
+>
+> **Fix:**
+> 1. Use a Vite proxy so API calls go through your local server (`/api → https://xyz.church.tools`). This makes cookies look first‑party.
+> 2. Run your dev server with **HTTPS**. You can generate a local trusted certificate with [mkcert](https://github.com/FiloSottile/mkcert).
+>
+> With proxy + HTTPS, Safari will accept and store cookies just like Chrome.
 
 ### Building for Production
 
