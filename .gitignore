@@ -1,0 +1,32 @@
+# Composer dependencies
+/vendor/
+
+# Environment config
+.env
+
+# Logs
+/logs/
+*.log
+
+# PHPUnit
+/phpunit.xml
+/phpunit.xml.dist
+/test-results/
+
+# IDE and editor files
+*.swp
+*.swo
+*.bak
+*.tmp
+*.orig
+.DS_Store
+.idea/
+.vscode/
+
+# OS-specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Coverage reports
+/coverage/
