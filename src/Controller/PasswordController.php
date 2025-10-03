@@ -1,0 +1,138 @@
+<?php
+
+declare(strict_types=1);
+
+namespace CtPassStore\Controller;
+
+use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Http\Message\ResponseInterface as Response;
+
+use CtPassStore\Service\ServiceSettings;
+use CtPassStore\Service\ChurchToolsStore;
+use CtPassStore\Service\EncryptionService;
+use CtPassStore\Service\PasswordValidator;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use CtPassStore\Service\ChurchtoolsAuthVerifier;
+use CtPassStore\Exception\HttpResponseException;
+
+class PasswordController
+{
+    private ServiceSettings $settings;
+    private ChurchToolsStore $store;
+    private EncryptionService $encryption;
+    private PasswordValidator $validator;
+
+    public function __construct(
+        ServiceSettings $settings,
+        ChurchToolsStore $store,
+        EncryptionService $encryption,
+        PasswordValidator $validator,
+        ChurchtoolsAuthVerifier $authVerifier
+    ) {
+        $this->settings = $settings;
+        $this->store = $store;
+        $this->encryption = $encryption;
+        $this->validator = $validator;
+        $this->authVerifier = $authVerifier;
+    }
+
+    public function put(Request $request, Response $response, array $args): ResponseInterface
+    {
+        $targetId = (int) $args['id'];
+
+        try {
+            $data = $this->authorizeAndValidate($request, $targetId, true);
+            $body = $data['body'];
+        } catch (HttpResponseException $errorResponse) {
+            return $errorResponse->getResponse();;
+        }
+
+        $pwd = $body['secondaryPwd'] ?? null;
+
+        if ($pwd !== null) {
+            if (!$this->settings->allowCustomPasswords()) {
+                return $this->error(400, 'Custom passwords are not allowed');
+            }
+        } else {
+            $pwd = $this->validator->generateRandom($this->settings->pwdLength());
+        }
+
+        if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
+            return $this->error(400, 'Password must contain at least one letter, digit, and symbol');
+        }
+
+        $ciphertext = $this->encryption->encrypt($pwd);
+        $this->store->put($targetId, $ciphertext);
+
+        // 204 - no further content
+        return $response->withStatus(204);
+    }
+
+    public function delete(Request $request, Response $response, array $args): ResponseInterface
+    {
+        $targetId = (int) $args['id'];
+
+        try {
+            $this->authorizeAndValidate($request, $targetId, true);
+        } catch (HttpResponseException $errorResponse) {
+            return $errorResponse->getResponse();
+        }
+
+        $this->store->delete($targetId);
+        return $response->withStatus(204);
+    }
+
+
+    private function authorizeAndValidate(
+        ServerRequestInterface $request,
+        int $targetId,
+        bool $requirePasswordCheck
+    ): array {
+        $user = $request->getAttribute('user');
+        $userId = (int) $user['id'];
+        $cmsUserId = (string) $user['cmsUserId'];
+
+        if ($userId !== $targetId && !in_array($userId, $this->settings->adminUsers(), true)) {
+            throw new HttpResponseException(
+                $this->error(403, 'Not authorized to modify this entry')
+            );
+        }
+
+        $body = (array) $request->getParsedBody();
+
+        if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
+            $primaryPwd = (string) ($body['primaryPwd'] ?? '');
+            if ($primaryPwd === '') {
+                throw new HttpResponseException(
+                    $this->error(400, 'Missing primaryPwd for password change')
+                );
+            }
+
+            if (!$this->authVerifier->verifyUserPassword($cmsUserId, $primaryPwd)) {
+                throw HttpResponseException(
+                    $this->error(401, 'Invalid primary password')
+                );
+            }
+        }
+
+        return [
+            'userId' => $userId,
+            'cmsUserId' => $cmsUserId,
+            'body' => $body,
+        ];
+    }
+
+
+    private function error(int $status, string $message): ResponseInterface
+    {
+        $response = new \Slim\Psr7\Response($status);
+        $response->getBody()->write(json_encode(['error' => $message]));
+        return $response->withHeader('Content-Type', 'application/json');
+    }
+
+    private function json(int $status): ResponseInterface
+    {
+        return (new \Slim\Psr7\Response($status))->withHeader('Content-Type', 'application/json');
+    }
+}

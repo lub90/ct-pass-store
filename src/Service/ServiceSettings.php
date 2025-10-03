@@ -4,22 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-class ServiceSettings
+class ServiceSettings extends ChurchToolsBaseService
 {
-    private string $apiUrl;
-    private string $token;
-
-    public function __construct(string $apiUrl, string $token)
-    {
-        if (empty($apiUrl)) {
-            throw new RuntimeException('Churchtools API URL must be set.');
-        }
-        if (empty($token)) {
-            throw new RuntimeException('Churchtools API token must be set.');
-        }
-        $this->apiUrl = rtrim($apiUrl, '/');
-        $this->token = $token;
-    }
 
     /**
      * Gibt zurück, ob ein Passwort erforderlich ist, um ein Passwort zu ändern.
@@ -27,7 +13,7 @@ class ServiceSettings
     public function requirePasswordForPasswordChange(): bool
     {
         // TODO: ChurchTools-API-Abfrage
-        return true; // Dummy-Wert
+        return false; // Dummy-Wert
     }
 
     /**
@@ -49,4 +35,24 @@ class ServiceSettings
         // TODO: ChurchTools-API-Abfrage
         return [42, 101, 202]; // Dummy-Werte
     }
+
+    public function pwdLength(): int
+    {
+        return 16; // Dummy-Wert, später aus ChurchTools laden
+    }
+
+    public function publicKey(): string
+    {
+        // This is just a dummy key!
+        return "-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzqOI1fvf3TIIxd1MJboo
+nwUcGzcN8BDEkYu+Bd1DlchiAi0d0is7bDjTEgBxEgSayj7Oja5gbpuExNmlQHV2
+Kf8o9RwPxzmPU85LDNhKySODsmANuVxXPwUEPBQW3QPlVmIcffli15sJ9GafqsOZ
+sVkOcVHIqqf0IVOZI3Lv1m8lL2LjgWNxUyDfBDS+3vMPubG9cNRC6WvmbiWpaVio
+VMmTOdeVPIwFeKLput185+IDGsBjpNxqJ80Tbg5b3X9WzqzDppSmNs+i9L5tdBLV
+aAxGVMwq7rb+jwogVVXOcOhmvlazbThyzBmUwpxj7fHmMd2i6Y2ClsOPRzm5fnnt
+SQIDAQAB
+-----END PUBLIC KEY-----";
+    }
+
 }

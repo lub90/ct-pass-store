@@ -31,6 +31,7 @@ class AuthMiddleware implements MiddlewareInterface
 
         $token = $request->getHeaderLine('Authorization');
 
+
         if (empty($token)) {
             $this->logger?->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Missing Authorization header!');
