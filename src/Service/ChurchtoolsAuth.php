@@ -16,7 +16,7 @@ class ChurchtoolsAuth
 
     public function __construct(string $apiUrl) {
         if (empty($apiUrl)) {
-            throw new RuntimeException('CT_API_URL is not set in environment.');
+            throw new RuntimeException('Churchtools API URL must be set.');
         }
         $this->apiUrl = rtrim($apiUrl, '/');
     }

@@ -7,6 +7,9 @@ use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Dotenv\Dotenv;
 use Psr\Container\ContainerInterface;
+use CtPassStore\Service\ServiceSettings;
+use CtPassStore\Service\ChurchtoolsAuth;
+
 
 return function (App $app): void {
 
@@ -18,7 +21,7 @@ return function (App $app): void {
     $container = $app->getContainer();
 
     // Register logger
-    $container->set('logger', function (): Logger {
+    $container->set(Logger::class, function (): Logger {
         $logger = new Logger('ct-pass-store');
         $logPath = __DIR__ . '/../../logs/app.log';
         $logger->pushHandler(new StreamHandler($logPath, Logger::DEBUG));
@@ -26,7 +29,7 @@ return function (App $app): void {
     });
 
     // Validate required environment variables
-    $required = ['DB_DSN', 'DB_USER', 'DB_PASS'];
+    $required = ['CT_API_TOKEN', 'CT_API_URL'];
     foreach ($required as $var) {
         if (empty($_ENV[$var])) {
             $logger = $container->get('logger');
@@ -35,33 +38,22 @@ return function (App $app): void {
         }
     }
 
-    // Register PDO database connection
-    $container->set('db', function () use ($container): PDO {
-        $dsn = $_ENV['DB_DSN'];
-        $user = $_ENV['DB_USER'];
-        $pass = $_ENV['DB_PASS'];
-
-        try {
-            $pdo = new PDO($dsn, $user, $pass, [
-                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-            ]);
-            return $pdo;
-        } catch (PDOException $e) {
-            $container->get('logger')->error('Database connection failed: ' . $e->getMessage());
-            throw new RuntimeException('Failed to connect to database.');
-        }
+    // Load the settings from churchtools and provide them to the stack
+    $container->set(ServiceSettings::class, function () use ($container): ServiceSettings {
+        $apiUrl = $_ENV['CT_API_URL'];
+        $apiToken = $_ENV['CT_API_TOKEN'];
+        return new ServiceSettings($apiUrl, $apiToken);
+    });
+    // Load the churchtools auth service
+    $container->set(ChurchtoolsAuth::class, function () use ($container): ChurchtoolsAuth {
+        $ctUrl = $_ENV['CT_API_URL'];
+        return new ChurchtoolsAuth($ctUrl);
     });
 
-    // Add the middlewares for IP-Filtering and Authentication - registration order is inverse to call order
-    $logger = $container->get('logger');
-
-    $ctUrl = $_ENV['CT_API_URL'];
-    $ctAuth = new \CtPassStore\Service\ChurchtoolsAuth($ctUrl);
-    $app->add(new \CtPassStore\Middleware\AuthMiddleware($ctAuth, $logger));
-
-    $allowed = explode(',', $_ENV['ALLOWED_IPS'] ?? '');
-    $app->add(new \CtPassStore\Middleware\IPFilter($allowed, $logger));
-
+    // Add the middlewares for Churchtools Authentication - registration order is inverse to call order
+    $app->add(new \CtPassStore\Middleware\AuthMiddleware(
+        $container->get(ChurchtoolsAuth::class),
+        $container->get(Logger::class)
+    ));
     
 };
