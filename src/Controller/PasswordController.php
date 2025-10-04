@@ -11,12 +11,14 @@ use CtPassStore\Service\ServiceSettings;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
+use CtPassStore\Service\BaseService;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Log\LoggerInterface;
 use CtPassStore\Service\ChurchtoolsAuthVerifier;
 use CtPassStore\Exception\HttpResponseException;
 
-class PasswordController
+class PasswordController extends BaseService
 {
     private ServiceSettings $settings;
     private ChurchToolsStore $store;
@@ -28,8 +30,11 @@ class PasswordController
         ChurchToolsStore $store,
         EncryptionService $encryption,
         PasswordValidator $validator,
-        ChurchtoolsAuthVerifier $authVerifier
+        ChurchtoolsAuthVerifier $authVerifier,
+        LoggerInterface $logger
     ) {
+        parent::__construct($logger);
+
         $this->settings = $settings;
         $this->store = $store;
         $this->encryption = $encryption;
@@ -40,6 +45,8 @@ class PasswordController
     public function put(Request $request, Response $response, array $args): ResponseInterface
     {
         $targetId = (int) $args['id'];
+        $user = $request->getAttribute('user');
+        $userId = (int) $user['id'];
 
         try {
             $data = $this->authorizeAndValidate($request, $targetId, true);
@@ -52,21 +59,34 @@ class PasswordController
 
         if ($pwd !== null) {
             if (!$this->settings->allowCustomPasswords()) {
-                return $this->error(400, 'Custom passwords are not allowed');
+                $this->logger->warning("User {$userId} tried to set a custom password, but it is not allowed to do so!");
+                return $this->error(400, 'Custom passwords are not allowed!');
             }
         } else {
             $pwd = $this->validator->generateRandom($this->settings->pwdLength());
         }
 
         if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
-            return $this->error(400, 'Password must contain at least one letter, digit, and symbol');
+            $this->logger->info("User {$userId} tried to set a password with insufficient complexity!");
+            return $this->error(400, 'Password must contain at least one letter, digit, and symbol!');
         }
 
         $ciphertext = $this->encryption->encrypt($pwd);
         $this->store->put($targetId, $ciphertext);
 
-        // 204 - no further content
-        return $response->withStatus(204);
+
+        if ($body['secondaryPwd'] ?? null) {
+            // Custom password was provided and stored
+            return $response->withStatus(204);
+        }
+
+        // Password was generated — return it in JSON
+        $response->getBody()->write(json_encode([
+            'secondaryPassword' => $pwd,
+        ]));
+        return $response
+            ->withHeader('Content-Type', 'application/json')
+            ->withStatus(200);
     }
 
     public function delete(Request $request, Response $response, array $args): ResponseInterface
@@ -94,8 +114,9 @@ class PasswordController
         $cmsUserId = (string) $user['cmsUserId'];
 
         if ($userId !== $targetId && !in_array($userId, $this->settings->adminUsers(), true)) {
+            $this->logger->warning("User {$userId} tried to update password for user {$targetId} but is not allowed to so!");
             throw new HttpResponseException(
-                $this->error(403, 'Not authorized to modify this entry')
+                $this->error(403, 'Not authorized to modify this entry!')
             );
         }
 
@@ -104,12 +125,14 @@ class PasswordController
         if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
             $primaryPwd = (string) ($body['primaryPwd'] ?? '');
             if ($primaryPwd === '') {
+                $this->logger->info("User {$userId} tried to update a password without providing a primary password!");
                 throw new HttpResponseException(
-                    $this->error(400, 'Missing primaryPwd for password change')
+                    $this->error(400, 'Missing primaryPwd for password change!')
                 );
             }
 
             if (!$this->authVerifier->verifyUserPassword($cmsUserId, $primaryPwd)) {
+                //authVerifier does his own logging during checks
                 throw HttpResponseException(
                     $this->error(401, 'Invalid primary password')
                 );

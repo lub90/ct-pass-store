@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Slim\App;
+use Psr\Log\LoggerInterface;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 use Dotenv\Dotenv;
@@ -11,6 +12,8 @@ use CtPassStore\Service\ServiceSettings;
 use CtPassStore\Service\ChurchtoolsAuth;
 use CtPassStore\Service\ChurchtoolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
+use CtPassStore\Service\EncryptionService;
+use CtPassStore\Service\PasswordValidator;
 
 
 return function (App $app): void {
@@ -23,7 +26,7 @@ return function (App $app): void {
     $container = $app->getContainer();
 
     // Register logger
-    $container->set(Logger::class, function (): Logger {
+    $container->set(LoggerInterface::class, function (): LoggerInterface {
         $logger = new Logger('ct-pass-store');
         $logPath = __DIR__ . '/../../logs/app.log';
         $logger->pushHandler(new StreamHandler($logPath, Logger::DEBUG));
@@ -34,7 +37,7 @@ return function (App $app): void {
     $required = ['CT_API_URL', 'CT_API_TOKEN'];
     foreach ($required as $var) {
         if (empty($_ENV[$var])) {
-            $logger = $container->get(Logger::class);
+            $logger = $container->get(LoggerInterface::class);
             $logger->error("Missing required environment variable: $var");
             throw new RuntimeException("Environment variable '$var' is not set.");
         }
@@ -44,7 +47,7 @@ return function (App $app): void {
     $container->set(ServiceSettings::class, function () use ($container): ServiceSettings {
         $apiUrl = $_ENV['CT_API_URL'];
         $apiToken = $_ENV['CT_API_TOKEN'];
-        $logger = $container->get(Logger::class);
+        $logger = $container->get(LoggerInterface::class);
         return new ServiceSettings($apiUrl, $apiToken, $logger);
     });
     // Load the churchtools auth service
@@ -56,15 +59,28 @@ return function (App $app): void {
     // The AuthVerifier to check if provided passwords are valid
     $container->set(ChurchtoolsAuthVerifier::class, function () use ($container): ChurchToolsAuthVerifier {
         $apiUrl = $_ENV['CT_API_URL'];
-        $logger = $container->get(Logger::class);
+        $logger = $container->get(LoggerInterface::class);
         return new ChurchtoolsAuthVerifier($apiUrl, $logger);
+    });
+
+    // The Encryption service
+    $container->set(EncryptionService::class, function () use ($container): EncryptionService {
+        $serviceSettings = $container->get(ServiceSettings::class);
+        $logger = $container->get(LoggerInterface::class);
+        return new EncryptionService($serviceSettings, $logger);
+    });
+
+    // The password validation service
+    $container->set(PasswordValidator::class, function () use ($container): PasswordValidator {
+        $logger = $container->get(LoggerInterface::class);
+        return new PasswordValidator($logger);
     });
 
     // Register the binding to the entries backend in ChurchTools
     $container->set(ChurchToolsStore::class, function () use ($container): ChurchToolsStore {
         $apiUrl = $_ENV['CT_API_URL'];
         $apiToken = $_ENV['CT_API_TOKEN'];
-        $logger = $container->get(Logger::class);
+        $logger = $container->get(LoggerInterface::class);
         return new ChurchToolsStore($apiUrl, $apiToken, $logger);
     });
 
@@ -72,7 +88,7 @@ return function (App $app): void {
     // Add the middlewares for Churchtools Authentication - registration order is inverse to call order
     $app->add(new \CtPassStore\Middleware\AuthMiddleware(
         $container->get(ChurchtoolsAuth::class),
-        $container->get(Logger::class)
+        $container->get(LoggerInterface::class)
     ));
     
 };

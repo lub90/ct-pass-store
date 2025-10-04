@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-class EncryptionService
+use Psr\Log\LoggerInterface;
+
+class EncryptionService extends BaseService
 {
     private string $publicKey;
 
-    public function __construct(ServiceSettings $settings)
+    public function __construct(ServiceSettings $settings, LoggerInterface $logger)
     {
+        parent::__construct($logger);
+
         $this->publicKey = $settings->publicKey();
     }
 
@@ -17,6 +21,7 @@ class EncryptionService
     {
         $key = openssl_pkey_get_public($this->publicKey);
         if ($key === false) {
+            $this->logger->error("Invalid public key!");
             throw new \RuntimeException('Invalid public key');
         }
 
@@ -28,6 +33,7 @@ class EncryptionService
         );
 
         if (!$success) {
+            $this->logger->error("Encryption failed!");
             throw new \RuntimeException('Encryption failed');
         }
 

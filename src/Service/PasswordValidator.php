@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-class PasswordValidator
+class PasswordValidator extends BaseService
 {
     private const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     private const DIGITS = '0123456789';

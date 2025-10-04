@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Slim\App;
+use Psr\Log\LoggerInterface;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
@@ -21,7 +22,8 @@ return function (App $app): void {
         $container->get(ChurchToolsStore::class),
         $container->get(EncryptionService::class),
         $container->get(PasswordValidator::class),
-        $container->get(ChurchtoolsAuthVerifier::class)
+        $container->get(ChurchtoolsAuthVerifier::class),
+        $container->get(LoggerInterface::class)
     );
 
     $app->put('/entries/{id}', [$controller, 'put']);

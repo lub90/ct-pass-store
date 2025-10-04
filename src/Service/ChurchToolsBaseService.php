@@ -7,14 +7,14 @@ namespace CtPassStore\Service;
 use Psr\Log\LoggerInterface;
 use RuntimeException;
 
-abstract class ChurchToolsBaseService
+abstract class ChurchToolsBaseService extends BaseService
 {
     protected string $apiUrl;
     protected string $apiToken;
-    protected LoggerInterface $logger;
-
     public function __construct(string $apiUrl, string $apiToken, LoggerInterface $logger)
     {
+        parent::__construct($logger);
+        
         if (empty($apiUrl)) {
             throw new RuntimeException('Churchtools API URL must be set.');
         }
@@ -23,7 +23,6 @@ abstract class ChurchToolsBaseService
         }
         $this->apiUrl = rtrim($apiUrl, '/');
         $this->apiToken = $apiToken;
-        $this->logger = $logger;
     }
 
     protected function defaultHeaders(): array

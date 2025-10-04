@@ -11,3 +11,4 @@ TODO:
 - Add comments to each class
 
 - MFA Check for the ChurchtoolsAuthVerifier
+- Logging with Monolog has these strange [] [] at the end of each log
