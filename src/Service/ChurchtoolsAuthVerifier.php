@@ -7,6 +7,7 @@ namespace CtPassStore\Service;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Psr\Log\LoggerInterface;
+use CtPassStore\Config\AppConfig;
 
 class ChurchToolsAuthVerifier extends BaseService
 {
@@ -20,7 +21,7 @@ class ChurchToolsAuthVerifier extends BaseService
         $this->apiUrl = rtrim($apiUrl, '/');
         $this->http = new Client([
             'base_uri' => $this->apiUrl,
-            'timeout' => 5.0,
+            'timeout' => AppConfig::EXTERNAL_REQUEST_TIMEOUT,
             'http_errors' => false,
         ]);
     }

@@ -17,6 +17,7 @@ use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
 use CtPassStore\Service\ChurchtoolsAuthVerifier;
 use CtPassStore\Exception\HttpResponseException;
+use CtPassStore\Config\AppConfig;
 
 class PasswordController extends BaseService
 {
@@ -45,8 +46,8 @@ class PasswordController extends BaseService
     public function put(Request $request, Response $response, array $args): ResponseInterface
     {
         $targetId = (int) $args['id'];
-        $user = $request->getAttribute('user');
-        $userId = (int) $user['id'];
+        $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
+        $userId = (int) $user[AppConfig::CT_USER_ID_FIELD];
 
         try {
             $data = $this->authorizeAndValidate($request, $targetId, true);
@@ -55,7 +56,7 @@ class PasswordController extends BaseService
             return $errorResponse->getResponse();;
         }
 
-        $pwd = $body['secondaryPwd'] ?? null;
+        $pwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
 
         if ($pwd !== null) {
             if (!$this->settings->allowCustomPasswords()) {
@@ -75,14 +76,14 @@ class PasswordController extends BaseService
         $this->store->put($targetId, $ciphertext);
 
 
-        if ($body['secondaryPwd'] ?? null) {
+        if ($body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null) {
             // Custom password was provided and stored
             return $response->withStatus(204);
         }
 
         // Password was generated — return it in JSON
         $response->getBody()->write(json_encode([
-            'secondaryPassword' => $pwd,
+            AppConfig::REQUEST_SECONDARY_PWD_FIELD => $pwd,
         ]));
         return $response
             ->withHeader('Content-Type', 'application/json')
@@ -109,9 +110,9 @@ class PasswordController extends BaseService
         int $targetId,
         bool $requirePasswordCheck
     ): array {
-        $user = $request->getAttribute('user');
-        $userId = (int) $user['id'];
-        $cmsUserId = (string) $user['cmsUserId'];
+        $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
+        $userId = (int) $user[AppConfig::CT_USER_ID_FIELD];
+        $cmsUserId = (string) $user[AppConfig::CT_USER_NAME_FIELD];
 
         if ($userId !== $targetId && !in_array($userId, $this->settings->adminUsers(), true)) {
             $this->logger->warning("User {$userId} tried to update password for user {$targetId} but is not allowed to so!");
@@ -123,11 +124,11 @@ class PasswordController extends BaseService
         $body = (array) $request->getParsedBody();
 
         if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
-            $primaryPwd = (string) ($body['primaryPwd'] ?? '');
+            $primaryPwd = (string) ($body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '');
             if ($primaryPwd === '') {
                 $this->logger->info("User {$userId} tried to update a password without providing a primary password!");
                 throw new HttpResponseException(
-                    $this->error(400, 'Missing primaryPwd for password change!')
+                    $this->error(400, "Missing " . AppConfig::REQUEST_PRIMARY_PWD_FIELD . " for password change!")
                 );
             }
 

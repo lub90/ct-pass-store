@@ -10,5 +10,7 @@ TODO:
 - Move timeout for the different parts communicating with the Churchtools API to a consistent file
 - Add comments to each class
 
-- MFA Check for the ChurchtoolsAuthVerifier
+- Enable true MFA for the ChurchtoolsAuthVerifier
+- 40* returns different json formatted message between AuthMiddleware and PasswordController -> Make the same
+- Make logger log all exceptions and warnings from php! (use setDefaultErrorHandler from Slim)
 - Logging with Monolog has these strange [] [] at the end of each log

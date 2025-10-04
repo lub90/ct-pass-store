@@ -9,6 +9,7 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Server\RequestHandlerInterface as Handler;
 use Psr\Http\Server\MiddlewareInterface;
 use CtPassStore\Service\ChurchtoolsAuth;
+use CtPassStore\Config\AppConfig;
 use Monolog\Logger;
 
 /**
@@ -39,13 +40,13 @@ class AuthMiddleware implements MiddlewareInterface
 
         $user = $this->auth->validateToken($token);
 
-        if (!$user || !isset($user['id'])) {
+        if (!$user || !isset($user[AppConfig::CT_USER_ID_FIELD])) {
             $this->logger?->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Invalid ChurchTools token!');
         }
 
         // Attach user info to request attributes
-        $request = $request->withAttribute('user', $user);
+        $request = $request->withAttribute(AppConfig::USER_ATTRIBUTE, $user);
 
         return $handler->handle($request);
     }
