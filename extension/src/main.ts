@@ -62,7 +62,7 @@ app.component('setup', {
   template: () => mainTemplate(),
   controller: function() {
     this.$onInit = () => {
-      const controller = new SetupController();
+      const controller = new SetupController(churchtoolsClient);
       controller.init();
     };
   }
@@ -91,6 +91,7 @@ angular.bootstrap(document.querySelector('#app'), ['ctExtensionApp']);
 
 /**
 const user = await churchtoolsClient.get<Person>(`/whoami`);
+
 
 document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   <div style="display: flex; place-content: center; place-items: center; height: 100vh;">

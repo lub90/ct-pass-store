@@ -6,7 +6,9 @@
 
 
 ## TODO:
-- Move Permissions class to new REST API as soon as extension permissions are included therein.
+- Add comments
+- Add public/procted etc. to the different functions in each class
+- Add tests
 
 
 # ChurchTools Extension Boilerplate

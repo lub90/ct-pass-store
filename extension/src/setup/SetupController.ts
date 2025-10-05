@@ -1,21 +1,28 @@
 import type { SetupStep } from './SetupStep';
 import { Precondition } from './Precondition';
 import { Step1 } from './steps/Step1';
+import { InitializeKeyValueStoreStep } from './steps/InitializeKeyValueStoreStep'
 import { AbstractController } from '../AbstractController';
 
 export class SetupController extends AbstractController {
-  private steps: SetupStep[] = [new Step1(), new Step1(), new Step1()];
+  private steps: SetupStep[];
   private currentStepIndex = 0;
   private nextButton: HTMLElement;
   private startSetupButton: HTMLElement;
+  private readonly churchtoolsClient: any;
 
-  constructor() {
+  constructor(churchtoolsClient : any) {
     super("Setup");
+
+    this.churchtoolsClient = churchtoolsClient;
+
+    this.steps = [new InitializeKeyValueStoreStep(this.churchtoolsClient), new Step1(), new Step1()];
 
     // Generate the next button on start, hide and disable the next button on start
     this.nextButton = this.addFooterButton("lubl-next-setup-step", "Next >", () => this.next());
     this.nextButton.style.display = 'none';
 
+    // Generate the start setup button
     this.startSetupButton = this.addFooterButton("lubl-start-setup", "Start Setup", () => {
       // Reveal the next button
       this.nextButton.style.display = 'inline-block';
@@ -27,12 +34,15 @@ export class SetupController extends AbstractController {
   }
 
   async init() {
+    // TODO: Rework to react to the settings boolean if it is present
+    /**
     const allCompleted = await Promise.all(this.steps.map(s => s.isCompleted()));
     if (allCompleted.every(c => c)) {
       this.showCompletedNotice();
       window.location.hash = '!/settings';
       return;
     }
+    */
 
     this.showPreconditions();
   }
@@ -40,7 +50,7 @@ export class SetupController extends AbstractController {
   private async showPreconditions() {
     // Generate status display
     const statusText = document.createElement('p');
-    statusText.textContent = 'Checking preconditions...';
+    statusText.innerHTML = 'The extension has not been set up yet. Starting setup and checking preconditions…';
     statusText.classList.add('alert', 'alert-info', 'd-flex', 'align-items-center', 'gap-2', 'py-2', 'px-3', 'mb-3', 'fw-semibold');
     this.container.appendChild(statusText);
 
@@ -52,7 +62,8 @@ export class SetupController extends AbstractController {
     const allFulfilled = flatPreconditions.every(p => p.fulfilled);
 
     // Update status
-    statusText.textContent = allFulfilled
+    statusText.innerHTML += '<br><br>';
+    statusText.innerHTML += allFulfilled
       ? '✅ All preconditions fulfilled. You can start the setup.'
       : '❌ Some preconditions are not fulfilled. You are not authorized to run the setup.';
 
