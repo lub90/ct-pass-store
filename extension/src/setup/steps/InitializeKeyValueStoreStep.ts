@@ -1,6 +1,7 @@
 import { CtSetupStep } from '../CtSetupStep';
 import { Precondition } from '../Precondition';
 import { Permissions } from '../../api/Permissions';
+import { AppConfig } from '../../AppConfig';
 
 export class InitializeKeyValueStoreStep extends CtSetupStep {
   
@@ -51,11 +52,81 @@ export class InitializeKeyValueStoreStep extends CtSetupStep {
 
 
     async isCompleted(): Promise<boolean> {
-        // Implementation pending
-        return false;
+
+        return (await this.extensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))
+            && (await this.extensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY));
+    }
+
+    async createSettings(container: HTMLElement): Promise<void> {
+        const statusBox = document.createElement('div');
+        statusBox.classList.add('alert', 'alert-info', 'd-flex', 'align-items-center', 'gap-2', 'py-2', 'px-3', 'mb-3');
+        container.appendChild(statusBox);
+
+        const updateStatus = (icon: string, message: string, type: 'info' | 'success' | 'danger' = 'info') => {
+            statusBox.className = `alert alert-${type} d-flex align-items-center gap-2 py-2 px-3 mb-3`;
+            statusBox.innerHTML = `<i class="bi ${icon} fs-5"></i><span><strong>${message}</strong></span>`;
+        };
+
+        try {
+            // Generate settings if not done yet...
+            if (!
+                (await this.extensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))
+            ) {
+                updateStatus('bi-hourglass-split text-primary', 'Creating settings...');
+
+                
+                await this.extensionData.createCategory(
+                    AppConfig.SETTINGS_CATEGORY,
+                    AppConfig.SETTINGS_CATEGORY_SHORTY,
+                    AppConfig.SETTINGS_SCHEMA,
+                    'Stores extension settings'
+                );
+
+                updateStatus('bi-check-circle-fill text-success', 'Settings created successfully.', 'success');
+            }
+
+        } catch (error) {
+            updateStatus('bi-x-circle-fill text-danger', 'Failed to create settings. See console for details.', 'danger');
+            console.error('Creation of settings failed:', error);
+        }
+    }
+
+    async createPwdStore(container: HTMLElement): Promise<void> {
+        const statusBox = document.createElement('div');
+        statusBox.classList.add('alert', 'alert-info', 'd-flex', 'align-items-center', 'gap-2', 'py-2', 'px-3', 'mb-3');
+        container.appendChild(statusBox);
+
+        const updateStatus = (icon: string, message: string, type: 'info' | 'success' | 'danger' = 'info') => {
+            statusBox.className = `alert alert-${type} d-flex align-items-center gap-2 py-2 px-3 mb-3`;
+            statusBox.innerHTML = `<i class="bi ${icon} fs-5"></i><span><strong>${message}</strong></span>`;
+        };
+
+        try {
+
+            // Generate password store if not done yet
+            if (!
+                (await this.extensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))
+            ) {
+                updateStatus('bi-hourglass-split text-primary', 'Creating password store ...');
+
+                await this.extensionData.createCategory(
+                    AppConfig.PASSWORD_STORE_CATEGORY,
+                    AppConfig.PASSWORD_STORE_CATEGORY_SHORTY,
+                    AppConfig.PASSWORD_STORE_SCHEMA,
+                    'Stores encrypted credentials'
+                );
+
+                updateStatus('bi-check-circle-fill text-success', 'Password store created successfully.', 'success');
+            }
+        } catch (error) {
+            updateStatus('bi-x-circle-fill text-danger', 'Failed to create password store. See console for details.', 'danger');
+            console.error('Creation of password store failed:', error);
+        }
     }
 
     async run(container: HTMLElement): Promise<void> {
-        // Implementation pending
+        await this.createSettings(container);
+        await this.createPwdStore(container);
     }
+
 }

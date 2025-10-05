@@ -1,6 +1,6 @@
 export class ExtensionData {
     private moduleId: number | null;
-    private categories: any[];
+    private categories: any[] | null;
     private readonly churchtoolsClient: any;
     private readonly extensionKey: string;
 
@@ -8,7 +8,7 @@ export class ExtensionData {
     this.churchtoolsClient = churchtoolsClient;
     this.extensionKey = extensionKey;
     this.moduleId = null;
-    this.categories = [];
+    this.categories = null;
     }
 
     private async resolveModuleId(): Promise<number> {
@@ -16,7 +16,7 @@ export class ExtensionData {
 
         try {
             const response = await this.churchtoolsClient.get(`/custommodules/${this.extensionKey}`);
-            this.moduleId = response.data?.id;
+            this.moduleId = response.id;
             return this.moduleId!;
         } catch (error) {
             console.error('Failed to resolve module ID:', error);
@@ -33,7 +33,7 @@ export class ExtensionData {
 
         try {
             const response = await this.churchtoolsClient.get(`/custommodules/${moduleId}/customdatacategories`);
-            this.categories = response.data?.data ?? [];
+            this.categories = response;
             return this.categories;
         } catch (error) {
             console.error('Failed to fetch categories:', error);
@@ -50,6 +50,31 @@ export class ExtensionData {
         const categories = await this.fetchCategories();
         return categories.some(c => c.name === name);
     }
+
+    async createCategory(fullName: string, shortName: string, schema: string, description?: string): Promise<any> {
+        const moduleId = await this.resolveModuleId();
+
+        const body = {
+            customModuleId: moduleId,
+            name: fullName,
+            shorty: shortName,
+            schema,
+            securityLevelId: '1',
+            description: description ?? '',
+        };
+
+        try {
+            const response = await this.churchtoolsClient.post(
+            `/custommodules/${moduleId}/customdatacategories`,
+            body
+            );
+            return response.data;
+        } catch (error) {
+            console.error(`Failed to create category "${fullName}":`, error);
+            throw error;
+        }
+    }
+
 
     async categoryHasData(name: string): Promise<boolean> {
         const categories = await this.fetchCategories();
