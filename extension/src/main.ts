@@ -29,7 +29,6 @@ if (import.meta.env.MODE === 'development' && username && password) {
 const KEY = import.meta.env.VITE_KEY;
 export { KEY };
 
-
 // Include bootstrap
 const bootstrapCss = document.createElement('link');
 bootstrapCss.rel = 'stylesheet';

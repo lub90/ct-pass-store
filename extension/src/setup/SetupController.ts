@@ -65,7 +65,6 @@ export class SetupController extends AbstractController {
   private renderPreconditions(preconditions: Precondition[]): void {
     const list = document.createElement('ul');
     list.classList.add('list-group');
-    list.style.width = '75%';
 
     preconditions.forEach(p => {
       const item = document.createElement('li');

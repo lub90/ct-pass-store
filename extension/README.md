@@ -1,3 +1,14 @@
+# Documentation for ct-pass-store extension
+
+
+## Development notes:
+- The Permissions API is based on the old ajax API that has no CORS. Thus, for local development you either need a proxy or e.g., chrome with google-chrome --disable-web-security --user-data-dir="/tmp/chrome_dev" (Be carefull! Do not use this in daily life! Opens a lot of security holes!)
+
+
+## TODO:
+- Move Permissions class to new REST API as soon as extension permissions are included therein.
+
+
 # ChurchTools Extension Boilerplate
 
 This project provides a boilerplate for building your own extension for [ChurchTools](https://www.church.tools).
