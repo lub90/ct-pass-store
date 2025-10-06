@@ -1,9 +1,5 @@
-import type { Person } from './utils/ct-types';
 import { churchtoolsClient } from '@churchtools/churchtools-client';
-import angular from 'angular';
-import 'angular-route';
-import { SetupController } from './setup/SetupController';
-import { mainTemplate } from './ui/mainTemplate';
+
 
 // only import reset.css in development mode to keep the production bundle small and to simulate CT environment
 if (import.meta.env.MODE === 'development') {
@@ -42,60 +38,12 @@ document.head.appendChild(bootstrapIconCss);
 
 
 // Setup angular
-const app = angular.module('ctExtensionApp', ['ngRoute']);
+import { createApp } from 'vue';
+import App from './layout/BaseLayout.vue';
+import { router } from './router';
 
-app.config(['$routeProvider', function($routeProvider) {
-  $routeProvider
-    .when('/setup', {
-      template: '<setup></setup>'
-    })
-    .when('/settings', {
-      template: '<settings></settings>'
-    })
-    .when('/password', {
-      template: '<password></password>'
-    })
-    .otherwise({ redirectTo: '/password' });
-}]);
-
-app.component('setup', {
-  template: () => mainTemplate(),
-  controller: function() {
-    this.$onInit = () => {
-      const controller = new SetupController(churchtoolsClient);
-      controller.init();
-    };
-  }
-});
-
-app.component('settings', {
-  template: `<div class="container"><h2>Settings Page</h2></div>`
-});
-
-app.component('password', {
-  template: `<div class="container"><h2>Password Page</h2></div>`
-});
-
-
-
-
-// Inject AngularJS into #app
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div ng-app="ctExtensionApp">
-    <div ng-view></div>
-  </div>
-`;
-
-angular.bootstrap(document.querySelector('#app'), ['ctExtensionApp']);
-
-
-/**
-const user = await churchtoolsClient.get<Person>(`/whoami`);
-
-
-document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
-  <div style="display: flex; place-content: center; place-items: center; height: 100vh;">
-    <h1>Welcome ${[user.firstName, user.lastName].join(' ')}</h1>
-  </div>
-`;
-*/
+const mountPoint = document.querySelector('#app');
+if (mountPoint) {
+  mountPoint.innerHTML = '<div id="vue-root"></div>';
+  createApp(App).use(router).mount('#vue-root');
+}

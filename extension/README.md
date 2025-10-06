@@ -6,6 +6,8 @@
 
 
 ## TODO:
+- Remove dependencies to angular etc....
+
 - Add comments
 - Add public/procted etc. to the different functions in each class
 - Add tests
