@@ -18,8 +18,8 @@
     </ul>
 
     <div v-if="allResolved" :class="['alert', allFulfilled ? 'alert-success' : 'alert-danger']" class="d-flex align-items-center gap-2 py-2 px-3 mb-3 fw-semibold">
-      <span v-if="allFulfilled">✅ All preconditions fulfilled. You can start the setup.</span>
-      <span v-else>❌ Some preconditions are not fulfilled. You are not authorized to run the setup.</span>
+      <span v-if="allFulfilled">✓ All preconditions fulfilled. You can start the setup.</span>
+      <span v-else>✗ Some preconditions are not fulfilled. Setup cannot be started.</span>
     </div>
   </div>
 </template>
