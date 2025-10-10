@@ -1,6 +1,13 @@
 export class AppConfig {
     // Extension metadata
-    static readonly EXTENSION_KEY = 'organigramm';
+    static readonly EXTENSION_KEY = 'organigramm'
+    /**
+     * Returns the base URL prefix for the extension, e.g. "/ccm/organigramm"
+     */
+    static getExtensionUrlPrefix(): string {
+        return `/ccm/${this.EXTENSION_KEY}`;
+    }
+
 
     static readonly SETTINGS_CATEGORY = 'settings';
     static readonly SETTINGS_CATEGORY_SHORTY = 'sett';

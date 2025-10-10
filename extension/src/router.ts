@@ -1,17 +1,21 @@
 import { createRouter, createWebHistory } from 'vue-router';
-import PasswordPage from './pages/PasswordPage.vue';
-import SetupPage from './pages/SetupPage.vue';
-import SettingsPage from './pages/SettingsPage.vue';
+import type { RouteRecordRaw } from 'vue-router';
+import PasswordView from './views/PasswordView.vue';
+import SetupView from './views/SetupView.vue';
+import SettingsView from './views/SettingsView.vue';
 import { AppConfig } from './AppConfig';
 
-const base = '/ccm/' + AppConfig.EXTENSION_KEY + '/';
+const prefix: String = AppConfig.getExtensionUrlPrefix();
 
-export const router = createRouter({
-  history: createWebHistory(base),
-  routes: [
-    { path: '/password', component: PasswordPage },
-    { path: '/setup', component: SetupPage },
-    { path: '/settings', component: SettingsPage },
-    { path: '/', redirect: '/password' }
-  ]
+const routes: RouteRecordRaw[] = [
+  { path: prefix + '/password', component: PasswordView },
+  { path: prefix + '/setup', component: SetupView },
+  { path: prefix + '/settings', component: SettingsView },
+];
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
 });
+
+export default router;

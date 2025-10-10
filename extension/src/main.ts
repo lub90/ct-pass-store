@@ -37,13 +37,9 @@ bootstrapIconCss.href = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/fon
 document.head.appendChild(bootstrapIconCss);
 
 
-// Setup angular
+// Setup vue
 import { createApp } from 'vue';
-import App from './layout/BaseLayout.vue';
-import { router } from './router';
+import App from './App.vue';
+import router from './router';
 
-const mountPoint = document.querySelector('#app');
-if (mountPoint) {
-  mountPoint.innerHTML = '<div id="vue-root"></div>';
-  createApp(App).use(router).mount('#vue-root');
-}
+createApp(App).use(router).mount('#app');
