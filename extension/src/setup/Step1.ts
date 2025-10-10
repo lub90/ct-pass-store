@@ -8,11 +8,11 @@ export class Step1 implements SetupStep {
 
     component: Component = Step1Component;
 
-    checkPrecondition(): Promise<Precondition[]> {
+    async checkPrecondition(): Promise<Precondition[]> {
         return new Promise(resolve => {
             setTimeout(() => {
             resolve([
-                new Precondition('Step 1 must be completed manually.', false),
+                new Precondition('Step 1 must be completed manually.', true),
             ]);
             }, 3000); // 3 seconds delay
         });

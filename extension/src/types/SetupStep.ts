@@ -3,5 +3,5 @@ import type { Precondition } from "./Precondition";
 
 export interface SetupStep {
   component: Component;
-  async checkPrecondition() : Promise<Precondition[]>;
+  checkPrecondition() : Promise<Precondition[]>;
 }

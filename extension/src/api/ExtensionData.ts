@@ -5,10 +5,10 @@ export class ExtensionData {
     private readonly extensionKey: string;
 
     constructor(churchtoolsClient: any, extensionKey: string) {
-    this.churchtoolsClient = churchtoolsClient;
-    this.extensionKey = extensionKey;
-    this.moduleId = null;
-    this.categories = null;
+        this.churchtoolsClient = churchtoolsClient;
+        this.extensionKey = extensionKey;
+        this.moduleId = null;
+        this.categories = null;
     }
 
     private async resolveModuleId(): Promise<number> {

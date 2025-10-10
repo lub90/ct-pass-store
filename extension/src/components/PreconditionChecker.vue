@@ -57,13 +57,18 @@ const allFulfilled = computed(() =>
 );
 
 onMounted(async () => {
-  // Initialize with pending placeholders
-  preconditionStatuses.value = props.steps.map(() => ({ pending: true }));
 
-  for (let i = 0; i < props.steps.length; i++) {
-    const result = await props.steps[i].checkPrecondition();
-    // Replace pending with actual result(s)
-    preconditionStatuses.value.splice(i, 1, ...result.map(p => ({
+  for (const step of props.steps) {
+    // Zeige Spinner
+    preconditionStatuses.value.push({ pending: true });
+
+    const result = await step.checkPrecondition();
+
+    // Entferne Spinner
+    preconditionStatuses.value.pop();
+
+    // Füge echte Ergebnisse ein
+    preconditionStatuses.value.push(...result.map(p => ({
       pending: false,
       precondition: p,
     })));
