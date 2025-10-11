@@ -53,12 +53,16 @@ onMounted(async () => {
   const extensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
   await setupSettings(extensionData);
+  await setupInternalSettings(extensionData);
   await setupPasswordStore(extensionData);
 
   // Generate an update extension data set
-  const extensionData2: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
+  const updatedExtensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
-  if ((await extensionData2.hasCategory(AppConfig.SETTINGS_CATEGORY)) && (await extensionData2.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))) {
+  if ((await updatedExtensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))
+    && (await updatedExtensionData.hasCategory(AppConfig.INTERNAL_SETTINGS_CATEGORY))
+    && (await updatedExtensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))
+  ) {
     allOkay.value = true;
     emit('completed');
   }
@@ -68,72 +72,62 @@ onMounted(async () => {
 });
 
 async function setupSettings(extensionData: ExtensionData) {
-  statusItems.value.push({
-    pending: true,
-    message: 'Creating settings...',
-  });
+await setupDataStructure(
+    extensionData,
+    AppConfig.SETTINGS_CATEGORY,
+    AppConfig.SETTINGS_CATEGORY_SHORTY,
+    AppConfig.SETTINGS_CATEGORY_SCHEMA,
+    "Settings"
+  );
+}
 
-  try {
-
-    if (!(await extensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))) {
-      await extensionData.createCategory(
-        AppConfig.SETTINGS_CATEGORY,
-        AppConfig.SETTINGS_CATEGORY_SHORTY,
-        AppConfig.SETTINGS_SCHEMA,
-        'Stores extension settings'
-      );
-
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: 'Settings created successfully.',
-        icon: 'bi-check-circle-fill text-success',
-        variant: 'success',
-      });
-    } else {
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: 'Settings already exist. No need to create them...',
-        icon: 'bi-check-circle-fill text-success',
-        variant: 'success',
-      });
-    }
-  } catch (error) {
-    statusItems.value.splice(-1, 1, {
-      pending: false,
-      message: 'Failed to create settings. See console for details.',
-      icon: 'bi-x-circle-fill text-danger',
-      variant: 'danger',
-    });
-    console.error('Creation of settings failed:', error);
-  }
+async function setupInternalSettings(extensionData: ExtensionData) {
+await setupDataStructure(
+    extensionData,
+    AppConfig.INTERNAL_SETTINGS_CATEGORY,
+    AppConfig.INTERNAL_SETTINGS_SHORTY,
+    AppConfig.INTERNAL_SETTINGS_CATEGORY_SCHEMA,
+    "Constants"
+  );
 }
 
 async function setupPasswordStore(extensionData: ExtensionData) {
+  await setupDataStructure(
+    extensionData,
+    AppConfig.PASSWORD_STORE_CATEGORY,
+    AppConfig.PASSWORD_STORE_CATEGORY_SHORTY,
+    AppConfig.PASSWORD_STORE_SCHEMA,
+    "Password Database"
+  );
+}
+
+
+async function setupDataStructure(extensionData: ExtensionData, category: string, categoryShorty: string, categorySchema: string, displayName: string) {
   statusItems.value.push({
     pending: true,
-    message: 'Creating password store...',
+    message: `Creating ${displayName}...`,
   });
 
   try {
 
-    if (!(await extensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))) {
+    if (!(await extensionData.hasCategory(category))) {
       await extensionData.createCategory(
-        AppConfig.PASSWORD_STORE_CATEGORY,
-        AppConfig.PASSWORD_STORE_CATEGORY_SHORTY,
-        AppConfig.PASSWORD_STORE_SCHEMA,
-        'Stores encrypted credentials'
+        category,
+        categoryShorty,
+        categorySchema,
+        `Stores extension ${displayName}`
       );
 
       statusItems.value.splice(-1, 1, {
         pending: false,
-        message: 'Password store created successfully.',
+        message: `${displayName} created successfully.`,
         icon: 'bi-check-circle-fill text-success',
         variant: 'success',
       });
     } else {
       statusItems.value.splice(-1, 1, {
         pending: false,
-        message: 'Password store already exists. No need to create them...',
+        message: `${displayName} already exist. No need to create them...`,
         icon: 'bi-check-circle-fill text-success',
         variant: 'success',
       });
@@ -141,14 +135,13 @@ async function setupPasswordStore(extensionData: ExtensionData) {
   } catch (error) {
     statusItems.value.splice(-1, 1, {
       pending: false,
-      message: 'Failed to create password store. See console for details.',
+      message: `Failed to create ${displayName}. See console for details.`,
       icon: 'bi-x-circle-fill text-danger',
       variant: 'danger',
     });
-    console.error('Creation of password store failed:', error);
+    console.error(`Creation of ${displayName} failed:`, error);
   }
 }
-
 
 
 </script>

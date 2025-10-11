@@ -61,6 +61,30 @@ export class AppConfig {
 
             `;
 
+    static readonly INTERNAL_SETTINGS_CATEGORY = 'internalSettings';
+    static readonly INTERNAL_SETTINGS_SHORTY = 'iSett';
+    static readonly INTERNAL_SETTINGS_SCHEMA = `
+        {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Internal Settings",
+        "type": "object",
+        "properties": {
+            "setupCompleted": {
+                "type": "boolean",
+                "description": "Indicates whether the setup process has been completed"
+            },
+            "publicKey": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Public key used for encryption or verification"
+            }
+        },
+        "required": ["setupCompleted", "publicKey"],
+        "additionalProperties": false
+        }
+        `;
+
+
     static readonly PASSWORD_STORE_CATEGORY = 'passwordStore';
     static readonly PASSWORD_STORE_CATEGORY_SHORTY = 'pwdSt';
     static readonly PASSWORD_STORE_SCHEMA = `

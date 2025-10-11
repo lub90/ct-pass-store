@@ -44,6 +44,7 @@ import PreconditionChecker from '../components/PreconditionChecker.vue';
 import type { SetupStep } from '../types/SetupStep';
 import { Step1 } from '../setup/Step1';
 import { DataStructureStep } from '../setup/DataStructureStep'
+import { ExtensionData } from '../api/ExtensionData';
 
 
 import { inject } from 'vue';
@@ -61,6 +62,8 @@ const showNext = ref(false);
 
 const isStartEnabled = ref(false);
 const isNextEnabled = ref(false);
+
+// TODO: Check if the setup has already been run before
 
 function enableStart() {
     isStartEnabled.value = true;

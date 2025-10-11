@@ -77,11 +77,7 @@ export class ExtensionData {
 
 
     async categoryHasData(name: string): Promise<boolean> {
-        const categories = await this.fetchCategories();
-        const category = categories.find(c => c.name === name);
-        if (!category) {
-            return false;
-        }
+        const category: any = await this.getCategoryByName(name);   
 
         try {
             const response = await this.churchtoolsClient.get(
@@ -94,4 +90,99 @@ export class ExtensionData {
             throw error;
         }
     }
+
+    async getCategoryByName(name: string) : Promise<any> {
+        const categories = await this.fetchCategories();
+        const category = categories.find(c => c.name === name);
+        if (!category) {
+            throw new Error(`Category "${name}" not found.`);
+        }
+        return category;
+    }
+
+    async getCategoryData(name: string, single = false): Promise<any[] | any> {
+        const category: any = await this.getCategoryByName(name);        
+
+        try {
+            const response = await this.churchtoolsClient.get(
+                `/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`
+            );
+            const values = response.data?.data ?? [];
+
+            if (single) {
+                if (values.length !== 1) {
+                    throw new Error(`Expected exactly one entry in category "${name}", but found ${values.length}.`);
+                }
+                return values[0];
+            }
+
+            return values;
+        } catch (error) {
+                console.error(`Failed to fetch data for category "${name}":`, error);
+            throw error;
+        }
+    }
+
+    async deleteCategoryEntry(name: string, valueId: number): Promise<void> {
+        const category: any = await this.getCategoryByName(name); 
+
+        const moduleId = await this.resolveModuleId();
+
+        try {
+            await this.churchtoolsClient.delete(
+                `/custommodules/${moduleId}/customdatacategories/${category.id}/customdatavalues/${valueId}`
+            );
+        } catch (error) {
+            console.error(`Failed to delete entry ${valueId} in category "${name}":`, error);
+            throw error;
+        }
+    }
+
+    async createCategoryEntry(name: string, data: object): Promise<number> {
+        const moduleId = await this.resolveModuleId();
+        const category: any = await this.getCategoryByName(name); 
+
+        const payload = {
+            dataCategoryId: category.id,
+            domainId: '1',
+            domainType: 'status',
+            value: JSON.stringify(data),
+        };
+
+        try {
+            const response = await this.churchtoolsClient.post(
+                `/custommodules/${moduleId}/customdatacategories/${category.id}/customdatavalues`,
+                payload
+            );
+            return response.data?.id;
+        } catch (error) {
+            console.error(`Failed to create entry in category "${category.name}":`, error);
+            throw error;
+        }
+    }
+
+    async updateCategoryEntry(name: string, valueId: number, data: object): Promise<number> {
+        const moduleId = await this.resolveModuleId();
+        const category: any = await this.getCategoryByName(name); 
+
+        const payload = {
+            dataCategoryId: category.id,
+            id: valueId,
+            value: JSON.stringify(data),
+        };
+
+        try {
+            const response = await this.churchtoolsClient.put(
+                `/custommodules/${moduleId}/customdatacategories/${category.id}/customdatavalues/${valueId}`,
+                payload
+            );
+            return response.data?.id;
+        } catch (error) {
+            console.error(`Failed to update entry ${valueId} in category "${category.name}":`, error);
+            throw error;
+        }
+    }
+
+
+
 }
