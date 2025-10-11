@@ -79,10 +79,13 @@ export class ExtensionData {
     async categoryHasData(name: string): Promise<boolean> {
         const category: any = await this.getCategoryByName(name);   
 
+        console.log(category);
+
         try {
             const response = await this.churchtoolsClient.get(
             `/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`
             );
+            console.log(response);
             const values = response.data?.data ?? [];
             return values.length > 0;
         } catch (error) {

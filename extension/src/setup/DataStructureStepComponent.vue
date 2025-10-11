@@ -20,6 +20,18 @@
       <span v-else>✗ Unable to generate necessary data structures. Cannot conintue with setup!</span>
     </div>
 
+    <div
+        v-if="finished && allOkay"
+        class="alert alert-info d-flex align-items-start gap-2 py-2 px-3 mb-3"
+    >
+        <i class="bi bi-info-circle-fill text-info mt-1"></i>
+        <div>
+            <strong>Next step:</strong> Now give yourself the rights to <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.
+            <br />
+            <strong>You must do that manually.</strong> After that, please continue with the next step of the setup.
+        </div>
+    </div>
+
   </div>
 </template>
 
