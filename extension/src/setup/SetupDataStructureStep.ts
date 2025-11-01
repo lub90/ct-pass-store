@@ -2,14 +2,14 @@
 import type { Component } from "vue";
 import { Precondition } from "../types/Precondition";
 import type { SetupStep } from "../types/SetupStep";
-import DataStructureStepComponent from "./DataStructureStepComponent.vue";
+import SetupDataStructureStepComponent from "./SetupDataStructureStepComponent.vue";
 import { ExtensionData } from "../api/ExtensionData";
 import { CtSetupStep } from "./CtSetupStep";
 
 
-export class DataStructureStep extends CtSetupStep {
+export class SetupDataStructureStep extends CtSetupStep {
 
-    component: Component = DataStructureStepComponent;
+    component: Component = SetupDataStructureStepComponent;
 
     async checkPrecondition(): Promise<Precondition[]> {
 

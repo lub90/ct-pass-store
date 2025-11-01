@@ -1,9 +1,6 @@
 # Documentation for ct-pass-store extension
 
 
-## Development notes:
-- The Permissions API is based on the old ajax API that has no CORS. Thus, for local development you either need a proxy or e.g., chrome with google-chrome --disable-web-security --user-data-dir="/tmp/chrome_dev" (Be carefull! Do not use this in daily life! Opens a lot of security holes!)
-
 
 ## TODO:
 - Remove dependencies to angular etc....
@@ -11,7 +8,13 @@
 - Add comments
 - Add public/procted etc. to the different functions in each class
 - Add tests
+- Make the rights confirmation step check, that the rights were assigned properly
 
+- Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
+
+## Bugs
+
+Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
 
 # ChurchTools Extension Boilerplate
 

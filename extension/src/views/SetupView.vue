@@ -43,7 +43,8 @@ import BaseLayout from '../layouts/BaseLayout.vue';
 import PreconditionChecker from '../components/PreconditionChecker.vue';
 import type { SetupStep } from '../types/SetupStep';
 import { Step1 } from '../setup/Step1';
-import { DataStructureStep } from '../setup/DataStructureStep'
+import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
+import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { InternalSettingsStep } from '../setup/InternalSettingsStep'
 import { ExtensionData } from '../api/ExtensionData';
 
@@ -51,7 +52,7 @@ import { ExtensionData } from '../api/ExtensionData';
 import { inject } from 'vue';
 const churchtoolsClient = inject('churchtoolsClient');
 
-const steps: SetupStep[] = [new DataStructureStep(churchtoolsClient), new InternalSettingsStep(churchtoolsClient), new Step1()];
+const steps: SetupStep[] = [new SetupDataStructureStep(churchtoolsClient), new RightsConfirmationStep(churchtoolsClient), new InternalSettingsStep(churchtoolsClient), new Step1()];
 
 const currentStepIndex = ref(0);
 const currentStepComponent = computed(() => steps[currentStepIndex.value].component);

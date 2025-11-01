@@ -51,14 +51,14 @@ export class ExtensionData {
         return categories.some(c => c.name === name);
     }
 
-    async createCategory(fullName: string, shortName: string, schema: string, description?: string): Promise<any> {
+    async createCategory(fullName: string, shortName: string, schemaDefinition: string, description?: string): Promise<any> {
         const moduleId = await this.resolveModuleId();
 
         const body = {
             customModuleId: moduleId,
             name: fullName,
             shorty: shortName,
-            schema,
+            schema: schemaDefinition,
             securityLevelId: '1',
             description: description ?? '',
         };
@@ -79,22 +79,27 @@ export class ExtensionData {
     async categoryHasData(name: string): Promise<boolean> {
         const category: any = await this.getCategoryByName(name);   
 
-        console.log(category);
-        console.log(`/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`);
-
         try {
             const response = await this.churchtoolsClient.get(
             `/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`
             );
-            console.log(response);
-            const values = response.data;
-            console.log("Values");
-            console.log(values);
-            return values.length > 0;
+
+            return (response !== undefined) && (response.length > 0);
         } catch (error) {
             console.error(`Failed to fetch data for category "${name}":`, error);
             throw error;
         }
+    }
+
+    async categoryExists(name: string) : Promise<boolean> {
+        try {
+            // We try to get this category
+            await this.getCategoryByName(name);
+        } catch (error) {
+            // Error dindicates that the category does not exists, or is not visible to us
+            return false;
+        }
+        return true;
     }
 
     async getCategoryByName(name: string) : Promise<any> {
@@ -113,7 +118,7 @@ export class ExtensionData {
             const response = await this.churchtoolsClient.get(
                 `/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`
             );
-            const values = response.data?.data ?? [];
+            const values = response ?? [];
 
             if (single) {
                 if (values.length !== 1) {
@@ -124,7 +129,6 @@ export class ExtensionData {
 
             return values;
         } catch (error) {
-                console.error(`Failed to fetch data for category "${name}":`, error);
             throw error;
         }
     }

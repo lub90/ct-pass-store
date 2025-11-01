@@ -1,65 +1,39 @@
+
 <template>
-  <div>
-    <p>Setting up the data structure…</p>
+    <SetupStep title="Setting up the data structure…">
+        <SetupStatusList :items="statusItems" />
 
-    <ul class="list-group mb-3">
-      <li
-        v-for="(status, index) in statusItems"
-        :key="index"
-        class="list-group-item d-flex align-items-center gap-2"
-        :class="status.variant ? `text-${status.variant}` : ''"
-      >
-        <span v-if="status.pending" class="spinner-border spinner-border-sm text-secondary" role="status" />
-        <i v-else :class="`bi ${status.icon}`"></i>
-        <span>{{ status.message }}</span>
-      </li>
-    </ul>
+        <SetupResultBox
+            :finished="finished"
+            :all-okay="allOkay"
+            success-message="✓ All data structures were generated. Please continue with the next step."
+            error-message="✗ Unable to generate necessary data structures. Cannot continue with setup!"
+        />
 
-    <div v-if="finished" :class="['alert', allOkay ? 'alert-success' : 'alert-danger']" class="d-flex align-items-center gap-2 py-2 px-3 mb-3 fw-semibold">
-      <span v-if="allOkay">✓ All data structures were generated. Please continue with the next step.</span>
-      <span v-else>✗ Unable to generate necessary data structures. Cannot conintue with setup!</span>
-    </div>
-
-    <div
-        v-if="finished && allOkay"
-        class="alert alert-info d-flex align-items-start gap-2 py-2 px-3 mb-3"
-    >
-        <i class="bi bi-info-circle-fill text-info mt-1"></i>
-        <div>
-            <strong>Next step:</strong> Now give yourself the rights to <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.
-            <br />
-            <strong>You must do that manually.</strong> After that, please continue with the next step of the setup.
-        </div>
-    </div>
-
-  </div>
+    </SetupStep>
 </template>
 
 <script setup lang="ts">
-
+import SetupStep from './SetupStep.vue';
+import SetupStatusList from './SetupStatusList.vue';
+import SetupResultBox from './SetupResultBox.vue';
+import SetupInfoBox from './SetupInfoBox.vue';
+import type { StatusItem } from './SetupStatusList.vue';
 import { ref, onMounted } from 'vue';
 import { inject } from 'vue';
-import { defineEmits } from 'vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { AppConfig } from '../AppConfig'
 
+
 const churchtoolsClient = inject('churchtoolsClient');
+const statusItems = ref<StatusItem[]>([]);
+const finished = ref(false);
+const allOkay = ref(false);
+
 
 const emit = defineEmits<{
     (e: 'completed'): void;
 }>();
-
-
-type StatusItem = {
-  pending: boolean;
-  message: string;
-  icon?: string;
-  variant?: 'success' | 'danger';
-};
-
-const statusItems = ref<StatusItem[]>([]);
-const finished = ref(false);
-const allOkay = ref(false);
 
 onMounted(async () => {
   const extensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
@@ -67,6 +41,7 @@ onMounted(async () => {
   await setupSettings(extensionData);
   await setupInternalSettings(extensionData);
   await setupPasswordStore(extensionData);
+  await setupSetupCompleted(extensionData);
 
   // Generate an update extension data set
   const updatedExtensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
@@ -97,9 +72,19 @@ async function setupInternalSettings(extensionData: ExtensionData) {
 await setupDataStructure(
     extensionData,
     AppConfig.INTERNAL_SETTINGS_CATEGORY,
-    AppConfig.INTERNAL_SETTINGS_SHORTY,
-    AppConfig.INTERNAL_SETTINGS_CATEGORY_SCHEMA,
+    AppConfig.INTERNAL_SETTINGS_CATEGORY_SHORTY,
+    AppConfig.INTERNAL_SETTINGS_SCHEMA,
     "Constants"
+  );
+}
+
+async function setupSetupCompleted(extensionData: ExtensionData) {
+await setupDataStructure(
+    extensionData,
+    AppConfig.SETUP_COMPLETED_CATEGORY,
+    AppConfig.SETUP_COMPLETED_CATEGORY_SHORTY,
+    AppConfig.SETUP_COMPLETED_SCHEMA,
+    "Flags"
   );
 }
 

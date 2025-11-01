@@ -62,8 +62,27 @@ export class AppConfig {
             `;
 
     static readonly INTERNAL_SETTINGS_CATEGORY = 'internalSettings';
-    static readonly INTERNAL_SETTINGS_SHORTY = 'iSett';
+    static readonly INTERNAL_SETTINGS_CATEGORY_SHORTY = 'iSett';
     static readonly INTERNAL_SETTINGS_SCHEMA = `
+        {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Internal Settings",
+        "type": "object",
+        "properties": {
+            "publicKey": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Public key used for encryption or verification"
+            }
+        },
+        "required": ["publicKey"],
+        "additionalProperties": false
+        }
+        `;
+
+    static readonly SETUP_COMPLETED_CATEGORY = 'setupCompleted';
+    static readonly SETUP_COMPLETED_CATEGORY_SHORTY = 'sComp';
+    static readonly SETUP_COMPLETED_SCHEMA = `
         {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "Internal Settings",
@@ -72,14 +91,9 @@ export class AppConfig {
             "setupCompleted": {
                 "type": "boolean",
                 "description": "Indicates whether the setup process has been completed"
-            },
-            "publicKey": {
-                "type": "string",
-                "minLength": 1,
-                "description": "Public key used for encryption or verification"
             }
         },
-        "required": ["setupCompleted", "publicKey"],
+        "required": ["setupCompleted"],
         "additionalProperties": false
         }
         `;
