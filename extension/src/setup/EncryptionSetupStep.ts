@@ -2,14 +2,14 @@
 import type { Component } from "vue";
 import { Precondition } from "../types/Precondition";
 import type { SetupStep } from "../types/SetupStep";
-import InternalSettingsStepComponent from "./InternalSettingsStepComponent.vue";
+import EncryptionSetupStepComponent from "./EncryptionSetupStepComponent.vue";
 import { ExtensionData } from "../api/ExtensionData";
 import { CtSetupStep } from "./CtSetupStep";
 
 
-export class InternalSettingsStep extends CtSetupStep {
+export class EncryptionSetupStep extends CtSetupStep {
 
-    component: Component = InternalSettingsStepComponent;
+    component: Component = EncryptionSetupStepComponent;
 
     async checkPrecondition(): Promise<Precondition[]> {
         // TODO: We cannot check anything here because the data categories do not exist yet!
