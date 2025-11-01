@@ -84,7 +84,7 @@ onMounted(async () => {
 
     // TODO: Check if we have write permissions...
 
-    const hasData = await extensionData.categoryHasData(AppConfig.INTERNAL_SETTINGS_CATEGORY);
+    const hasData = await extensionData.categoryHasData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY);
 
     if (!hasData) {
         
@@ -105,7 +105,7 @@ onMounted(async () => {
     // Verify final state
     const updatedExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
     try {
-        const entry = await updatedExtensionData.getCategoryData(AppConfig.INTERNAL_SETTINGS_CATEGORY, true);
+        const entry = await updatedExtensionData.getCategoryData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, true);
         if (entry && entry.id) {
             allOkay.value = true;
         }
@@ -126,7 +126,7 @@ async function storeEncryption(extensionData: ExtensionData) {
             const payload = {
                 publicKey: publicKeyPem.value,
             };
-            await extensionData.createCategoryEntry(AppConfig.INTERNAL_SETTINGS_CATEGORY, payload);
+            await extensionData.createCategoryEntry(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, payload);
 
             statusItems.value.splice(-1, 1, {
                 pending: false,
@@ -158,14 +158,12 @@ async function generateKeyPair() {
       // Generate a random password (32 characters)
       const randomBytes = forge.random.getBytesSync(24);
       const password = forge.util.encode64(randomBytes);
-      console.log(password);
 
       const { publicKey, encryptedPrivateKey } = await generateRSAKeyPair(password);
 
       publicKeyPem.value = publicKey;
       privateKeyPem.value = encryptedPrivateKey;
       encryptionPassword.value = password;
-      console.log(encryptionPassword.value);
 
       statusItems.value.splice(-1, 1, {
         pending: false,

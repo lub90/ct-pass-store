@@ -56,12 +56,12 @@ export class AppConfig {
 
             `;
 
-    static readonly INTERNAL_SETTINGS_CATEGORY = 'internalSettings';
-    static readonly INTERNAL_SETTINGS_CATEGORY_SHORTY = 'iSett';
-    static readonly INTERNAL_SETTINGS_SCHEMA = `
+    static readonly ENCRYPTION_SETTINGS_CATEGORY = 'encryptionSettings';
+    static readonly ENCRYPTION_SETTINGS_CATEGORY_SHORTY = 'eSett';
+    static readonly ENCRYPTION_SETTINGS_SCHEMA = `
         {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "title": "Internal Settings",
+        "title": "Encryption Settings",
         "type": "object",
         "properties": {
             "publicKey": {

@@ -7,7 +7,7 @@
         - <strong>settings</strong> category: Give read access to all users of this extension. Give write access to all admins.<br />
         - <strong>internalSettings</strong> category: No necessity to assign anybody any rights, besides the user for the external backend.<br />
         - <strong>passwordStore</strong> category: No necessity to assign anybody any rights, besides the user for the external backend and users of other applications accessing the secondary password.<br />
-        - <strong>setupCompleted</strong> category: No necessity to assign anybody any rights.
+        - <strong>setupCompleted</strong> category: Give read access to all users of this extension and all admins.
       `"
     />
 

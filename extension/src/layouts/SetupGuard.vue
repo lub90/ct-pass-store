@@ -65,7 +65,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     correctAccessRights.value = true;
 
     // Step 2: Check if any categories exist
-    const hasCategories = await extensionData.hasCategory(AppConfig.INTERNAL_SETTINGS_CATEGORY);
+    const hasCategories = await extensionData.hasCategory(AppConfig.ENCRYPTION_SETTINGS_CATEGORY);
     if (!hasCategories) {
         console.info('Settings category not found — setup has not started.');
         setupCompleted.value = false;
@@ -73,7 +73,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     }
 
     // Step 3: Check if categories contain settings data
-    const setupHasData = await extensionData.categoryHasData(AppConfig.INTERNAL_SETTINGS_CATEGORY);
+    const setupHasData = await extensionData.categoryHasData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY);
     if (!setupHasData) {
         console.info('Settings category exists but contain no data — setup incomplete.');
         setupCompleted.value = false;
@@ -81,7 +81,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     }
 
     // Step 4: Check if setup_completed flag is set
-    const setupEntry = await extensionData.getCategoryData(AppConfig.INTERNAL_SETTINGS_CATEGORY, true);
+    const setupEntry = await extensionData.getCategoryData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, true);
 
     try {
         const parsed = JSON.parse(setupEntry.value);

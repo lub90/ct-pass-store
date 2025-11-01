@@ -47,7 +47,7 @@ onMounted(async () => {
   const updatedExtensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
   if ((await updatedExtensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))
-    && (await updatedExtensionData.hasCategory(AppConfig.INTERNAL_SETTINGS_CATEGORY))
+    && (await updatedExtensionData.hasCategory(AppConfig.ENCRYPTION_SETTINGS_CATEGORY))
     && (await updatedExtensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))
   ) {
     allOkay.value = true;
@@ -71,9 +71,9 @@ await setupDataStructure(
 async function setupInternalSettings(extensionData: ExtensionData) {
 await setupDataStructure(
     extensionData,
-    AppConfig.INTERNAL_SETTINGS_CATEGORY,
-    AppConfig.INTERNAL_SETTINGS_CATEGORY_SHORTY,
-    AppConfig.INTERNAL_SETTINGS_SCHEMA,
+    AppConfig.ENCRYPTION_SETTINGS_CATEGORY,
+    AppConfig.ENCRYPTION_SETTINGS_CATEGORY_SHORTY,
+    AppConfig.ENCRYPTION_SETTINGS_SCHEMA,
     "Constants"
   );
 }
