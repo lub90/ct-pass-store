@@ -45,13 +45,14 @@ import type { SetupStep } from '../types/SetupStep';
 import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
 import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
+import { SettingsSetupStep } from '../setup/SettingsSetupStep'
 import { ExtensionData } from '../api/ExtensionData';
 
 
 import { inject } from 'vue';
 const churchtoolsClient = inject('churchtoolsClient');
 
-const steps: SetupStep[] = [new SetupDataStructureStep(churchtoolsClient), new RightsConfirmationStep(churchtoolsClient), new EncryptionSetupStep(churchtoolsClient)];
+const steps: SetupStep[] = [new SetupDataStructureStep(churchtoolsClient), new RightsConfirmationStep(churchtoolsClient), new EncryptionSetupStep(churchtoolsClient), new SettingsSetupStep(churchtoolsClient)];
 
 const currentStepIndex = ref(0);
 const currentStepComponent = computed(() => steps[currentStepIndex.value].component);

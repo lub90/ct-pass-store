@@ -17,10 +17,6 @@ export class AppConfig {
             "title": "Extension Settings",
             "type": "object",
             "properties": {
-                "extensionSetup": {
-                    "type": "boolean",
-                    "description": "Indicates whether the extension setup was completed"
-                },
                 "requirePasswordForPasswordChange": {
                     "type": "boolean",
                     "description": "Whether password change requires entering the old password"
@@ -49,7 +45,6 @@ export class AppConfig {
                 }
             },
             "required": [
-                "extensionSetup",
                 "requirePasswordForPasswordChange",
                 "allowCustomPassword",
                 "adminUsers",

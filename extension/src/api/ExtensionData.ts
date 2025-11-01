@@ -139,7 +139,7 @@ export class ExtensionData {
         const moduleId = await this.resolveModuleId();
 
         try {
-            await this.churchtoolsClient.delete(
+            await this.churchtoolsClient.deleteApi(
                 `/custommodules/${moduleId}/customdatacategories/${category.id}/customdatavalues/${valueId}`
             );
         } catch (error) {
