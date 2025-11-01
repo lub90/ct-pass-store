@@ -102,7 +102,7 @@ export class AppConfig {
             "title": "Password Store Entry",
             "type": "object",
             "properties": {
-                "id": {
+                "personId": {
                 "type": "integer",
                 "minimum": 1,
                 "description": "Unique positive identifier for the person to whom this password  belongs to."
@@ -113,7 +113,7 @@ export class AppConfig {
                 "description": "Secondary password (encrypted, must not be empty)"
                 }
             },
-            "required": ["id", "secondaryPwd"],
+            "required": ["personId", "secondaryPwd"],
             "additionalProperties": false
             }
             `;

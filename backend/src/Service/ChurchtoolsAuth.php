@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use RuntimeException;
+use CtPassStore\Config\AppConfig;
 
 /**
  * Handles ChurchTools token validation via Authorization header.
@@ -38,7 +39,7 @@ class ChurchtoolsAuth
                 'Authorization: Login ' . $token,
                 'Accept: application/json',
             ],
-            CURLOPT_TIMEOUT => 5, // 5 second timeout
+            CURLOPT_TIMEOUT => AppConfig::EXTERNAL_REQUEST_TIMEOUT,
         ]);
 
         $response = curl_exec($curl);
