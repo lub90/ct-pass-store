@@ -5,10 +5,11 @@
 ## TODO:
 - Remove dependencies to angular etc....
 
+- Add the steps giving instruction to setup the backend as well as the step to test the backend connections
 - Add comments
 - Add public/procted etc. to the different functions in each class
 - Add tests
-- Make the rights confirmation step check, that the rights were assigned properly
+- After the rights confirmation step check that the rights were assigned properly
 
 - Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
 

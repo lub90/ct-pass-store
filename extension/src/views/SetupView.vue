@@ -47,12 +47,21 @@ import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
 import { SettingsSetupStep } from '../setup/SettingsSetupStep'
 import { ExtensionData } from '../api/ExtensionData';
+import { FinalUpdateRightsStep } from '../setup/FinalUpdateRightsStep';
 
 
 import { inject } from 'vue';
 const churchtoolsClient = inject('churchtoolsClient');
 
-const steps: SetupStep[] = [new SetupDataStructureStep(churchtoolsClient), new RightsConfirmationStep(churchtoolsClient), new EncryptionSetupStep(churchtoolsClient), new SettingsSetupStep(churchtoolsClient)];
+const steps: SetupStep[] = [
+    new SetupDataStructureStep(churchtoolsClient),
+    new RightsConfirmationStep(churchtoolsClient),
+    new EncryptionSetupStep(churchtoolsClient),
+    // TODO: One step is missing here: Setup instructions for the Backend
+    new SettingsSetupStep(churchtoolsClient),
+    // TODO: One step is missing here: Test of the backen
+    new FinalUpdateRightsStep(churchtoolsClient)
+];
 
 const currentStepIndex = ref(0);
 const currentStepComponent = computed(() => steps[currentStepIndex.value].component);
@@ -65,7 +74,7 @@ const showNext = ref(false);
 const isStartEnabled = ref(false);
 const isNextEnabled = ref(false);
 
-// TODO: Check if the setup has already been run before
+// We do not check if the setup has been run before. A setup and each step should be idempotent
 
 function enableStart() {
     isStartEnabled.value = true;
