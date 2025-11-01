@@ -1,5 +1,5 @@
 <template>
-  <SetupStep title="Configure Extension Settings…">
+  <SetupStep title="Configure Extension Settings">
     <SettingsForm
       :extension-data="extensionData"
       :category-name="AppConfig.SETTINGS_CATEGORY"

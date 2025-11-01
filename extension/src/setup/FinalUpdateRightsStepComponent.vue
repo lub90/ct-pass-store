@@ -5,8 +5,8 @@
       :content="`
         Your setup is nearly finished. Last thing to do now is to set the rights to access and edit the data categories of this extension as follows:<br />
         - <strong>settings</strong> category: Give read access to all users of this extension. Give write access to all admins.<br />
-        - <strong>internalSettings</strong> category: No necessity to assign anybody any rights, besides the user for the external backend.<br />
-        - <strong>passwordStore</strong> category: No necessity to assign anybody any rights, besides the user for the external backend and users of other applications accessing the secondary password.<br />
+        - <strong>encryptionSettings</strong> category: No need to assign anybody any rights, besides the user for the external backend.<br />
+        - <strong>passwordStore</strong> category: No need to assign anybody any rights, besides the user for the external backend and users of other applications accessing the secondary password.<br />
         - <strong>setupCompleted</strong> category: Give read access to all users of this extension and all admins.
       `"
     />

@@ -1,5 +1,5 @@
 <template>
-  <SetupStep title="">
+  <SetupStep title="Adjust access rights">
     <SetupInfoBox
       :visible="true"
       :content="`
