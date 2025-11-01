@@ -53,7 +53,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     const permissions = new Permissions(churchtoolsClient);
 
     // Step 1: Check if user has permission to view custom data
-    // TODO: This is just a rough chekc. Because read access might also be enabled for another cattegory. Sadly we cannot determine whether we have the read access to the right categories. As such, this must be sufficient.
+    // TODO: This is just a rough check. Because read access might also be enabled for another category. Sadly we cannot determine whether we have the read access to the right categories. As such, this must be sufficient.
     const canView = await permissions.canViewCustomData();
     if (!canView) {
         console.warn('User lacks permission to view custom data.');
@@ -65,7 +65,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     correctAccessRights.value = true;
 
     // Step 2: Check if any categories exist
-    const hasCategories = await extensionData.hasCategory(AppConfig.ENCRYPTION_SETTINGS_CATEGORY);
+    const hasCategories = await extensionData.hasCategory(AppConfig.SETUP_COMPLETED_CATEGORY);
     if (!hasCategories) {
         console.info('Settings category not found — setup has not started.');
         setupCompleted.value = false;
@@ -73,15 +73,15 @@ async function setupAlreadyCompleted(): Promise<void> {
     }
 
     // Step 3: Check if categories contain settings data
-    const setupHasData = await extensionData.categoryHasData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY);
+    const setupHasData = await extensionData.categoryHasData(AppConfig.SETUP_COMPLETED_CATEGORY);
     if (!setupHasData) {
-        console.info('Settings category exists but contain no data — setup incomplete.');
+        console.info('Settings category exists but contains no data — setup incomplete.');
         setupCompleted.value = false;
         return;
     }
 
     // Step 4: Check if setup_completed flag is set
-    const setupEntry = await extensionData.getCategoryData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, true);
+    const setupEntry = await extensionData.getCategoryData(AppConfig.SETUP_COMPLETED_CATEGORY, true);
 
     try {
         const parsed = JSON.parse(setupEntry.value);
