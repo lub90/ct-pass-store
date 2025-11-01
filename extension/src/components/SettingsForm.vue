@@ -1,5 +1,9 @@
 <template>
   <form @submit.prevent="handleSave">
+    <div v-if="saved" class="alert alert-success mb-3">
+      ✅ Settings were successfully saved.
+    </div>
+
     <div class="mb-3">
       <label class="form-label">Require primary password for secondary password change</label>
       <div class="form-check form-switch">
@@ -34,7 +38,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, onMounted, defineProps, defineEmits } from 'vue';
 import { ExtensionData } from '../api/ExtensionData';
 
 const props = defineProps<{
@@ -52,6 +56,24 @@ const allowCustomPassword = ref(true);
 const adminUserInput = ref('');
 const passwordLength = ref(12);
 const backendUrl = ref('');
+const saved = ref(false);
+
+onMounted(async () => {
+  try {
+    const hasData = await props.extensionData.categoryHasData(props.categoryName);
+    if (hasData) {
+      const entry = await props.extensionData.getCategoryData(props.categoryName, true);
+      const values = JSON.parse(entry.value);
+      requireOldPassword.value = values.requirePasswordForPasswordChange ?? true;
+      allowCustomPassword.value = values.allowCustomPassword ?? true;
+      adminUserInput.value = (values.adminUsers ?? []).join(', ');
+      passwordLength.value = values.passwordLength ?? 12;
+      backendUrl.value = values.backendUrl ?? '';
+    }
+  } catch (error) {
+    console.warn('Could not load existing settings:', error);
+  }
+});
 
 async function handleSave() {
   const adminUsers = adminUserInput.value
@@ -69,7 +91,6 @@ async function handleSave() {
 
   try {
     const hasData = await props.extensionData.categoryHasData(props.categoryName);
-
     if (hasData) {
       const existing = await props.extensionData.getCategoryData(props.categoryName);
       for (const entry of existing) {
@@ -78,6 +99,7 @@ async function handleSave() {
     }
 
     await props.extensionData.createCategoryEntry(props.categoryName, payload);
+    saved.value = true;
     emit('saved', payload);
   } catch (error) {
     console.error('Failed to save settings:', error);
