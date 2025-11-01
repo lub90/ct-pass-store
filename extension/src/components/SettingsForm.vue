@@ -13,6 +13,10 @@
 
     <div class="mb-3">
       <label class="form-label">Allow custom passwords</label>
+      <br />
+      <small class="text-muted">
+        If enabled, users can choose their own passwords. If disabled, passwords will be generated automatically and can only be reset.
+      </small>
       <div class="form-check form-switch">
         <input class="form-check-input" type="checkbox" v-model="allowCustomPassword" />
       </div>
@@ -20,16 +24,28 @@
 
     <div class="mb-3">
       <label class="form-label">Admin user IDs (comma-separated)</label>
+      <br />
+      <small class="text-muted">
+        Admin users are users that are allowed to set and/or reset the secondary password for other users. <strong>Use this feature carefully!</strong>
+      </small>
       <input type="text" class="form-control" v-model="adminUserInput" />
     </div>
 
     <div class="mb-3">
       <label class="form-label">Minimum password length</label>
+      <br />
+      <small class="text-muted">
+        Must be greater than 8.
+      </small>
       <input type="number" class="form-control" v-model.number="passwordLength" min="8" />
     </div>
 
     <div class="mb-3">
       <label class="form-label">Backend URL</label>
+      <br />
+      <small class="text-muted">
+        Including "https://...".
+      </small>
       <input type="text" class="form-control" v-model="backendUrl" />
     </div>
 
