@@ -53,9 +53,11 @@ const allOkay = ref(false);
 onMounted(async () => {
     const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
+    // TODO: Check if we have view permissions...
+
     const hasData = await extensionData.categoryHasData(AppConfig.INTERNAL_SETTINGS_CATEGORY);
 
-    console.log("TEst");
+    console.log("Test");
     console.log(hasData);
 
     if (!hasData) {

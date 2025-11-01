@@ -80,13 +80,16 @@ export class ExtensionData {
         const category: any = await this.getCategoryByName(name);   
 
         console.log(category);
+        console.log(`/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`);
 
         try {
             const response = await this.churchtoolsClient.get(
             `/custommodules/${category.customModuleId}/customdatacategories/${category.id}/customdatavalues`
             );
             console.log(response);
-            const values = response.data?.data ?? [];
+            const values = response.data;
+            console.log("Values");
+            console.log(values);
             return values.length > 0;
         } catch (error) {
             console.error(`Failed to fetch data for category "${name}":`, error);
