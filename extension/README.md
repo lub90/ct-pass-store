@@ -13,9 +13,10 @@
 
 - Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
 
-## Bugs
+## Bugs/Wishes towards churchtools
 
-Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
+- Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
+- Possibility to associate values with users, so that they are deleted, when the user is deleted or when the extension is deleted
 
 # ChurchTools Extension Boilerplate
 

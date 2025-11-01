@@ -91,14 +91,19 @@ async function handleSave() {
 
   try {
     const hasData = await props.extensionData.categoryHasData(props.categoryName);
+
     if (hasData) {
       const existing = await props.extensionData.getCategoryData(props.categoryName);
-      for (const entry of existing) {
-        await props.extensionData.deleteCategoryEntry(props.categoryName, entry.id);
+      if (existing.length > 0) {
+        const entry = existing[0];
+        await props.extensionData.updateCategoryEntry(props.categoryName, entry.id, payload);
+      } else {
+        await props.extensionData.createCategoryEntry(props.categoryName, payload);
       }
+    } else {
+      await props.extensionData.createCategoryEntry(props.categoryName, payload);
     }
 
-    await props.extensionData.createCategoryEntry(props.categoryName, payload);
     saved.value = true;
     emit('saved', payload);
   } catch (error) {
@@ -106,4 +111,5 @@ async function handleSave() {
     emit('error', error);
   }
 }
+
 </script>
