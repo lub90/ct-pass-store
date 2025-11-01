@@ -28,30 +28,25 @@ import BaseLayout from '../layouts/BaseLayout.vue';
 import { inject, defineEmits, ref, onMounted } from 'vue';
 import SettingsForm from '../components/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
+import { Permissions } from '../api/Permissions';
 import { AppConfig } from '../AppConfig';
 
 
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
+const permissions = new Permissions(churchtoolsClient);
 
 const isAdmin = ref(false);
-const currentUserId = ref<number | null>(null);
 const loading = ref(true);
 
 onMounted(async () => {
   try {
-    const user = await churchtoolsClient.get('/whoami');
-    currentUserId.value = user.id;
+    const category = await extensionData.getCategoryByName(AppConfig.SETTINGS_CATEGORY);
+    const canEdit = await permissions.canEditCustomDataForCategory(category.id);
 
-    const hasData = await extensionData.categoryHasData(AppConfig.SETTINGS_CATEGORY);
-    if (hasData) {
-      const entry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true);
-      const values = JSON.parse(entry.value);
-      const adminIds = values.adminUsers ?? [];
+    isAdmin.value = canEdit;
 
-      isAdmin.value = adminIds.includes(currentUserId.value);
-    }
   } catch (error) {
     console.warn('Could not verify admin rights:', error);
   } finally {

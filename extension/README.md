@@ -10,6 +10,7 @@
 - Add public/procted etc. to the different functions in each class
 - Add tests
 - After the rights confirmation step check that the rights were assigned properly
+- Test access to settings page with other users (should work, just to be sure...)
 
 - Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
 
