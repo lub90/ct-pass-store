@@ -43,6 +43,31 @@ class PasswordController extends BaseService
         $this->authVerifier = $authVerifier;
     }
 
+    public function get(Request $request, Response $response, array $args): ResponseInterface
+    {
+        $targetId = (int) $args['id'];
+
+        try {
+            $this->authorizeAndValidate($request, $targetId, false);
+        } catch (HttpResponseException $errorResponse) {
+            return $errorResponse->getResponse();
+        }
+
+        $encryptedSecondaryPwd = $this->store->get($targetId);
+
+        if ($encryptedSecondaryPwd === null) {
+            return $this->error(404, 'No password entry found for this user.');
+        }
+
+        return $response
+            ->withHeader('Content-Type', 'application/json')
+            ->withStatus(200)
+            ->withBody((new \Slim\Psr7\Factory\StreamFactory())->createStream(json_encode([
+                AppConfig::REQUEST_SECONDARY_PWD_FIELD => $encryptedSecondaryPwd,
+            ])));
+    }
+
+
     public function put(Request $request, Response $response, array $args): ResponseInterface
     {
         $targetId = (int) $args['id'];

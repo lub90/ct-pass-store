@@ -8,6 +8,24 @@ use CtPassStore\Config\AppConfig;
 
 class ChurchToolsStore extends ChurchToolsBaseService
 {
+    public function get(int $personId): ?string
+    {
+        $extension = new DataExtensionService($this, AppConfig::CT_EXTENSION_ID);
+
+        $existingValues = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $matching = array_filter($existingValues, fn($v) => ($v['personId'] ?? null) === (string)$personId);
+
+        if (count($matching) !== 1) {
+            return null;
+        }
+
+        $entry = $matching[array_key_first($matching)];
+        $decoded = json_decode($entry['data'] ?? '', true);
+
+        return $decoded[AppConfig::CT_ENCRYPTED_PWD_FIELD] ?? null;
+    }
+
+
     public function put(int $personId, string $encryptedPassword): void
     {
         $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);

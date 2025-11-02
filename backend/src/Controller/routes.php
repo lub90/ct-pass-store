@@ -26,6 +26,7 @@ return function (App $app): void {
         $container->get(LoggerInterface::class)
     );
 
+    $app->get('/entries/{id}', [$controller, 'get']);
     $app->put('/entries/{id}', [$controller, 'put']);
     $app->delete('/entries/{id}', [$controller, 'delete']);
 };
