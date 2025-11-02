@@ -3,7 +3,7 @@
     <SetupInfoBox
       :visible="true"
       :content="`
-        Now give yourself the rights to <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.<br />
+        Give yourself the rights to <strong>create</strong>, <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.<br />
         <strong>You must do that manually.</strong> After that, please confirm below and continue with the next step of the setup.
       `"
     />

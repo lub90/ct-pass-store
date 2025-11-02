@@ -21,6 +21,7 @@
 - Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
 - Possibility to associate values with users, so that they are deleted, when the user is deleted or when the extension is deleted
 - Possbility to check whether we have read access in general to a certain dataset. Not only specific to values... (via old API this is possible, but not via new one)
+- No minus sign in extension key allowed --> suboptimal
 
 # ChurchTools Extension Boilerplate
 

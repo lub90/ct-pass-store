@@ -8,6 +8,7 @@ import { AppConfig } from './AppConfig';
 const prefix: String = AppConfig.getExtensionUrlPrefix();
 
 const routes: RouteRecordRaw[] = [
+  { path: prefix + '/', redirect: prefix + '/password' }, // Default redirect
   { path: prefix + '/password', component: PasswordView },
   { path: prefix + '/setup', component: SetupView },
   { path: prefix + '/settings', component: SettingsView },

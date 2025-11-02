@@ -54,8 +54,8 @@ import { inject } from 'vue';
 const churchtoolsClient = inject('churchtoolsClient');
 
 const steps: SetupStep[] = [
-    new SetupDataStructureStep(churchtoolsClient),
     new RightsConfirmationStep(churchtoolsClient),
+    new SetupDataStructureStep(churchtoolsClient),
     new EncryptionSetupStep(churchtoolsClient),
     // TODO: One step is missing here: Setup instructions for the Backend
     new SettingsSetupStep(churchtoolsClient),
