@@ -1,8 +1,8 @@
 export class AppConfig {
     // Extension metadata
-    static readonly EXTENSION_KEY = 'organigramm'
+    static readonly EXTENSION_KEY = 'ctpassstore'
     /**
-     * Returns the base URL prefix for the extension, e.g. "/ccm/organigramm"
+     * Returns the base URL prefix for the extension, e.g. "/ccm/lubl-ct-pass-store"
      */
     static getExtensionUrlPrefix(): string {
         return `/ccm/${this.EXTENSION_KEY}`;

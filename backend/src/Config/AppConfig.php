@@ -4,7 +4,7 @@ namespace CtPassStore\Config;
 
 final class AppConfig
 {
-    public const CT_EXTENSION_ID = 'ct-pass-store';
+    public const CT_EXTENSION_ID = 'ctpassstore';
     public const CT_PWD_CATEGORY_NAME = 'passwordStore';
     public const CT_PERSON_ID_FIELD = 'id';
     public const CT_ENCRYPTED_PWD_FIELD = 'secondaryPwd';

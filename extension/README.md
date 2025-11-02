@@ -14,6 +14,8 @@
 
 - Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
 
+- Add possibility to pull backup and reload backup
+
 ## Bugs/Wishes towards churchtools
 
 - Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
