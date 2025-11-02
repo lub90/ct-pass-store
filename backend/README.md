@@ -16,9 +16,34 @@ Accept: application/json
 
 ## 📦 Endpoints
 
+### GET /entries/{id}
+
+Retrieves the encrypted password for the ChurchTools user with the given ID.
+
+Path Parameter
+
+    id — ChurchTools person ID
+
+Request Body
+
+    (none)
+
+Response
+
+ ```json
+{
+    "secondaryPassword": "your-encrypted-password"
+}
+ ```
+
+- Returns the encrypted password as stored in the backend.
+- If no password entry exists for the given user, a `404 Not Found` response is returned.
+
+
 ### PUT /entries/{id}
 
 Sets or updates the encrypted password for the ChurchTools user with the given ID.
+
 Path Parameter
 
     id — ChurchTools person ID
@@ -55,9 +80,11 @@ Responses
 ### DELETE /entries/{id}
 
 Deletes the stored password for the ChurchTools user with the given ID.
+
 Path Parameter
 
     id — ChurchTools person ID
+
 
 Request Body
 
