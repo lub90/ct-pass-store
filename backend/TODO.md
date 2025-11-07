@@ -12,6 +12,8 @@ TODO:
 
 - What about paging?
 
+- Test HTTPS with .htaccess and add it to the installation instructions!
+
 - Enable true MFA for the ChurchtoolsAuthVerifier
 - 40* returns different json formatted message between AuthMiddleware and PasswordController -> Make the same
 - Make logger log all exceptions and warnings from php! (use setDefaultErrorHandler from Slim)
