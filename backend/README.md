@@ -59,7 +59,7 @@ Request Body
 
 Behavior
 
-- If secondaryPassword is provided and allowed, it will be stored directly.
+- If secondaryPassword is provided and custom passwords are allowed, it will be encrypted and then stored.
 
 - If omitted, a secure password will be generated and returned.
 

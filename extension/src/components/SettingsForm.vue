@@ -26,9 +26,18 @@
       <label class="form-label">Admin user IDs (comma-separated)</label>
       <br />
       <small class="text-muted">
-        Admin users are users that are allowed to set and/or reset the secondary password for other users. <strong>Use this feature carefully!</strong>
+        Admin users are users that are allowed to read, set and/or reset the secondary password for other users. <strong>Use this feature carefully!</strong>
       </small>
       <input type="text" class="form-control" v-model="adminUserInput" />
+    </div>
+
+    <div class="mb-3">
+      <label class="form-label">Read access user IDs (comma-separated)</label>
+      <br />
+      <small class="text-muted">
+        Read access users are users that are allowed to read the secondary password for other users. <strong>Use this feature carefully!</strong>
+      </small>
+      <input type="text" class="form-control" v-model="readAccessUserInput" />
     </div>
 
     <div class="mb-3">
@@ -70,6 +79,7 @@ const emit = defineEmits<{
 const requireOldPassword = ref(true);
 const allowCustomPassword = ref(true);
 const adminUserInput = ref('');
+const readAccessUserInput = ref('');
 const passwordLength = ref(12);
 const backendUrl = ref('');
 const saved = ref(false);
@@ -83,6 +93,7 @@ onMounted(async () => {
       requireOldPassword.value = values.requirePasswordForPasswordChange ?? true;
       allowCustomPassword.value = values.allowCustomPassword ?? true;
       adminUserInput.value = (values.adminUsers ?? []).join(', ');
+      readAccessUserInput.value = (values.readAccessUsers ?? []).join(', ');
       passwordLength.value = values.passwordLength ?? 12;
       backendUrl.value = values.backendUrl ?? '';
     }
@@ -97,10 +108,16 @@ async function handleSave() {
     .map(id => parseInt(id.trim()))
     .filter(id => !isNaN(id) && id >= 1);
 
+  const readAccessUsers = readAccessUserInput.value
+    .split(',')
+    .map(id => parseInt(id.trim()))
+    .filter(id => !isNaN(id) && id >= 1);
+
   const payload = {
     requirePasswordForPasswordChange: requireOldPassword.value,
     allowCustomPassword: allowCustomPassword.value,
     adminUsers,
+    readAccessUsers,
     passwordLength: passwordLength.value,
     backendUrl: backendUrl.value,
   };

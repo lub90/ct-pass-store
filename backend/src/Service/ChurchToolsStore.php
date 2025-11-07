@@ -8,7 +8,7 @@ use CtPassStore\Config\AppConfig;
 
 class ChurchToolsStore extends ChurchToolsBaseService
 {
-    public function get(int $personId): ?string
+    public function getPwd(int $personId): ?string
     {
         $extension = new DataExtensionService($this, AppConfig::CT_EXTENSION_ID);
 
@@ -26,7 +26,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
     }
 
 
-    public function put(int $personId, string $encryptedPassword): void
+    public function putPwd(int $personId, string $encryptedPassword): void
     {
         $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
 
@@ -51,7 +51,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
     }
 
-    public function delete(int $personId): void
+    public function deletePwd(int $personId): void
     {
         $extension = new DataExtensionService($this, AppConfig::CT_EXTENSION_ID);
 

@@ -36,6 +36,17 @@ class ServiceSettings extends ChurchToolsBaseService
         return [42, 101, 202]; // Dummy-Werte
     }
 
+    /**
+     * Gibt die Liste der User-IDs zurück, die ReadAccess haben
+     *
+     * @return int[]
+     */
+    public function readAccessUsers(): array
+    {
+        // TODO: ChurchTools-API-Abfrage
+        return [42, 101, 202]; // Dummy-Werte
+    }
+
     public function pwdLength(): int
     {
         return 16; // Dummy-Wert, später aus ChurchTools laden

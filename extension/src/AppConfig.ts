@@ -33,6 +33,14 @@ export class AppConfig {
                     },
                     "description": "List of user IDs with admin privileges"
                 },
+                "readAccessUsers": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer",
+                        "minimum": 1
+                    },
+                    "description": "List of user IDs with read access privileges for all IDs"
+                },
                 "passwordLength": {
                     "type": "integer",
                     "minimum": 8,
@@ -48,6 +56,7 @@ export class AppConfig {
                 "requirePasswordForPasswordChange",
                 "allowCustomPassword",
                 "adminUsers",
+                "readAccessUsers",
                 "passwordLength",
                 "backendUrl"
             ],

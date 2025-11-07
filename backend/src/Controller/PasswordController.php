@@ -48,12 +48,12 @@ class PasswordController extends BaseService
         $targetId = (int) $args['id'];
 
         try {
-            $this->authorizeAndValidate($request, $targetId, false);
+            $this->authorizeAndValidate($request, $targetId, false, true);
         } catch (HttpResponseException $errorResponse) {
             return $errorResponse->getResponse();
         }
 
-        $encryptedSecondaryPwd = $this->store->get($targetId);
+        $encryptedSecondaryPwd = $this->store->getPwd($targetId);
 
         if ($encryptedSecondaryPwd === null) {
             return $this->error(404, 'No password entry found for this user.');
@@ -75,10 +75,10 @@ class PasswordController extends BaseService
         $userId = (int) $user[AppConfig::CT_USER_ID_FIELD];
 
         try {
-            $data = $this->authorizeAndValidate($request, $targetId, true);
+            $data = $this->authorizeAndValidate($request, $targetId, true, false);
             $body = $data['body'];
         } catch (HttpResponseException $errorResponse) {
-            return $errorResponse->getResponse();;
+            return $errorResponse->getResponse();
         }
 
         $pwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
@@ -98,7 +98,7 @@ class PasswordController extends BaseService
         }
 
         $ciphertext = $this->encryption->encrypt($pwd);
-        $this->store->put($targetId, $ciphertext);
+        $this->store->putPwd($targetId, $ciphertext);
 
 
         if ($body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null) {
@@ -120,12 +120,12 @@ class PasswordController extends BaseService
         $targetId = (int) $args['id'];
 
         try {
-            $this->authorizeAndValidate($request, $targetId, true);
+            $this->authorizeAndValidate($request, $targetId, true, false);
         } catch (HttpResponseException $errorResponse) {
             return $errorResponse->getResponse();
         }
 
-        $this->store->delete($targetId);
+        $this->store->deletePwd($targetId);
         return $response->withStatus(204);
     }
 
@@ -133,17 +133,21 @@ class PasswordController extends BaseService
     private function authorizeAndValidate(
         ServerRequestInterface $request,
         int $targetId,
-        bool $requirePasswordCheck
+        bool $requirePasswordCheck,
+        bool $checkReadAccess
     ): array {
         $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
         $userId = (int) $user[AppConfig::CT_USER_ID_FIELD];
         $cmsUserId = (string) $user[AppConfig::CT_USER_NAME_FIELD];
 
-        if ($userId !== $targetId && !in_array($userId, $this->settings->adminUsers(), true)) {
-            $this->logger->warning("User {$userId} tried to update password for user {$targetId} but is not allowed to so!");
-            throw new HttpResponseException(
-                $this->error(403, 'Not authorized to modify this entry!')
-            );
+        if ($userId !== $targetId) {
+            $hasSpecialAccess = ( in_array($userId, $this->settings->adminUsers(), true) || (checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true)) );
+            if (!$hasSpecialAcces) {
+                $this->logger->warning("User {$userId} tried to read/update password for user {$targetId} but is not allowed to so!");
+                throw new HttpResponseException(
+                    $this->error(403, 'Not authorized to modify this entry!')
+                );
+            }
         }
 
         $body = (array) $request->getParsedBody();
@@ -159,7 +163,7 @@ class PasswordController extends BaseService
 
             if (!$this->authVerifier->verifyUserPassword($cmsUserId, $primaryPwd)) {
                 //authVerifier does his own logging during checks
-                throw HttpResponseException(
+                throw new HttpResponseException(
                     $this->error(401, 'Invalid primary password')
                 );
             }
