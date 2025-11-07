@@ -10,6 +10,7 @@ use RuntimeException;
 class ServiceSettings extends ChurchToolsBaseService
 {
     private ?array $settings = null;
+    private ?array $encryptionSettings = null;
 
     private function loadSettings(): array
     {
@@ -33,14 +34,36 @@ class ServiceSettings extends ChurchToolsBaseService
         return $this->settings;
     }
 
+    private function loadEncryptionSettings(): array
+    {
+        if ($this->encryptionSettings !== null) {
+            return $this->encryptionSettings;
+        }
+
+        $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
+        $entries = $extension->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, true);
+
+        if (!is_array($entries) || !isset($entries['value'])) {
+            throw new RuntimeException('Settings entry is missing or malformed.');
+        }
+
+        $decoded = json_decode($entries['value'], true);
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Failed to decode encryption settings JSON.');
+        }
+
+        $this->encryptionSettings = $decoded;
+        return $this->encryptionSettings;
+    }
+
     public function requirePasswordForPasswordChange(): bool
     {
-        return (bool) ($this->loadSettings()['requirePasswordForPasswordChange'] ?? false);
+        return (bool) ($this->loadSettings()['requirePasswordForPasswordChange']);
     }
 
     public function allowCustomPasswords(): bool
     {
-        return (bool) ($this->loadSettings()['allowCustomPassword'] ?? false);
+        return (bool) ($this->loadSettings()['allowCustomPassword']);
     }
 
     /**
@@ -63,21 +86,11 @@ class ServiceSettings extends ChurchToolsBaseService
 
     public function pwdLength(): int
     {
-        return (int) ($this->loadSettings()['passwordLength'] ?? 16);
+        return (int) ($this->loadSettings()['passwordLength']);
     }
 
-    // TODO: Implement correctly...
     public function publicKey(): string
     {
-        // unchanged
-        return "-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzqOI1fvf3TIIxd1MJboo
-nwUcGzcN8BDEkYu+Bd1DlchiAi0d0is7bDjTEgBxEgSayj7Oja5gbpuExNmlQHV2
-Kf8o9RwPxzmPU85LDNhKySODsmANuVxXPwUEPBQW3QPlVmIcffli15sJ9GafqsOZ
-sVkOcVHIqqf0IVOZI3Lv1m8lL2LjgWNxUyDfBDS+3vMPubG9cNRC6WvmbiWpaVio
-VMmTOdeVPIwFeKLput185+IDGsBjpNxqJ80Tbg5b3X9WzqzDppSmNs+i9L5tdBLV
-aAxGVMwq7rb+jwogVVXOcOhmvlazbThyzBmUwpxj7fHmMd2i6Y2ClsOPRzm5fnnt
-SQIDAQAB
------END PUBLIC KEY-----";
+        return $this->loadEncryptionSettings()['publicKey'];
     }
 }

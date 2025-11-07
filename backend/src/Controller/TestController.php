@@ -27,6 +27,41 @@ class TestController extends BaseService
     {
         $tests = [];
 
+
+        try {
+            $credentialsPath = dirname(__DIR__, 2) . '/config/credentials.php';
+
+            if (!file_exists($credentialsPath)) {
+                throw new \RuntimeException('credentials.php file does not exist.');
+            }
+
+            $perms = fileperms($credentialsPath);
+
+            // Check if file is readable only by owner (0600 or stricter)
+            $isStrict = ($perms & 0x1FF) <= 0o600;
+
+            if (!$isStrict) {
+                throw new \RuntimeException(sprintf(
+                    'credentials.php file permissions too loose: %o. Expected 0600 or stricter.',
+                    $perms & 0x1FF
+                ));
+            }
+
+            $tests[] = [
+                'name' => 'credentials.php file permission check',
+                'status' => 'ok',
+                'message' => 'credentials.php file has secure permissions (0600 or stricter).',
+            ];
+        } catch (Throwable $e) {
+            $allPassed = false;
+            $tests[] = [
+                'name' => 'credentials.php file permission check',
+                'status' => 'fail',
+                'message' => $e->getMessage(),
+            ];
+        }
+
+
         // List of methods to test
         $methods = [
             'requirePasswordForPasswordChange',
@@ -34,6 +69,7 @@ class TestController extends BaseService
             'adminUsers',
             'readAccessUsers',
             'pwdLength',
+            'publicKey'
         ];
 
         $allPassed = true;
@@ -54,35 +90,6 @@ class TestController extends BaseService
                     'message' => $e->getMessage(),
                 ];
             }
-        }
-
-
-        try {
-            $envPath = dirname(__DIR__, 2) . '/.env';
-            $perms = fileperms($envPath);
-
-            // Check if file is readable only by owner (0600 or stricter)
-            $isStrict = ($perms & 0x1FF) <= 0o600;
-
-            if (!$isStrict) {
-                throw new \RuntimeException(sprintf(
-                    '.env file permissions too loose: %o. Expected 0600 or stricter.',
-                    $perms & 0x1FF
-                ));
-            }
-
-            $tests[] = [
-                'name' => '.env file permission check',
-                'status' => 'ok',
-                'message' => '.env file has secure permissions (0600 or stricter).',
-            ];
-        } catch (Throwable $e) {
-            $allPassed = false;
-            $tests[] = [
-                'name' => '.env file permission check',
-                'status' => 'fail',
-                'message' => $e->getMessage(),
-            ];
         }
 
 

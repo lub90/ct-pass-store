@@ -1,8 +1,9 @@
 # Composer dependencies
 /vendor/
 
-# Environment config
+# Environment and credential configs
 .env
+/config/credentials.php
 
 # Logs
 /logs/
