@@ -8,15 +8,18 @@ use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
 use CtPassStore\Controller\PasswordController;
+use CtPassStore\Controller\TestController;
 use CtPassStore\Service\ServiceSettings;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
 use CtPassStore\Service\ChurchtoolsAuthVerifier;
 
-
 return function (App $app): void {
     $container = $app->getContainer();
+
+    // Routes for the passwords (protected)
+
     $controller = new PasswordController(
         $container->get(ServiceSettings::class),
         $container->get(ChurchToolsStore::class),
@@ -29,4 +32,13 @@ return function (App $app): void {
     $app->get('/entries/{id}', [$controller, 'get']);
     $app->put('/entries/{id}', [$controller, 'put']);
     $app->delete('/entries/{id}', [$controller, 'delete']);
+
+
+    // Route to test whether everything works properly (protected)
+    $testController = new TestController(
+        $container->get(ServiceSettings::class),
+        $container->get(LoggerInterface::class)
+    );
+
+    $app->get('/test', [$testController, 'get']);
 };

@@ -4,57 +4,72 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
+use CtPassStore\Config\AppConfig;
+use RuntimeException;
+
 class ServiceSettings extends ChurchToolsBaseService
 {
+    private ?array $settings = null;
 
-    /**
-     * Gibt zurück, ob ein Passwort erforderlich ist, um ein Passwort zu ändern.
-     */
+    private function loadSettings(): array
+    {
+        if ($this->settings !== null) {
+            return $this->settings;
+        }
+
+        $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
+        $entries = $extension->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
+
+        if (!is_array($entries) || !isset($entries['value'])) {
+            throw new RuntimeException('Settings entry is missing or malformed.');
+        }
+
+        $decoded = json_decode($entries['value'], true);
+        if (!is_array($decoded)) {
+            throw new RuntimeException('Failed to decode settings JSON.');
+        }
+
+        $this->settings = $decoded;
+        return $this->settings;
+    }
+
     public function requirePasswordForPasswordChange(): bool
     {
-        // TODO: ChurchTools-API-Abfrage
-        return false; // Dummy-Wert
+        return (bool) ($this->loadSettings()['requirePasswordForPasswordChange'] ?? false);
     }
 
-    /**
-     * Gibt zurück, ob Benutzer eigene Passwörter setzen dürfen.
-     */
     public function allowCustomPasswords(): bool
     {
-        // TODO: ChurchTools-API-Abfrage
-        return false; // Dummy-Wert
+        return (bool) ($this->loadSettings()['allowCustomPassword'] ?? false);
     }
 
     /**
-     * Gibt die Liste der Admin-User-IDs zurück.
-     *
      * @return int[]
      */
     public function adminUsers(): array
     {
-        // TODO: ChurchTools-API-Abfrage
-        return [42, 101, 202]; // Dummy-Werte
+        $value = $this->loadSettings()['adminUsers'] ?? [];
+        return is_array($value) ? array_map('intval', $value) : [];
     }
 
     /**
-     * Gibt die Liste der User-IDs zurück, die ReadAccess haben
-     *
      * @return int[]
      */
     public function readAccessUsers(): array
     {
-        // TODO: ChurchTools-API-Abfrage
-        return [42, 101, 202]; // Dummy-Werte
+        $value = $this->loadSettings()['readAccessUsers'] ?? [];
+        return is_array($value) ? array_map('intval', $value) : [];
     }
 
     public function pwdLength(): int
     {
-        return 16; // Dummy-Wert, später aus ChurchTools laden
+        return (int) ($this->loadSettings()['passwordLength'] ?? 16);
     }
 
+    // TODO: Implement correctly...
     public function publicKey(): string
     {
-        // This is just a dummy key!
+        // unchanged
         return "-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAzqOI1fvf3TIIxd1MJboo
 nwUcGzcN8BDEkYu+Bd1DlchiAi0d0is7bDjTEgBxEgSayj7Oja5gbpuExNmlQHV2
@@ -65,5 +80,4 @@ aAxGVMwq7rb+jwogVVXOcOhmvlazbThyzBmUwpxj7fHmMd2i6Y2ClsOPRzm5fnnt
 SQIDAQAB
 -----END PUBLIC KEY-----";
     }
-
 }

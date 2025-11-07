@@ -26,7 +26,8 @@ class ExtensionDataService
         }
 
         $response = $this->client->get("/custommodules/{$this->extensionKey}");
-        $this->moduleId = $response['id'] ?? throw new RuntimeException('Module ID not found');
+
+        $this->moduleId = $response['data']['id'] ?? throw new RuntimeException('Module ID not found');
         return $this->moduleId;
     }
 
@@ -37,7 +38,8 @@ class ExtensionDataService
         }
 
         $moduleId = $this->resolveModuleId();
-        $this->categories = $this->client->get("/custommodules/{$moduleId}/customdatacategories");
+        $this->categories = $this->client->get("/custommodules/{$moduleId}/customdatacategories")['data'];
+
         return $this->categories;
     }
 
@@ -52,10 +54,16 @@ class ExtensionDataService
         throw new RuntimeException("Category \"$name\" not found.");
     }
 
-    public function getCategoryData(string $name): array
+    public function getCategoryData(string $name, bool $single): array
     {
         $category = $this->getCategoryByName($name);
-        return $this->client->get("/custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues");
+        $result = $this->client->get("/custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
+
+        if ($single) {
+            $result = $result[0];
+        }
+
+        return $result;
     }
 
     public function createCategoryEntry(string $name, array $data): int

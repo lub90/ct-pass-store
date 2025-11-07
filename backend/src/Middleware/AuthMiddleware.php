@@ -30,7 +30,7 @@ class AuthMiddleware implements MiddlewareInterface
     public function process(Request $request, Handler $handler): Response
     {
 
-        $token = $request->getHeaderLine('Authorization');
+        $token = str_replace("Login ", "", $request->getHeaderLine('Authorization') );
 
 
         if (empty($token)) {

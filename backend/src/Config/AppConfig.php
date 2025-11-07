@@ -6,6 +6,7 @@ final class AppConfig
 {
     public const CT_EXTENSION_ID = 'ctpassstore';
     public const CT_PWD_CATEGORY_NAME = 'passwordStore';
+    public const CT_SETTINGS_CATEGORY_NAME = 'settings';
     public const CT_PERSON_ID_FIELD = 'id';
     public const CT_ENCRYPTED_PWD_FIELD = 'secondaryPwd';
     public const EXTERNAL_REQUEST_TIMEOUT = 5.0; // seconds
