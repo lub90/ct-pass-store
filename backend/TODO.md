@@ -1,9 +1,16 @@
 TODO:
 
-- Implement the ServiceSettings
-- Implement the ChurchtoolsStore
+
+openapi-generator-cli generate -i https://your.church.tools/system/runtime/swagger/openapi.json -g php -o ./churchtools-api/ -c ./churchtools-api/openapi-generator-config.json
+
+
+
+- Add installation instructions referencing openapi-generator and compose (in general, and add version to generated churchtools-api -> "version": "0.1.0",)
+
+- Do end2end testing to ensure, that backend works properly
 - Rename ServiceSettings to ChurchtoolsServiceSettings
 - Consistent Writing of ChurchtTools vs. Churchtools
+- Implement Cross Origin availability
 
 - What happens with MFA activated -> Do we accept even if only password is provided?
 - Write tests for everything

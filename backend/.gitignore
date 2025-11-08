@@ -4,6 +4,8 @@
 # Environment and credential configs
 .env
 /config/credentials.php
+/churchtools-api/*
+!/churchtools-api/openapi-generator-config.json
 
 # Logs
 /logs/

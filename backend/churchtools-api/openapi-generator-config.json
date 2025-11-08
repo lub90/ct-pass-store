@@ -1,0 +1,5 @@
+{
+  "invokerPackage": "ChurchTools\\Api",
+  "composerPackageName": "churchtools/api",
+  "composerVersion": "0.1.0"
+}
