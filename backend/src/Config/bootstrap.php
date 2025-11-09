@@ -40,8 +40,9 @@ return function (App $app): void {
     });
     // Load the churchtools auth service
     $container->set(ChurchtoolsAuth::class, function () use ($container, $credentials): ChurchtoolsAuth {
-        $ctUrl = $credentials['CT_API_URL'];
-        return new ChurchtoolsAuth($ctUrl);
+        $apiUrl = $credentials['CT_API_URL'];
+        $logger = $container->get(LoggerInterface::class);
+        return new ChurchtoolsAuth($apiUrl, $logger);
     });
 
     // The AuthVerifier to check if provided passwords are valid

@@ -5,21 +5,25 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use RuntimeException;
+use Psr\Log\LoggerInterface;
 use CtPassStore\Config\AppConfig;
+use ChurchTools\Api\GeneralApi;
+use ChurchTools\Api\PersonApi;
+use ChurchTools\Configuration;
+use CtPassStore\Service\BaseService;
 
 /**
  * Handles ChurchTools token validation via Authorization header.
  */
-class ChurchtoolsAuth
+class ChurchtoolsAuth extends BaseService
 {
 
-    private string $apiUrl;
+    protected string $apiUrl;
 
-    public function __construct(string $apiUrl) {
-        if (empty($apiUrl)) {
-            throw new RuntimeException('Churchtools API URL must be set.');
-        }
-        $this->apiUrl = rtrim($apiUrl, '/');
+    public function __construct(string $apiUrl, LoggerInterface $logger) {
+        parent::__construct($logger);
+
+        $this->apiUrl = $apiUrl;
     }
 
     /**
@@ -28,38 +32,16 @@ class ChurchtoolsAuth
      * @param string $token The ChurchTools API token.
      * @return array|null Returns user data if valid, null otherwise.
      */
-    public function validateToken(string $token): ?array
+    public function validateToken(string $apiToken)
     {
-        $url = $this->apiUrl . '/whoami';
+        $config = Configuration::getDefaultConfiguration()
+            ->setHost($this->apiUrl)
+            ->setApiKey('Authorization', $apiToken)
+            ->setApiKeyPrefix('Authorization', 'Login');
 
-        $curl = curl_init($url);
-        curl_setopt_array($curl, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_HTTPHEADER => [
-                'Authorization: Login ' . $token,
-                'Accept: application/json',
-            ],
-            CURLOPT_TIMEOUT => AppConfig::EXTERNAL_REQUEST_TIMEOUT,
-        ]);
-
-        $response = curl_exec($curl);
-        $httpCode = curl_getinfo($curl, CURLINFO_HTTP_CODE);
-        curl_close($curl);
-
-        if ($httpCode !== 200 || !$response) {
-            return null;
-        }
-
-        $json = json_decode($response, true);
-        if (!is_array($json)) {
-            return null;
-        }
-        $person = $json['data'] ?? null;
-
-        if (!is_array($person) || ($person['id'] ?? -1) < 0) {
-            return null;
-        }
-
-        return $person;
+        $generalApi = new GeneralApi(config: $config);
+        $whoAmI = $generalApi->getWhoami();
+        
+        return $whoAmI->getData();
     }
 }

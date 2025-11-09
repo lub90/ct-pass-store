@@ -11,6 +11,7 @@ use Psr\Http\Server\MiddlewareInterface;
 use CtPassStore\Service\ChurchtoolsAuth;
 use CtPassStore\Config\AppConfig;
 use Monolog\Logger;
+use ChurchTools\ApiException;
 
 /**
  * Middleware that validates ChurchTools token and attaches user info to the request.
@@ -32,15 +33,20 @@ class AuthMiddleware implements MiddlewareInterface
 
         $token = str_replace("Login ", "", $request->getHeaderLine('Authorization') );
 
-
         if (empty($token)) {
             $this->logger?->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Missing Authorization header!');
         }
 
-        $user = $this->auth->validateToken($token);
+        $user = null;
+        try {
+            $user = $this->auth->validateToken($token);
+        } catch (ApiException $e) {
+            // Do nothing, because user becomes null and we fire the unathorized access part below
+        }
 
-        if (!$user || !isset($user[AppConfig::CT_USER_ID_FIELD])) {
+        // Check if everything was set properly and we are able to login via the provded token
+        if (($user == null) || ($user->getId() == null) || ($user->getId() < 1)) {
             $this->logger?->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Invalid ChurchTools token!');
         }

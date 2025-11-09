@@ -16,7 +16,9 @@ abstract class ChurchToolsBaseService extends BaseService
     protected string $apiUrl;
     protected string $apiToken;
 
-    protected PersonApi $hurchtoolsClient;
+    protected Client $http;
+
+    protected Configuration $churchtoolsConfig;
 
 
     public function __construct(string $apiUrl, string $apiToken, LoggerInterface $logger)
@@ -32,17 +34,10 @@ abstract class ChurchToolsBaseService extends BaseService
         $this->apiUrl = rtrim($apiUrl, '/');
         $this->apiToken = $apiToken;
 
-        // TODO: Test
-        $config = Configuration::getDefaultConfiguration()->setHost($apiUrl)->setApiKey('Authorization', $apiToken)->setApiKeyPrefix('Authorization', 'Login');
-        $guzzle = new Client([
-            'headers' => [
-                'Authorization' => "Login {$apiToken}"
-            ]
-        ]);
-        $this->churchtoolsClient = new PersonApi(null, $config);
-        $response = $this->churchtoolsClient->getPersonById(1);
-        print_r($response->getData()->getFirstName());
+        // Setup the churchtools config
+        $this->churchtoolsConfig = Configuration::getDefaultConfiguration()->setHost($apiUrl)->setApiKey('Authorization', $apiToken)->setApiKeyPrefix('Authorization', 'Login');
 
+        // TODO: If we do not use the client, remove it later on...
         $this->http = new Client([
             'base_uri' => $this->apiUrl . '/',
             'headers' => $this->defaultHeaders(),
