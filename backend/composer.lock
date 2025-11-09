@@ -4,15 +4,15 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7a21fc82d6729eef52ebe742fadd99c0",
+    "content-hash": "b8561caa33e21a5f200651c03bd203ad",
     "packages": [
         {
-            "name": "churchtools/api",
-            "version": "0.1.0",
+            "name": "churchtools/php-client",
+            "version": "dev-main",
             "dist": {
                 "type": "path",
-                "url": "churchtools-api",
-                "reference": "75425032d0323d21deb261af608ecf975bdb1044"
+                "url": "../../ct-php-client",
+                "reference": "55382180a46672e11cefe6006bd5ac86a2af98fd"
             },
             "require": {
                 "ext-curl": "*",
@@ -29,12 +29,12 @@
             "type": "library",
             "autoload": {
                 "psr-4": {
-                    "ChurchTools\\Api\\": "lib/"
+                    "ChurchTools\\": "lib/"
                 }
             },
             "autoload-dev": {
                 "psr-4": {
-                    "ChurchTools\\Api\\Test\\": "test/"
+                    "ChurchTools\\Test\\": "test/"
                 }
             },
             "license": [
@@ -3139,7 +3139,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "churchtools/php-client": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -8,11 +8,15 @@ use Psr\Log\LoggerInterface;
 use RuntimeException;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
+use ChurchTools\Configuration;
+use ChurchTools\Api\PersonApi;
 
 abstract class ChurchToolsBaseService extends BaseService
 {
     protected string $apiUrl;
     protected string $apiToken;
+
+    protected PersonApi $hurchtoolsClient;
 
 
     public function __construct(string $apiUrl, string $apiToken, LoggerInterface $logger)
@@ -27,6 +31,17 @@ abstract class ChurchToolsBaseService extends BaseService
         }
         $this->apiUrl = rtrim($apiUrl, '/');
         $this->apiToken = $apiToken;
+
+        // TODO: Test
+        $config = Configuration::getDefaultConfiguration()->setHost($apiUrl)->setApiKey('Authorization', $apiToken)->setApiKeyPrefix('Authorization', 'Login');
+        $guzzle = new Client([
+            'headers' => [
+                'Authorization' => "Login {$apiToken}"
+            ]
+        ]);
+        $this->churchtoolsClient = new PersonApi(null, $config);
+        $response = $this->churchtoolsClient->getPersonById(1);
+        print_r($response->getData()->getFirstName());
 
         $this->http = new Client([
             'base_uri' => $this->apiUrl . '/',
