@@ -22,6 +22,10 @@ class BackendSandboxManager
             throw new \RuntimeException('Backend is already running.');
         }
 
+        if (!$this->isPortAvailable()) {
+            throw new \RuntimeException(sprintf('Port %d on host %s is already in use.', $this->port, $this->host));
+        }
+
         // Starte den Server im Hintergrund und speichere die PID
         $command = sprintf('php -S %s:%d -t %s > /dev/null 2>&1 & echo $!', $this->host, $this->port, $this->webroot);
         $output = [];
@@ -32,7 +36,7 @@ class BackendSandboxManager
             throw new \RuntimeException('Failed to start PHP built-in server.');
         }
 
-        // Kurze Pause, damit der Server hochfahren kann
+        // Give the server time to start up
         sleep(1);
     }
 
@@ -41,11 +45,24 @@ class BackendSandboxManager
         if ($this->pid !== null) {
             exec('kill ' . $this->pid);
             $this->pid = null;
+            // Give the server time to shut down
+            sleep(1);
         }
     }
 
     public function getBaseUrl(): string
     {
         return sprintf('http://%s:%d', $this->host, $this->port);
+    }
+
+
+    private function isPortAvailable(): bool
+    {
+        $connection = @fsockopen($this->host, $this->port);
+        if (is_resource($connection)) {
+            fclose($connection);
+            return false; // Port is already in use
+        }
+        return true; // Port is free
     }
 }

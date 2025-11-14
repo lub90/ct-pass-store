@@ -19,6 +19,8 @@ use ChurchTools\ApiException;
 class AuthMiddleware implements MiddlewareInterface
 {
 
+    private const AUTH_HEADER_PREFIX = "Login ";
+
     private ChurchtoolsAuth $auth;
     private Logger $logger;
 
@@ -31,12 +33,23 @@ class AuthMiddleware implements MiddlewareInterface
     public function process(Request $request, Handler $handler): Response
     {
 
-        $token = str_replace("Login ", "", $request->getHeaderLine('Authorization') );
+        $requestHeader = $request->getHeaderLine('Authorization')  ?? '';
 
-        if (empty($token)) {
+        if (empty($requestHeader)) {
             $this->logger?->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Missing Authorization header!');
         }
+
+        if (!str_starts_with($requestHeader, AuthMiddleware::AUTH_HEADER_PREFIX)) {
+            $this->logger?->warning('Unauthorized access attempt: Invalid or missing Login prefix in Authorization header!', [
+                'ip' => $request->getServerParams()['REMOTE_ADDR']
+            ]);
+            return $this->unauthorized($request, 'Request header must startwith ' . AuthMiddleware::AUTH_HEADER_PREFIX);
+        }
+
+        $token = str_replace(AuthMiddleware::AUTH_HEADER_PREFIX, "", $requestHeader);
+
+        
 
         // Check if we are able to login via the provided token
         $user = null;
@@ -68,10 +81,10 @@ class AuthMiddleware implements MiddlewareInterface
     private function unauthorized(Request $request, string $reason): Response
     {
         $responseFactory = new \Slim\Psr7\Factory\ResponseFactory();
-        $response = $responseFactory->createResponse(403);
+        $response = $responseFactory->createResponse(401);
         $response->getBody()->write(json_encode([
             'error' => 'Unauthorized',
-            'reason' => $reason,
+            'message' => $reason,
         ]));
         return $response->withHeader('Content-Type', 'application/json');
     }
