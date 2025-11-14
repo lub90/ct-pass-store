@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "b8561caa33e21a5f200651c03bd203ad",
+    "content-hash": "7ca0b537e91ac1def0cb0e9006fde9b4",
     "packages": [
         {
             "name": "churchtools/php-client",
@@ -12,7 +12,7 @@
             "dist": {
                 "type": "path",
                 "url": "../../ct-php-client",
-                "reference": "7c390800e2248260676fcd8a89fe174e0a67776f"
+                "reference": "e7584d87fcccf5ab96b7b3c1789dec4bfb086d69"
             },
             "require": {
                 "ext-curl": "*",
