@@ -38,17 +38,22 @@ class AuthMiddleware implements MiddlewareInterface
             return $this->unauthorized($request, 'Missing Authorization header!');
         }
 
+        // Check if we are able to login via the provided token
         $user = null;
         try {
             $user = $this->auth->validateToken($token);
         } catch (ApiException $e) {
             // Do nothing, because user becomes null and we fire the unathorized access part below
         }
-
-        // Check if everything was set properly and we are able to login via the provded token
         if (($user == null) || ($user->getId() == null) || ($user->getId() < 1)) {
             $this->logger?->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Invalid ChurchTools token!');
+        }
+
+        // Check if the user has the right to access the service
+        if (!$this->auth->hasAccessRights($token)) {
+            $this->logger?->warning("Unauthorized access attempt: User {$user->getId()} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            return $this->unauthorized($request, 'User is not allowed to access the service!');
         }
 
         // Attach user info to request attributes
