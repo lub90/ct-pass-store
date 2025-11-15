@@ -12,24 +12,22 @@ use CtPassStore\Tests\EndToEnd\BackendSandboxManager;
 
 abstract class AccessTestPrototype extends TestCase
 {
-    private static ChurchToolsSandboxManager $ctBackend;
     private static BackendSandboxManager $thisBackend;
 
     protected const string AUTH_HEADER_PREFIX = 'Login ';
 
 
     public static function setUpBeforeClass(): void {
-        self::$ctBackend = new ChurchToolsSandboxManager();
         self::$thisBackend = new BackendSandboxManager();
 
-        self::$ctBackend->start();
+        ChurchToolsSandboxManager::getInstance()->start();
         self::$thisBackend->start();
     }
 
     public static function tearDownAfterClass(): void
     {
         self::$thisBackend->stop();
-        self::$ctBackend->stop();
+        ChurchToolsSandboxManager::getInstance()->stop();
     }
 
     abstract public function getEndpoint(): string;
@@ -78,7 +76,7 @@ abstract class AccessTestPrototype extends TestCase
 
     public static function invalidAuthHeaderProvider(): array
     {
-        $ct = new ChurchToolsSandboxManager();
+        $ct = ChurchToolsSandboxManager::getInstance();
 
         $tokens = array_merge(
             array_map(fn($u) => $u['token'], $ct->getNormalUsers()),
@@ -132,7 +130,7 @@ abstract class AccessTestPrototype extends TestCase
 
     public static function invalidTokenProvider(): array
     {
-        $ct = new ChurchToolsSandboxManager();
+        $ct = ChurchToolsSandboxManager::getInstance();
 
         $invalidTokens = array_map(fn($u) => $u['token'], $ct->getInvalidAccessTokens());
 
@@ -195,9 +193,9 @@ abstract class AccessTestPrototype extends TestCase
 
     public static function unauthorizedTokenProvider(): array
     {
-        $ct = new ChurchToolsSandboxManager();
+        $ct = ChurchToolsSandboxManager::getInstance();
 
-        $unauthorizedTokens = array_map(fn($u) => $u['token'], $ct->getUnauthorizedUsers());
+        $unauthorizedTokens = array_map(fn($u) => $u['token'], $ct->getNoAccessAllowedUsers());
 
         $cases = [];
 

@@ -7,9 +7,20 @@ namespace CtPassStore\Tests\EndToEnd;
  */
 class ChurchToolsSandboxManager
 {
+
+    private static ?ChurchToolsSandboxManager $instance = null;
+
+    public static function getInstance(string $fixturePath = __DIR__ . '/fixtures') {
+        if (self::$instance === null) {
+            self::$instance = new ChurchToolsSandboxManager($fixturePath);
+        }
+        return self::$instance;
+    }
+
+
     private string $fixturePath;
 
-    public function __construct(string $fixturePath = __DIR__ . '/fixtures')
+    private function __construct(string $fixturePath = __DIR__ . '/fixtures')
     {
         $this->fixturePath = rtrim($fixturePath, '/');
     }
@@ -39,9 +50,9 @@ class ChurchToolsSandboxManager
         return $this->loadUsersFromFixture('read_access_users.json');
     }
 
-    public function getUnauthorizedUsers(): array
+    public function getNoAccessAllowedUsers(): array
     {
-        return $this->loadUsersFromFixture('unauthorized_users.json');
+        return $this->loadUsersFromFixture('no_access_allowed_users.json');
     }
 
     public function getInvalidAccessTokens(): array
