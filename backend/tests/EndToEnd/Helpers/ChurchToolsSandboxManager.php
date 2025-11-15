@@ -1,6 +1,6 @@
 <?php
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 /**
  * Class to manage the sandbox backend for end to end testing
@@ -10,7 +10,7 @@ class ChurchToolsSandboxManager
 
     private static ?ChurchToolsSandboxManager $instance = null;
 
-    public static function getInstance(string $fixturePath = __DIR__ . '/fixtures') {
+    public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures') {
         if (self::$instance === null) {
             self::$instance = new ChurchToolsSandboxManager($fixturePath);
         }
@@ -20,7 +20,7 @@ class ChurchToolsSandboxManager
 
     private string $fixturePath;
 
-    private function __construct(string $fixturePath = __DIR__ . '/fixtures')
+    private function __construct(string $fixturePath = __DIR__ . '/../fixtures')
     {
         $this->fixturePath = rtrim($fixturePath, '/');
     }

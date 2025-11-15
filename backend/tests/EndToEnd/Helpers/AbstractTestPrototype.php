@@ -1,10 +1,10 @@
 <?php
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 use PHPUnit\Framework\TestCase;
-use CtPassStore\Tests\EndToEnd\ChurchToolsSandboxManager;
-use CtPassStore\Tests\EndToEnd\BackendSandboxManager;
+use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
+use CtPassStore\Tests\EndToEnd\Helpers\BackendSandboxManager;
 use \GuzzleHttp\Client;
 
 

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Service\ExtensionDataService;
@@ -18,7 +18,7 @@ class PersistenceChecker
     public function __construct(string $category)
     {
         // Manually load them from the server configuration
-        $credentials = require __DIR__ . '/../../config/credentials.php';
+        $credentials = require __DIR__ . '/../../../config/credentials.php';
 
         // Setup the churchtools config
         $ctConfig = Configuration::getDefaultConfiguration()

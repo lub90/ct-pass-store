@@ -3,12 +3,12 @@
 
 
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 use CtPassStore\Config\AppConfig;
-use CtPassStore\Tests\EndToEnd\ChurchToolsSandboxManager;
-use CtPassStore\Tests\EndToEnd\PersistenceChecker;
-use CtPassStore\Tests\EndToEnd\AbstractTestPrototype;
+use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
+use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
+use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 
 abstract class AccessTestPrototype extends AbstractTestPrototype
 {
