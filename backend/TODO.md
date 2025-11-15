@@ -2,6 +2,7 @@ TODO:
 
 
 - Add installation instructions referencing openapi-generator and compose (in general, and add version to generated churchtools-api -> "version": "0.1.0",)
+- Add to test that the log file is not readible from the outside!
 
 - Do end2end testing to ensure, that backend works properly
 - Rename ServiceSettings to ChurchtoolsServiceSettings

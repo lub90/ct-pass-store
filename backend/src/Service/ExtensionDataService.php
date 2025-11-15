@@ -57,7 +57,7 @@ class ExtensionDataService
         throw new RuntimeException("Category \"$name\" not found.");
     }
 
-    public function getCategoryData(string $name, bool $single): array
+    public function getCategoryData(string $name, bool $single = false): array
     {
         $category = $this->getCategoryByName($name);
         $result = $this->client->getJson("custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];

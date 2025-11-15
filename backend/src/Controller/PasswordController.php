@@ -141,11 +141,11 @@ class PasswordController extends BaseService
         $cmsUserId = (string) $user[AppConfig::CT_USER_NAME_FIELD];
 
         if ($userId !== $targetId) {
-            $hasSpecialAccess = ( in_array($userId, $this->settings->adminUsers(), true) || (checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true)) );
-            if (!$hasSpecialAcces) {
+            $hasSpecialAccess = ( in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true)) );
+            if (!$hasSpecialAccess) {
                 $this->logger->warning("User {$userId} tried to read/update password for user {$targetId} but is not allowed to so!");
                 throw new HttpResponseException(
-                    $this->error(403, 'Not authorized to modify this entry!')
+                    $this->error(403, 'Not authorized to read/modify this entry!')
                 );
             }
         }
