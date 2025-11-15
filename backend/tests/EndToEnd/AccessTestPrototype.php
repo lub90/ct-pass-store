@@ -5,42 +5,18 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use PHPUnit\Framework\TestCase;
-use \GuzzleHttp\Client;
+use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\EndToEnd\ChurchToolsSandboxManager;
-use CtPassStore\Tests\EndToEnd\BackendSandboxManager;
+use CtPassStore\Tests\EndToEnd\PersistenceChecker;
+use CtPassStore\Tests\EndToEnd\AbstractTestPrototype;
 
-abstract class AccessTestPrototype extends TestCase
+abstract class AccessTestPrototype extends AbstractTestPrototype
 {
-    private static BackendSandboxManager $thisBackend;
-
-    protected const string AUTH_HEADER_PREFIX = 'Login ';
-
-
-    public static function setUpBeforeClass(): void {
-        self::$thisBackend = new BackendSandboxManager();
-
-        ChurchToolsSandboxManager::getInstance()->start();
-        self::$thisBackend->start();
-    }
-
-    public static function tearDownAfterClass(): void
-    {
-        self::$thisBackend->stop();
-        ChurchToolsSandboxManager::getInstance()->stop();
-    }
 
     abstract public function getEndpoint(): string;
 
     abstract public function getMethods(): array;
 
-    protected function getClient(): Client
-    {
-        return new Client([
-            'base_uri' => self::$thisBackend->getBaseUrl(),
-            'http_errors' => false,
-        ]);
-    }
 
     /**
      * @dataProvider invalidAuthHeaderProvider
@@ -53,6 +29,11 @@ abstract class AccessTestPrototype extends TestCase
     }
 
     protected function invalidAuthHeaderReturns401PerMethod(string $method, ?string $authHeader): void {
+        // Save previous database status
+        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck->saveStatus();
+
+        // Start request
         $client = $this->getClient();
 
         $headers = [];
@@ -72,6 +53,9 @@ abstract class AccessTestPrototype extends TestCase
         $this->assertArrayHasKey('message', $body);
         $this->assertIsString($body['error']);
         $this->assertIsString($body['message']);
+
+        // Check that there were no changes
+        $persCheck->assertUnchanged();
     }
 
     public static function invalidAuthHeaderProvider(): array
@@ -111,6 +95,11 @@ abstract class AccessTestPrototype extends TestCase
     }
 
     protected function invalidTokenReturns401PerMethod(string $method, string $authHeader): void {
+        // Save previous database status
+        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck->saveStatus();
+
+        // Start request
         $client = $this->getClient();
 
         $response = $client->request($method, $this->getEndpoint(), [
@@ -125,6 +114,9 @@ abstract class AccessTestPrototype extends TestCase
         $this->assertArrayHasKey('message', $body);
         $this->assertIsString($body['error']);
         $this->assertIsString($body['message']);
+
+        // Check that there were no changes
+        $persCheck->assertUnchanged();
     }
 
 
@@ -174,6 +166,11 @@ abstract class AccessTestPrototype extends TestCase
     }
 
     protected function unauthorizedTokenReturns403PerMethod(string $method, string $authHeader): void {
+        // Save previous database status
+        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck->saveStatus();
+
+        // Start request
         $client = $this->getClient();
 
         $response = $client->request($method, $this->getEndpoint(), [
@@ -188,6 +185,9 @@ abstract class AccessTestPrototype extends TestCase
         $this->assertArrayHasKey('message', $body);
         $this->assertIsString($body['error']);
         $this->assertIsString($body['message']);
+
+        // Check that there were no changes
+        $persCheck->assertUnchanged();
     }
 
 
