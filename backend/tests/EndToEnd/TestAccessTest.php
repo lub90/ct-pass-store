@@ -11,16 +11,16 @@ use CtPassStore\Tests\EndToEnd\BackendSandboxManager;
 
 class TestAccessTest extends TestCase
 {
-    private ChurchToolsSandboxManager $ctBackend;
-    private BackendSandboxManager $thisBackend;
+    private static ChurchToolsSandboxManager $ctBackend;
+    private static BackendSandboxManager $thisBackend;
     private string $endpoint = '/test';
 
-    protected function setUp(): void {
-        $this->ctBackend = new ChurchToolsSandboxManager();
-        $this->thisBackend = new BackendSandboxManager();
+    public static function setUpBeforeClass(): void {
+        self::$ctBackend = new ChurchToolsSandboxManager();
+        self::$thisBackend = new BackendSandboxManager();
 
-        $this->ctBackend->start();
-        $this->thisBackend->start();
+        self::$ctBackend->start();
+        self::$thisBackend->start();
     }
 
     /**
@@ -29,7 +29,7 @@ class TestAccessTest extends TestCase
     public function testUnauthorizedAccessReturns401(?string $authHeader): void
     {
         $client = new \GuzzleHttp\Client([
-            'base_uri' => $this->thisBackend->getBaseUrl(),
+            'base_uri' => self::$thisBackend->getBaseUrl(),
             'http_errors' => false
         ]);
 
@@ -83,7 +83,7 @@ class TestAccessTest extends TestCase
     public function testForbiddenAccessReturns403(string $authHeader): void
     {
         $client = new \GuzzleHttp\Client([
-            'base_uri' => $this->thisBackend->getBaseUrl(),
+            'base_uri' => self::$thisBackend->getBaseUrl(),
             'http_errors' => false
         ]);
 
@@ -141,14 +141,14 @@ class TestAccessTest extends TestCase
         }
 
         return $cases;
-}
+    }
 
 
 
-    protected function tearDown(): void
+    public static function tearDownAfterClass(): void
     {
-        $this->thisBackend->stop();
-        $this->ctBackend->stop();
+        self::$thisBackend->stop();
+        self::$ctBackend->stop();
     }
 
 
