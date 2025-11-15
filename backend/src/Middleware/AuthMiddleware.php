@@ -65,8 +65,8 @@ class AuthMiddleware implements MiddlewareInterface
 
         // Check if the user has the right to access the service
         if (!$this->auth->hasAccessRights($token)) {
-            $this->logger?->warning("Unauthorized access attempt: User {$user->getId()} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
-            return $this->unauthorized($request, 'User is not allowed to access the service!');
+            $this->logger?->warning("Forbidden access attempt: User {$user->getId()} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            return $this->forbidden($request, 'User is not allowed to access the service!');
         }
 
         // Attach user info to request attributes
@@ -80,8 +80,18 @@ class AuthMiddleware implements MiddlewareInterface
      */
     private function unauthorized(Request $request, string $reason): Response
     {
+        return $this->accessDenied($request, 401, $reason);
+    }
+
+    private function forbidden(Request $request, string $reason): Response
+    {
+        return $this->accessDenied($request, 403, $reason);
+    }
+
+    private function accessDenied(Request $request, int $code, string $reason): Response
+    {
         $responseFactory = new \Slim\Psr7\Factory\ResponseFactory();
-        $response = $responseFactory->createResponse(401);
+        $response = $responseFactory->createResponse($code);
         $response->getBody()->write(json_encode([
             'error' => 'Unauthorized',
             'message' => $reason,

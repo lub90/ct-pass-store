@@ -134,7 +134,6 @@ abstract class AccessTestPrototype extends TestCase
     {
         $ct = new ChurchToolsSandboxManager();
 
-        $unauthorizedTokens = array_map(fn($u) => $u['token'], $ct->getUnauthorizedUsers());
         $invalidTokens = array_map(fn($u) => $u['token'], $ct->getInvalidAccessTokens());
 
         $validTokens = array_merge(
@@ -145,23 +144,18 @@ abstract class AccessTestPrototype extends TestCase
 
         $cases = [];
 
-        // 1. Valid tokens from unauthorized users
-        foreach ($unauthorizedTokens as $token) {
-            $cases['unauthorized user token ' . $token] = [self::AUTH_HEADER_PREFIX . $token];
-        }
-
-        // 2. Invalid tokens (correct prefix)
+        // 1. Invalid tokens (correct prefix)
         foreach ($invalidTokens as $token) {
             $cases['invalid token' . $token] = [self::AUTH_HEADER_PREFIX . $token];
         }
 
-        // 3. Valid tokens with whitespace inserted
+        // 2. Valid tokens with whitespace inserted
         foreach ($validTokens as $token) {
             $cases['valid token with whitespace 1 ' . $token] = [self::AUTH_HEADER_PREFIX . substr($token, 0, 3) . ' ' . substr($token, 3)];
             $cases['valid token with whitespace 2 ' . $token] = [self::AUTH_HEADER_PREFIX . substr($token, 0, 1) . '  ' . substr($token, 1)];
         }
 
-        // 4. Valid tokens with extra characters at beginning or end
+        // 3. Valid tokens with extra characters at beginning or end
         foreach ($validTokens as $token) {
             $cases['valid tokens with extra character at beginning ' . $token] = [self::AUTH_HEADER_PREFIX . 'X' . $token];
             $cases['valid tokens with extra character at end ' . $token] = [self::AUTH_HEADER_PREFIX . $token . 'X'];
@@ -171,4 +165,47 @@ abstract class AccessTestPrototype extends TestCase
     }
 
 
+    /**
+     * @dataProvider unauthorizedTokenProvider
+     */
+    public function testUnauthorizedTokenReturns403(string $authHeader): void
+    {
+        foreach($this->getMethods() as $method) {
+            $this->unauthorizedTokenReturns403PerMethod($method, $authHeader);
+        }
+    }
+
+    protected function unauthorizedTokenReturns403PerMethod(string $method, string $authHeader): void {
+        $client = $this->getClient();
+
+        $response = $client->request($method, $this->getEndpoint(), [
+            'headers' => ['Authorization' => $authHeader]
+        ]);
+
+        $this->assertSame(403, $response->getStatusCode(), "Expected 403 for method $method and for header: $authHeader");
+
+        $body = json_decode((string)$response->getBody(), true);
+        $this->assertIsArray($body);
+        $this->assertArrayHasKey('error', $body);
+        $this->assertArrayHasKey('message', $body);
+        $this->assertIsString($body['error']);
+        $this->assertIsString($body['message']);
+    }
+
+
+    public static function unauthorizedTokenProvider(): array
+    {
+        $ct = new ChurchToolsSandboxManager();
+
+        $unauthorizedTokens = array_map(fn($u) => $u['token'], $ct->getUnauthorizedUsers());
+
+        $cases = [];
+
+        // Valid tokens from unauthorized users
+        foreach ($unauthorizedTokens as $token) {
+            $cases['unauthorized user token ' . $token] = [self::AUTH_HEADER_PREFIX . $token];
+        }
+
+        return $cases;
+    }
 }

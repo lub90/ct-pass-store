@@ -53,22 +53,14 @@ class ChurchtoolsAuth extends BaseService
         $config = $this->getCtConfig($apiToken);
         $simpleClient = new SimpleClient(config: $config);
 
-        try {
-    $response = $simpleClient->get(AppConfig::PERMISSIONS_ENDPOINT);
-} catch (\GuzzleHttp\Exception\TooManyRedirectsException $e) {
-    echo $e->getMessage();
-    echo "\nLetzte URL: " . $e->getRequest()->getUri();
-}
-
-        $response = $simpleClient->get(AppConfig::PERMISSIONS_ENDPOINT);
-        $body = json_decode($response->getBody()->getContents(), true);
+        $response = $simpleClient->getJson(AppConfig::PERMISSIONS_ENDPOINT);
 
         // Check if 'ctpassstore' exists and has 'view' set to true
         if (
-            isset($body['data']) &&
-            isset($body['data'][AppConfig::CT_EXTENSION_ID]) &&
-            isset($body['data'][AppConfig::CT_EXTENSION_ID]['view']) &&
-            $body['data'][AppConfig::CT_EXTENSION_ID]['view'] === true
+            isset($response['data']) &&
+            isset($response['data'][AppConfig::CT_EXTENSION_ID]) &&
+            isset($response['data'][AppConfig::CT_EXTENSION_ID]['view']) &&
+            $response['data'][AppConfig::CT_EXTENSION_ID]['view'] === true
         ) {
             return true;
         }
