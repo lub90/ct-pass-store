@@ -4,18 +4,20 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
+use ChurchTools\SimpleClient;
 use RuntimeException;
+use ChurchTools\Configuration;
 
 class ExtensionDataService
 {
     private ?int $moduleId = null;
     private ?array $categories = null;
-    private ChurchToolsBaseService $client;
-    private string $extensionKey;
+    private SimpleClient $client;
+    private readonly string $extensionKey;
 
-    public function __construct(ChurchToolsBaseService $client, string $extensionKey)
+    public function __construct(Configuration $ctConfig, string $extensionKey)
     {
-        $this->client = $client;
+        $this->client = new SimpleClient($ctConfig);
         $this->extensionKey = $extensionKey;
     }
 
@@ -25,7 +27,7 @@ class ExtensionDataService
             return $this->moduleId;
         }
 
-        $response = $this->client->get("/custommodules/{$this->extensionKey}");
+        $response = $this->client->getJson("custommodules/{$this->extensionKey}");
 
         $this->moduleId = $response['data']['id'] ?? throw new RuntimeException('Module ID not found');
         return $this->moduleId;
@@ -38,7 +40,8 @@ class ExtensionDataService
         }
 
         $moduleId = $this->resolveModuleId();
-        $this->categories = $this->client->get("/custommodules/{$moduleId}/customdatacategories")['data'];
+
+        $this->categories = $this->client->getJson("custommodules/{$moduleId}/customdatacategories")['data'];
 
         return $this->categories;
     }
@@ -57,7 +60,7 @@ class ExtensionDataService
     public function getCategoryData(string $name, bool $single): array
     {
         $category = $this->getCategoryByName($name);
-        $result = $this->client->get("/custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
+        $result = $this->client->getJson("custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
 
         if ($single) {
             $result = $result[0];
@@ -78,7 +81,7 @@ class ExtensionDataService
             'value' => json_encode($data),
         ];
 
-        $response = $this->client->post("/custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues", $payload);
+        $response = $this->client->post("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues", $payload);
         return $response['data']['id'] ?? throw new RuntimeException('Failed to create entry');
     }
 
@@ -93,7 +96,7 @@ class ExtensionDataService
             'value' => json_encode($data),
         ];
 
-        $response = $this->client->put("/custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", $payload);
+        $response = $this->client->put("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", $payload);
         return $response['data']['id'] ?? throw new RuntimeException('Failed to update entry');
     }
 
@@ -102,6 +105,6 @@ class ExtensionDataService
         $category = $this->getCategoryByName($name);
         $moduleId = $this->resolveModuleId();
 
-        $this->client->delete("/custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}");
+        $this->client->delete("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}");
     }
 }

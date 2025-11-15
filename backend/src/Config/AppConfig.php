@@ -11,7 +11,7 @@ final class AppConfig
     public const CT_ENCRYPTED_PWD_FIELD = 'secondaryPwd';
     public const EXTERNAL_REQUEST_TIMEOUT = 5.0; // seconds
 
-    public const PERMISSIONS_ENDPOINT = '/api/permissions/global';
+    public const PERMISSIONS_ENDPOINT = 'permissions/global';
 
     // TODO: should be able to remove them later on
     public const USER_ATTRIBUTE = 'user';

@@ -18,7 +18,7 @@ class ServiceSettings extends ChurchToolsBaseService
             return $this->settings;
         }
 
-        $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
+        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
         $entries = $extension->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
 
         if (!is_array($entries) || !isset($entries['value'])) {
@@ -40,7 +40,7 @@ class ServiceSettings extends ChurchToolsBaseService
             return $this->encryptionSettings;
         }
 
-        $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
+        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
         $entries = $extension->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, true);
 
         if (!is_array($entries) || !isset($entries['value'])) {

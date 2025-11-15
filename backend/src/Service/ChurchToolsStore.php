@@ -28,7 +28,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
     public function putPwd(int $personId, string $encryptedPassword): void
     {
-        $extension = new ExtensionDataService($this, AppConfig::CT_EXTENSION_ID);
+        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
 
         $data = [
             AppConfig::CT_PERSON_ID_FIELD => $personId,
