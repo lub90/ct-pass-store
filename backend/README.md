@@ -32,7 +32,7 @@ Response
 
  ```json
 {
-    "secondaryPassword": "your-encrypted-password"
+    "secondaryPwd": "your-encrypted-password"
 }
  ```
 
@@ -52,18 +52,18 @@ Request Body
 
  ```json
 {
-    "primaryPassword": "churchtools-login-password", // optional, required if password change protection is enabled
-    "secondaryPassword": "your-new-password" // optional, will be generated if omitted
+    "primaryPwd": "churchtools-login-password", // optional, required if password change protection is enabled
+    "secondaryPwd": "your-new-password" // optional, will be generated if omitted
 }
 ```
 
 Behavior
 
-- If secondaryPassword is provided and custom passwords are allowed, it will be encrypted and then stored.
+- If secondaryPwd is provided and custom passwords are allowed, it will be encrypted and then stored.
 
 - If omitted, a secure password will be generated and returned.
 
-- If primaryPassword is required (based on config), it must be valid for the user.
+- If primaryPwd is required (based on config), it must be valid for the user.
 
 Responses
 
@@ -73,7 +73,7 @@ Responses
 
 ```json
 {
-    "secondaryPassword": "generated-password"
+    "secondaryPwd": "generated-password"
 }
 ```
 

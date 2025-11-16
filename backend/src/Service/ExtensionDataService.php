@@ -63,7 +63,7 @@ class ExtensionDataService
         $result = $this->client->getJson("custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
 
         if ($single) {
-            $result = $result[0];
+           $result = $result[0];
         }
 
         return $result;

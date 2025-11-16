@@ -54,7 +54,7 @@ abstract class AbstractTestPrototype extends TestCase {
         $adminUsers = array_map(fn($u) => $u['id'], $ct->getAdminUsers());
         $readAccessUsers = array_map(fn($u) => $u['id'], $ct->getReadAccessUsers());
         $settings['adminUsers'] = $adminUsers;
-        $settings['readAccessUers'] = $readAccessUsers;
+        $settings['readAccessUsers'] = $readAccessUsers;
 
         // Set settings in ct backend tests can access it
         $ct->loadSettings($settings);

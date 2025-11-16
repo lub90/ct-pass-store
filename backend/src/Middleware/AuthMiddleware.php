@@ -32,7 +32,6 @@ class AuthMiddleware implements MiddlewareInterface
 
     public function process(Request $request, Handler $handler): Response
     {
-
         $requestHeader = $request->getHeaderLine('Authorization')  ?? '';
 
         if (empty($requestHeader)) {
