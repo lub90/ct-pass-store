@@ -11,104 +11,87 @@ use CtPassStore\Tests\Helpers\Helpers;
  */
 class ChurchToolsSandboxManager
 {
-
     private static ?ChurchToolsSandboxManager $instance = null;
 
-    public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures') {
+    private string $fixturePath;
+    private ExtensionDataService $extensionDataService;
+
+    public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures'): ChurchToolsSandboxManager
+    {
         if (self::$instance === null) {
             self::$instance = new ChurchToolsSandboxManager($fixturePath);
         }
         return self::$instance;
     }
 
-
-    private string $fixturePath;
-
     private function __construct(string $fixturePath = __DIR__ . '/../fixtures')
     {
         $this->fixturePath = rtrim($fixturePath, '/');
+
+        $ctConfig = Helpers::getConfiguration();
+        $this->extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
     }
 
     public function start(): void
     {
-        // TODO: Later on, we can implement an automatic setup of the sandbox ChurchTools backend here
+        // TODO: automatic setup of the sandbox ChurchTools backend
     }
 
     public function stop(): void
     {
-        // TODO: Later on, we can implement an automatic tear down of the sandbox Churchtools backend here...
+        // TODO: automatic tear down of the sandbox ChurchTools backend
     }
 
-    public function loadSettings(array $settings): void {
-        $ctConfig = Helpers::getConfiguration();
+    public function loadSettings(array $settings): void
+    {
+        $currentSettings = $this->extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
 
-        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-
-        $currentSettings = $extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
-
-        // Ensure it's an array
         if (!is_array($currentSettings)) {
             throw new \RuntimeException("Expected current settings to be an array, got " . gettype($currentSettings));
         }
 
-        // Ensure it's empty
         if (!empty($currentSettings)) {
             throw new \RuntimeException("Settings category '" . AppConfig::CT_SETTINGS_CATEGORY_NAME . "' is not empty.");
         }
 
-        $extensionDataService->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
+        $this->extensionDataService->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
     }
 
-    public function unloadSettings(): void {
-        $ctConfig = Helpers::getConfiguration();
-        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-        $currentSettings = $extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
-        $extensionDataService->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
+    public function unloadSettings(): void
+    {
+        $currentSettings = $this->extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
+        $this->extensionDataService->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
     }
 
-    public function checkPwdDatabase(): void {
-        $ctConfig = Helpers::getConfiguration();
-        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-
-        // Query all entries in the pwd store category
-        $entries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+    public function checkPwdDatabase(): void
+    {
+        $entries = $this->extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
-            throw new \RuntimeException(
-                "Expected pwd store category data to be an array, got " . gettype($entries)
-            );
+            throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
         }
 
-        if (!empty($entrie)) {
-            throw new \RuntimeException(
-                "Pwd store is not empty!"
-            );
+        if (!empty($entries)) {
+            throw new \RuntimeException("Pwd store is not empty!");
         }
     }
 
-    public function cleanPwdDatabase(): void {
-        $ctConfig = Helpers::getConfiguration();
-        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-
-        // Query all entries in the pwd store category
-        $entries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+    public function cleanPwdDatabase(): void
+    {
+        $entries = $this->extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
-            throw new \RuntimeException(
-                "Expected pwd store category data to be an array, got " . gettype($entries)
-            );
+            throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
         }
 
-        // Delete each entry by its id
         foreach ($entries as $entry) {
             if (!isset($entry['id'])) {
                 throw new \RuntimeException("Pwd store entry is missing 'id' field");
             }
 
-            $extensionDataService->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
+            $this->extensionDataService->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
         }
     }
-
 
     public function getNormalUsers(): array
     {
