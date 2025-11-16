@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="vendor/autoload.php"
+         colors="true">
+
+    <!-- Suite for all tests -->
+    <testsuites>
+        <!-- Suite for all end-to-end tests -->
+        <testsuite name="EndToEnd">
+            <directory>tests/EndToEnd</directory>
+        </testsuite>
+    </testsuites>
+
+    <php>
+        <!-- Environment variables for your ChurchTools API -->
+        <env name="CT_API_URL" value="https://your.church.tools/api"/>
+        <env name="CT_API_TOKEN" value="YOUR_API_TOKEN_WITH_READ_AND_WRITE_ACCESS_TO_YOUR_CHURCHTOOLS_BACKEND_CATEGORIES"/>
+    </php>
+</phpunit>

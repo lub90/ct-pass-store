@@ -8,7 +8,7 @@ use CtPassStore\Tests\EndToEnd\Helpers\BackendSandboxManager;
 use \GuzzleHttp\Client;
 
 
-class AbstractTestPrototype extends TestCase {
+abstract class AbstractTestPrototype extends TestCase {
 
     protected static BackendSandboxManager $thisBackend;
 
@@ -27,6 +27,67 @@ class AbstractTestPrototype extends TestCase {
         self::$thisBackend->stop();
         ChurchToolsSandboxManager::getInstance()->stop();
     }
+
+
+    public abstract function getSettingsPath(): string;
+
+
+    protected function loadSettings(): void {
+        $ct = ChurchToolsSandboxManager::getInstance();
+
+        $path = $this->getSettingsPath();
+
+        if (!is_readable($path)) {
+            $this->fail("Settings file not found or not readable at: $path");
+        }
+
+        $content = file_get_contents($path);
+        $settings = json_decode($content, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->fail("Invalid JSON in settings file: " . json_last_error_msg());
+        }
+
+        $settings['backendUrl'] = self::$thisBackend->getBaseUrl();
+
+        
+        $adminUsers = array_map(fn($u) => $u['id'], $ct->getAdminUsers());
+        $readAccessUsers = array_map(fn($u) => $u['id'], $ct->getReadAccessUsers());
+        $settings['adminUsers'] = $adminUsers;
+        $settings['readAccessUers'] = $readAccessUsers;
+
+        // Set settings in ct backend tests can access it
+        $ct->loadSettings($settings);
+    }
+
+    protected function unloadSettings(): void {
+        ChurchToolsSandboxManager::getInstance()->unloadSettings();
+    }
+
+    protected function cleanPwdDatabase(): void {
+        ChurchToolsSandboxManager::getInstance()->cleanPwdDatabase();
+    }
+
+    protected function checkPwdDatabase(): void {
+        ChurchToolsSandboxManager::getInstance()->checkPwdDatabase();
+    }
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->loadSettings();
+        $this->checkPwdDatabase();
+    }
+
+
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->unloadSettings();
+        $this->cleanPwdDatabase();
+    }
+
 
     protected function getClient(): Client
     {

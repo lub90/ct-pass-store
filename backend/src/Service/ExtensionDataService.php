@@ -76,12 +76,15 @@ class ExtensionDataService
 
         $payload = [
             'dataCategoryId' => $category['id'],
-            'domainId' => '1',
-            'domainType' => 'status',
             'value' => json_encode($data),
         ];
 
-        $response = $this->client->post("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues", $payload);
+        $response = $this->client->postJson(
+            "custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues",
+            [
+                'json' => $payload
+            ]);
+        
         return $response['data']['id'] ?? throw new RuntimeException('Failed to create entry');
     }
 

@@ -18,6 +18,11 @@ class TestAccessTest extends AccessTestPrototype {
         return ['get'];
     }
 
+    public function getSettingsPath(): string
+    {
+        return __DIR__ . '/../settings/false_false_12.json';
+    }
+
     // Default access tests are already included in the super class
 
     /**

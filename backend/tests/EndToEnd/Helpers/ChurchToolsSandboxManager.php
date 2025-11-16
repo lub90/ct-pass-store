@@ -2,6 +2,10 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
+use CtPassStore\Config\AppConfig;
+use CtPassStore\Service\ExtensionDataService;
+use CtPassStore\Tests\Helpers\Helpers;
+
 /**
  * Class to manage the sandbox backend for end to end testing
  */
@@ -34,6 +38,77 @@ class ChurchToolsSandboxManager
     {
         // TODO: Later on, we can implement an automatic tear down of the sandbox Churchtools backend here...
     }
+
+    public function loadSettings(array $settings): void {
+        $ctConfig = Helpers::getConfiguration();
+
+        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
+
+        $currentSettings = $extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
+
+        // Ensure it's an array
+        if (!is_array($currentSettings)) {
+            throw new \RuntimeException("Expected current settings to be an array, got " . gettype($currentSettings));
+        }
+
+        // Ensure it's empty
+        if (!empty($currentSettings)) {
+            throw new \RuntimeException("Settings category '" . AppConfig::CT_SETTINGS_CATEGORY_NAME . "' is not empty.");
+        }
+
+        $extensionDataService->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
+    }
+
+    public function unloadSettings(): void {
+        $ctConfig = Helpers::getConfiguration();
+        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
+        $currentSettings = $extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
+        $extensionDataService->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
+    }
+
+    public function checkPwdDatabase(): void {
+        $ctConfig = Helpers::getConfiguration();
+        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
+
+        // Query all entries in the pwd store category
+        $entries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+
+        if (!is_array($entries)) {
+            throw new \RuntimeException(
+                "Expected pwd store category data to be an array, got " . gettype($entries)
+            );
+        }
+
+        if (!empty($entrie)) {
+            throw new \RuntimeException(
+                "Pwd store is not empty!"
+            );
+        }
+    }
+
+    public function cleanPwdDatabase(): void {
+        $ctConfig = Helpers::getConfiguration();
+        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
+
+        // Query all entries in the pwd store category
+        $entries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+
+        if (!is_array($entries)) {
+            throw new \RuntimeException(
+                "Expected pwd store category data to be an array, got " . gettype($entries)
+            );
+        }
+
+        // Delete each entry by its id
+        foreach ($entries as $entry) {
+            if (!isset($entry['id'])) {
+                throw new \RuntimeException("Pwd store entry is missing 'id' field");
+            }
+
+            $extensionDataService->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
+        }
+    }
+
 
     public function getNormalUsers(): array
     {

@@ -6,8 +6,8 @@ namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Service\ExtensionDataService;
+use CtPassStore\Tests\Helpers\Helpers;
 use PHPUnit\Framework\Assert;
-use ChurchTools\Configuration;
 
 class PersistenceChecker
 {
@@ -17,14 +17,7 @@ class PersistenceChecker
 
     public function __construct(string $category)
     {
-        // Manually load them from the server configuration
-        $credentials = require __DIR__ . '/../../../config/credentials.php';
-
-        // Setup the churchtools config
-        $ctConfig = Configuration::getDefaultConfiguration()
-            ->setHost($credentials['CT_API_URL'])
-            ->setApiKey('Authorization', $credentials['CT_API_TOKEN'])
-            ->setApiKeyPrefix('Authorization', 'Login');
+        $ctConfig = Helpers::getConfiguration();
 
         $this->category = $category;
 

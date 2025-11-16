@@ -15,6 +15,7 @@
 # PHPUnit
 /phpunit.xml
 /phpunit.xml.dist
+/.phpunit.result.cache
 /test-results/
 
 # IDE and editor files
