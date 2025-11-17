@@ -12,6 +12,7 @@ use CtPassStore\Tests\Helpers\Helpers;
 
 class EntriesGetTest extends AbstractTestPrototype {
 
+    protected ?ExtensionDataService $extensionDataService = null;
 
     public function getSettingsPath(): string
     {
@@ -22,23 +23,40 @@ class EntriesGetTest extends AbstractTestPrototype {
         return "entries";
     }
 
-    
+    protected function generateEntries(array $allPwdEntries): void {
+        foreach($allPwdEntries as $entry) {
+            $extensionDataService = $this->getExtensionDataService();
+
+            // For simplicity, we generate a deterministic password per target user
+            $password = $this->getPwdForUser($entry);
+
+            $extensionDataService->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
+                AppConfig::CT_PERSON_ID_PWD_FIELD => $entry,
+                AppConfig::CT_ENCRYPTED_PWD_FIELD => $password,
+            ]);
+        }
+    }
+
+    protected function getPwdForUser(int $targetId): string {
+        return "pwd-for-user-" . $targetId;
+    }
+
+    protected function getExtensionDataService(): ExtensionDataService {
+        if ($this->extensionDataService == null) {
+            $ctConfig = Helpers::getConfiguration();
+            $this->extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
+        }
+        return $this->extensionDataService;
+    }
+
     /**
      * @dataProvider normalAccessProvider
      */
-    public function testNormalAccessMatrix(int $userId, string $token, int $targetId, bool $hasAccess): void
+    public function testNormalAccessMatrix(int $userId, string $token, int $targetId, bool $hasAccess, array $otherPwdEntryIds): void
     {
         // 1. Create entries in pwd_category for each user
-        $ctConfig = Helpers::getConfiguration();
-        $extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-
-        // For simplicity, we generate a deterministic password per target user
-        $password = "pwd-for-user-" . $targetId;
-
-        $extensionDataService->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
-            AppConfig::CT_PERSON_ID_PWD_FIELD => $targetId,
-            AppConfig::CT_ENCRYPTED_PWD_FIELD => $password,
-        ]);
+        $allPwdEntries = [...$otherPwdEntryIds, $targetId];
+        $this->generateEntries($allPwdEntries);
 
         // 2. Save current database state
         $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
@@ -57,7 +75,7 @@ class EntriesGetTest extends AbstractTestPrototype {
             $body = json_decode((string) $response->getBody(), true);
             $this->assertIsArray($body);
             $this->assertArrayHasKey('secondaryPwd', $body);
-            $this->assertSame($password, $body['secondaryPwd'], "Password mismatch for user $userId accessing $targetId");
+            $this->assertSame($this->getPwdForUser($targetId), $body['secondaryPwd'], "Password mismatch for user $userId accessing $targetId");
         } else {
             // 4b. Not allowed → expect 401/403
             $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"
@@ -78,48 +96,82 @@ class EntriesGetTest extends AbstractTestPrototype {
 
         // Collect all users together for "targets"
         $allUsers = array_merge($normalUsers, $adminUsers, $readAccessUsers);
+        $allIds   = array_column($allUsers, 'id');
 
         $cases = [];
 
-        // Normal users: only allowed to access their own id
+        $makeVariants = function (string $label, array $baseCase) use (&$cases, $allIds) {
+            $targetId = $baseCase['targetId'];
+
+            // 1. Empty array
+            $cases[$label . ' (empty otherPwdEntryIds)'] = $baseCase + [
+                'otherPwdEntryIds' => []
+            ];
+
+            // 2. One element (pick first id that is not targetId)
+            $oneId = null;
+            foreach ($allIds as $id) {
+                if ($id !== $targetId) {
+                    $oneId = $id;
+                    break;
+                }
+            }
+            if ($oneId !== null) {
+                $cases[$label . " (one otherPwdEntryId $oneId)"] = $baseCase + [
+                    'otherPwdEntryIds' => [$oneId]
+                ];
+            }
+
+            // 3. All ids (except targetId)
+            $allExceptTarget = array_values(array_filter($allIds, fn($id) => $id !== $targetId));
+            $cases[$label . ' (all otherPwdEntryIds)'] = $baseCase + [
+                'otherPwdEntryIds' => $allExceptTarget
+            ];
+        };
+
+        // Normal users
         foreach ($normalUsers as $user) {
             foreach ($allUsers as $target) {
                 $hasAccess = ($user['id'] === $target['id']);
-                $cases["normal user {$user['id']} accessing {$target['id']}"] = [
-                    'userId'       => $user['id'],
-                    'token'        => $user['token'],
-                    'targetId'     => $target['id'],
-                    'hasAccess'    => $hasAccess,
+                $baseCase = [
+                    'userId'    => $user['id'],
+                    'token'     => $user['token'],
+                    'targetId'  => $target['id'],
+                    'hasAccess' => $hasAccess,
                 ];
+                $makeVariants("normal user {$user['id']} accessing {$target['id']}", $baseCase);
             }
         }
 
-        // Admin users: allowed to access all ids
+        // Admin users
         foreach ($adminUsers as $user) {
             foreach ($allUsers as $target) {
-                $cases["admin user {$user['id']} accessing {$target['id']}"] = [
-                    'userId'       => $user['id'],
-                    'token'        => $user['token'],
-                    'targetId'     => $target['id'],
-                    'hasAccess'    => true,
+                $baseCase = [
+                    'userId'    => $user['id'],
+                    'token'     => $user['token'],
+                    'targetId'  => $target['id'],
+                    'hasAccess' => true,
                 ];
+                $makeVariants("admin user {$user['id']} accessing {$target['id']}", $baseCase);
             }
         }
 
-        // Read access users: allowed to access all ids
+        // Read access users
         foreach ($readAccessUsers as $user) {
             foreach ($allUsers as $target) {
-                $cases["read access user {$user['id']} accessing {$target['id']}"] = [
-                    'userId'       => $user['id'],
-                    'token'        => $user['token'],
-                    'targetId'     => $target['id'],
-                    'hasAccess'    => true,
+                $baseCase = [
+                    'userId'    => $user['id'],
+                    'token'     => $user['token'],
+                    'targetId'  => $target['id'],
+                    'hasAccess' => true,
                 ];
+                $makeVariants("read access user {$user['id']} accessing {$target['id']}", $baseCase);
             }
         }
 
         return $cases;
     }
+
 
 
 }

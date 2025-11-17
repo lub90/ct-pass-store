@@ -26,7 +26,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
             return null;
         }
 
-        return $matching[0][AppConfig::CT_ENCRYPTED_PWD_FIELD];
+        return array_values($matching)[0][AppConfig::CT_ENCRYPTED_PWD_FIELD];
     }
 
 
