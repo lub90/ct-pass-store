@@ -52,7 +52,7 @@ class EntriesGetTest extends AbstractTestPrototype {
     /**
      * @dataProvider normalAccessProvider
      */
-    public function testNormalAccessMatrix(int $userId, string $token, int $targetId, bool $hasAccess, array $otherPwdEntryIds): void
+    public function testNormalAccess(int $userId, string $token, int $targetId, bool $hasAccess, array $otherPwdEntryIds): void
     {
         // 1. Create entries in pwd_category for each user
         $allPwdEntries = [...$otherPwdEntryIds, $targetId];
@@ -76,6 +76,43 @@ class EntriesGetTest extends AbstractTestPrototype {
             $this->assertIsArray($body);
             $this->assertArrayHasKey('secondaryPwd', $body);
             $this->assertSame($this->getPwdForUser($targetId), $body['secondaryPwd'], "Password mismatch for user $userId accessing $targetId");
+        } else {
+            // 4b. Not allowed → expect 401/403
+            $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"
+            );
+        }
+
+        // 5. Ensure database state unchanged
+        $persCheck->assertUnchanged();
+    }
+
+    /**
+     * @dataProvider normalAccessProvider
+     */
+    public function testMissingEntry(int $userId, string $token, int $targetId, bool $hasAccess, array $otherPwdEntryIds): void
+    {
+        // 1. Create entries in pwd_category for each user except the target id
+        $allPwdEntries = [...$otherPwdEntryIds];
+        $this->generateEntries($allPwdEntries);
+
+        // 2. Save current database state
+        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck->saveStatus();
+
+        // 3. Perform GET request as acting user
+        $client = $this->getClient();
+        $response = $client->get($this->getEndpoint() . '/' . $targetId, [
+            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token]
+        ]);
+
+        if ($hasAccess) {
+            // 4a. Allowed → expect 404 because entry is not present
+            $this->assertSame(404, $response->getStatusCode(), "Expected 404 for user $userId accessing $targetId");
+
+            $body = json_decode((string) $response->getBody(), true);
+            $this->assertIsArray($body);
+            $this->assertArrayHasKey('error', $body);
+            $this->assertArrayHasKey('message', $body);
         } else {
             // 4b. Not allowed → expect 401/403
             $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"

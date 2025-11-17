@@ -56,7 +56,7 @@ class PasswordController extends BaseService
         $encryptedSecondaryPwd = $this->store->getPwd($targetId);
 
         if ($encryptedSecondaryPwd === null) {
-            return $this->error(404, 'No password entry found for this user.');
+            return $this->error(404, 'Not Found','No password entry found for this user.');
         }
 
         return $response
@@ -86,7 +86,7 @@ class PasswordController extends BaseService
         if ($pwd !== null) {
             if (!$this->settings->allowCustomPasswords()) {
                 $this->logger->warning("User {$userId} tried to set a custom password, but it is not allowed to do so!");
-                return $this->error(400, 'Custom passwords are not allowed!');
+                return $this->error(400, 'Invalid parameters','Custom passwords are not allowed!');
             }
         } else {
             $pwd = $this->validator->generateRandom($this->settings->pwdLength());
@@ -94,7 +94,7 @@ class PasswordController extends BaseService
 
         if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
             $this->logger->info("User {$userId} tried to set a password with insufficient complexity!");
-            return $this->error(400, 'Password must contain at least one letter, digit, and symbol!');
+            return $this->error(400, 'Invalid parameters','Password must contain at least one letter, digit, and symbol!');
         }
 
         $ciphertext = $this->encryption->encrypt($pwd);
@@ -141,11 +141,11 @@ class PasswordController extends BaseService
         $cmsUserId = (string) $user[AppConfig::CT_USER_NAME_FIELD];
 
         if ($userId !== $targetId) {
-            $hasSpecialAccess = ( in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true)) );
+            $hasSpecialAccess = in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true));
             if (!$hasSpecialAccess) {
                 $this->logger->warning("User {$userId} tried to read/update password for user {$targetId} but is not allowed to so!");
                 throw new HttpResponseException(
-                    $this->error(403, 'Not authorized to read/modify this entry!')
+                    $this->error(403, 'Forbidden', 'Not authorized to read/modify this entry!')
                 );
             }
         }
@@ -157,14 +157,14 @@ class PasswordController extends BaseService
             if ($primaryPwd === '') {
                 $this->logger->info("User {$userId} tried to update a password without providing a primary password!");
                 throw new HttpResponseException(
-                    $this->error(400, "Missing " . AppConfig::REQUEST_PRIMARY_PWD_FIELD . " for password change!")
+                    $this->error(400, 'Invalid parameters', "Missing " . AppConfig::REQUEST_PRIMARY_PWD_FIELD . " for password change!")
                 );
             }
 
             if (!$this->authVerifier->verifyUserPassword($cmsUserId, $primaryPwd)) {
                 //authVerifier does his own logging during checks
                 throw new HttpResponseException(
-                    $this->error(401, 'Invalid primary password')
+                    $this->error(401, 'Invalid parameters', 'Invalid primary password')
                 );
             }
         }
@@ -177,10 +177,10 @@ class PasswordController extends BaseService
     }
 
 
-    private function error(int $status, string $message): ResponseInterface
+    private function error(int $status, string $error, string $message): ResponseInterface
     {
         $response = new \Slim\Psr7\Response($status);
-        $response->getBody()->write(json_encode(['error' => $message]));
+        $response->getBody()->write(json_encode(['error' => $error, 'message' => $message]));
         return $response->withHeader('Content-Type', 'application/json');
     }
 
