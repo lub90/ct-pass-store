@@ -28,7 +28,7 @@ class ChurchtoolsAuth extends BaseService
 
 
     protected function getCtConfig(string $apiToken) : Configuration {
-        return Configuration::getDefaultConfiguration()
+        return (new Configuration())
             ->setHost($this->apiUrl)
             ->setApiKey('Authorization', $apiToken)
             ->setApiKeyPrefix('Authorization', 'Login');

@@ -35,7 +35,7 @@ abstract class ChurchToolsBaseService extends BaseService
         $this->apiToken = $apiToken;
 
         // Setup the churchtools config
-        $this->churchtoolsConfig = Configuration::getDefaultConfiguration()
+        $this->churchtoolsConfig = (new Configuration())
             ->setHost($apiUrl)
             ->setApiKey('Authorization', $apiToken)
             ->setApiKeyPrefix('Authorization', 'Login');

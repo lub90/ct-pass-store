@@ -50,9 +50,6 @@ class EntriesGetTest extends AbstractTestPrototype {
             'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token]
         ]);
 
-        print_r($this->getEndpoint() . '/' . $targetId);
-        print_r((string) $response->getBody());
-
         if ($hasAccess) {
             // 4a. Allowed → expect 200 and correct password in body
             $this->assertSame(200, $response->getStatusCode(), "Expected 200 for user $userId accessing $targetId");
