@@ -14,7 +14,6 @@ class ChurchToolsSandboxManager
     private static ?ChurchToolsSandboxManager $instance = null;
 
     private string $fixturePath;
-    private ExtensionDataService $extensionDataService;
 
     public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures'): ChurchToolsSandboxManager
     {
@@ -27,9 +26,6 @@ class ChurchToolsSandboxManager
     private function __construct(string $fixturePath = __DIR__ . '/../fixtures')
     {
         $this->fixturePath = rtrim($fixturePath, '/');
-
-        $ctConfig = Helpers::getConfiguration();
-        $this->extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
     }
 
     public function start(): void
@@ -44,7 +40,7 @@ class ChurchToolsSandboxManager
 
     public function loadSettings(array $settings): void
     {
-        $currentSettings = $this->extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
+        $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
 
         if (!is_array($currentSettings)) {
             throw new \RuntimeException("Expected current settings to be an array, got " . gettype($currentSettings));
@@ -54,18 +50,18 @@ class ChurchToolsSandboxManager
             throw new \RuntimeException("Settings category '" . AppConfig::CT_SETTINGS_CATEGORY_NAME . "' is not empty.");
         }
 
-        $this->extensionDataService->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
+        Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
     }
 
     public function unloadSettings(): void
     {
-        $currentSettings = $this->extensionDataService->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
-        $this->extensionDataService->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
+        $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
+        Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
     }
 
     public function checkPwdDatabase(): void
     {
-        $entries = $this->extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
             throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
@@ -78,7 +74,7 @@ class ChurchToolsSandboxManager
 
     public function cleanPwdDatabase(): void
     {
-        $entries = $this->extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
             throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
@@ -89,7 +85,7 @@ class ChurchToolsSandboxManager
                 throw new \RuntimeException("Pwd store entry is missing 'id' field");
             }
 
-            $this->extensionDataService->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
+            Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
         }
     }
 

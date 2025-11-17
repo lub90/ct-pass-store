@@ -25,12 +25,10 @@ class EntriesGetTest extends AbstractTestPrototype {
 
     protected function generateEntries(array $allPwdEntries): void {
         foreach($allPwdEntries as $entry) {
-            $extensionDataService = $this->getExtensionDataService();
-
             // For simplicity, we generate a deterministic password per target user
             $password = $this->getPwdForUser($entry);
 
-            $extensionDataService->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
+            Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
                 AppConfig::CT_PERSON_ID_PWD_FIELD => $entry,
                 AppConfig::CT_ENCRYPTED_PWD_FIELD => $password,
             ]);
@@ -39,14 +37,6 @@ class EntriesGetTest extends AbstractTestPrototype {
 
     protected function getPwdForUser(int $targetId): string {
         return "pwd-for-user-" . $targetId;
-    }
-
-    protected function getExtensionDataService(): ExtensionDataService {
-        if ($this->extensionDataService == null) {
-            $ctConfig = Helpers::getConfiguration();
-            $this->extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
-        }
-        return $this->extensionDataService;
     }
 
     /**

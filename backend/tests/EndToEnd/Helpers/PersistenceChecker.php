@@ -11,18 +11,12 @@ use PHPUnit\Framework\Assert;
 
 class PersistenceChecker
 {
-    private ExtensionDataService $extensionDataService;
     private string $category;
     private array $status = [];
 
     public function __construct(string $category)
     {
-        $ctConfig = Helpers::getConfiguration();
-
         $this->category = $category;
-
-        // Extension name comes from AppConfig
-        $this->extensionDataService = new ExtensionDataService($ctConfig, AppConfig::CT_EXTENSION_ID);
     }
 
     /**
@@ -30,7 +24,7 @@ class PersistenceChecker
      */
     public function saveStatus(): void
     {
-        $this->status = $this->extensionDataService->getCategoryData($this->category, false);
+        $this->status = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
     }
 
     /**
@@ -38,7 +32,7 @@ class PersistenceChecker
      */
     public function assertUnchanged(): void
     {
-        $current = $this->extensionDataService->getCategoryData($this->category, false);
+        $current = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
         Assert::assertSame(
             $this->status,
             $current,
@@ -51,7 +45,7 @@ class PersistenceChecker
      */
     public function assertChanged(): void
     {
-        $current = $this->extensionDataService->getCategoryData($this->category, false);
+        $current = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
         Assert::assertNotSame(
             $this->status,
             $current,
