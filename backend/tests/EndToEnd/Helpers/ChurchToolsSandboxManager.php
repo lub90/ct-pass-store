@@ -53,10 +53,31 @@ class ChurchToolsSandboxManager
         Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
     }
 
+    public function loadPublicKey(array $publicKey): void
+    {
+        $currentPublicKey = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME);
+
+        if (!is_array($currentPublicKey)) {
+            throw new \RuntimeException("Expected current public key to be an array, got " . gettype($publicKey));
+        }
+
+        if (!empty($currentPublicKey)) {
+            throw new \RuntimeException("Public key category '" . AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME . "' is not empty.");
+        }
+
+        Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, $publicKey);
+    }
+
     public function unloadSettings(): void
     {
         $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
         Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
+    }
+
+    public function unloadPublicKey(): void
+    {
+        $currentPublicKey = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, true);
+        Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, $currentPublicKey['id']);
     }
 
     public function checkPwdDatabase(): void

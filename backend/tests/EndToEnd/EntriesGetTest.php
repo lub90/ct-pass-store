@@ -6,13 +6,10 @@ use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
-use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Tests\Helpers\Helpers;
 
 
 class EntriesGetTest extends AbstractTestPrototype {
-
-    protected ?ExtensionDataService $extensionDataService = null;
 
     public function getSettingsPath(): string
     {
@@ -21,6 +18,10 @@ class EntriesGetTest extends AbstractTestPrototype {
 
     public function getEndpoint(): string {
         return "entries";
+    }
+
+    public function getPublicKeyPath(): string {
+        return __DIR__ . '/../keys/publicKey1.pem';
     }
 
     protected function generateEntries(array $allPwdEntries): void {
@@ -64,8 +65,8 @@ class EntriesGetTest extends AbstractTestPrototype {
 
             $body = json_decode((string) $response->getBody(), true);
             $this->assertIsArray($body);
-            $this->assertArrayHasKey('secondaryPwd', $body);
-            $this->assertSame($this->getPwdForUser($targetId), $body['secondaryPwd'], "Password mismatch for user $userId accessing $targetId");
+            $this->assertArrayHasKey(AppConfig::REQUEST_SECONDARY_PWD_FIELD, $body);
+            $this->assertSame($this->getPwdForUser($targetId), $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD], "Password mismatch for user $userId accessing $targetId");
         } else {
             // 4b. Not allowed → expect 401/403
             $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"

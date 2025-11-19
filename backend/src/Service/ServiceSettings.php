@@ -12,6 +12,7 @@ class ServiceSettings extends ChurchToolsBaseService
     private ?array $settings = null;
     private ?array $encryptionSettings = null;
 
+    // TODO: Move all field names to the app config
     private function loadSettings(): array
     {
         if ($this->settings !== null) {
@@ -63,7 +64,7 @@ class ServiceSettings extends ChurchToolsBaseService
 
     public function allowCustomPasswords(): bool
     {
-        return (bool) ($this->loadSettings()['allowCustomPassword']);
+        return (bool) ($this->loadSettings()[AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME]);
     }
 
     /**
@@ -91,6 +92,6 @@ class ServiceSettings extends ChurchToolsBaseService
 
     public function publicKey(): string
     {
-        return $this->loadEncryptionSettings()['publicKey'];
+        return $this->loadEncryptionSettings()[AppConfig::CT_PUBLIC_KEY_FIELD_NAME];
     }
 }

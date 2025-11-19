@@ -14,6 +14,10 @@ class TestAccessTest extends AccessTestPrototype {
         return '/test';
     }
 
+    public function getPublicKeyPath(): string {
+        return __DIR__ . '/../keys/publicKey1.pem';
+    }
+
     public function getMethods(): array {
         return ['get'];
     }

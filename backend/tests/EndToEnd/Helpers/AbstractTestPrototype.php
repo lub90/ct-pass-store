@@ -5,14 +5,15 @@ namespace CtPassStore\Tests\EndToEnd\Helpers;
 use PHPUnit\Framework\TestCase;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\BackendSandboxManager;
+use CtPassStore\Config\AppConfig;
 use \GuzzleHttp\Client;
 
 
 abstract class AbstractTestPrototype extends TestCase {
-
     protected static BackendSandboxManager $thisBackend;
 
     protected const string AUTH_HEADER_PREFIX = 'Login ';
+    protected const int WAIT_TIME_AFTER_TEST = 1;
 
 
     public static function setUpBeforeClass(): void {
@@ -29,12 +30,56 @@ abstract class AbstractTestPrototype extends TestCase {
     }
 
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->loadSettings();
+        $this->loadPublicKey();
+        $this->checkPwdDatabase();
+    }
+
+
+
+    protected function tearDown(): void
+    {
+        parent::tearDown();
+        $this->unloadSettings();
+        $this->unloadPublicKey();
+        $this->cleanPwdDatabase();
+
+        // Sleep for one second to prevent 429 - too many requests...
+        sleep(self::WAIT_TIME_AFTER_TEST);
+    }
+
+
+    protected function getClient(): Client
+    {
+        return new Client([
+            'base_uri' => self::$thisBackend->getBaseUrl(),
+            'http_errors' => false,
+        ]);
+    }
+
     public abstract function getSettingsPath(): string;
 
+    public abstract function getPublicKeyPath(): string;
 
-    protected function loadSettings(): void {
-        $ct = ChurchToolsSandboxManager::getInstance();
+    public function getPublicKey(): array {
+        $path = $this->getPublicKeyPath();
 
+        if (!is_readable($path)) {
+            $this->fail("Settings file not found or not readable at: $path");
+        }
+
+        $rawContent = file_get_contents($path);
+
+        $result = [];
+        $result[AppConfig::CT_PUBLIC_KEY_FIELD_NAME] = $rawContent;
+
+        return $result;
+    }
+
+    public function getSettings(): array {
         $path = $this->getSettingsPath();
 
         if (!is_readable($path)) {
@@ -42,15 +87,33 @@ abstract class AbstractTestPrototype extends TestCase {
         }
 
         $content = file_get_contents($path);
-        $settings = json_decode($content, true);
+        $json = json_decode($content, true);
 
         if (json_last_error() !== JSON_ERROR_NONE) {
             $this->fail("Invalid JSON in settings file: " . json_last_error_msg());
         }
 
+        return $json;
+    }
+
+
+    public function allowCustomPassword(): bool {
+        return $this->getSettings()[AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME];
+    }
+
+    protected function loadPublicKey(): void {
+        $ct = ChurchToolsSandboxManager::getInstance();
+        $publicKey = $this->getPublicKey();
+        $ct->loadPublicKey($publicKey);
+    }
+
+    protected function loadSettings(): void {
+        $ct = ChurchToolsSandboxManager::getInstance();
+
+        $settings = $this->getSettings();
+
         $settings['backendUrl'] = self::$thisBackend->getBaseUrl();
 
-        
         $adminUsers = array_map(fn($u) => $u['id'], $ct->getAdminUsers());
         $readAccessUsers = array_map(fn($u) => $u['id'], $ct->getReadAccessUsers());
         $settings['adminUsers'] = $adminUsers;
@@ -58,6 +121,10 @@ abstract class AbstractTestPrototype extends TestCase {
 
         // Set settings in ct backend tests can access it
         $ct->loadSettings($settings);
+    }
+
+    protected function unloadPublicKey(): void {
+        ChurchToolsSandboxManager::getInstance()->unloadPublicKey();
     }
 
     protected function unloadSettings(): void {
@@ -72,28 +139,4 @@ abstract class AbstractTestPrototype extends TestCase {
         ChurchToolsSandboxManager::getInstance()->checkPwdDatabase();
     }
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-        $this->loadSettings();
-        $this->checkPwdDatabase();
-    }
-
-
-
-    protected function tearDown(): void
-    {
-        parent::tearDown();
-        $this->unloadSettings();
-        $this->cleanPwdDatabase();
-    }
-
-
-    protected function getClient(): Client
-    {
-        return new Client([
-            'base_uri' => self::$thisBackend->getBaseUrl(),
-            'http_errors' => false,
-        ]);
-    }
 }
