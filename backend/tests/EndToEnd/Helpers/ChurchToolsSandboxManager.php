@@ -2,9 +2,15 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
+use ChurchTools\Api\GeneralApi;
+use ChurchTools\Api\PersonApi;
+use ChurchTools\Configuration;
+use ChurchTools\Model\PostLoginRequest;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Tests\Helpers\Helpers;
+use GuzzleHttp\Client;
+use GuzzleHttp\Cookie\CookieJar;
 
 /**
  * Class to manage the sandbox backend for end to end testing
@@ -14,6 +20,15 @@ class ChurchToolsSandboxManager
     private static ?ChurchToolsSandboxManager $instance = null;
 
     private string $fixturePath;
+
+
+    private ?array $adminUsers;
+
+    private ?array $normalUsers;
+
+    private ?array $readAccessUsers;
+
+    private ?array $noAccessAllowedUsers;
 
     public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures'): ChurchToolsSandboxManager
     {
@@ -26,16 +41,11 @@ class ChurchToolsSandboxManager
     private function __construct(string $fixturePath = __DIR__ . '/../fixtures')
     {
         $this->fixturePath = rtrim($fixturePath, '/');
-    }
-
-    public function start(): void
-    {
-        // TODO: automatic setup of the sandbox ChurchTools backend
-    }
-
-    public function stop(): void
-    {
-        // TODO: automatic tear down of the sandbox ChurchTools backend
+        // Load the user data...
+        $this->adminUsers = $this->loadUsersFromFixture('admin_users.json');
+        $this->normalUsers = $this->loadUsersFromFixture('normal_users.json');
+        $this->readAccessUsers = $this->loadUsersFromFixture('read_access_users.json');
+        $this->noAccessAllowedUsers = $this->loadUsersFromFixture('no_access_allowed_users.json');
     }
 
     public function loadSettings(array $settings): void
@@ -112,30 +122,39 @@ class ChurchToolsSandboxManager
 
     public function getNormalUsers(): array
     {
-        return $this->loadUsersFromFixture('normal_users.json');
+        return $this->normalUsers;
     }
 
     public function getAdminUsers(): array
     {
-        return $this->loadUsersFromFixture('admin_users.json');
+        return $this->adminUsers;
     }
 
     public function getReadAccessUsers(): array
     {
-        return $this->loadUsersFromFixture('read_access_users.json');
+        return $this->readAccessUsers;
     }
 
     public function getNoAccessAllowedUsers(): array
     {
-        return $this->loadUsersFromFixture('no_access_allowed_users.json');
+        return $this->noAccessAllowedUsers;
     }
 
     public function getInvalidAccessTokens(): array
     {
-        return $this->loadUsersFromFixture('invalid_tokens.json', true);
+        $filename = 'invalid_tokens.json';
+
+        $data = $this->loadFixture($filename);
+        foreach ($data as $user) {
+            if (!isset($user['token'])) {
+                throw new \RuntimeException("Each entry in the invalid token test fixtures must have 'token' fields in $filename");
+            }
+        }
+        return $data;
     }
 
-    private function loadUsersFromFixture(string $filename, bool $ignoreUserId = false): array
+
+    private function loadFixture(string $filename): array
     {
         $path = $this->fixturePath . '/' . $filename;
 
@@ -147,25 +166,47 @@ class ChurchToolsSandboxManager
         $data = json_decode($json, true);
 
         if (empty($data)) {
-            throw new \RuntimeException("Fixture file '$filename' is empty or contains no valid users.");
+            throw new \RuntimeException("Fixture file '$filename' is empty.");
         }
 
         if (!is_array($data)) {
             throw new \RuntimeException("Invalid JSON format in fixture: $filename");
         }
 
-        foreach ($data as $user) {
-            if (!$ignoreUserId) {
-                if (!isset($user['id'], $user['token'])) {
-                    throw new \RuntimeException("Each user must have 'id' and 'token' fields in $filename");
-                }
-            } else {
-                if (!isset($user['token'])) {
-                    throw new \RuntimeException("Each array entry must have at least a 'token' field in $filename");
-                }
+        return $data;
+    }
+
+    private function loadUsersFromFixture(string $filename, bool $ignoreUserId = false): array
+    {
+        $data = $this->loadFixture($filename);
+
+        foreach ($data as $i => $user) {
+            if (!isset($user['id'], $user['pwd'], $user['username'])) {
+                throw new \RuntimeException("Each user must have 'id', 'username' and 'pwd' fields in $filename");
             }
+
+            // Log the user in
+            // Create a shared cookie jar
+            $cookieJar = new CookieJar();
+            $httpClient = new Client([
+                'cookies' => $cookieJar,
+            ]);
+            $ctClientConfig = (new Configuration())->setHost(getenv('CT_API_URL'));
+            $ctGeneralClient = new GeneralApi($httpClient, $ctClientConfig);
+            $loginRequest = new PostLoginRequest();
+            $loginRequest->setUsername($user['username']);
+            $loginRequest->setPassword($user['pwd']);
+            $loginRequest->setRememberMe(false);
+            $ctGeneralClient->postLogin($loginRequest);
+
+            // Get the users access token
+            $ctPersonClient = new PersonApi($httpClient, $ctClientConfig);
+            $accessToken = $ctPersonClient->getPersonsIdLogintoken($user['id']);
+
+            $data[$i]['token'] = $accessToken->getData();
         }
 
         return $data;
     }
+
 }

@@ -59,7 +59,7 @@ class ServiceSettings extends ChurchToolsBaseService
 
     public function requirePasswordForPasswordChange(): bool
     {
-        return (bool) ($this->loadSettings()['requirePasswordForPasswordChange']);
+        return (bool) ($this->loadSettings()[AppCofig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME]);
     }
 
     public function allowCustomPasswords(): bool

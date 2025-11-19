@@ -18,15 +18,12 @@ abstract class AbstractTestPrototype extends TestCase {
 
     public static function setUpBeforeClass(): void {
         self::$thisBackend = new BackendSandboxManager();
-
-        ChurchToolsSandboxManager::getInstance()->start();
         self::$thisBackend->start();
     }
 
     public static function tearDownAfterClass(): void
     {
         self::$thisBackend->stop();
-        ChurchToolsSandboxManager::getInstance()->stop();
     }
 
 
@@ -101,11 +98,17 @@ abstract class AbstractTestPrototype extends TestCase {
         return $this->getSettings()[AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME];
     }
 
+    protected function requirePasswordForPasswordChange(): bool {
+        return $this->getSettings()[AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME];
+    }
+
     protected function loadPublicKey(): void {
         $ct = ChurchToolsSandboxManager::getInstance();
         $publicKey = $this->getPublicKey();
         $ct->loadPublicKey($publicKey);
     }
+
+    
 
     protected function loadSettings(): void {
         $ct = ChurchToolsSandboxManager::getInstance();
