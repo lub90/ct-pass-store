@@ -34,13 +34,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
     {
         $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
 
-        $data = [
-            AppConfig::CT_PERSON_ID_PWD_FIELD => $personId,
-            AppConfig::CT_ENCRYPTED_PWD_FIELD => $encryptedPassword,
-        ];
-
         $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
-
         $existing = [];
         foreach($existingValueEntries as $existingEntry) {
             $encodedValues = json_decode($existingEntry['value'], true);
@@ -52,6 +46,11 @@ class ChurchToolsStore extends ChurchToolsBaseService
             }
         }
 
+        $data = [
+            AppConfig::CT_PERSON_ID_PWD_FIELD => $personId,
+            AppConfig::CT_ENCRYPTED_PWD_FIELD => $encryptedPassword,
+        ];
+        
         if (count($existing) === 1) {
             $valueId = $existing[array_key_first($existing)]['id'];
             $extension->updateCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $valueId, $data);
@@ -67,17 +66,26 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
     public function deletePwd(int $personId): void
     {
-        $extension = new DataExtensionService($this, AppConfig::CT_EXTENSION_ID);
+        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
 
-        $existingValues = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
-        $matching = array_filter($existingValues, fn($v) => ($v[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === (string)$personId);
+        $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $existing = [];
+        foreach($existingValueEntries as $existingEntry) {
+            $encodedValues = json_decode($existingEntry['value'], true);
+            if (($encodedValues[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === $personId) {
+                $existing[] = [
+                    "id" => $existingEntry["id"],
+                    "value" => $encodedValues,
+                ];
+            }
+        }
 
-        if (count($matching) === 0) {
+        if (count($existing) === 0) {
             $this->logger->info("No password entry found for person $personId — nothing to delete.");
             return;
         }
 
-        foreach ($matching as $entry) {
+        foreach ($existing as $entry) {
             $valueId = $entry['id'];
             $extension->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $valueId);
             $this->logger->info("Deleted password entry $valueId for person $personId");
