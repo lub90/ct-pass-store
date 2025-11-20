@@ -8,17 +8,11 @@ use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
 use CtPassStore\Tests\Helpers\Helpers;
 
-class EntriesPutTestPrototype extends AbstractTestPrototype
+abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 {
 
-    // TODO: Remove
-    public function getSettingsPath(): string
-    {
-        return __DIR__ . '/../settings/false_false_12.json';
-    }
-
-    public function getPublicKeyPath(): string {
-        return __DIR__ . '/../keys/publicKey1.pem';
+    public static function getValidPwdPath(): string {
+        throw new \LogicException("Subclass must override");
     }
 
     public function getEndpoint(): string
@@ -111,12 +105,19 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
                 $returnedPwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD];
                 $this->assertNotEmpty($returnedPwd);
                 $expectedPwd = $returnedPwd;
+            } else {
+                $this->assertEmpty((string) $response->getBody());
             }
-            
-            $this->getAndCheckPwd($targetId, $token, $expectedPwd);
 
             // Ensure database state changed
             $persCheck->assertChanged();
+            // Ensure only one value is present per user in the databes. Make this check before getting an comparing the pwd, because otherwise we might fail to fetch
+            $this->checkUniqueUsers();
+
+
+            $this->getAndCheckPwd($targetId, $token, $expectedPwd);
+
+            
 
         } else {
             // 4b. Not allowed → expect 403
@@ -124,6 +125,18 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
             );
         }
         
+    }
+
+    protected function checkUniqueUsers(): void {
+        $extensionDataService = Helpers::getExtensionDataService();
+        $allPwdEntries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+
+        $allPwdIds = [];
+        foreach($allPwdEntries as $pwdEntry) {
+            $allPwdIds[] = json_decode($pwdEntry["value"], true)[AppConfig::CT_PERSON_ID_PWD_FIELD];
+        }
+
+        $this->assertSame(count($allPwdIds), count(array_unique($allPwdIds)), "Duplicate password entries found!");
     }
 
     protected function getAndCheckPwd(int $userId, string $token, string $newPwd): void
@@ -146,33 +159,66 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
 
         $encryptedPwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD];
 
-        // 2. Load public key
-        $publicKey = openssl_pkey_get_public($this->getPublicKey()[AppConfig::CT_PUBLIC_KEY_FIELD_NAME]);
-        if ($publicKey === false) {
-            throw new \RuntimeException("Could not load public key from $publicKey");
+        // 2. Load private key
+        $privateKey = $this->getPrivateKey();
+        $privateKey = openssl_pkey_get_private($privateKey);
+        if ($privateKey === false) {
+            $keyPath = $this->getPrivateKeyPath();
+            throw new \RuntimeException("Could not load private key from $keyPath");
         }
 
-        // 3. Encrypt with RSA 4096 OAEP SHA256
-        $success = openssl_public_encrypt(
-            $newPwd,
-            $encryptedNewPwd,
-            $publicKey,
+        // 3. Decode from Base64 and decrypt with RSA 4096 OAEP SHA256
+        $decodedCipher = base64_decode($encryptedPwd, true);
+        if ($decodedCipher === false) {
+            throw new \RuntimeException("Encrypted password is not valid base64");
+        }
+
+        $decrypted = '';
+        $success = openssl_private_decrypt(
+            $decodedCipher,
+            $decrypted,
+            $privateKey,
             OPENSSL_PKCS1_OAEP_PADDING
         );
 
         if (!$success) {
-            throw new \RuntimeException("Failed to encrypt newPwd with public key");
+            throw new \RuntimeException("Failed to decrypt password for user $userId");
         }
-
-        // Encrypt in base 64, because backend also delivers Base64
-        $encryptedNewPwd = base64_encode($encryptedNewPwd);
 
         // 4. Check that both encrypted passwords are the same
         $this->assertSame(
-            $encryptedPwd,
-            $encryptedNewPwd,
-            "Encrypted password does not match expected encrypted newPwd for user $userId"
+            $newPwd,
+            $decrypted,
+            "Decrypted password does not match expected newPwd for user $userId"
         );
+    }
+
+    // TODO: Move to separate file to easily test them
+    // TODO: Currently set to minimal length of 12 chars
+    protected static function getValidPwds(): array
+    {
+        $filePath = static::getValidPwdPath();
+
+        if (!is_readable($filePath)) {
+            throw new \RuntimeException("Password file not readable at: $filePath");
+        }
+
+        $json = file_get_contents($filePath);
+        if ($json === false) {
+            throw new \RuntimeException("Failed to read file: $filePath");
+        }
+
+        $data = json_decode($json, true);
+
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            throw new \RuntimeException("Invalid JSON in file $filePath: " . json_last_error_msg());
+        }
+
+        if (!is_array($data)) {
+            throw new \RuntimeException("Expected JSON array in file $filePath");
+        }
+
+        return $data;
     }
 
     public static function normalAccessProvider(): array
@@ -190,11 +236,7 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
 
 
         // List of passwords to test
-        $newPwdsToTest = [
-            'newPwd-123',
-            //'anotherSecret!',
-            //'pwd-Ümlaut-äöü',
-        ];
+        $newPwdsToTest = self::getValidPwds();
 
         $makeVariants = function (string $label, array $baseCase) use (&$cases, $allIds, $newPwdsToTest) {
 
@@ -206,7 +248,6 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
                 'otherPwdEntryIds' => []
             ];
 
-            /*
             $oneId = null;
             foreach ($allIds as $id) {
                 if ($id !== $targetId) {
@@ -224,7 +265,6 @@ class EntriesPutTestPrototype extends AbstractTestPrototype
             $variants[$label . ' (all otherPwdEntryIds)'] = $baseCase + [
                 'otherPwdEntryIds' => $allExceptTarget
             ];
-            */
 
             // Now generate this foreach password possibility
             foreach ($variants as $variantLabel => $variantCase) {

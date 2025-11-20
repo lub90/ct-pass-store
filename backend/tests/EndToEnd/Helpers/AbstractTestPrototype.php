@@ -61,6 +61,8 @@ abstract class AbstractTestPrototype extends TestCase {
 
     public abstract function getPublicKeyPath(): string;
 
+    public abstract function getPrivateKeyPath(): string;
+
     public function getPublicKey(): array {
         $path = $this->getPublicKeyPath();
 
@@ -74,6 +76,18 @@ abstract class AbstractTestPrototype extends TestCase {
         $result[AppConfig::CT_PUBLIC_KEY_FIELD_NAME] = $rawContent;
 
         return $result;
+    }
+
+    public function getPrivateKey(): string {
+        $path = $this->getPrivateKeyPath();
+
+        if (!is_readable($path)) {
+            $this->fail("Settings file not found or not readable at: $path");
+        }
+
+        $rawContent = file_get_contents($path);
+
+        return $rawContent;
     }
 
     public function getSettings(): array {

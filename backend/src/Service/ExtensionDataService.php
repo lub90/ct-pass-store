@@ -99,8 +99,12 @@ class ExtensionDataService
             'value' => json_encode($data),
         ];
 
-        $response = $this->client->put("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", $payload);
-        return $response['data']['id'] ?? throw new RuntimeException('Failed to update entry');
+        $response = $this->client->put("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", [
+            'json' => $payload,
+        ]);
+        $body = json_decode((string)$response->getBody(), true);
+
+        return $body['data']['id'] ?? throw new RuntimeException('Failed to update entry');
     }
 
     public function deleteCategoryEntry(string $name, int $valueId): void

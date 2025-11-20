@@ -1,0 +1,5 @@
+{
+    "requirePasswordForPasswordChange": false,
+    "allowCustomPassword": false,
+    "passwordLength": 12
+}

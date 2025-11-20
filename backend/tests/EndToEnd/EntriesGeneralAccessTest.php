@@ -18,6 +18,10 @@ class EntriesGeneralAccessTest extends AccessTestPrototype {
         return __DIR__ . '/../keys/publicKey1.pem';
     }
 
+    public function getPrivateKeyPath(): string {
+        return __DIR__ . '/../keys/privateKey1.pem';
+    }
+
     public function getMethods(): array {
         return ['get', 'put', 'delete'];
     }

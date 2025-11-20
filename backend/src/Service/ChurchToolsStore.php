@@ -39,8 +39,18 @@ class ChurchToolsStore extends ChurchToolsBaseService
             AppConfig::CT_ENCRYPTED_PWD_FIELD => $encryptedPassword,
         ];
 
-        $existingValues = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
-        $existing = array_filter($existingValues, fn($v) => ($v[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === (string)$personId);
+        $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+
+        $existing = [];
+        foreach($existingValueEntries as $existingEntry) {
+            $encodedValues = json_decode($existingEntry['value'], true);
+            if (($encodedValues[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === $personId) {
+                $existing[] = [
+                    "id" => $existingEntry["id"],
+                    "value" => $encodedValues,
+                ];
+            }
+        }
 
         if (count($existing) === 1) {
             $valueId = $existing[array_key_first($existing)]['id'];
@@ -50,7 +60,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
             $newId = $extension->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $data + [AppConfig::CT_PERSON_ID_PWD_FIELD => (string)$personId]);
             $this->logger->info("Created new password entry $newId for person $personId");
         } else {
-            throw new RuntimeException("Multiple password entries found for person $personId");
+            throw new \RuntimeException("Multiple password entries found for person $personId");
         }
 
     }

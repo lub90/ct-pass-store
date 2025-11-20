@@ -24,6 +24,10 @@ class EntriesGetTest extends AbstractTestPrototype {
         return __DIR__ . '/../keys/publicKey1.pem';
     }
 
+    public function getPrivateKeyPath(): string {
+        return __DIR__ . '/../keys/privateKey1.pem';
+    }
+
     protected function generateEntries(array $allPwdEntries): void {
         foreach($allPwdEntries as $entry) {
             // For simplicity, we generate a deterministic password per target user
