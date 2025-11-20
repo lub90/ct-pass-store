@@ -25,6 +25,7 @@ class PasswordController extends BaseService
     private ChurchToolsStore $store;
     private EncryptionService $encryption;
     private PasswordValidator $validator;
+    private ChurchtoolsAuthVerifier $authVerifier;
 
     public function __construct(
         ServiceSettings $settings,

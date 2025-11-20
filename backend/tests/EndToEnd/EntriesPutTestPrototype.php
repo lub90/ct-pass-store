@@ -70,7 +70,7 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
      */
     public function testNormalUpdatePwd(int $userId, string $token, int $targetId, bool $hasAccess, string $ctPwd, array $otherPwdEntryIds, string $newPwd): void
     {
-                // Create entries in pwd_category for each user, except the one we want to test
+        // Create entries in pwd_category for each user, except the one we want to test
         $allPwdEntries = [...$otherPwdEntryIds, $targetId];
         $this->generateEntries($allPwdEntries);
 
