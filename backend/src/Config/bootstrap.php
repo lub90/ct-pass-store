@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use CtPassStore\Middleware\CorsMiddleware;
+use CtPassStore\Middleware\AuthMiddleware;
 use Slim\App;
 use Psr\Log\LoggerInterface;
 use Monolog\Logger;
@@ -73,9 +75,11 @@ return function (App $app): void {
         return new ChurchToolsStore($apiUrl, $apiToken, $logger);
     });
 
+    // Add the middleware for CORS
+    $app->add(new CorsMiddleware($credentials['CORS']));
 
     // Add the middlewares for Churchtools Authentication - registration order is inverse to call order
-    $app->add(new \CtPassStore\Middleware\AuthMiddleware(
+    $app->add(new AuthMiddleware(
         $container->get(ChurchtoolsAuth::class),
         $container->get(LoggerInterface::class)
     ));
