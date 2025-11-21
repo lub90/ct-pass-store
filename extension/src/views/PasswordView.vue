@@ -53,6 +53,15 @@
             <li :class="criteriaMet.special ? 'text-success' : 'text-danger'">
               Contains at least one special character (!@$%&*-_+=?.)
             </li>
+            <li :class="criteriaMet.hasDigit ? 'text-success' : 'text-danger'">
+              Contains at least one digit (0-9)
+            </li>
+            <li :class="criteriaMet.hasLetter ? 'text-success' : 'text-danger'">
+              Contains at least one letter
+            </li>
+            <li :class="criteriaMet.onlyValidChars ? 'text-success' : 'text-danger'">
+              Contains only valid chars (letters, digits and special characters)
+            </li>
             <li :class="criteriaMet.match ? 'text-success' : 'text-danger'">
               Passwords match
             </li>
@@ -138,21 +147,24 @@ onMounted(async () => {
 
 // Criteria checks
 // TODO: Move special characters in string of AppConfig
-const criteriaMet = ref(true); /*computed(() => {
+const criteriaMet = computed(() => {
   return {
     length: newPassword.value.length >= settings.value.passwordLength,
     special: /[!@$%&*\-_\+=?.]/.test(newPassword.value),
+    hasDigit: /\d/.test(newPassword.value),
+    hasLetter: /[A-Za-z]/.test(newPassword.value),
+    onlyValidChars: /^[A-Za-z0-9!@$%&*\-_\+=?.]+$/.test(newPassword.value),
     match: newPassword.value && newPassword.value === repeatPassword.value,
   };
-});*/
+});
 
-const canSubmit = ref(true); /*computed(() => {
+const canSubmit = computed(() => {
   const allCriteria =
-    criteriaMet.value.length && criteriaMet.value.special && criteriaMet.value.match;
+    criteriaMet.value.length && criteriaMet.value.special && criteriaMet.value.hasDigit && criteriaMet.value.hasLetter && criteriaMet.value.onlyValidChars && criteriaMet.value.match;
   const primaryOk =
     !settings.value.requirePasswordForPasswordChange || !!primaryPassword.value;
   return allCriteria && primaryOk;
-});*/
+});
 
 // Dummy calls
 async function saveResetPassword() {
