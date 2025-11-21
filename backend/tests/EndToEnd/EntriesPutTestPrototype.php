@@ -91,14 +91,14 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
                     'json'    => $this->getBody($ctPwd, $newPwd),
                 ]);
 
-        
         if ($hasAccess) {
-            // 4a. Allowed → expect 200 and correct password in body
-            $this->assertSame(200, $response->getStatusCode(), "Expected 200 for user $userId accessing $targetId");
-
             // The new password might not have been set at all, if we have a config type, that does not allow custom passwords...
             $expectedPwd = $newPwd;
+
             if (!$this->allowCustomPassword()) {
+                // 4a. Allowed → expect 200 and correct password in body
+                $this->assertSame(200, $response->getStatusCode(), "Expected 200 for user $userId accessing $targetId");
+
                 $body = json_decode((string) $response->getBody(), true);
                 $this->assertIsArray($body);
                 $this->assertArrayHasKey(AppConfig::REQUEST_SECONDARY_PWD_FIELD, $body);
@@ -106,6 +106,8 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
                 $this->assertNotEmpty($returnedPwd);
                 $expectedPwd = $returnedPwd;
             } else {
+                // 4a. Allowed → expect 204 and correct password in body
+                $this->assertSame(204, $response->getStatusCode(), "Expected 200 for user $userId accessing $targetId");
                 $this->assertEmpty((string) $response->getBody());
             }
 
@@ -193,8 +195,6 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         );
     }
 
-    // TODO: Move to separate file to easily test them
-    // TODO: Currently set to minimal length of 12 chars
     protected static function getValidPwds(): array
     {
         $filePath = static::getValidPwdPath();

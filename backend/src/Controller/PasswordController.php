@@ -152,7 +152,11 @@ class PasswordController extends BaseService
         }
 
         $rawBody = $request->getBody()->getContents();
-        $body = json_decode($rawBody, true);
+        $body = [];
+        if (!empty($rawBody)) {
+            $body = json_decode($rawBody, true);
+        }
+        
         
         if (json_last_error() !== JSON_ERROR_NONE) {
             $this->logger->warning("User {$userId} tried to send an invalid body, that cannot be converted to json!");
