@@ -92,8 +92,8 @@
         </div>
       </div>
 
-      <div v-if="successMessage" class="alert alert-success mt-3">
-        {{ successMessage }}
+      <div v-if="successMessage">
+        <div class="alert alert-success mt-3" v-html="successMessage"></div>
       </div>
     </BaseLayout>
   </SetupGuard>
@@ -174,10 +174,10 @@ async function saveResetPassword() {
     loginToken
   );
 
-  if (response.status === 200) {
-    const data = response.data;
+  if (response.ok) {
+    const data = await response.json();
     if (data && data.secondaryPwd) {
-      successMessage.value = `Your new secondary password is ${data.secondaryPwd}. Please remember it or store it securely. You will only see it here once.`;
+      successMessage.value = `Your new secondary password is: <br\><b> ${data.secondaryPwd} </b><br \>Please remember it or store it securely. You will only see it here once.`;
     } else {
       successMessage.value = 'Password has been saved successfully.';
     }

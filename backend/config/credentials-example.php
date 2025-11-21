@@ -6,6 +6,10 @@ return [
     'CT_API_TOKEN' => "YOUR_CHURCHTOOLS_AUTH_TOKEN_FOR_YOUR_API_USER",
 
     # Logging level (optional)
-    'LOG_LEVEL' => "DEBUG"
+    'LOG_LEVEL' => "DEBUG",
+
+    'CORS' => [
+       'https://your.church.tools'
+    ]
 ];
 

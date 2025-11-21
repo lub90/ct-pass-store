@@ -75,13 +75,13 @@ return function (App $app): void {
         return new ChurchToolsStore($apiUrl, $apiToken, $logger);
     });
 
-    // Add the middleware for CORS
-    $app->add(new CorsMiddleware($credentials['CORS']));
-
     // Add the middlewares for Churchtools Authentication - registration order is inverse to call order
     $app->add(new AuthMiddleware(
         $container->get(ChurchtoolsAuth::class),
         $container->get(LoggerInterface::class)
     ));
+
+    // Add the middleware for CORS
+    $app->add(new CorsMiddleware($credentials['CORS']));
     
 };
