@@ -92,9 +92,9 @@
         </div>
       </div>
 
-      <div v-if="successMessage">
-        <div class="alert alert-success mt-3" v-html="successMessage"></div>
-      </div>
+      <div v-if="successMessage" class="alert alert-success mt-3" v-html="successMessage"></div>
+      <div v-if="errorMessage" class="alert alert-danger mt-3" v-html="errorMessage"></div>
+
     </BaseLayout>
   </SetupGuard>
 </template>
@@ -121,6 +121,7 @@ const newPassword = ref('');
 const repeatPassword = ref('');
 const backendUrl = ref('');
 const successMessage = ref('');
+const errorMessage = ref('');
 
 onMounted(async () => {
   try {
@@ -137,21 +138,21 @@ onMounted(async () => {
 
 // Criteria checks
 // TODO: Move special characters in string of AppConfig
-const criteriaMet = computed(() => {
+const criteriaMet = ref(true); /*computed(() => {
   return {
     length: newPassword.value.length >= settings.value.passwordLength,
     special: /[!@$%&*\-_\+=?.]/.test(newPassword.value),
     match: newPassword.value && newPassword.value === repeatPassword.value,
   };
-});
+});*/
 
-const canSubmit = computed(() => {
+const canSubmit = ref(true); /*computed(() => {
   const allCriteria =
     criteriaMet.value.length && criteriaMet.value.special && criteriaMet.value.match;
   const primaryOk =
     !settings.value.requirePasswordForPasswordChange || !!primaryPassword.value;
   return allCriteria && primaryOk;
-});
+});*/
 
 // Dummy calls
 async function saveResetPassword() {
@@ -174,13 +175,19 @@ async function saveResetPassword() {
     loginToken
   );
 
-  if (response.ok) {
+  if (response.status == 200) {
     const data = await response.json();
-    if (data && data.secondaryPwd) {
       successMessage.value = `Your new secondary password is: <br\><b> ${data.secondaryPwd} </b><br \>Please remember it or store it securely. You will only see it here once.`;
+  } else if (response.status == 204) {
+    successMessage.value = 'Password has been saved successfully.';
+  } else {
+    const data = await response.json().catch(() => null);
+    if (data && data.error && data.message) {
+      errorMessage.value = `<b>Cannot set secondary password: ${data.error}</b><br /> ${data.message}`;
     } else {
-      successMessage.value = 'Password has been saved successfully.';
+      errorMessage.value = `Request failed with status ${response.status}`;
     }
+    return; // stop here so you don’t also set successMessage
   }
 }
 

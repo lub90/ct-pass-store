@@ -81,7 +81,7 @@ class PasswordController extends BaseService
         } catch (HttpResponseException $errorResponse) {
             return $errorResponse->getResponse();
         }
-
+        
         $pwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
 
         if ($pwd !== null) {
@@ -95,7 +95,7 @@ class PasswordController extends BaseService
 
         if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
             $this->logger->info("User {$userId} tried to set a password with insufficient complexity!");
-            return $this->error(400, 'Invalid parameters','Password must contain at least one letter, digit, and symbol!');
+            return $this->error(400, "Invalid parameters","Password must contain at least one letter, digit, and symbol, and be at least {$this->settings->pwdLength()}!");
         }
 
         $ciphertext = $this->encryption->encrypt($pwd);
@@ -151,7 +151,15 @@ class PasswordController extends BaseService
             }
         }
 
-        $body = (array) $request->getParsedBody();
+        $rawBody = $request->getBody()->getContents();
+        $body = json_decode($rawBody, true);
+        
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            $this->logger->warning("User {$userId} tried to send an invalid body, that cannot be converted to json!");
+                throw new HttpResponseException(
+                    $this->error(400, 'Bad Request', 'Body is not json!')
+                );
+        }
 
         if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
             $primaryPwd = (string) ($body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '');
