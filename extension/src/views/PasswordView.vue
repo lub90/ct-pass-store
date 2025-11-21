@@ -1,20 +1,203 @@
 <template>
-    <SetupGuard>
-        <BaseLayout>
-            <template #title>🔑 Change Password</template>
-            
-            <div>
-                <p>Hier kannst du dein Passwort aktualisieren.</p>
-            </div>
-            
-            <template #footer>
-                <div class="custom-footer">🔑 Passwortseite – Sicherheit zuerst!</div>
-            </template>
-        </BaseLayout>
-    </SetupGuard>
+  <SetupGuard>
+    <BaseLayout>
+      <template #title>🔑 Change Secondary Password</template>
+
+      <div v-if="loading" class="text-muted">Loading settings…</div>
+
+      <div v-else>
+        <!-- Case: allow custom password -->
+        <div v-if="settings.allowCustomPassword">
+          <p>You can update your secondary password here.</p>
+
+          <!-- Primary password field if required -->
+          <div v-if="settings.requirePasswordForPasswordChange" class="mb-3">
+            <label class="form-label">Your primary ChurchTools password</label>
+            <input
+              type="password"
+              class="form-control"
+              v-model="primaryPassword"
+              placeholder="Enter your primary password"
+            />
+            <br />
+          </div>
+
+          
+
+          <!-- New password fields -->
+          <div class="mb-3">
+            <label class="form-label">New secondary password</label>
+            <input
+              type="password"
+              class="form-control"
+              v-model="newPassword"
+              placeholder="Enter new password"
+            />
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">Repeat new secondary password</label>
+            <input
+              type="password"
+              class="form-control"
+              v-model="repeatPassword"
+              placeholder="Repeat new password"
+            />
+          </div>
+
+          <!-- Criteria feedback -->
+          <ul class="list-unstyled">
+            <li :class="criteriaMet.length ? 'text-success' : 'text-danger'">
+              Minimum length: {{ settings.passwordLength }} characters
+            </li>
+            <li :class="criteriaMet.special ? 'text-success' : 'text-danger'">
+              Contains at least one special character (!@$%&*-_+=?.)
+            </li>
+            <li :class="criteriaMet.match ? 'text-success' : 'text-danger'">
+              Passwords match
+            </li>
+          </ul>
+
+          <button
+            class="btn btn-primary mt-3"
+            :disabled="!canSubmit"
+            @click="saveResetPassword"
+          >
+            Save your secondary Password
+          </button>
+        </div>
+
+        <!-- Case: only reset allowed -->
+        <div v-else>
+          <p>You can reset your secondary password here.</p>
+
+          <!-- Primary password field if required -->
+          <div v-if="settings.requirePasswordForPasswordChange" class="mb-3">
+            <label class="form-label">Your primary ChurchTools password</label>
+            <input
+              type="password"
+              class="form-control"
+              v-model="primaryPassword"
+              placeholder="Enter your primary password"
+            />
+          </div>
+
+          <button
+            class="btn btn-warning mt-3"
+            :disabled="settings.requirePasswordForPasswordChange && !primaryPassword"
+            @click="saveResetPassword"
+          >
+            Reset your secondary password
+          </button>
+        </div>
+      </div>
+
+      <div v-if="successMessage" class="alert alert-success mt-3">
+        {{ successMessage }}
+      </div>
+    </BaseLayout>
+  </SetupGuard>
 </template>
 
 <script setup lang="ts">
+import { ref, computed, onMounted, inject } from 'vue';
 import SetupGuard from '../layouts/SetupGuard.vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
+import { ExtensionData } from '../api/ExtensionData';
+import { AppConfig } from '../AppConfig';
+
+const churchtoolsClient = inject('churchtoolsClient');
+const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
+
+const loading = ref(true);
+const settings = ref<any>({
+  allowCustomPassword: false,
+  requirePasswordForPasswordChange: false,
+  passwordLength: 12,
+});
+
+const primaryPassword = ref('');
+const newPassword = ref('');
+const repeatPassword = ref('');
+const backendUrl = ref('');
+const successMessage = ref('');
+
+onMounted(async () => {
+  try {
+    const entry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true);
+    const values = JSON.parse(entry.value);
+    settings.value = values;
+    backendUrl.value = values.backendUrl;
+  } catch (err) {
+    console.error('Failed to load settings:', err);
+  } finally {
+    loading.value = false;
+  }
+});
+
+// Criteria checks
+// TODO: Move special characters in string of AppConfig
+const criteriaMet = computed(() => {
+  return {
+    length: newPassword.value.length >= settings.value.passwordLength,
+    special: /[!@$%&*\-_\+=?.]/.test(newPassword.value),
+    match: newPassword.value && newPassword.value === repeatPassword.value,
+  };
+});
+
+const canSubmit = computed(() => {
+  const allCriteria =
+    criteriaMet.value.length && criteriaMet.value.special && criteriaMet.value.match;
+  const primaryOk =
+    !settings.value.requirePasswordForPasswordChange || !!primaryPassword.value;
+  return allCriteria && primaryOk;
+});
+
+// Dummy calls
+async function saveResetPassword() {
+  const body: any = {};
+  if (settings.value.requirePasswordForPasswordChange) {
+    body.primaryPwd = primaryPassword.value;
+  }
+
+  if (settings.value.allowCustomPassword) {
+    body.secondaryPwd = newPassword.value; // or generated one for reset
+  }
+
+  const userId = (await churchtoolsClient.get('/whoami'))['id'];
+  const loginToken = await churchtoolsClient.get(`/persons/${userId}/logintoken`);
+
+  const response = await updatePassword(
+    userId,
+    body,
+    backendUrl.value,
+    loginToken
+  );
+
+  if (response.status === 200) {
+    const data = response.data;
+    if (data && data.secondaryPwd) {
+      successMessage.value = `Your new secondary password is ${data.secondaryPwd}. Please remember it or store it securely. You will only see it here once.`;
+    } else {
+      successMessage.value = 'Password has been saved successfully.';
+    }
+  }
+}
+
+async function updatePassword(userId: number, body: any, backendUrl: string, token: string) {
+  if (backendUrl.endsWith('/')) {
+    backendUrl = backendUrl.slice(0, -1);
+  }
+
+  const response = await fetch(`${backendUrl}/entries/${userId}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Login ${token}` // 👈 add your auth token here
+    },
+    body: JSON.stringify(body)
+  });
+
+  return response;
+}
 </script>

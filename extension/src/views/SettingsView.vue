@@ -25,7 +25,7 @@
 <script setup lang="ts">
 import SetupGuard from '../layouts/SetupGuard.vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
-import { inject, defineEmits, ref, onMounted } from 'vue';
+import { inject, ref, onMounted } from 'vue';
 import SettingsForm from '../components/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { Permissions } from '../api/Permissions';
