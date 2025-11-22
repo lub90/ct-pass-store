@@ -2,6 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
+use phpseclib3\Crypt\RSA;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
@@ -169,24 +170,23 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             throw new \RuntimeException("Could not load private key from $keyPath");
         }
 
+
+        // 2. Load private key with phpseclib instead of openssl
+        //    This allows us to configure OAEP with SHA-256
+        $privateKeyPem = $this->getPrivateKey();
+        $rsa = RSA::loadPrivateKey($privateKeyPem)
+            ->withPadding(RSA::ENCRYPTION_OAEP)   // OAEP padding
+            ->withHash('sha256')                  // OAEP hash function
+            ->withMGFHash('sha256');              // MGF1 hash function
+
         // 3. Decode from Base64 and decrypt with RSA 4096 OAEP SHA256
         $decodedCipher = base64_decode($encryptedPwd, true);
-        if ($decodedCipher === false) {
-            throw new \RuntimeException("Encrypted password is not valid base64");
-        }
+        $this->assertNotFalse($decodedCipher, "Encrypted password is not valid base64");
 
-        $decrypted = '';
-        $success = openssl_private_decrypt(
-            $decodedCipher,
-            $decrypted,
-            $privateKey,
-            OPENSSL_PKCS1_OAEP_PADDING
-        );
-
-        if (!$success) {
-            throw new \RuntimeException("Failed to decrypt password for user $userId");
-        }
-
+        $decrypted = $rsa->decrypt($decodedCipher);
+        $this->assertNotFalse($decrypted, "Failed to decrypt password for user $userId");
+        
+        
         // 4. Check that both encrypted passwords are the same
         $this->assertSame(
             $newPwd,

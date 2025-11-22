@@ -15,7 +15,8 @@
     "monolog/monolog": "^2.9",
     "php-di/php-di": "^7.1",
     "guzzlehttp/guzzle": "^7.10",
-    "churchtools/php-client": "*@dev"
+    "churchtools/php-client": "*@dev",
+    "phpseclib/phpseclib": "^3.0"
   },
   "require-dev": {
     "phpunit/phpunit": "^10.5"

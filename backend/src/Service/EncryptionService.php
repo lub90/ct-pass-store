@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use Psr\Log\LoggerInterface;
+use phpseclib3\Crypt\RSA;
 
 class EncryptionService extends BaseService
 {
@@ -19,24 +20,22 @@ class EncryptionService extends BaseService
 
     public function encrypt(string $plaintext): string
     {
-        $key = openssl_pkey_get_public($this->publicKey);
-        if ($key === false) {
-            $this->logger->error("Invalid public key!");
-            throw new \RuntimeException('Invalid public key');
+        try {
+            // Load public key
+            $rsa = RSA::loadPublicKey($this->publicKey)
+                ->withPadding(RSA::ENCRYPTION_OAEP)   // OAEP Padding
+                ->withHash('sha256')                  // OAEP Hash function
+                ->withMGFHash('sha256');              // MGF1 Hash function
+
+            // Verschlüsseln
+            $ciphertext = $rsa->encrypt($plaintext);
+
+            // Base64 für Transport/Storage
+            return base64_encode($ciphertext);
+
+        } catch (\Throwable $e) {
+            $this->logger->error("Encryption failed: " . $e->getMessage());
+            throw new \RuntimeException('Encryption failed', 0, $e);
         }
-
-        $success = openssl_public_encrypt(
-            $plaintext,
-            $ciphertext,
-            $key,
-            OPENSSL_PKCS1_OAEP_PADDING
-        );
-
-        if (!$success) {
-            $this->logger->error("Encryption failed!");
-            throw new \RuntimeException('Encryption failed');
-        }
-
-        return base64_encode($ciphertext);
     }
 }
