@@ -1,6 +1,6 @@
 # 📡 CtPassStore API Documentation
 
-This backend provides a secure interface for storing, updating, and deleting encrypted passwords for ChurchTools users. It is built with PHP and Slim Framework and uses ChurchTools authentication tokens for access control.
+This backend provides a secure interface for storing, updating, and deleting encrypted, secondary passwords for ChurchTools users. It is built with PHP and Slim Framework and uses ChurchTools authentication tokens for access control.
 
 ## 🔐 Authentication
 
@@ -36,13 +36,14 @@ Response
 }
  ```
 
-- Returns the encrypted password as stored in the backend.
+- Returns the encrypted secondary password as stored in the backend.
 - If no password entry exists for the given user, a `404 Not Found` response is returned.
+- If your are no allowed to retrieve the entrypted password for the given user, a `403 Forbidden` response is returned.
 
 
 ### PUT /entries/{id}
 
-Sets or updates the encrypted password for the ChurchTools user with the given ID.
+Sets or updates the secondary password for the ChurchTools user with the given ID.
 
 Path Parameter
 
@@ -61,7 +62,7 @@ Behavior
 
 - If secondaryPwd is provided and custom passwords are allowed, it will be encrypted and then stored.
 
-- If omitted, a secure password will be generated and returned.
+- If omitted, a secure secondary password will be generated and returned.
 
 - If primaryPwd is required (based on config), it must be valid for the user.
 
@@ -94,7 +95,7 @@ Response
 
 - 204 No Content — password deleted successfully
 
-## 🧠 Validation Rules
+## 🧠 Validation Rules for Secondary Passwords
 
 - Only the user themselves or configured admin users may modify or delete entries.
 
