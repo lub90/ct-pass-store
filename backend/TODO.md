@@ -7,7 +7,7 @@ Tests:
 - Add tests for requirePasswordForPasswordChange = true
 - Add tests for DELETE
 
-
+- Currently, wrong method for an endpoint throws an internal server error, but check response towards client...
 - Implement Cross Origin availability
 - Optimize calls to backend to be more efficient by putting ExtensionDataContainer into its own container
 - Implement and test 2FA with requirePasswordForPasswordChange = true

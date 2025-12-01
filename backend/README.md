@@ -98,9 +98,12 @@ Response
 ## 🧠 Validation Rules for Secondary Passwords
 
 - Only the user themselves or configured admin users may modify or delete entries.
-
 - Passwords must meet complexity requirements (letter, digit, symbol).
-
 - Custom passwords may be disallowed via configuration.
-
 - Primary password may be required for changes, depending on settings.
+
+## Setup
+
+Setting up the PHP backend is closely tied to configuring the CtPassStore extension in ChurchTools. We recommend following the steps outlined in the [CtPassStore extension setup guide](../extension/docs/setup.md).
+
+If you prefer to focus only on the backend, you can find the standalone instructions in the [PHP Backend Setup Guide](./docs/setup.md).

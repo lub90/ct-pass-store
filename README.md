@@ -53,7 +53,6 @@ We use a state‑of‑the‑art encryption procedure to protect secondary passwo
 
 Because asymmetrical encryption is used, the **encryption key is never stored in ChurchTools nor in the PHP backend**. Even if ChurchTools or the PHP backend were compromised, secondary passwords remain secure. Only external IT systems holding the corresponding **private key locally** can decrypt and use the cleartext secondary password. Access is strictly restricted and read‑only, preventing any widespread security breach.
 
-
 ## 🤝 Contribution
 
 We welcome contributions of all kinds!  
@@ -64,6 +63,10 @@ You can reach out and share your feedback or code either through:
 - [ChurchTools Forum](https://forum.church.tools/user/lubl)  
 
 Together we can make this project stronger.
+
+## 📝 TODOs
+- Add a README for contributors, explaining the architecture, the reasoning behind it and how to run the tests
+- See TODOs in the README of the [PHP backend](./backend/README.md) and the [ChurchTools Extension](./extension/README.md)
 
 ## 📜 License
 
