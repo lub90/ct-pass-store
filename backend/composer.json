@@ -4,8 +4,8 @@
   "type": "project",
   "repositories": [
     {
-      "type": "path",
-      "url": "../../ct-php-client"
+      "type": "vcs",
+      "url": "https://github.com/lub90/ct-php-client.git"
     }
   ],
   "require": {
@@ -15,7 +15,7 @@
     "monolog/monolog": "^2.9",
     "php-di/php-di": "^7.1",
     "guzzlehttp/guzzle": "^7.10",
-    "churchtools/php-client": "*@dev",
+    "churchtools/php-client": "dev-version/3.126.2",
     "phpseclib/phpseclib": "^3.0"
   },
   "require-dev": {

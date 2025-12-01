@@ -1,0 +1,21 @@
+# Redirect all requests to the public/ folder
+RewriteEngine On
+RewriteRule ^$ public/ [L]
+RewriteRule (.*) public/$1 [L]
+
+# Deny direct access to sensitive directories
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Block access to vendor, src, config, etc.
+    RewriteRule ^(vendor|src|config|logs|\.env) - [F,L]
+</IfModule>
+
+# Security: prevent directory listing
+Options -Indexes
+
+# Security: deny access to hidden files (.git, .env, etc.)
+<FilesMatch "^\.">
+    Order allow,deny
+    Deny from all
+</FilesMatch>

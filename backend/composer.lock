@@ -4,15 +4,21 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "1b8a80459c95f3e32edc01d8d250c18d",
+    "content-hash": "3d7e435d671d314edfef626d75c40638",
     "packages": [
         {
             "name": "churchtools/php-client",
             "version": "dev-version/3.126.2",
-            "dist": {
-                "type": "path",
-                "url": "../../ct-php-client",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/lub90/ct-php-client.git",
                 "reference": "2168e79c5631a7c28d65b3e84a721fce5b5ebbb3"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/lub90/ct-php-client/zipball/2168e79c5631a7c28d65b3e84a721fce5b5ebbb3",
+                "reference": "2168e79c5631a7c28d65b3e84a721fce5b5ebbb3",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -26,6 +32,7 @@
                 "friendsofphp/php-cs-fixer": "^3.5",
                 "phpunit/phpunit": "^8.0 || ^9.0"
             },
+            "default-branch": true,
             "type": "library",
             "autoload": {
                 "psr-4": {
@@ -57,9 +64,11 @@
                 "rest",
                 "sdk"
             ],
-            "transport-options": {
-                "relative": true
-            }
+            "support": {
+                "source": "https://github.com/lub90/ct-php-client/tree/version/3.126.2",
+                "issues": "https://github.com/lub90/ct-php-client/issues"
+            },
+            "time": "2025-11-15T21:26:43+00:00"
         },
         {
             "name": "fig/http-message-util",
