@@ -1,13 +1,24 @@
 <template>
   <SetupGuard>
     <BaseLayout>
-      <template #title>🔑 Change Secondary Password</template>
+      <template #title>🔑 Secondary Password</template>
+      <template #subtitle>Manage your secondary password here.</template>
 
-      <div v-if="loading" class="text-muted">Loading settings…</div>
+      <v-alert
+        v-if="loading"
+        type="info"
+        density="compact"
+        class="mx-auto my-4"
+        max-width="1200"
+        >
+        <template #prepend>
+            <v-progress-circular indeterminate color="primary" size="20" />
+        </template>
+        Loading settings...
+      </v-alert>
 
-      <div v-else>
         <!-- Case: allow custom password -->
-        <div v-if="settings.allowCustomPassword">
+        <div v-if="!loading && settings.allowCustomPassword">
           <p>You can update your secondary password here.</p>
 
           <!-- Primary password field if required -->
@@ -77,29 +88,43 @@
         </div>
 
         <!-- Case: only reset allowed -->
-        <div v-else>
-          <p>You can reset your secondary password here.</p>
+        <div v-if="!loading && !settings.allowCustomPassword">
+          <v-alert
+            v-if="!loading && !settings.allowCustomPassword"
+            type="info"
+            density="compact"
+            class="mx-auto my-4"
+            >
+            Your administrator has set up secondary passwords so that you cannot create one yourself. Click below to generate a random password. Once you do, the new password will be displayed to you.
+          </v-alert>
 
           <!-- Primary password field if required -->
-          <div v-if="settings.requirePasswordForPasswordChange" class="mb-3">
-            <label class="form-label">Your primary ChurchTools password</label>
-            <input
-              type="password"
-              class="form-control"
-              v-model="primaryPassword"
-              placeholder="Enter your primary password"
-            />
-          </div>
+          <v-sheet
+            v-if="settings.requirePasswordForPasswordChange"
+            color="transparent"
+            class="d-flex flex-column"
+          >
+            <div class="text-body-2 text-muted mb-2">
+              You are required to enter your primary ChurchTools password in order to reset your secondary password.
+            </div>
 
-          <button
-            class="btn btn-warning mt-3"
+            <v-text-field
+              v-model="primaryPassword"
+              type="password"
+              label="Your primary ChurchTools password"
+              placeholder="Enter your primary password"
+              density="comfortable"
+            />
+          </v-sheet>
+
+          <v-btn
+            variant="tonal"
             :disabled="settings.requirePasswordForPasswordChange && !primaryPassword"
             @click="saveResetPassword"
           >
             Reset your secondary password
-          </button>
+          </v-btn>
         </div>
-      </div>
 
       <div v-if="successMessage" class="alert alert-success mt-3" v-html="successMessage"></div>
       <div v-if="errorMessage" class="alert alert-danger mt-3" v-html="errorMessage"></div>

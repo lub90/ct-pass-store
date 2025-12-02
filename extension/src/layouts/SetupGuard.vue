@@ -1,50 +1,53 @@
 <template>
-    <div class="container py-4">
-        <!-- Loading spinner while check is running -->
+    <!-- Loading spinner while check is running -->
+    <v-alert
+        v-if="!checkCompleted"
+        type="info"
+        density="compact"
+        class="mx-auto my-4"
+        max-width="1200"
+        >
+        <template #prepend>
+            <v-progress-circular indeterminate color="primary" size="20" />
+        </template>
+        Starting extension...
+    </v-alert>
+
+    <!-- Error: No access rights -->
         <v-alert
-            v-if="!checkCompleted"
-            type="info"
-            density="compact"
+        v-else-if="!correctAccessRights"
+        type="error"
+        density="compact"
+        class="mx-auto my-4"
+        max-width="1200"
+        >
+        <v-icon color="error" start>mdi-close-circle</v-icon>
+        You do not have sufficient access rights to use this extension.
+    </v-alert>
+
+    <!-- Setup completed: show content -->
+    <slot v-else-if="setupFinished" />
+
+    <!-- Setup incomplete: show info message -->
+    <v-alert
+        v-else
+        type="info"
+        density="compact"
+        class="mx-auto my-4"
+        max-width="1200"
+        >
+        <v-icon color="info" start>mdi-information</v-icon>
+        Extension is not setup correctly.
+        <template #append>
+            <v-btn
+                :to="`${AppConfig.getExtensionUrlPrefix()}/setup`"
+                variant="outlined"
+                size="small"
             >
-            <template #prepend>
-                <v-progress-circular indeterminate color="primary" size="20" />
-            </template>
-
-            Starting extension...
-        </v-alert>
-
-        <!-- Error: No access rights -->
-         <v-alert
-            v-else-if="!correctAccessRights"
-            type="error"
-            density="compact"
-            >
-            <v-icon color="error" start>mdi-close-circle</v-icon>
-            You do not have sufficient access rights to use this extension.
-        </v-alert>
-
-        <!-- Setup completed: show content -->
-        <slot v-else-if="setupFinished" />
-
-        <!-- Setup incomplete: show info message -->
-        <v-alert
-            v-else
-            type="info"
-            density="compact"
-            >
-            <v-icon color="info" start>mdi-information</v-icon>
-            Extension is not setup correctly.
-            <template #append>
-                <v-btn
-                    :to="`${AppConfig.getExtensionUrlPrefix()}/setup`"
-                    variant="outlined"
-                    size="small"
-                >
-                    Run setup
-                </v-btn>
-            </template>
-        </v-alert>
-    </div>
+                Run setup
+            </v-btn>
+        </template>
+    </v-alert>
 </template>
 
 

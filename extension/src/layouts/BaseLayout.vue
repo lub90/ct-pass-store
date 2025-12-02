@@ -1,14 +1,27 @@
 <template>
-  <div class="d-flex justify-content-between align-items-center mb-4">
-    <h1 class="mb-0 text-primary" id="title"><slot name="title" /></h1>
-    <div id="menu"><slot name="menu" /></div>
-  </div>
+  <v-container fluid class="pa-5 h-screen">
+    <!-- Header -->
+    <v-card class="h-100 " elevation="1">
+      <!-- Titel -->
+      <v-card-title>
+        <slot name="title" />
+      </v-card-title>
 
-  <div id="container" class="mb-4" style="height: 100%">
-    <slot />
-  </div>
+      <v-card-subtitle>
+        <slot name="subtitle" />
+      </v-card-subtitle>
 
-  <div id="footer"><slot name="footer" /></div>
+      <!-- Hauptinhalt -->
+      <v-card-text>
+        <slot />
+      </v-card-text>
+
+      <!-- Footer -->
+      <v-card-actions>
+        <slot name="footer" />
+      </v-card-actions>
+    </v-card>
+  </v-container>
 </template>
 
 <script setup lang="ts">

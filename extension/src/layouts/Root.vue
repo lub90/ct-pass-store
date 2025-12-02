@@ -1,5 +1,5 @@
 <template>
-  <v-layout>
+  <v-layout height="100%">
     <v-navigation-drawer permanent>
       <v-list>
         <v-list-item
@@ -46,7 +46,7 @@
       </v-list>
     </v-navigation-drawer>
 
-    <v-main>
+    <v-main class="h-screen">
       <slot />
     </v-main>
   </v-layout>
