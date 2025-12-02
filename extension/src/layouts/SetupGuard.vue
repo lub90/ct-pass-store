@@ -1,10 +1,17 @@
 <template>
     <div class="container py-4">
         <!-- Loading spinner while check is running -->
-        <div v-if="!checkCompleted">
-            <v-progress-circular indeterminate color="primary" size="24" />
-            <span>Starting extension...</span>
-        </div>
+        <v-alert
+            v-if="!checkCompleted"
+            type="info"
+            density="compact"
+            >
+            <template #prepend>
+                <v-progress-circular indeterminate color="primary" size="20" />
+            </template>
+
+            Starting extension...
+        </v-alert>
 
         <!-- Error: No access rights -->
          <v-alert
