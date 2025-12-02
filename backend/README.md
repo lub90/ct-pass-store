@@ -1,8 +1,12 @@
-# 📡 CtPassStore API Documentation
+# 📡 CtPassStore PHP Backend Documentation
+
+## API Documentation
 
 This backend provides a secure interface for storing, updating, and deleting encrypted, secondary passwords for ChurchTools users. It is built with PHP and Slim Framework and uses ChurchTools authentication tokens for access control.
 
-## 🔐 Authentication
+---
+
+### 🔐 Authentication
 
 All endpoints require a valid ChurchTools token in the Authorization header.
 
@@ -14,7 +18,9 @@ Content-Type: application/json
 Accept: application/json
  ```
 
-## 📦 Endpoints
+---
+
+### 📦 Endpoints
 
 ### GET /entries/{id}
 
@@ -107,3 +113,30 @@ Response
 Setting up the PHP backend is closely tied to configuring the CtPassStore extension in ChurchTools. We recommend following the steps outlined in the [CtPassStore extension setup guide](../extension/docs/setup.md).
 
 If you prefer to focus only on the backend, you can find the standalone instructions in the [PHP Backend Setup Guide](./docs/setup.md).
+
+
+## TODOs
+
+### Tests
+- Complete the remaining tests for entry operations (`GET`, `PUT`, `DELETE`)
+- Add tests for valid passwords when custom passwords are not allowed
+- Add tests for invalid passwords (disallowed characters, too short, insufficient entropy)
+- Add tests for `requirePasswordForPasswordChange = true`
+- Add additional tests for `DELETE`
+- Add tests for unknown endpoints or missing IDs in the entries endpoint (must have no side effects)
+- Write comprehensive unit tests for all components
+
+### Fixes
+- Ensure wrong HTTP methods on endpoints return proper client responses with `405 Method Not Allowed` without side effects instead of internal server errors
+- Ensure HTTP methods on non-existing endpoints return `404 Not Found` without any side effects
+- Optimize backend calls by moving `ExtensionDataContainer` into its own container (current `GET`, `PUT`, `DELETE` responses are slow)
+- Implement and test 2FA when `requirePasswordForPasswordChange = true`
+- Extend the `/test` endpoint to verify that log files and non-public folders are not accessible externally
+- Rename `ServiceSettings` to `ChurchtoolsServiceSettings`
+- Standardize spelling of “ChurchTools” across the codebase
+- Centralize timeout configuration for all ChurchTools API communication in a single file
+- Add clear comments to each class
+- Investigate and implement paging support
+- Test HTTPS enforcement via `.htaccess`
+- Test that access to folders outside of `/public` is blocked via `.htaccess`
+- Implement a cron job to clean up the database and remove non-existent users from the key-value store
