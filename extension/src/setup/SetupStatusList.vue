@@ -14,7 +14,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineProps } from 'vue';
 
 export type StatusItem = {
     pending: boolean;

@@ -63,7 +63,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, defineProps, defineEmits } from 'vue';
+import { ref, onMounted, defineEmits } from 'vue';
 import { ExtensionData } from '../api/ExtensionData';
 
 const props = defineProps<{
