@@ -30,7 +30,7 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { defineEmits, inject } from 'vue';
+import { inject } from 'vue';
 
 import SetupStep from './SetupStep.vue';
 import SetupInfoBox from './SetupInfoBox.vue';

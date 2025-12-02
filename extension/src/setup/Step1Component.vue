@@ -7,7 +7,6 @@
 </template>
 
 <script setup lang="ts">
-import { defineEmits } from 'vue';
 import type { Precondition } from '../types/Precondition';
 
 const emit = defineEmits<{

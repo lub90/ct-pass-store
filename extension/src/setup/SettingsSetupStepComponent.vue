@@ -9,7 +9,7 @@
 </template>
 
 <script setup lang="ts">
-import { inject, defineEmits } from 'vue';
+import { inject } from 'vue';
 import SetupStep from './SetupStep.vue';
 import SettingsForm from '../components/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';

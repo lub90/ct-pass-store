@@ -4,6 +4,7 @@
 
 ## TODO:
 - Remove dependencies to angular etc....
+- Change sidebar to automatically use the router components...
 
 - Add the steps giving instruction to setup the backend as well as the step to test the backend connections
 - Add comments

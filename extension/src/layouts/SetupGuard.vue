@@ -1,30 +1,42 @@
 <template>
     <div class="container py-4">
         <!-- Loading spinner while check is running -->
-        <div v-if="!checkCompleted" class="d-flex align-items-center gap-2">
-            <div class="spinner-border text-primary" role="status" />
+        <div v-if="!checkCompleted">
+            <v-progress-circular indeterminate color="primary" size="24" />
             <span>Starting extension...</span>
         </div>
 
         <!-- Error: No access rights -->
-        <div v-else-if="!correctAccessRights" class="alert alert-danger d-flex align-items-center gap-2">
-            <i class="bi bi-x-circle-fill text-danger"></i>
-            <span>You do not have sufficient access rights to use this extension.</span>
-        </div>
+         <v-alert
+            v-else-if="!correctAccessRights"
+            type="error"
+            density="compact"
+            >
+            <v-icon color="error" start>mdi-close-circle</v-icon>
+            You do not have sufficient access rights to use this extension.
+        </v-alert>
 
         <!-- Setup completed: show content -->
-        <slot v-else-if="setupCompleted" />
+        <slot v-else-if="setupFinished" />
 
         <!-- Setup incomplete: show info message -->
-        <div v-else class="alert alert-info d-flex align-items-center justify-content-between">
-            <div class="d-flex align-items-center gap-2">
-                <i class="bi bi-info-circle-fill text-info"></i>
-                <span>Extension is not setup correctly. Run setup.</span>
-            </div>
-            <router-link :to="`${AppConfig.getExtensionUrlPrefix()}/setup`" class="btn btn-outline-info btn-sm">
-                Run setup
-            </router-link>
-        </div>
+        <v-alert
+            v-else
+            type="info"
+            density="compact"
+            >
+            <v-icon color="info" start>mdi-information</v-icon>
+            Extension is not setup correctly.
+            <template #append>
+                <v-btn
+                    :to="`${AppConfig.getExtensionUrlPrefix()}/setup`"
+                    variant="outlined"
+                    size="small"
+                >
+                    Run setup
+                </v-btn>
+            </template>
+        </v-alert>
     </div>
 </template>
 
@@ -35,11 +47,12 @@ import { inject } from 'vue';
 import { AppConfig } from '../AppConfig'
 import { ExtensionData } from '../api/ExtensionData';
 import { Permissions } from '../api/Permissions';
+import { setupCompleted } from '../setup/SetupStatus';
 
 const churchtoolsClient = inject('churchtoolsClient');
 
 const checkCompleted = ref(false);
-const setupCompleted = ref(false);
+const setupFinished = ref(false);
 const correctAccessRights = ref(false);
 
 onMounted(async () => {
@@ -64,39 +77,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     // Acces right check seems to be complete
     correctAccessRights.value = true;
 
-    // Step 2: Check if any categories exist
-    const hasCategories = await extensionData.hasCategory(AppConfig.SETUP_COMPLETED_CATEGORY);
-    if (!hasCategories) {
-        console.info('Settings category not found — setup has not started.');
-        setupCompleted.value = false;
-        return;
-    }
-
-    // Step 3: Check if categories contain settings data
-    const setupHasData = await extensionData.categoryHasData(AppConfig.SETUP_COMPLETED_CATEGORY);
-    if (!setupHasData) {
-        console.info('Settings category exists but contains no data — setup incomplete.');
-        setupCompleted.value = false;
-        return;
-    }
-
-    // Step 4: Check if setup_completed flag is set
-    const setupEntry = await extensionData.getCategoryData(AppConfig.SETUP_COMPLETED_CATEGORY, true);
-
-    try {
-        const parsed = JSON.parse(setupEntry.value);
-        if (parsed.setupCompleted === true) {
-            setupCompleted.value = true;
-            return;
-        } else {
-            console.info('Setup flag is present but not completed.');
-            setupCompleted.value = false;
-            return;
-        }
-    } catch (error) {
-        console.error('Failed to parse setup entry value:', error);
-        return;
-    }
+    setupFinished.value = await setupCompleted(extensionData);
 }
 
 </script>
