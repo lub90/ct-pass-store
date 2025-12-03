@@ -12,4 +12,12 @@ export abstract class CtSetupStep implements SetupStep {
         this.churchtoolsClient = churchtoolsClient;
         this.permissions = new Permissions(this.churchtoolsClient);
     }
+
+    public allowBack(): boolean {
+        return true;
+    }
+
+    public allowRetry(): boolean {
+        return false;
+    }
 }

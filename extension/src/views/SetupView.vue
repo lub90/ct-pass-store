@@ -1,10 +1,11 @@
 <template>
 
     <BaseLayout>
-        <template #title>⚙️ Setup Extension</template>
+        <template #title>⚙️ Setup</template>
+        <template #subtitle>Setup the CtPassStoreExtension</template>
         
-        <PreconditionChecker
-        v-if="showChecker"
+        <SetupStartPage
+        v-if="showSetupStartPage"
         :steps="steps"
         @complete="enableStart"
         />
@@ -16,23 +17,61 @@
         />
         
         <template #footer>
-            <button
-                v-if="showStart"
-                class="btn btn-primary rounded-pill px-4"
+            <!-- Start Setup -->
+            <v-btn
+                v-if="showSetupStartPage"
+                variant="tonal"
+                prepend-icon="mdi-play-circle"
                 @click="startSetup"
                 :disabled="!isStartEnabled"
             >
                 Start Setup
-            </button>
-            <button
+            </v-btn>
+
+            <!-- Back -->
+            <v-btn
+                v-if="showBack"
+                variant="tonal"
+                prepend-icon="mdi-arrow-left"
+                @click="previousStep"
+            >
+                Back
+            </v-btn>
+
+            <!-- Retry -->
+            <v-btn
+                v-if="showRetry"
+                variant="tonal"
+                prepend-icon="mdi-refresh"
+                @click="retry"
+            >
+                Retry
+            </v-btn>
+
+            <!-- Next -->
+            <v-btn
                 v-if="showNext"
-                class="btn btn-primary rounded-pill px-4"
+                variant="tonal"
+                prepend-icon="mdi-arrow-right"
                 @click="nextStep"
                 :disabled="!isNextEnabled"
             >
-                Next >
-            </button>
-        </template>
+                Next
+            </v-btn>
+
+            <!-- Finish Setup -->
+            <v-btn
+                v-if="showFinish"
+                color="success"
+                variant="tonal"
+                prepend-icon="mdi-check-circle"
+                :disabled="!isNextEnabled"
+                @click="finishSetup"
+            >
+                Finish Setup
+            </v-btn>
+            </template>
+
     </BaseLayout>
 
 </template>
@@ -40,18 +79,21 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
-import PreconditionChecker from '../components/PreconditionChecker.vue';
+import SetupStartPage from '../components/SetupStartPage.vue';
 import type { SetupStep } from '../types/SetupStep';
 import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
 import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
 import { SettingsSetupStep } from '../setup/SettingsSetupStep'
-import { ExtensionData } from '../api/ExtensionData';
 import { FinalUpdateRightsStep } from '../setup/FinalUpdateRightsStep';
+import { useRouter } from 'vue-router';
 
 
 import { inject } from 'vue';
 const churchtoolsClient = inject('churchtoolsClient');
+const router = useRouter();
+
+// We do not check if the setup has been run before. Consequently, a setup and each step should be idempotent or at least check whether it should change something
 
 const steps: SetupStep[] = [
     new RightsConfirmationStep(churchtoolsClient),
@@ -59,47 +101,84 @@ const steps: SetupStep[] = [
     new EncryptionSetupStep(churchtoolsClient),
     // TODO: One step is missing here: Setup instructions for the Backend
     new SettingsSetupStep(churchtoolsClient),
-    // TODO: One step is missing here: Test of the backen
+    // TODO: One step is missing here: Test of the backend
     new FinalUpdateRightsStep(churchtoolsClient)
+    // TODO: One step is missing here: Setting the setup complete to true...
 ];
 
-const currentStepIndex = ref(0);
-const currentStepComponent = computed(() => steps[currentStepIndex.value].component);
+const currentStepIndex = ref(-1);
+const currentStep = computed(() => {
+    return currentStepIndex.value < 0
+        ? null
+        : steps[currentStepIndex.value]
+    });
+const currentStepComponent = computed(() => {
+    return currentStepIndex.value < 0
+        ? null
+        : steps[currentStepIndex.value].component
+    });
+const showStep = computed(() => {
+  return currentStepIndex.value >= 0 && currentStepIndex.value < steps.length
+})
+const showBack = computed(() => {
+    if (currentStep.value === null) {
+        return false
+    }
+    return currentStep.value.allowBack()
+    });
+const showRetry = computed(() => {
+    if (currentStep.value === null) {
+        return false
+    }
+    return currentStep.value.allowRetry()
+    });
+const showNext = computed(() => {
+    return currentStepIndex.value >= 0 &&
+        currentStepIndex.value + 1 < steps.length
+    });
+const showFinish = computed(() => {
+        return currentStepIndex.value + 1 === steps.length
+    });
 
-const showChecker = ref(true);
-const showStep = ref(false);
-const showStart = ref(true);
-const showNext = ref(false);
 
+const showSetupStartPage = computed(() => {
+    return currentStepIndex.value < 0;
+    });
 const isStartEnabled = ref(false);
 const isNextEnabled = ref(false);
 
-// We do not check if the setup has been run before. A setup and each step should be idempotent
-
 function enableStart() {
     isStartEnabled.value = true;
-    showStart.value = true;
 }
 
 function startSetup() {
     if (!isStartEnabled.value) return;
-    showChecker.value = false;
-    showStep.value = true;
 
-    showStart.value = false;
-    showNext.value = true;
+    currentStepIndex.value = 0;
     isNextEnabled.value = false;
 }
 
 function enableNextStep() {
     isNextEnabled.value = true;
-    showNext.value = true;
 }
 
 function nextStep() {
     if (!isNextEnabled.value) return;
     currentStepIndex.value++;
     isNextEnabled.value = false;
+}
+
+function previousStep() {
+    currentStepIndex.value--;
+    isNextEnabled.value = false;
+}
+
+function retry() {
+    // TODO: Implement
+}
+
+function finishSetup() {
+    router.push('./settings');
 }
 
 </script>

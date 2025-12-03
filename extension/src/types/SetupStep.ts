@@ -1,7 +1,8 @@
 import type { Component } from "vue";
-import type { Precondition } from "./Precondition";
+import type { SetupProcessStatus } from "./SetupProcessStatus";
 
 export interface SetupStep {
   component: Component;
-  checkPrecondition() : Promise<Precondition[]>;
+  allowBack(): boolean;
+  allowRetry(): boolean;
 }

@@ -68,6 +68,5 @@ onMounted(async () => {
 
 function navigateToSettings() {
   emit('completed');
-  router.push('./settings');
 }
 </script>
