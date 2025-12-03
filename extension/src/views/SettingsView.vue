@@ -2,21 +2,37 @@
       <SetupGuard>
         <BaseLayout>
             <template #title>🛠 Settings</template>
+            <template #subtitle>Manage the CtPassStore extension</template>
 
-            <div v-if="loading">
-              <div class="text-muted">Checking access rights…</div>
-            </div>
+            <!-- While loading the settings and checking access rights -->
+            <v-alert
+              v-if="loading"
+              type="info"
+              density="compact"
+              class="mx-auto my-4"
+              max-width="1200"
+              >
+              <template #prepend>
+                  <v-progress-circular indeterminate color="primary" size="20" />
+              </template>
+              Checking access rights...
+            </v-alert>
 
-            <div v-else-if="isAdmin">
+            <v-alert
+              v-if="!isAdmin"
+              type="error"
+              density="compact"
+              class="mx-auto my-4">
+              You do not have permission to view or edit the settings.
+            </v-alert>
+
+
+            <v-sheet v-if="isAdmin">
               <SettingsForm
                 :extension-data="extensionData"
                 :category-name="AppConfig.SETTINGS_CATEGORY"
               />
-            </div>
-
-            <div v-else class="alert alert-danger mt-3">
-              ❌ You do not have permission to view or edit the settings.
-            </div>
+            </v-sheet>
         </BaseLayout>
     </SetupGuard>
 </template>

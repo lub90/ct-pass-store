@@ -191,7 +191,7 @@
       <v-btn
           v-if="!loading"
         variant="tonal"
-        class="mt-6"
+        class="mt-4"
         :disabled="(settings.requirePasswordForPasswordChange && !primaryPassword) || (settings.allowCustomPassword && !allCriteriaMet)"
         @click="saveResetPassword"
       >

@@ -1,66 +1,98 @@
 <template>
-  <form @submit.prevent="handleSave">
-    <div v-if="saved" class="alert alert-success mb-3">
-      ✅ Settings were successfully saved.
-    </div>
+  <v-form @submit.prevent="handleSave">
+    <!-- Success alert -->
+    <v-alert
+      v-if="saved"
+      type="success"
+      density="compact"
+    >
+      Settings were successfully saved.
+    </v-alert>
 
-    <div class="mb-3">
-      <label class="form-label">Require primary password for secondary password change</label>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" v-model="requireOldPassword" />
-      </div>
-    </div>
+    <!-- Require primary password -->
+    <v-switch
+      v-model="requireOldPassword"
+      label="Require primary password for secondary password change"
+      inset
+    />
 
-    <div class="mb-3">
-      <label class="form-label">Allow custom passwords</label>
-      <br />
-      <small class="text-muted">
-        If enabled, users can choose their own passwords. If disabled, passwords will be generated automatically and can only be reset.
-      </small>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" v-model="allowCustomPassword" />
-      </div>
-    </div>
+    <!-- Allow custom passwords -->
+    <v-tooltip text="If enabled, users can choose their own passwords. If disabled, passwords will be generated automatically and can only be reset by the users.">
+      <template #activator="{ props }">
+        <v-switch
+          v-model="allowCustomPassword"
+          label="Allow custom passwords"
+          inset
+          v-bind="props"
+        />
+      </template>
+    </v-tooltip>
 
-    <div class="mb-3">
-      <label class="form-label">Admin user IDs (comma-separated)</label>
-      <br />
-      <small class="text-muted">
-        Admin users are users that are allowed to read, set and/or reset the secondary password for other users. <strong>Use this feature carefully!</strong>
-      </small>
-      <input type="text" class="form-control" v-model="adminUserInput" />
-    </div>
+    <!-- Admin user IDs -->
+    <v-tooltip text="Admin users can read, set and/or reset the secondary password for other users. Use this feature carefully!">
+      <template #activator="{ props }">
+        <v-text-field
+          v-model="adminUserInput"
+          label="Admin user IDs (comma-separated)"
+          variant="outlined"
+          density="comfortable"
+          v-bind="props"
+        />
+      </template>
+    </v-tooltip>
 
-    <div class="mb-3">
-      <label class="form-label">Read access user IDs (comma-separated)</label>
-      <br />
-      <small class="text-muted">
-        Read access users are users that are allowed to read the secondary password for other users. <strong>Use this feature carefully!</strong>
-      </small>
-      <input type="text" class="form-control" v-model="readAccessUserInput" />
-    </div>
 
-    <div class="mb-3">
-      <label class="form-label">Minimum password length</label>
-      <br />
-      <small class="text-muted">
-        Must be greater than 8.
-      </small>
-      <input type="number" class="form-control" v-model.number="passwordLength" min="8" />
-    </div>
+    <!-- Read access user IDs -->
+    <v-tooltip text="Read access users can read the secondary password for other users. Use this feature carefully!">
+      <template #activator="{ props }">
+        <v-text-field
+          v-model="readAccessUserInput"
+          label="Read access user IDs (comma-separated)"
+          variant="outlined"
+          density="comfortable"
+          v-bind="props"
+        />
+      </template>
+    </v-tooltip>
 
-    <div class="mb-3">
-      <label class="form-label">Backend URL</label>
-      <br />
-      <small class="text-muted">
-        Including "https://...".
-      </small>
-      <input type="text" class="form-control" v-model="backendUrl" />
-    </div>
+    <!-- Minimum password length -->
+    <v-tooltip text="Must be greater than 8.">
+      <template #activator="{ props }">
+        <v-text-field
+          v-model.number="passwordLength"
+          type="number"
+          min="8"
+          label="Minimum password length"
+          variant="outlined"
+          density="comfortable"
+          v-bind="props"
+        />
+      </template>
+    </v-tooltip>
 
-    <button type="submit" class="btn btn-primary mt-3">Save Settings</button>
-  </form>
+    <!-- Backend URL -->
+    <v-tooltip text='Including "https://...".'>
+      <template #activator="{ props }">
+        <v-text-field
+          v-model="backendUrl"
+          label="PHP Backend URL"
+          variant="outlined"
+          density="comfortable"
+          v-bind="props"
+        />
+      </template>
+    </v-tooltip>
+
+    <!-- Submit button -->
+    <v-btn
+      type="submit"
+      variant="tonal"
+      class="mt-4">
+      Save Settings
+    </v-btn>
+  </v-form>
 </template>
+
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
