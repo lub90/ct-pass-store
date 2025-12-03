@@ -2,8 +2,9 @@
   <SetupGuard>
     <BaseLayout>
       <template #title>🔑 Secondary Password</template>
-      <template #subtitle>Manage your secondary password here.</template>
+      <template #subtitle>Manage your secondary password here</template>
 
+      <!-- While loading the settings-->
       <v-alert
         v-if="loading"
         type="info"
@@ -17,117 +18,185 @@
         Loading settings...
       </v-alert>
 
-        <!-- Case: allow custom password -->
-        <div v-if="!loading && settings.allowCustomPassword">
-          <p>You can update your secondary password here.</p>
+      <!-- Case: only reset allowed -->
+      <v-sheet v-if="!loading && !settings.allowCustomPassword">
+        <v-alert
+          v-if="!loading && !settings.allowCustomPassword"
+          type="info"
+          density="compact"
+          class="mx-auto my-4"
+          >
+          Your administrator has set up secondary passwords so that you cannot create one yourself. Click below to generate a random password. Once you do, the new password will be displayed to you.
+        </v-alert>
+      </v-sheet>
 
-          <!-- Primary password field if required -->
-          <div v-if="settings.requirePasswordForPasswordChange" class="mb-3">
-            <label class="form-label">Your primary ChurchTools password</label>
-            <input
-              type="password"
-              class="form-control"
-              v-model="primaryPassword"
-              placeholder="Enter your primary password"
-            />
-            <br />
-          </div>
+      <!-- While saving the password -->
+      <v-alert
+        v-if="saving"
+        type="info"
+        density="compact"
+        class="mx-auto my-4"
+        >
+        <template #prepend>
+            <v-progress-circular indeterminate color="primary" size="20" />
+        </template>
+        Setting new password - please wait...
+      </v-alert>
 
-          
+      <!-- Feedback messages -->
+      <v-alert
+        v-if="successMessage"
+        type="success"
+        density="compact"
+      >
+        <div v-html="successMessage"></div>
+      </v-alert>
+      <v-alert
+        v-if="errorMessage"
+        type="error"
+        density="compact">
+        <div v-html="errorMessage"></div>
+      </v-alert>
 
-          <!-- New password fields -->
-          <div class="mb-3">
-            <label class="form-label">New secondary password</label>
-            <input
-              type="password"
-              class="form-control"
+
+
+
+
+      <!-- Case: allow custom password -->
+      <v-sheet v-if="!loading && settings.allowCustomPassword" class="mt-6">
+        <v-input>
+          <template #prepend>
+            <p class="text-body-1 font-weight-medium" style="width:170px;">Secondary Password:</p>
+          </template>
+          <v-text-field
               v-model="newPassword"
-              placeholder="Enter new password"
-            />
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label">Repeat new secondary password</label>
-            <input
               type="password"
-              class="form-control"
-              v-model="repeatPassword"
-              placeholder="Repeat new password"
-            />
-          </div>
-
-          <!-- Criteria feedback -->
-          <ul class="list-unstyled">
-            <li :class="criteriaMet.length ? 'text-success' : 'text-danger'">
-              Minimum length: {{ settings.passwordLength }} characters
-            </li>
-            <li :class="criteriaMet.special ? 'text-success' : 'text-danger'">
-              Contains at least one special character (!@$%&*-_+=?.)
-            </li>
-            <li :class="criteriaMet.hasDigit ? 'text-success' : 'text-danger'">
-              Contains at least one digit (0-9)
-            </li>
-            <li :class="criteriaMet.hasLetter ? 'text-success' : 'text-danger'">
-              Contains at least one letter
-            </li>
-            <li :class="criteriaMet.onlyValidChars ? 'text-success' : 'text-danger'">
-              Contains only valid chars (letters, digits and special characters)
-            </li>
-            <li :class="criteriaMet.match ? 'text-success' : 'text-danger'">
-              Passwords match
-            </li>
-          </ul>
-
-          <button
-            class="btn btn-primary mt-3"
-            :disabled="!canSubmit"
-            @click="saveResetPassword"
-          >
-            Save your secondary Password
-          </button>
-        </div>
-
-        <!-- Case: only reset allowed -->
-        <div v-if="!loading && !settings.allowCustomPassword">
-          <v-alert
-            v-if="!loading && !settings.allowCustomPassword"
-            type="info"
-            density="compact"
-            class="mx-auto my-4"
-            >
-            Your administrator has set up secondary passwords so that you cannot create one yourself. Click below to generate a random password. Once you do, the new password will be displayed to you.
-          </v-alert>
-
-          <!-- Primary password field if required -->
-          <v-sheet
-            v-if="settings.requirePasswordForPasswordChange"
-            color="transparent"
-            class="d-flex flex-column"
-          >
-            <div class="text-body-2 text-muted mb-2">
-              You are required to enter your primary ChurchTools password in order to reset your secondary password.
-            </div>
-
-            <v-text-field
-              v-model="primaryPassword"
-              type="password"
-              label="Your primary ChurchTools password"
-              placeholder="Enter your primary password"
+              label="New secondary password"
+              placeholder="New secondry password"
+              variant="outlined"
               density="comfortable"
+              style="max-width: 400px;"
             />
-          </v-sheet>
+        </v-input>
 
-          <v-btn
-            variant="tonal"
-            :disabled="settings.requirePasswordForPasswordChange && !primaryPassword"
-            @click="saveResetPassword"
-          >
-            Reset your secondary password
-          </v-btn>
+        <v-input>
+          <template #prepend>
+            <p class="text-body-1 font-weight-medium" style="width:170px;">Repeat Password:</p>
+          </template>
+          <v-text-field
+            v-model="repeatPassword"
+            type="password"
+            label="Repeat new secondary password"
+            placeholder="Repeat new secondary password"
+            variant="outlined"
+            density="comfortable"
+            style="max-width: 400px;"
+          />
+        </v-input>
+
+        <!-- Criteria feedback -->
+        <v-list density="compact">
+          <v-list-subheader class="text-body-1 font-weight-medium">
+            Secondary Password Criteria
+          </v-list-subheader>
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.length ? 'text-success' : 'text-error'">
+                {{ criteriaMet.length ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Minimum length: {{ settings.passwordLength }} characters
+          </v-list-item>
+
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.special ? 'text-success' : 'text-error'">
+                {{ criteriaMet.special ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Contains at least one special character (!@$%&*-_+=?.)
+          </v-list-item>
+
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.hasDigit ? 'text-success' : 'text-error'">
+                {{ criteriaMet.hasDigit ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Contains at least one digit (0-9)
+          </v-list-item>
+
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.hasLetter ? 'text-success' : 'text-error'">
+                {{ criteriaMet.hasLetter ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Contains at least one letter
+          </v-list-item>
+
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.onlyValidChars ? 'text-success' : 'text-error'">
+                {{ criteriaMet.onlyValidChars ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Contains only valid chars (letters, digits and special characters)
+          </v-list-item>
+
+          <v-list-item>
+            <template #prepend>
+              <v-icon :class="criteriaMet.match ? 'text-success' : 'text-error'">
+                {{ criteriaMet.match ? 'mdi-check-circle' : 'mdi-close-circle' }}
+              </v-icon>
+            </template>
+            Passwords match
+          </v-list-item>
+        </v-list>
+      </v-sheet>
+
+
+
+
+
+      <!-- Primary password field if required -->
+      <v-sheet
+        v-if="!loading && settings.requirePasswordForPasswordChange"
+        color="transparent"
+        class="d-flex flex-column mt-10"
+      >
+        <div class="text-body-2 text-muted mb-2">
+          You are required to enter your primary ChurchTools password in order to reset your secondary password.
         </div>
 
-      <div v-if="successMessage" class="alert alert-success mt-3" v-html="successMessage"></div>
-      <div v-if="errorMessage" class="alert alert-danger mt-3" v-html="errorMessage"></div>
+        <v-input>
+          <template #prepend>
+            <p class="text-body-1 font-weight-medium" style="width:170px;">Primary Password:</p>
+          </template>
+          <v-text-field
+            v-model="primaryPassword"
+            type="password"
+            label="Your primary ChurchTools password"
+            placeholder="Your primary ChurchTools password"
+            variant="outlined"
+            density="comfortable"
+            style="max-width: 400px;"
+          />
+        </v-input>
+      </v-sheet> 
+
+
+
+      <!-- Save/Reset button -->
+      <v-btn
+          v-if="!loading"
+        variant="tonal"
+        class="mt-6"
+        :disabled="(settings.requirePasswordForPasswordChange && !primaryPassword) || (settings.allowCustomPassword && !allCriteriaMet)"
+        @click="saveResetPassword"
+      >
+        {{ settings.allowCustomPassword ? 'Save secondary password' : 'Reset secondary password' }}
+      </v-btn>
 
     </BaseLayout>
   </SetupGuard>
@@ -149,6 +218,7 @@ const settings = ref<any>({
   requirePasswordForPasswordChange: false,
   passwordLength: 12,
 });
+const saving = ref(false);
 
 const primaryPassword = ref('');
 const newPassword = ref('');
@@ -156,19 +226,6 @@ const repeatPassword = ref('');
 const backendUrl = ref('');
 const successMessage = ref('');
 const errorMessage = ref('');
-
-onMounted(async () => {
-  try {
-    const entry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true);
-    const values = JSON.parse(entry.value);
-    settings.value = values;
-    backendUrl.value = values.backendUrl;
-  } catch (err) {
-    console.error('Failed to load settings:', err);
-  } finally {
-    loading.value = false;
-  }
-});
 
 // Criteria checks
 // TODO: Move special characters in string of AppConfig
@@ -183,16 +240,27 @@ const criteriaMet = computed(() => {
   };
 });
 
-const canSubmit = computed(() => {
-  const allCriteria =
-    criteriaMet.value.length && criteriaMet.value.special && criteriaMet.value.hasDigit && criteriaMet.value.hasLetter && criteriaMet.value.onlyValidChars && criteriaMet.value.match;
-  const primaryOk =
-    !settings.value.requirePasswordForPasswordChange || !!primaryPassword.value;
-  return allCriteria && primaryOk;
+const allCriteriaMet = computed(() => {
+  return Object.values(criteriaMet.value).every(Boolean)
 });
 
-// Dummy calls
+onMounted(async () => {
+  try {
+    const entry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true);
+    const values = JSON.parse(entry.value);
+    settings.value = values;
+    backendUrl.value = values.backendUrl;
+  } catch (err) {
+    console.error('Failed to load settings:', err);
+  } finally {
+    loading.value = false;
+  }
+});
+
+
 async function saveResetPassword() {
+  saving.value = true;
+
   const body: any = {};
   if (settings.value.requirePasswordForPasswordChange) {
     body.primaryPwd = primaryPassword.value;
@@ -214,7 +282,7 @@ async function saveResetPassword() {
 
   if (response.status == 200) {
     const data = await response.json();
-      successMessage.value = `Your new secondary password is: <br\><b> ${data.secondaryPwd} </b><br \>Please remember it or store it securely. You will only see it here once.`;
+    successMessage.value = `Your new secondary password is: <br\><b> ${data.secondaryPwd} </b><br \>Please remember it or store it securely. You will only see it here once.`;
   } else if (response.status == 204) {
     successMessage.value = 'Password has been saved successfully.';
   } else {
@@ -224,8 +292,8 @@ async function saveResetPassword() {
     } else {
       errorMessage.value = `Request failed with status ${response.status}`;
     }
-    return; // stop here so you don’t also set successMessage
   }
+  saving.value = false;
 }
 
 async function updatePassword(userId: number, body: any, backendUrl: string, token: string) {
@@ -237,7 +305,7 @@ async function updatePassword(userId: number, body: any, backendUrl: string, tok
     method: 'PUT',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Login ${token}` // 👈 add your auth token here
+      'Authorization': `Login ${token}`
     },
     body: JSON.stringify(body)
   });
