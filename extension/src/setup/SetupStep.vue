@@ -1,6 +1,6 @@
 <template>
     <div>
-        <v-typography class="text-h5 mb-6">{{ title }}</v-typography>
+        <div class="text-h5 mb-6">{{ title }}</div>
         <slot />
     </div>
 </template>

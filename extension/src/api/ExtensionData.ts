@@ -34,7 +34,11 @@ export class ExtensionData {
         try {
             const response = await this.churchtoolsClient.get(`/custommodules/${moduleId}/customdatacategories`);
             this.categories = response;
-            return this.categories;
+            if (this.categories === null) {
+                return []
+            } else {
+                return this.categories;
+            }
         } catch (error) {
             console.error('Failed to fetch categories:', error);
             throw error;

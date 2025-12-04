@@ -1,16 +1,13 @@
 import type { SetupStep } from "../types/SetupStep";
-import { Permissions } from "../api/Permissions";
+import type { Component } from "vue";
 
 
-export abstract class CtSetupStep implements SetupStep {
+export class CtSetupStep implements SetupStep {
 
-    protected churchtoolsClient : any;
-    protected permissions: Permissions;
+    public component: Component;
 
-
-    public constructor(churchtoolsClient : any) {
-        this.churchtoolsClient = churchtoolsClient;
-        this.permissions = new Permissions(this.churchtoolsClient);
+    public constructor(component: Component) {
+        this.component = component;
     }
 
     public allowBack(): boolean {

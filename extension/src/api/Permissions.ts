@@ -18,7 +18,7 @@ export class Permissions {
 
     try {
 
-      this.globalPermissions = await this.churchtoolsClient.get<GlobalPermissions>('/permissions/global');
+      this.globalPermissions = await this.churchtoolsClient.get('/permissions/global');
       return this.globalPermissions;
 
     } catch (error) {

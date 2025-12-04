@@ -4,8 +4,9 @@ import { ref } from 'vue'
 
 export class SetupProcessElement {
   public waitingMessage: string
-  public result: Promise<SetupProcessElementResult>
-  public resultPending: boolean = ref(true)
+  // TODO: Ugly approach - clean up and test later on...
+  public result: Promise<SetupProcessElementResult>|SetupProcessElementResult
+  public resultPending = ref(true)
 
   constructor(
     waitingMessage: string,
@@ -20,7 +21,7 @@ export class SetupProcessElement {
         this.result = result;
         this.resultPending.value = false;
       })
-      .catch(result => {
+      .catch(() => {
         this.result = {
           successful: false,
           message: "Unknown error occured!"

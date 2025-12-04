@@ -80,31 +80,29 @@ import { ref, computed } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
 import SetupStartPage from '../components/SetupStartPage.vue';
 import type { SetupStep } from '../types/SetupStep';
-import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
-import { SetupBackendInstructions } from '../setup/SetupBackendInstructions'
-import { TestBackend } from '../setup/TestBackend'
-import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
-import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
-import { SettingsSetupStep } from '../setup/SettingsSetupStep'
-import { FinalUpdateRightsStep } from '../setup/FinalUpdateRightsStep';
+import SetupDataStructureStepComponent from '../setup/SetupDataStructureStepComponent.vue'
+import SetupBackendInstructionsComponent from '../setup/SetupBackendInstructionsComponent.vue'
+import TestBackendComponent from '../setup/TestBackendComponent.vue'
+import RightsConfirmationStepComponent from '../setup/RightsConfirmationStepComponent.vue'
+import EncryptionSetupStepComponent from '../setup/EncryptionSetupStepComponent.vue'
+import SettingsSetupStepComponent from '../setup/SettingsSetupStepComponent.vue'
+import FinalUpdateRightsStepComponent from '../setup/FinalUpdateRightsStepComponent.vue';
+import { CtSetupStep } from '../setup/CtSetupStep';
 import { useRouter } from 'vue-router';
 
-
-import { inject } from 'vue';
-const churchtoolsClient = inject('churchtoolsClient');
 const router = useRouter();
 
 // We do not check if the setup has been run before. Consequently, a setup and each step should be idempotent or at least check whether it should change something
 
 const steps: SetupStep[] = [
-    new RightsConfirmationStep(churchtoolsClient),
-    new SetupDataStructureStep(churchtoolsClient),
-    new EncryptionSetupStep(churchtoolsClient),
-    new SetupBackendInstructions(churchtoolsClient),
-    new SettingsSetupStep(churchtoolsClient),
-    new TestBackend(churchtoolsClient),
+    new CtSetupStep(RightsConfirmationStepComponent),
+    new CtSetupStep(SetupDataStructureStepComponent),
+    new CtSetupStep(EncryptionSetupStepComponent),
+    new CtSetupStep(SetupBackendInstructionsComponent),
+    new CtSetupStep(SettingsSetupStepComponent),
+    new CtSetupStep(TestBackendComponent),
     // This step also marks the setup as completed...
-    new FinalUpdateRightsStep(churchtoolsClient)
+    new CtSetupStep(FinalUpdateRightsStepComponent)
 ];
 
 const currentStepIndex = ref(-1);
