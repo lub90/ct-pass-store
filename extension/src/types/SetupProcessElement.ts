@@ -17,15 +17,15 @@ export class SetupProcessElement {
     // Register handlers to update resultPending once the promise settles
     this.result
       .then(result => {
-        this.resultPending.value = false
-        this.result = result
+        this.result = result;
+        this.resultPending.value = false;
       })
       .catch(result => {
-        this.resultPending.value = false
         this.result = {
           successful: false,
-          message: "Un unknown error occured!"
-        }
+          message: "Unknown error occured!"
+        };
+        this.resultPending.value = false;
       })
   }
 }

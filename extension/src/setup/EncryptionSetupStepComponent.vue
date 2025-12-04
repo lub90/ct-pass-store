@@ -1,12 +1,24 @@
 <template>
-  <SetupStep title="Setting up Encryption…">
-    <SetupStatusList :items="statusItems" />
+  <SetupStep title="Encryption Setup">
+
+    <v-card>
+      <SetupProcessList :elements="statusItems" />
+    </v-card>
 
 
     <SetupInfoBox
     :visible="encryptionPassword !== ''"
-    :content="infoBoxContent"
-    />
+    class="mt-6"
+    >
+      <strong>Important!</strong><br />
+      Your RSA public-private-key-pairs to store passwords securely were created successfully. Please download your public and private key files below and store them securely!<br />
+      You need them to setup further applications that need to read and/or write the secondary password.<br />
+      <br />
+      <strong>But be careful:</strong> If your private key gets known, the passwords can be decrypted! Consequently, your private key is additionally protected by a password.<br />
+      Your password for encrypting the private key is:<br />
+      <pre class='mt-2 mb-2'>{{encryptionPassword}}</pre>
+      Store this password securely.
+    </SetupInfoBox>
 
     <div v-if="publicKeyPem" class="d-flex gap-2 mt-3">
         <button class="btn btn-outline-success" @click="downloadPem(publicKeyPem, 'public_key.pem')">
@@ -25,7 +37,9 @@
       v-model="confirmed"
       :content="''"
       label="I have securly saved the public key, the private key and the password to the private key."
-    />
+    >
+    Confirm to continue...
+    </SetupCheckboxBox>
 
     <br />
 
@@ -33,41 +47,32 @@
 </template>
 
 <script setup lang="ts">
-import SetupStep from './SetupStep.vue';
-import SetupStatusList from './SetupStatusList.vue';
-import SetupResultBox from './SetupResultBox.vue';
+import SetupStep from './SetupStep.vue'
+import SetupProcessList from '../components/SetupProcessList.vue'
+import { SetupProcessElement } from '../types/SetupProcessElement'
+import { SetupProcessElementResult } from '../types/SetupProcessElementResult'
 import SetupInfoBox from './SetupInfoBox.vue'
 import SetupCheckboxBox from './SetupCheckboxBox.vue'
 
-import { ref, onMounted, watch } from 'vue';
-import { inject } from 'vue';
-import { ExtensionData } from '../api/ExtensionData';
-import { AppConfig } from '../AppConfig';
-import forge from 'node-forge';
-import { computed } from 'vue';
+import { ref, onMounted, watch } from 'vue'
+import { inject } from 'vue'
+import { ExtensionData } from '../api/ExtensionData'
+import { AppConfig } from '../AppConfig'
+import forge from 'node-forge'
 
 
 
 const churchtoolsClient = inject('churchtoolsClient');
-const statusItems = ref<StatusItem[]>([]);
+const statusItems = ref<SetupProcessElement[]>([]);
 const allOkay = ref(false);
 const publicKeyPem = ref('');
 const privateKeyPem = ref('');
 const encryptionPassword = ref('');
 const confirmed = ref(false);
+import { reactive } from 'vue'
 
 
 
-const infoBoxContent = computed(() => `
-          <strong>Important!</strong><br />
-            Your RSA public-private-key-pairs to store passwords securely were created successfully. Please download your public and private key files below and store them securely!<br />
-            You need them to setup further applications that need to read and/or write the secondary password.<br />
-            <br />
-            <strong>But be careful:</strong> If your private key gets known, the passwords can be decrypted! Consequently, your private key is additionally protected by a password.<br />
-            Your password for encrypting the private key is:<br />
-            <pre class='mt-2 mb-2'>${encryptionPassword.value}</pre>
-            Store this password securely.
-    `);
 
 // Watch for checkbox change and emit immediately when checked
 watch(confirmed, (val) => {
@@ -88,18 +93,18 @@ onMounted(async () => {
 
     if (!hasData) {
         
-        await generateKeyPair();
-        await storeEncryption(extensionData);
+      statusItems.value.push(new SetupProcessElement(
+        'Generating RSA key pair...',
+        generateKeyPair(extensionData)
+      ));
 
     } else {
+      statusItems.value.push(new SetupProcessElement(
+          '',
+          alreadyExists()
+        ));
+      emit('completed');
 
-        statusItems.value.push({
-            pending: false,
-            message: 'Encryption already setup. No need to generate it...',
-            icon: 'bi-check-circle-fill text-success',
-            variant: 'success',
-        });
-        emit('completed');
     }
 
     // Verify final state
@@ -115,12 +120,14 @@ onMounted(async () => {
 });
 
 
-async function storeEncryption(extensionData: ExtensionData) {
-    statusItems.value.push({
-            pending: true,
-            message: 'Storing encryption data...',
-        });
+async function alreadyExists(): Promise<SetupProcessElementResult> {
+  return {
+    successful: true,
+    message: 'Encryption already setup. No need to generate it...'
+  }
+}
 
+async function storeEncryption(extensionData: ExtensionData): Promise<SetupProcessElementResult> {
         try {
 
             const payload = {
@@ -128,30 +135,23 @@ async function storeEncryption(extensionData: ExtensionData) {
             };
             await extensionData.createCategoryEntry(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, payload);
 
-            statusItems.value.splice(-1, 1, {
-                pending: false,
-                message: 'Encryption setup successfully.',
-                icon: 'bi-check-circle-fill text-success',
-                variant: 'success',
-            });
+            return {
+              successful: true,
+              message: 'Encryption setup successful.'
+            };
+
         } catch (error) {
-            statusItems.value.splice(-1, 1, {
-                pending: false,
-                message: 'Failed to setup encryption. See console for details.',
-                icon: 'bi-x-circle-fill text-danger',
-                variant: 'danger',
-            });
             console.error('Creation of internal settings failed:', error);
+            return {
+              successful: false,
+              message: 'Failed to setup encryption. See console for details.'
+            }
         }
     
 }
 
 
-async function generateKeyPair() {
-    statusItems.value.push({
-      pending: true,
-      message: 'Generating RSA key pair...',
-    });
+async function generateKeyPair(extensionData: ExtensionData): Promise<SetupProcessElementResult> {
 
     try {
 
@@ -165,21 +165,23 @@ async function generateKeyPair() {
       privateKeyPem.value = encryptedPrivateKey;
       encryptionPassword.value = password;
 
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: 'Generation of RSA key par successfull.',
-        icon: 'bi-check-circle-fill text-success',
-        variant: 'success',
-      });
+      // Start the storage process
+      statusItems.value.push(new SetupProcessElement(
+        'Storing encryption data...',
+        storeEncryption(extensionData)
+      ));
+
+      return {
+        successful: true,
+        message: 'Generation of RSA key pair successful.'
+      }
 
     } catch (error) {
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: 'Failed to generate RSA key pair. See console for details.',
-        icon: 'bi-x-circle-fill text-danger',
-        variant: 'danger',
-      });
       console.error('RSA key generation failed:', error);
+      return {
+        successful: false,
+        message: 'Failed to generate RSA key pair. See console for details.'
+      }
     }
 }
 

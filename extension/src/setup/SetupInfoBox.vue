@@ -20,6 +20,5 @@
 
 defineProps<{
     visible: boolean;
-    content: string;
 }>();
 </script>

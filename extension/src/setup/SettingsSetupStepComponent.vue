@@ -1,5 +1,11 @@
 <template>
   <SetupStep title="Configure Extension Settings">
+
+    <!-- Intro text -->
+    <v-card-text class="mb-3 font-weight-semibold">
+      Choose your settings and click "Save Settings"!
+    </v-card-text>
+
     <SettingsForm
       :extension-data="extensionData"
       :category-name="AppConfig.SETTINGS_CATEGORY"

@@ -6,7 +6,6 @@
         
         <SetupStartPage
         v-if="showSetupStartPage"
-        :steps="steps"
         @complete="enableStart"
         />
 

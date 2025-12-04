@@ -30,13 +30,6 @@ const emit = defineEmits<{
   (e: 'complete'): void;
 }>();
 
-// Currently, we do not use the setup steps - but might be interesting to display a setup agenda on the start page
-// Thus, we leave it in here
-const props = defineProps<{
-  elements: SetupProcessElement[];
-}>()
-
-
 const checks = [
   new SetupProcessElement("Checking rights management permissions...", checkRightsManagement()),
   new SetupProcessElement("Checking permissions to generate data categories...", checkCanGenerateCategories())

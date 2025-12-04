@@ -3,7 +3,7 @@
     <template #prepend>
       <v-icon
       :color="iconColor"
-      :class="{ 'mdi-spin': props.element.resultPending.value }"
+      :class="{ 'mdi-spin': loading }"
       >
         {{ icon }}
       </v-icon>
@@ -22,15 +22,21 @@ const props = defineProps<{
   element: SetupProcessElement
 }>()
 
+// TODO: We need this due to a very strange error we sometimes have, if we add SetupProcessElements dynamically to the SetupProcessList
+// props.element.resultPending.value is then always undefined, but changes still trigger a reevaluation. As such, we also test for props.element.result.successful not to be undefined...
+const loading = computed(() => {
+  return props.element.resultPending.value || (props.element.result.successful === undefined);
+})
+
 const icon = computed(() => {
-  if (props.element.resultPending.value) {
+  if (loading.value) {
     return 'mdi-loading' // spinner icon
   }
   return props.element.result.successful ? 'mdi-check-circle' : 'mdi-close-circle'
 })
 
 const message = computed(() => {
-  if (props.element.resultPending.value) {
+  if (loading.value) {
     return props.element.waitingMessage
   }
   return props.element.result.message
@@ -38,14 +44,14 @@ const message = computed(() => {
 
 
 const iconColor = computed(() => {
-  if (props.element.resultPending.value) {
+  if (loading.value) {
     return 'info' // blue while loading
   }
   return props.element.result.successful ? 'success' : 'error'
 })
 
 const textColor = computed(() => {
-  if (props.element.resultPending.value) {
+  if (loading.value) {
     return 'text-info'
   }
   return props.element.result.successful ? 'text-success' : 'text-error'
