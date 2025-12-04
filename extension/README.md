@@ -3,6 +3,8 @@
 
 
 ## TODO:
+- Dropdown für admins um auch für andere Ids setzen zu können
+- Clean up component orders and folders etc.
 - More thorougly check the state of the settings etc. when accessing everything... - e.g., is a PHP backend server set...
 - Problem in the ProcessSetupItem component with dynamically adding new items --> resultPending is then read as undefined, even if it is not!
 - Problem in the ProcessSetup compponent with dynamically adding new items or starting with an empty list --> Positive result message then shows up too early...

@@ -2,7 +2,7 @@
   <v-sheet>
     <!-- Intro text -->
     <v-card-text class="mb-3 font-weight-semibold">
-      The extension has not been set up yet. Checking preconditions to start setup...
+      This is the setup process for the extension. Checking preconditions to start setup...
     </v-card-text>
 
     <!-- Check Process -->

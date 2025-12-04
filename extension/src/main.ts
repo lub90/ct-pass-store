@@ -25,19 +25,6 @@ if (import.meta.env.MODE === 'development' && username && password) {
 const KEY = import.meta.env.VITE_KEY;
 export { KEY };
 
-// Include bootstrap
-// TODO: Remove later on
-const bootstrapCss = document.createElement('link');
-bootstrapCss.rel = 'stylesheet';
-bootstrapCss.href = 'https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css';
-document.head.appendChild(bootstrapCss);
-
-const bootstrapIconCss = document.createElement('link');
-bootstrapIconCss.rel = 'stylesheet';
-bootstrapIconCss.href = 'https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.5/font/bootstrap-icons.css';
-document.head.appendChild(bootstrapIconCss);
-
-
 // Setup vue
 import { createApp } from 'vue';
 import App from './App.vue';

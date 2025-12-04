@@ -2,7 +2,7 @@
 
     <BaseLayout>
         <template #title>⚙️ Setup</template>
-        <template #subtitle>Setup the CtPassStoreExtension</template>
+        <template #subtitle>Setup the CtPassStore extension</template>
         
         <SetupStartPage
         v-if="showSetupStartPage"
