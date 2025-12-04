@@ -25,6 +25,8 @@ class TestController extends BaseService
 
     public function get(Request $request, Response $response): Response
     {
+        $allPassed = true;
+
         $tests = [];
 
 
@@ -41,6 +43,7 @@ class TestController extends BaseService
             $isStrict = ($perms & 0x1FF) <= 0o600;
 
             if (!$isStrict) {
+                $allPassed = false;
                 throw new \RuntimeException(sprintf(
                     'credentials.php file permissions too loose: %o. Expected 0600 or stricter.',
                     $perms & 0x1FF
@@ -71,8 +74,6 @@ class TestController extends BaseService
             'pwdLength',
             'publicKey'
         ];
-
-        $allPassed = true;
 
         foreach ($methods as $method) {
             try {

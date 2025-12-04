@@ -6,6 +6,9 @@
     </v-card>
 
     <!-- Result alert -->
+    <!-- TODO: We have a problem here, when dynamically adding parts or having an empty list at the beginning -->
+    <!-- TODO: The result then alreayd shows up with a positive feedback, which might change later on... -->
+    <!-- TODO: Might be related to the problem in SetupProcessItem with resultPending given as undefined when dynamically adding entries... -->
     <v-alert
       v-if="allResolved"
       :type="allSuccessful ? 'success' : 'error'"

@@ -82,6 +82,7 @@ import SetupStartPage from '../components/SetupStartPage.vue';
 import type { SetupStep } from '../types/SetupStep';
 import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
 import { SetupBackendInstructions } from '../setup/SetupBackendInstructions'
+import { TestBackend } from '../setup/TestBackend'
 import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
 import { SettingsSetupStep } from '../setup/SettingsSetupStep'
@@ -101,9 +102,9 @@ const steps: SetupStep[] = [
     new EncryptionSetupStep(churchtoolsClient),
     new SetupBackendInstructions(churchtoolsClient),
     new SettingsSetupStep(churchtoolsClient),
-    // TODO: One step is missing here: Test of the backend
+    new TestBackend(churchtoolsClient),
+    // This step also marks the setup as completed...
     new FinalUpdateRightsStep(churchtoolsClient)
-    // TODO: One step is missing here: Setting the setup complete to true...
 ];
 
 const currentStepIndex = ref(-1);
