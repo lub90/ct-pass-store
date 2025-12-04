@@ -2,24 +2,24 @@
   <SetupStep title="Adjust access rights">
     <SetupInfoBox
       :visible="true"
-      :content="`
-        Give yourself the rights to <strong>create</strong>, <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.<br />
+    >
+    Give yourself the rights to <strong>create</strong>, <strong>edit</strong>, <strong>delete</strong>, and <strong>view</strong> the custom data in all categories of this extension via ChurchTools' rights management.<br />
         <strong>You must do that manually.</strong> After that, please confirm below and continue with the next step of the setup.
-      `"
-    />
+    </SetupInfoBox>
 
     <SetupCheckboxBox
       v-model="confirmed"
-      :content="''"
       label="I have completed the rights assignment"
-    />
+    >
+      Confirm to continue setup...
+    </SetupCheckboxBox>
 
   </SetupStep>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import { defineEmits, watch } from 'vue';
+import { watch } from 'vue';
 
 import SetupStep from './SetupStep.vue';
 import SetupInfoBox from './SetupInfoBox.vue';

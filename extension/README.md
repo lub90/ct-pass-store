@@ -15,6 +15,9 @@
 
 - Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
 
+
+- With the SetupCheckboxBox, once checked the next button will be enabled. If it is unchecked, the button won't be disabled... -> Fix that
+
 - Add possibility to pull backup and reload backup
 
 ## Bugs/Wishes towards churchtools

@@ -1,7 +1,18 @@
 
 <template>
     <SetupStep title="Setting up the data structure…">
-        <SetupStatusList :items="statusItems" />
+
+        <!-- Intro text -->
+        <v-card-text class="mb-3 font-weight-semibold">
+          Generating the necessary data categories...
+        </v-card-text>
+
+        <SetupProcess
+          :elements="creationSteps"
+          successMessage="All data structures were generated. Please continue with the next step."
+          failMessage="Unable to generate necessary data structures. Cannot continue with setup!"
+          @complete="onComplete"
+        />
 
         <SetupResultBox
             :finished="finished"
@@ -15,51 +26,35 @@
 
 <script setup lang="ts">
 import SetupStep from './SetupStep.vue';
-import SetupStatusList from './SetupStatusList.vue';
+import SetupProcess from '../components/SetupProcess.vue';
 import SetupResultBox from './SetupResultBox.vue';
-import SetupInfoBox from './SetupInfoBox.vue';
-import type { StatusItem } from './SetupStatusList.vue';
 import { ref, onMounted } from 'vue';
 import { inject } from 'vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { AppConfig } from '../AppConfig'
+import { SetupProcessElementResult } from '../types/SetupProcessElementResult'
+import { SetupProcessElement } from '../types/SetupProcessElement'
 
 
 const churchtoolsClient = inject('churchtoolsClient');
-const statusItems = ref<StatusItem[]>([]);
+const extensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
+
 const finished = ref(false);
 const allOkay = ref(false);
+const creationSteps = [
+  setupSettings(extensionData),
+  setupInternalSettings(extensionData),
+  setupPasswordStore(extensionData),
+  setupSetupCompleted(extensionData)
+]
 
 
 const emit = defineEmits<{
     (e: 'completed'): void;
 }>();
 
-onMounted(async () => {
-  const extensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-
-  await setupSettings(extensionData);
-  await setupInternalSettings(extensionData);
-  await setupPasswordStore(extensionData);
-  await setupSetupCompleted(extensionData);
-
-  // Generate an update extension data set
-  const updatedExtensionData: ExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-
-  if ((await updatedExtensionData.hasCategory(AppConfig.SETTINGS_CATEGORY))
-    && (await updatedExtensionData.hasCategory(AppConfig.ENCRYPTION_SETTINGS_CATEGORY))
-    && (await updatedExtensionData.hasCategory(AppConfig.PASSWORD_STORE_CATEGORY))
-  ) {
-    allOkay.value = true;
-    emit('completed');
-  }
-
-  finished.value = true;
-    
-});
-
-async function setupSettings(extensionData: ExtensionData) {
-await setupDataStructure(
+function setupSettings(extensionData: ExtensionData): SetupProcessElement {
+  return setupDataStructure(
     extensionData,
     AppConfig.SETTINGS_CATEGORY,
     AppConfig.SETTINGS_CATEGORY_SHORTY,
@@ -68,8 +63,8 @@ await setupDataStructure(
   );
 }
 
-async function setupInternalSettings(extensionData: ExtensionData) {
-await setupDataStructure(
+function setupInternalSettings(extensionData: ExtensionData): SetupProcessElement {
+  return setupDataStructure(
     extensionData,
     AppConfig.ENCRYPTION_SETTINGS_CATEGORY,
     AppConfig.ENCRYPTION_SETTINGS_CATEGORY_SHORTY,
@@ -78,8 +73,8 @@ await setupDataStructure(
   );
 }
 
-async function setupSetupCompleted(extensionData: ExtensionData) {
-await setupDataStructure(
+function setupSetupCompleted(extensionData: ExtensionData): SetupProcessElement {
+  return setupDataStructure(
     extensionData,
     AppConfig.SETUP_COMPLETED_CATEGORY,
     AppConfig.SETUP_COMPLETED_CATEGORY_SHORTY,
@@ -88,8 +83,8 @@ await setupDataStructure(
   );
 }
 
-async function setupPasswordStore(extensionData: ExtensionData) {
-  await setupDataStructure(
+function setupPasswordStore(extensionData: ExtensionData): SetupProcessElement {
+  return setupDataStructure(
     extensionData,
     AppConfig.PASSWORD_STORE_CATEGORY,
     AppConfig.PASSWORD_STORE_CATEGORY_SHORTY,
@@ -99,46 +94,48 @@ async function setupPasswordStore(extensionData: ExtensionData) {
 }
 
 
-async function setupDataStructure(extensionData: ExtensionData, category: string, categoryShorty: string, categorySchema: string, displayName: string) {
-  statusItems.value.push({
-    pending: true,
-    message: `Creating ${displayName}...`,
-  });
+function setupDataStructure(extensionData: ExtensionData, category: string, categoryShorty: string, categorySchema: string, displayName: string): SetupProcessElement {
+  return new SetupProcessElement(
+    `Creating ${displayName}...`,
+    runSetupDataStructure(extensionData, category, categoryShorty, categorySchema, displayName)
+  );
+}
 
+
+async function runSetupDataStructure(extensionData: ExtensionData, category: string, categoryShorty: string, categorySchema: string, displayName: string): Promise<SetupProcessElementResult> {
   try {
 
-    if (!(await extensionData.hasCategory(category))) {
+    const categoryAlreadyExists = await extensionData.hasCategory(category);
+
+    if (categoryAlreadyExists) {
+      return {
+        successful: true,
+        message: `${displayName} already exist. No need to create them...`
+      }
+    } else {
       await extensionData.createCategory(
         category,
         categoryShorty,
         categorySchema,
         `Stores extension ${displayName}`
       );
-
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: `${displayName} created successfully.`,
-        icon: 'bi-check-circle-fill text-success',
-        variant: 'success',
-      });
-    } else {
-      statusItems.value.splice(-1, 1, {
-        pending: false,
-        message: `${displayName} already exist. No need to create them...`,
-        icon: 'bi-check-circle-fill text-success',
-        variant: 'success',
-      });
+      return {
+        successful: true,
+        message: `${displayName} created successfully.`
+      }
     }
+
   } catch (error) {
-    statusItems.value.splice(-1, 1, {
-      pending: false,
-      message: `Failed to create ${displayName}. See console for details.`,
-      icon: 'bi-x-circle-fill text-danger',
-      variant: 'danger',
-    });
     console.error(`Creation of ${displayName} failed:`, error);
+    return {
+      successful: false,
+      message: `Failed to create ${displayName}. See console for details.`
+    }
   }
 }
 
+function onComplete() {
+  emit('completed')
+}
 
 </script>

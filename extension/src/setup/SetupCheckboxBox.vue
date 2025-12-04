@@ -1,44 +1,34 @@
 <template>
-  <div
-    :class="[
-      'alert',
-      checked ? 'alert-success' : 'alert-danger',
-      'd-flex',
-      'align-items-start',
-      'gap-2',
-      'py-2',
-      'px-3',
-      'mb-3'
-    ]"
+  <v-alert
+    :type="checked ? 'success' : 'error'"
+    density="comfortable"
   >
-    <i
-      :class="[
-        'bi',
-        checked ? 'bi-check-circle-fill text-success mt-1' : 'bi-exclamation-circle-fill text-danger mt-1'
-      ]"
-    ></i>
+    <template #prepend>
+      <v-icon>
+        {{ checked ? 'mdi-check-circle' : 'mdi-alert-circle' }}
+      </v-icon>
+    </template>
+
+    <!-- Content text -->
     <div>
-      <div v-html="content" class="mb-2" />
-      <div class="form-check">
-        <input
-          class="form-check-input"
-          type="checkbox"
-          :id="checkboxId"
-          v-model="checked"
-        />
-        <label class="form-check-label" :for="checkboxId">
-          {{ label }}
-        </label>
-      </div>
+      <slot />
     </div>
-  </div>
+
+    <!-- Checkbox -->
+    <v-checkbox
+      v-model="checked"
+      :label="label"
+      :id="checkboxId"
+      hide-details
+      density="compact"
+    />
+  </v-alert>
 </template>
 
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 
 const props = defineProps<{
-  content: string;
   label: string;
   modelValue: boolean;
   checkboxId?: string;

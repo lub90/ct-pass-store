@@ -1,33 +1,53 @@
 <template>
   <v-list-item>
     <template #prepend>
-      <v-icon :color="iconColor">
+      <v-icon
+      :color="iconColor"
+      :class="{ 'mdi-spin': props.element.resultPending.value }"
+      >
         {{ icon }}
       </v-icon>
     </template>
     <v-list-item-title :class="textColor">
-      {{ setupStatus.description }}
+      {{ message }}
     </v-list-item-title>
   </v-list-item>
 </template>
 
 <script setup lang="ts">
-import type { SetupProcessStatus } from '../types/SetupProcessStatus'
+import type { SetupProcessElement } from '../types/SetupProcessElement'
 import { computed } from 'vue'
 
 const props = defineProps<{
-  setupStatus: SetupProcessStatus   
+  element: SetupProcessElement
 }>()
 
-const icon = computed(() =>
-  props.setupStatus.fulfilled ? 'mdi-check-circle' : 'mdi-close-circle'
-)
+const icon = computed(() => {
+  if (props.element.resultPending.value) {
+    return 'mdi-loading' // spinner icon
+  }
+  return props.element.result.successful ? 'mdi-check-circle' : 'mdi-close-circle'
+})
 
-const iconColor = computed(() =>
-  props.setupStatus.fulfilled ? 'success' : 'error'
-)
+const message = computed(() => {
+  if (props.element.resultPending.value) {
+    return props.element.waitingMessage
+  }
+  return props.element.result.message
+})
 
-const textColor = computed(() =>
-  props.setupStatus.fulfilled ? 'text-success' : 'text-error'
-)
+
+const iconColor = computed(() => {
+  if (props.element.resultPending.value) {
+    return 'info' // blue while loading
+  }
+  return props.element.result.successful ? 'success' : 'error'
+})
+
+const textColor = computed(() => {
+  if (props.element.resultPending.value) {
+    return 'text-info'
+  }
+  return props.element.result.successful ? 'text-success' : 'text-error'
+})
 </script>
