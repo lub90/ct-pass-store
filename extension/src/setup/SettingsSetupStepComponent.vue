@@ -3,7 +3,7 @@
 
     <!-- Intro text -->
     <v-card-text class="mb-3 font-weight-semibold">
-      Choose your settings and click "Save Settings"!
+      Configure your extension's settings and click "Save Settings"!
     </v-card-text>
 
     <SettingsForm

@@ -81,6 +81,7 @@ import BaseLayout from '../layouts/BaseLayout.vue';
 import SetupStartPage from '../components/SetupStartPage.vue';
 import type { SetupStep } from '../types/SetupStep';
 import { SetupDataStructureStep } from '../setup/SetupDataStructureStep'
+import { SetupBackendInstructions } from '../setup/SetupBackendInstructions'
 import {RightsConfirmationStep} from '../setup/RightsConfirmationStep'
 import { EncryptionSetupStep } from '../setup/EncryptionSetupStep'
 import { SettingsSetupStep } from '../setup/SettingsSetupStep'
@@ -98,7 +99,7 @@ const steps: SetupStep[] = [
     new RightsConfirmationStep(churchtoolsClient),
     new SetupDataStructureStep(churchtoolsClient),
     new EncryptionSetupStep(churchtoolsClient),
-    // TODO: One step is missing here: Setup instructions for the Backend
+    new SetupBackendInstructions(churchtoolsClient),
     new SettingsSetupStep(churchtoolsClient),
     // TODO: One step is missing here: Test of the backend
     new FinalUpdateRightsStep(churchtoolsClient)

@@ -22,7 +22,7 @@ These rights must be assigned through the ChurchTools rights management system. 
 
 ## Generate PHP Backend Files
 
-Clone the CtPassStore extension repository (if not already done) from [https://github.com/lub90/ct-pass-store](https://github.com/lub90/ct-pass-store). Stable builds are available on the **main** branch. Then navigate into the backend directory and the setup directory. Inside the setup directory, run:
+Clone the CtPassStore repository (if not already done) from [https://github.com/lub90/ct-pass-store](https://github.com/lub90/ct-pass-store). Stable builds are available on the **main** branch. Then navigate into the backend directory and the setup directory. Inside the setup directory, run:
 
 ```bash
 git clone https://github.com/lub90/ct-pass-store
@@ -76,6 +76,8 @@ Additional requirements:
 - Grant the webserver user write access to `logs/app.log`.  
 
 > This setup already provides some guards regarding the above mentioned read access blocking. Yet, it only works for servers that respect `.htaccess` files (e.g., Apache). For Nginx, a different configuration approach is required (not yet tested).
+
+Save the URL to your PHP backend. You need to insert it into the settings of your CtPassStore extension.
 
 ---
 
