@@ -14,7 +14,7 @@
     </v-alert>
 
     <!-- Error: No access rights -->
-        <v-alert
+    <v-alert
         v-else-if="!correctAccessRights"
         type="error"
         density="compact"
@@ -77,7 +77,7 @@ async function setupAlreadyCompleted(): Promise<void> {
 
     // Step 1: Check if user has permission to view custom data
     // TODO: This is just a rough check. Because read access might also be enabled for another category. Sadly we cannot determine whether we have the read access to the right categories. As such, this must be sufficient.
-    const canView = await permissions.canViewCustomData();
+    const canView = await permissions.canView();
     if (!canView) {
         console.warn('User lacks permission to view custom data.');
         correctAccessRights.value = false;
@@ -87,6 +87,7 @@ async function setupAlreadyCompleted(): Promise<void> {
     // Acces right check seems to be complete
     correctAccessRights.value = true;
 
+    // Check whether the setup is complete
     setupFinished.value = await setupCompleted(extensionData);
 }
 

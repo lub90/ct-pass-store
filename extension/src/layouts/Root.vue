@@ -70,13 +70,18 @@ const showSetup = ref(false);
 
 onMounted(async () => {
   try {
-    const category: any = await extensionData.getCategoryByName(AppConfig.SETTINGS_CATEGORY);
-    canEditSettings.value = await permissions.canEditCustomDataForCategory(category.id);
-
+    // Firstly, check if the setup is completed
     setupFinished.value = await setupCompleted(extensionData);
 
+    // Then check if we can create categories
     const canCreateCategories: boolean = await permissions.canCreateCustomCategory();
     showSetup.value = canCreateCategories && !setupFinished.value;
+
+    // If setup is completed, check if we want to show the settings
+    if (setupFinished.value) {
+      const category: any = await extensionData.getCategoryByName(AppConfig.SETTINGS_CATEGORY);
+      canEditSettings.value = await permissions.canEditCustomDataForCategory(category.id);
+    }
   } catch (err) {
     console.error('Permission check failed:', err);
   }

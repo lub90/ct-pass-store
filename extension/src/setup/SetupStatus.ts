@@ -3,21 +3,8 @@ import { AppConfig } from "../AppConfig";
 
 export async function setupCompleted(extensionData: ExtensionData): Promise<boolean> {
 
-    // Step 1: Check if any categories exist
-    const hasCategories = await extensionData.hasCategory(AppConfig.SETUP_COMPLETED_CATEGORY);
-    if (!hasCategories) {
-        console.info('Settings category not found — setup has not started.');
-        return false;
-    }
-
-    // Step 3: Check if categories contain settings data
-    const setupHasData = await extensionData.categoryHasData(AppConfig.SETUP_COMPLETED_CATEGORY);
-    if (!setupHasData) {
-        console.info('Settings category exists but contains no data — setup incomplete.');
-        return false;
-    }
-
     try {
+        // Check if we have a setup completed category and whether the value is set to true
         const setupFinishedRaw = await extensionData.getCategoryData(
             AppConfig.SETUP_COMPLETED_CATEGORY,
             true
@@ -26,6 +13,7 @@ export async function setupCompleted(extensionData: ExtensionData): Promise<bool
         return parsedValue.setupCompleted;
     } catch (err) {
         // If anything went wrong by reading the values, the setup has not set its completed flag.
+        console.info(`Category "${AppConfig.SETUP_COMPLETED_CATEGORY}" does not exist!`)
         return false;
     }
 }

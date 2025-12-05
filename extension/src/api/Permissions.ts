@@ -34,6 +34,11 @@ export class Permissions {
     return all[AppConfig.EXTENSION_KEY] ?? {};
   }
 
+  async canView(): Promise<boolean> {
+    const perms = await this.getExtensionPermissions();
+    return perms['view'];
+  }
+
   async canCreateCustomCategory(): Promise<boolean> {
     const perms = await this.getExtensionPermissions();
     return perms['create custom category'] === true;
@@ -59,24 +64,24 @@ export class Permissions {
     return all['churchcore']?.['administer persons'] === true;
     }
 
-    async canViewCustomDataForCategory(categoryId: number): Promise<boolean> {
+  async canViewCustomDataForCategory(categoryId: number): Promise<boolean> {
     const perms = await this.getExtensionPermissions();
     return Array.isArray(perms['view custom data']) && perms['view custom data'].includes(categoryId);
-}
+  }
 
-async canCreateCustomDataForCategory(categoryId: number): Promise<boolean> {
+  async canCreateCustomDataForCategory(categoryId: number): Promise<boolean> {
     const perms = await this.getExtensionPermissions();
     return Array.isArray(perms['create custom data']) && perms['create custom data'].includes(categoryId);
-}
+  }
 
-async canEditCustomDataForCategory(categoryId: number): Promise<boolean> {
+  async canEditCustomDataForCategory(categoryId: number): Promise<boolean> {
     const perms = await this.getExtensionPermissions();
     return Array.isArray(perms['edit custom data']) && perms['edit custom data'].includes(categoryId);
-}
+  }
 
-async canDeleteCustomDataForCategory(categoryId: number): Promise<boolean> {
+  async canDeleteCustomDataForCategory(categoryId: number): Promise<boolean> {
     const perms = await this.getExtensionPermissions();
     return Array.isArray(perms['delete custom data']) && perms['delete custom data'].includes(categoryId);
-}
+  }
 
 }

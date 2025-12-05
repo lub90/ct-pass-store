@@ -44,8 +44,6 @@ onMounted(async () => {
     const settingsEntry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true)
     const jsonSettingsEntry = JSON.parse(settingsEntry["value"])
     const backendUrl: string = jsonSettingsEntry?.backendUrl
-    console.log("Backend URL")
-    console.log(backendUrl)
 
     if (!backendUrl) {
       testSteps.value.push(new SetupProcessElement(

@@ -115,17 +115,6 @@ onMounted(async () => {
       emit('completed');
 
     }
-
-    // Verify final state
-    const updatedExtensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-    try {
-        const entry = await updatedExtensionData.getCategoryData(AppConfig.ENCRYPTION_SETTINGS_CATEGORY, true);
-        if (entry && entry.id) {
-            allOkay.value = true;
-        }
-    } catch (error) {
-        console.warn('Internal settings verification failed:', error);
-    }
 });
 
 

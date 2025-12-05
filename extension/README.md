@@ -3,6 +3,10 @@
 
 
 ## TODO:
+- Provide the setupCompleted result through the root component to the other components (e.g., the guard or the PasswordView), so that we can easily check, whether the setup has already been completed.
+- Adjust color scheme to fit churchtools (e.g. background of main app part...)
+- Make side-bar collaps on horizontal oriented screens
+- Check how it looks in the app
 - Rename compiled version...
 - Add language settings
 - Ugly approach in SetupProcessElements: public result: Promise<SetupProcessElementResult>|SetupProcessElementResult - Use two separate variables here and check later on...
