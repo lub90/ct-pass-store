@@ -4,10 +4,36 @@
       :visible="true"
     >
       Your setup is nearly finished. Last thing to do now is to set the rights to access and edit the data categories of this extension as follows:<br />
-        - <strong>settings</strong> category: Give read access to all users of this extension. Give write access to all administrators of this extension.<br />
-        - <strong>encryptionSettings</strong> category: No need to assign anybody any rights, besides the user for the PHP backend.<br />
-        - <strong>passwordStore</strong> category: No need to assign anybody any rights, besides the user for the PHP backend.<br />
-        - <strong>setupCompleted</strong> category: Give read access to all users of this extension and all administrators of this extension.
+      <br />
+      <strong>Normal users</strong> and <strong>Read-access users</strong> (especially third-party systems using the secondary password)
+      <ul>
+        <li>View ctpassstore: Enable (<i>view</i>).</li>
+        <li>settings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
+        <li>encryptionSettings (category & data): No access required.</li>
+        <li>passwordStore (category & data): No access required.</li>
+        <li>setupCompleted (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
+      </ul>
+      <br />
+      <strong>Administrators of the extension</strong>
+      <ul>
+        <li>View ctpassstore: Enable (<i>view</i>).</li>
+        <li>settings (category & data): Needs read and write access. (<i>view custom category, view custom data, edit custom category, edit custom data</i>)</li>
+        <li>encryptionSettings (category & data): No access required.</li>
+        <li>passwordStore (category & data): No access required.</li>
+        <li>setupCompleted (category & data): Needs read access. (<i>view custom category, view custom data</i>)</li>
+      </ul>
+      <br />
+      <strong>The PHP backend user</strong>
+      <ul>
+        <li>View ctpassstore: No access required.</li>
+        <li>settings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
+        <li>encryptionSettings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
+        <li>passwordStore (category & data): Needs read/write access. (<i>view custom category, view custom data, edit custom category, edit custom data</i>)</li>
+        <li>setupCompleted (category & data): No access required.</li>
+      </ul>
+      <br />
+      <br />
+      <i>Don't forget to adjust your own rights to one of the user groups above...</i>
     </SetupInfoBox>
 
     <SetupCheckboxBox
