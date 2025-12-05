@@ -29,7 +29,7 @@ class ChurchToolsAuthVerifier extends BaseService
     public function verifyUserPassword(string $username, string $password): bool
     {
         try {
-            $response = $this->http->post('/login', [
+            $response = $this->http->post('/api/login', [
                 'json' => [
                     'username' => $username,
                     'password' => $password,
