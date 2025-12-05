@@ -138,8 +138,8 @@ class PasswordController extends BaseService
         bool $checkReadAccess
     ): array {
         $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
-        $userId = (int) $user[AppConfig::CT_USER_ID_FIELD];
-        $cmsUserId = (string) $user[AppConfig::CT_USER_NAME_FIELD];
+        $userId = (int) $user->getId();
+        $cmsUserId = (string) $user->getCmsUserId();
 
         if ($userId !== $targetId) {
             $hasSpecialAccess = in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true));
