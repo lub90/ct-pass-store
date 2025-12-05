@@ -1,8 +1,7 @@
 <template>
-  <v-container fluid class="pa-5 h-screen">
-    <!-- Header -->
-    <v-card class="h-100 " elevation="1">
-      <!-- Titel -->
+  <v-container fluid class="pa-5 h-screen overflow-y-auto">
+    <v-card elevation="1">
+      <!-- title -->
       <v-card-title>
         <slot name="title" />
       </v-card-title>
@@ -11,12 +10,12 @@
         <slot name="subtitle" />
       </v-card-subtitle>
 
-      <!-- Hauptinhalt -->
+      <!-- main content -->
       <v-card-text>
         <slot />
       </v-card-text>
 
-      <!-- Footer -->
+      <!-- footer -->
       <v-card-actions>
         <slot name="footer" />
       </v-card-actions>
