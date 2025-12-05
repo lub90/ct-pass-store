@@ -1,7 +1,8 @@
 <template>
   <v-layout height="100%">
     <v-navigation-drawer permanent>
-      <v-list>
+      <!-- We need mt-16 here so that the side bar does not disappear behind the top toolbar -->
+      <v-list class="mt-16">
         <v-list-item
           title="Secondary Password"
           subtitle="CtPassStore"
