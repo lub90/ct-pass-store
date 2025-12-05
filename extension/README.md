@@ -108,7 +108,7 @@ The following rights must be set for the different user types in ChurchTools' ri
 - **setupCompleted (category & data)**: No access required.
 
 
-## TODOs for CtPassStore Extension
+## TODOs
 
 ### Builds & Packaging
 - Provide stable builds for the CtPassStore extension.
@@ -132,6 +132,7 @@ The following rights must be set for the different user types in ChurchTools' ri
 - Primary and Secondary Password labels on the password management page are not horizontally centered — fix alignment.
 - Change sidebar to automatically use router components.
 - Dropdown for admins to set passwords for other IDs.
+- Enable retry button (and implement it) for the TestBackend step in the SetupProcess.
 
 ### Code Quality & Refactoring
 - Improve `SetupProcessElements`: currently uses `public result: Promise<SetupProcessElementResult> | SetupProcessElementResult`. Use two separate variables instead.
