@@ -1,157 +1,151 @@
-# Documentation for ct-pass-store extension
+# CtPassStore Extension
+
+The extension part of the project builds upon the official boilerplate code from [ChurchTools](https://www.church.tools) (see [https://github.com/churchtools/extension-boilerplate](https://github.com/churchtools/extension-boilerplate)). Thus, it is based on the offical ChurchTools extension interface.
+
+## Setup
+
+The setup of the CtPassStore extension, including the PHP backend is descriped [here](./docs/setup.md).
+
+## Settings
+
+The CtPassStore extension provides several configuration options to control how secondary passwords are managed and who has access to them. These settings can be adjusted in the extension’s settings form.
+
+---
+
+### Settings Overview
+
+#### Require Primary Password
+- **Option:** `Require primary password for secondary password change`
+- **Description:** When enabled, users must enter their primary ChurchTools password before changing their secondary password.  
+- **Default:** Enabled (`true`)
+
+---
+
+#### Allow Custom Passwords
+- **Option:** `Allow custom passwords`
+- **Description:**  
+  - If enabled, users can choose their own secondary passwords.  
+  - If disabled, passwords are generated automatically and can only be reset by the users themselves.  
+- **Default:** Enabled (`true`)
+
+---
+
+#### Administrator User IDs
+- **Option:** `Admin user IDs (comma-separated)`
+- **Description:** Administrators listed here can read, set, and reset secondary passwords for other users.  
+- **Important:** This is a critical role. Assign carefully, as it grants elevated rights.  
+- **Format:** Comma-separated list of ChurchTools user IDs.
+
+---
+
+#### Read-Access User IDs
+- **Option:** `Read access user IDs (comma-separated)`
+- **Description:** Read-access users can view secondary passwords of other users.  
+- **Typical Use Case:** Third-party systems that require cleartext passwords (e.g., challenge-response authentication).  
+- **Format:** Comma-separated list of ChurchTools user IDs.
+
+---
+
+#### Minimum Password Length
+- **Option:** `Minimum password length`
+- **Description:** Defines the minimum length for secondary passwords.  
+- **Requirement:** Must be greater than 8 characters.  
+- **Default:** `12`
+
+*Hint: Besides the password length, CtPassStore requires other characteristics for secure, secondary passwords - like letters, numbers and special characters to be included. For further information see the [PHP Backend Documentation](../backend/README.md).*
+
+---
+
+#### PHP Backend URL
+- **Option:** `PHP Backend URL`
+- **Description:** Specifies the URL of the PHP backend used by the extension.  
+- **Requirement:** Must include the full URL, starting with `https://...`.
 
 
+## Roles and Rights Management
 
-## TODO:
-- Provide the setupCompleted result through the root component to the other components (e.g., the guard or the PasswordView), so that we can easily check, whether the setup has already been completed.
-- Adjust color scheme to fit churchtools (e.g. background of main app part...)
-- Make side-bar collaps on horizontal oriented screens
-- Check how it looks in the app
-- Rename compiled version...
-- Add language settings
-- Ugly approach in SetupProcessElements: public result: Promise<SetupProcessElementResult>|SetupProcessElementResult - Use two separate variables here and check later on...
-- Primary and Secondary Password label on the password management page a not centered horizontally correctly...
-- Remove old setup step classes and rename the setup step components to properly work...
-- Dropdown für admins um auch für andere Ids setzen zu können
-- Clean up component orders and folders etc.
-- More thorougly check the state of the settings etc. when accessing everything... - e.g., is a PHP backend server set...
-- Problem in the ProcessSetupItem component with dynamically adding new items --> resultPending is then read as undefined, even if it is not!
-- Problem in the ProcessSetup compponent with dynamically adding new items or starting with an empty list --> Positive result message then shows up too early...
-- Remove dependencies to angular etc....
-- Change sidebar to automatically use the router components...
+There are different roles with respect to the CtPassStore extension:
 
-- Add the steps giving instruction to setup the backend as well as the step to test the backend connections
-- Add comments
-- Add public/procted etc. to the different functions in each class
-- Add tests
-- After the rights confirmation step check that the rights were assigned properly
-- Test access to settings page with other users (should work, just to be sure...)
+- **Normal users**: These users simply use the extension to set their secondary password for other services. They can only set and read their own (encrypted) password. Yet, because the password is encrypted, it cannot be shown to them anymore, once set.
+- **Read-access users**: These users have access to all encrypted passwords, but they need the private key to decrypt them. Read-access users are typically third-party systems that require a cleartext password (e.g., for challenge-response authentication) and store the private key for decryption internally. Read-access users can be configured in the extension’s settings page via their ChurchTools user ID.
+- **Administrators**: There are two types of administrator roles:
+  1. Administrators who are allowed to set secondary passwords for other users (not only themselves). This is a very critical role, so use it carefully. It may be necessary, for example, when transitioning from a previous secondary password system. These administrators have the same rights in the ChurchTools Rights Management as normal users and read-access users. This role is defined in the extension’s settings page under "Adming users".
+  2. Administrators who configure the extension’s settings. This type of administrators needs its own role and access rights in the ChurchTools Rights Management.
+- **PHP backend user**: This role should only be assigned to one user (the backend user). It also requires specific rights in ChurchTools.
 
-- Add types etc. to Extension data and synchronize with https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1:L205
+---
+
+### Rights for Different User Roles
+
+The following rights must be set for the different user types in ChurchTools' right management system.
+
+#### Normal users, Read-access users and Administrators (type 1)
+
+- **View ctpassstore**: Enable (*view*).
+- **settings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
+- **encryptionSettings (category & data)**: No access required.
+- **passwordStore (category & data)**: No access required.
+- **setupCompleted (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
+
+---
+
+#### Administrators of the extension (type 2)
+
+- **View ctpassstore**: Enable (*view*).
+- **settings (category & data)**: Needs read and write access. (*view custom category, view custom data, edit custom category, edit custom data*)
+- **encryptionSettings (category & data)**: No access required.
+- **passwordStore (category & data)**: No access required.
+- **setupCompleted (category & data)**: Needs read access. (*view custom category, view custom data*)
+
+---
+
+#### PHP backend user
+
+- **View ctpassstore**: No access required.
+- **settings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
+- **encryptionSettings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
+- **passwordStore (category & data)**: Needs read/write access. (*view custom category, view custom data, edit custom category, edit custom data*)
+- **setupCompleted (category & data)**: No access required.
 
 
-- With the SetupCheckboxBox, once checked the next button will be enabled. If it is unchecked, the button won't be disabled... -> Fix that
+## TODOs for CtPassStore Extension
 
-- Add possibility to pull backup and reload backup
+### Builds & Packaging
+- Provide stable builds for the CtPassStore extension.
+- Rename compiled version for clarity.
+- Add language settings.
 
-## Bugs/Wishes towards churchtools
+### Settings Validation
+- Ensure the PHP Backend URL is set to a valid format.
+- Validate other input fields in settings (e.g., confirm that given user IDs actually exist).
+- More thoroughly check the state of the settings when accessing them (e.g., verify that a PHP backend server is configured).
 
-- Schema Setting suddenly, stopped to work... I always receive a return { data: null } value as a return, even if the data is set correctly...
-- Possibility to associate values with users, so that they are deleted, when the user is deleted or when the extension is deleted
-- Possbility to check whether we have read access in general to a certain dataset. Not only specific to values... (via old API this is possible, but not via new one)
-- No minus sign in extension key allowed --> suboptimal
+### Setup & Initialization
+- Provide the `setupCompleted` result through the root component to other components (e.g., SetupGuard, PasswordView) to easily check whether setup has been completed without any overhead.
+- Separate basic setup code logic in separate repository for reuse in other extensions.
+- Fix `SetupCheckboxBox`: once checked, the next button is enabled, but if unchecked, the button should be disabled.
 
-# ChurchTools Extension Boilerplate
+### UI & UX Improvements
+- Adjust color scheme to fit ChurchTools (e.g., background of main app part).
+- Make sidebar collapse on horizontally oriented screens.
+- Check how the extension looks inside the ChurchTools app.
+- Primary and Secondary Password labels on the password management page are not horizontally centered — fix alignment.
+- Change sidebar to automatically use router components.
+- Dropdown for admins to set passwords for other IDs.
 
-This project provides a boilerplate for building your own extension for [ChurchTools](https://www.church.tools).
+### Code Quality & Refactoring
+- Improve `SetupProcessElements`: currently uses `public result: Promise<SetupProcessElementResult> | SetupProcessElementResult`. Use two separate variables instead.
+- Problem in `ProcessSetupItem` component with dynamically adding new items → `resultPending` is read as undefined even when it is not.
+- Problem in `ProcessSetup` component with dynamically adding new items or starting with an empty list → positive result message shows up too early.
+- Remove dependencies on Angular.
+- Add comments throughout the codebase.
+- Add `public`/`protected` modifiers to functions in each class.
+- Fix inconsistent/unnecessary use of ";"
+- Add tests for reliability.
+- After the rights confirmation step, verify that rights were assigned properly.
+- Test access to the settings page with other users (should work, but confirm).
+- Add types to ExtensionData class and synchronize with [ct-events-load persistence.ts](https://github.com/bensteUEM/ct-events-load/blob/ede2d1dad12d30ce182656365ac4f4bfe476f340/src/persistance.ts#L1-L205).
+- Clean up component order and folder structure.
 
-## Getting Started
-
-### Prerequisites
-
--   Node.js (version compatible with the project)
--   npm or yarn
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies:
-    ```bash
-    npm install
-    ```
-
-### Optional: Using Dev Container
-
-This project includes a dev container configuration. If you use VS Code with the "Dev Containers" extension, you can:
-
-1. Clone the repository
-2. Open it in VS Code
-3. Click the Remote Indicator in the bottom-left corner of VS Code status bar
-4. Select "Reopen in Container"
-
-The container includes the tools mentioned in the prerequisites pre-installed and also runs `npm install` on startup.
-
-## Configuration
-
-Copy `.env-example` to `.env` and fill in your data.
-
-In the `.env` file, configure the necessary constants for your project. This file is included in `.gitignore` to prevent sensitive data from being committed to version control.
-
-## Development and Deployment
-
-### Development Server
-
-Start a development server with hot-reload:
-
-```bash
-npm run dev
-```
-
-> **Note:** For local development, make sure to configure CORS in your ChurchTools
-> instance to allow requests from your local development server
-> (typically `http://localhost:5173`).
-> This can be done in the ChurchTools admin settings under:
-> "System Settings" > "Integrations" > "API" > "Cross-Origin Resource Sharing"
->
-> If login works in Chrome but not in Safari, the issue is usually that Safari has stricter cookie handling:
-> - Safari blocks `Secure; SameSite=None` cookies on `http://localhost` (Chrome allows them in dev).
-> - Safari also blocks cookies if the API is on another domain (third‑party cookies).
->
-> **Fix:**
-> 1. Use a Vite proxy so API calls go through your local server (`/api → https://xyz.church.tools`). This makes cookies look first‑party.
-> 2. Run your dev server with **HTTPS**. You can generate a local trusted certificate with [mkcert](https://github.com/FiloSottile/mkcert).
->
-> With proxy + HTTPS, Safari will accept and store cookies just like Chrome.
-
-### Building for Production
-
-To create a production build:
-
-```bash
-npm run build
-```
-
-### Preview Production Build
-
-To preview the production build locally:
-
-```bash
-npm run preview
-```
-
-### Deployment
-
-To build and package your extension for deployment:
-
-```bash
-npm run deploy
-```
-
-This command will:
-
-1. Build the project
-2. Package it using the `scripts/package.js` script
-
-You can find the package in the `releases` directory.
-
-## API
-
-Following endpoints are available. Permissions are possible per route. Types are documented in `ct-types.d.ts` (CustomModuleCreate, CustomModuleDataCategoryCreate, CustomModuleDataValueCreate)
-
-GET `/custommodules` get all extensions  
-GET `/custommodules/{extensionkey}` get an extensions by its key  
-GET `/custommodules/{moduleId}` get an extension by its ID
-
-GET `/custommodules/{moduleId}/customdatacategories`  
-POST `/custommodules/{moduleId}/customdatacategories`  
-PUT `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}`  
-DELETE `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}`
-
-GET `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}/customdatavalues`  
-POST `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}/customdatavalues`  
-PUT `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}/customdatavalues/{valueId}`  
-DELETE `/custommodules/{moduleId}/customdatacategories/{dataCategoryId}/customdatavalues/{valueId}`
-
-## Support
-
-For questions about the ChurchTools API, visit the [Forum](https://forum.church.tools).
+### Backup & Restore
+- Add functionality to pull backups and reload backups.
