@@ -21,12 +21,21 @@
     </SetupInfoBox>
 
     <div v-if="publicKeyPem" class="d-flex gap-2 mt-3">
-        <button class="btn btn-outline-success" @click="downloadPem(publicKeyPem, 'public_key.pem')">
-            Download Public Key
-        </button>
-        <button class="btn btn-outline-danger" @click="downloadPem(privateKeyPem, 'private_key.pem')">
-            Download Private Key
-        </button>
+        <v-btn
+          color="success"
+          variant="outlined"
+          class="mr-4 mb-4"
+          @click="downloadPem(publicKeyPem, 'public_key.pem')"
+        >
+          Download Public Key
+        </v-btn>
+        <v-btn
+          color="error"
+          variant="outlined"
+          @click="downloadPem(privateKeyPem, 'private_key.pem')"
+        >
+          Download Private Key
+        </v-btn>
     </div>
 
     

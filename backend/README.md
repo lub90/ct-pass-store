@@ -129,12 +129,13 @@ If you prefer to focus only on the backend, you can find the standalone instruct
 ### Fixes
 - Ensure wrong HTTP methods on endpoints return proper client responses with `405 Method Not Allowed` without side effects instead of internal server errors
 - Ensure HTTP methods on non-existing endpoints return `404 Not Found` without any side effects
-- Extend self-tests to also check whether reade and write access to the database work
+- Extend self-tests at the `/test` endpoint to also check whether reade and write access to the database work
 - Optimize backend calls by moving `ExtensionDataContainer` into its own container (current `GET`, `PUT`, `DELETE` responses are slow)
 - Implement and test 2FA when `requirePasswordForPasswordChange = true`
 - Extend the `/test` endpoint to verify that log files and non-public folders are not accessible externally
 - Rename `ServiceSettings` to `ChurchtoolsServiceSettings`
 - Standardize spelling of “ChurchTools” across the codebase
+- Extend the setup.md instructions to also check that https is enforced
 - Centralize timeout configuration for all ChurchTools API communication in a single file
 - Add clear comments to each class
 - Investigate and implement paging support
