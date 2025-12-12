@@ -33,16 +33,10 @@ import router from './router';
 // Setup vuetify
 import 'vuetify/dist/vuetify.min.css'
 import '@mdi/font/css/materialdesignicons.css' 
-import { createVuetify } from 'vuetify'
-import * as components from 'vuetify/components'
-import * as directives from 'vuetify/directives'
-const vuetify = createVuetify({
-  components,
-  directives,
-  icons: {
-    defaultSet: 'mdi',
-  },
-})
+import vuetify from './plugins/vuetify'
+
+// Import own css stylesheet
+import './plugins/churchToolsTheme.css'
 
 // Import vuetify fonts
 import '@fontsource/roboto/100.css'

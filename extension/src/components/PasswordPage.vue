@@ -189,11 +189,12 @@
       <!-- Save/Reset button -->
       <v-btn
           v-if="!loading"
-        variant="tonal"
         class="mt-4"
+        color="primary"
         :disabled="(settings.requirePasswordForPasswordChange && !primaryPassword) || (settings.allowCustomPassword && !allCriteriaMet)"
         @click="saveResetPassword"
       >
+        <v-icon start>mdi-content-save</v-icon>
         {{ settings.allowCustomPassword ? 'Save secondary password' : 'Reset secondary password' }}
       </v-btn>
 

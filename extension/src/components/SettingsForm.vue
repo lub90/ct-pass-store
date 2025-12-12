@@ -12,6 +12,7 @@
     <!-- Require primary password -->
     <v-switch
       v-model="requireOldPassword"
+      color='success'
       label="Require primary password for secondary password change"
       inset
     />
@@ -21,6 +22,7 @@
       <template #activator="{ props }">
         <v-switch
           v-model="allowCustomPassword"
+          color='success'
           label="Allow custom passwords"
           inset
           v-bind="props"
@@ -86,8 +88,8 @@
     <!-- Submit button -->
     <v-btn
       type="submit"
-      variant="tonal"
-      class="mt-4">
+      color="primary">
+      <v-icon start>mdi-content-save</v-icon>
       Save Settings
     </v-btn>
   </v-form>

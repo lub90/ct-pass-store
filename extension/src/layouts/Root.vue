@@ -8,7 +8,7 @@
           subtitle="CtPassStore"
         >
         <template #prepend>
-          <v-avatar color="primary">
+          <v-avatar color="dark-blue">
             <v-icon icon="mdi-lock" color="white"></v-icon>
           </v-avatar>
         </template>
@@ -21,20 +21,30 @@
         <!-- Password entry -->
         <v-list-item
           v-if="setupFinished"
-          prepend-icon="mdi-lock"
           title="Your Secondary Password"
           to="password"
           link
-        ></v-list-item>
+        >
+        <template #prepend>
+          <v-avatar color="side-bar-selected" size="small" rounded="sm">
+            <v-icon color="primary">mdi-lock</v-icon>
+          </v-avatar>
+        </template>
+        </v-list-item>
 
         <!-- Settings -->
         <v-list-item
           v-if="setupFinished && canEditSettings"
-          prepend-icon="mdi-cog"
           title="Settings"
           to="settings"
           link
-        ></v-list-item>
+        >
+          <template #prepend>
+            <v-avatar color="side-bar-selected" size="small" rounded="sm">
+              <v-icon color="primary">mdi-cog</v-icon>
+            </v-avatar>
+          </template>
+        </v-list-item>
 
         <!-- Setup -->
         <v-list-item
@@ -43,11 +53,17 @@
           title="Setup"
           to="setup"
           link
-        ></v-list-item>
+        >
+          <template #prepend>
+            <v-avatar color="side-bar-selected" size="small" rounded="sm">
+              <v-icon color="primary">mdi-wrench</v-icon>
+            </v-avatar>
+          </template>
+        </v-list-item>
       </v-list>
     </v-navigation-drawer>
 
-    <v-main class="h-screen">
+    <v-main class="h-screen bg-background">
       <slot />
     </v-main>
   </v-layout>

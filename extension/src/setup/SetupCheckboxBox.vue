@@ -1,7 +1,9 @@
 <template>
   <v-alert
     :type="checked ? 'success' : 'error'"
+    variant="outlined"
     density="comfortable"
+    border="start"
   >
     <template #prepend>
       <v-icon>

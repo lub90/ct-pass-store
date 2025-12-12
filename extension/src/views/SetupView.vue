@@ -19,8 +19,9 @@
             <!-- Start Setup -->
             <v-btn
                 v-if="showSetupStartPage"
-                variant="tonal"
                 prepend-icon="mdi-play-circle"
+                color="primary"
+                variant="elevated"
                 @click="startSetup"
                 :disabled="!isStartEnabled"
             >
@@ -30,7 +31,8 @@
             <!-- Back -->
             <v-btn
                 v-if="showBack"
-                variant="tonal"
+                color="primary"
+                variant="outlined"
                 prepend-icon="mdi-arrow-left"
                 @click="previousStep"
             >
@@ -40,7 +42,8 @@
             <!-- Retry -->
             <v-btn
                 v-if="showRetry"
-                variant="tonal"
+                color="primary"
+                variant="outlined"
                 prepend-icon="mdi-refresh"
                 @click="retry"
             >
@@ -50,7 +53,8 @@
             <!-- Next -->
             <v-btn
                 v-if="showNext"
-                variant="tonal"
+                color="primary"
+                variant="elevated"
                 prepend-icon="mdi-arrow-right"
                 @click="nextStep"
                 :disabled="!isNextEnabled"
@@ -62,7 +66,7 @@
             <v-btn
                 v-if="showFinish"
                 color="success"
-                variant="tonal"
+                variant="elevated"
                 prepend-icon="mdi-check-circle"
                 :disabled="!isNextEnabled"
                 @click="finishSetup"
@@ -169,7 +173,7 @@ function nextStep() {
 
 function previousStep() {
     currentStepIndex.value--;
-    isNextEnabled.value = false;
+    // Next button can stay enabled
 }
 
 function retry() {
