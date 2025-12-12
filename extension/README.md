@@ -129,10 +129,10 @@ The following rights must be set for the different user types in ChurchTools' ri
 - Fix `SetupCheckboxBox`: once checked, the next button is enabled, but if unchecked, the button should be disabled.
 
 ### UI & UX Improvements
-- Adjust color scheme to fit ChurchTools (e.g., background of main app part).
 - Make sidebar collapse on horizontally oriented screens.
 - Check how the extension looks inside the ChurchTools app.
 - Primary and Secondary Password labels on the password management page are not horizontally centered — fix alignment.
+- SetupProcess has strange behavior with displaying the result box, when dynamically adding and removing steps  (see e.g., TestBackendCompoentn -> Displays failed test attempt in between, even if works afterwards.)
 - Change sidebar to automatically use router components.
 - Dropdown for admins to set passwords for other IDs.
 - Enable retry button (and implement it) for the TestBackend step in the SetupProcess.

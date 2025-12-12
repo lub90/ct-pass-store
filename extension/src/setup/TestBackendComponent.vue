@@ -19,7 +19,6 @@
 <script setup lang="ts">
 import SetupStep from './SetupStep.vue'
 import SetupProcess from '../components/SetupProcess.vue'
-import SetupResultBox from './SetupResultBox.vue'
 import { ref, onMounted } from 'vue'
 import { inject } from 'vue'
 import { ExtensionData } from '../api/ExtensionData'
@@ -57,6 +56,28 @@ onMounted(async () => {
       return
     }
 
+     testSteps.value.push(new SetupProcessElement(
+      'Testing PHP Backend',
+      backendTest(backendUrl)
+    ))
+    
+
+  } catch (error) {
+    console.error('Backend test failed:', error)
+    testSteps.value.push(new SetupProcessElement(
+      'Backend test failed',
+      Promise.resolve({
+        successful: false,
+        message: 'Could not test backend. See console for details.'
+      })
+    ))
+    finished.value = true
+    allOkay.value = false
+  }
+})
+
+
+async function backendTest(backendUrl: string): Promise<SetupProcessElementResult> {
     // call /test endpoint
     const userId = (await churchtoolsClient.get('/whoami'))['id'];
     const loginToken = await churchtoolsClient.get(`/persons/${userId}/logintoken`);
@@ -69,15 +90,6 @@ onMounted(async () => {
     }
     })
     const json = await response.json()
-
-    // summary step
-    testSteps.value.push(new SetupProcessElement(
-      'Backend summary',
-      Promise.resolve({
-        successful: json.summary?.toLowerCase().includes('success'),
-        message: json.summary
-      })
-    ))
 
     // individual test steps
     json.tests.forEach((t: any) => {
@@ -94,19 +106,11 @@ onMounted(async () => {
     finished.value = true
     allOkay.value = json.tests.every((t: any) => t.status === 'ok')
 
-  } catch (error) {
-    console.error('Backend test failed:', error)
-    testSteps.value.push(new SetupProcessElement(
-      'Backend test failed',
-      Promise.resolve({
-        successful: false,
-        message: 'Could not contact backend. See console for details.'
-      })
-    ))
-    finished.value = true
-    allOkay.value = false
-  }
-})
+    return {
+        successful: json.summary?.toLowerCase().includes('success'),
+        message: json.summary
+      }
+}
 
 function onComplete() {
   emit('completed')
