@@ -81,31 +81,34 @@ The following rights must be set for the different user types in ChurchTools' ri
 
 #### Normal users, Read-access users and Administrators (type 1)
 
-- **View ctpassstore**: Enable (*view*).
-- **settings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
-- **encryptionSettings (category & data)**: No access required.
-- **passwordStore (category & data)**: No access required.
-- **setupCompleted (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
+- **View Extension**: Enable the user to view the CtPassStore extension.
+- **View Custom Category**: Enable the user to view `settings`, `setupCompleted`
+- **View Custom Data**: Enable the user to view data in `settings`, `setupCompleted`
+- **Create Custom Data**: No access required.
+- **Edit Custom Data**: No access required.
+- **Delete Custom Data**: No access required.
 
 ---
 
 #### Administrators of the extension (type 2)
 
-- **View ctpassstore**: Enable (*view*).
-- **settings (category & data)**: Needs read and write access. (*view custom category, view custom data, edit custom category, edit custom data*)
-- **encryptionSettings (category & data)**: No access required.
-- **passwordStore (category & data)**: No access required.
-- **setupCompleted (category & data)**: Needs read access. (*view custom category, view custom data*)
+- **View Extension**: Enable the user to view the CtPassStore extension.
+- **View Custom Category**: Enable the user to view `settings`, `setupCompleted`
+- **View Custom Data**: Enable the user to view data in `settings`, `setupCompleted`
+- **Create Custom Data**: Enable the user to create data in `settings`
+- **Edit Custom Data**: Enable the user to edit data in `settings`
+- **Delete Custom Data**: Enable the user to delete data in `settings`
 
 ---
 
 #### PHP backend user
 
-- **View ctpassstore**: No access required.
-- **settings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
-- **encryptionSettings (category & data)**: Needs read access. No write access. (*view custom category, view custom data*)
-- **passwordStore (category & data)**: Needs read/write access. (*view custom category, view custom data, edit custom category, edit custom data*)
-- **setupCompleted (category & data)**: No access required.
+- **View Extension**: Enable the user to view the CtPassStore extension.
+- **View Custom Category**: Enable the user to view `passwordStore`, `encryptionSettings`, `settings`
+- **View Custom Data**: Enable the user to view data in `passwordStore`, `encryptionSettings`, `settings`
+- **Create Custom Data**: Enable the user to create data in `passwordStore`
+- **Edit Custom Data**: Enable the user to edit data in `passwordStore`
+- **Delete Custom Data**: Enable the user to delete data in `passwordStore`
 
 
 ## TODOs

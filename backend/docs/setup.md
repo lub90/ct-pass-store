@@ -7,8 +7,12 @@ This setup guide assumes that the CtPassStore extension in your ChurchTools inst
 The PHP backend requires a dedicated ChurchTools user account to access ChurchTools data.  
 
 Create a new ChurchTools user with the following permissions:  
-- **Category `passwordStore` of the CtPassStore extension**: Read, Write, and Delete entries
-- **Category `settings` of the CtPassStore extension**: Read access
+- **View Extension**: Enable the user to view the CtPassStore extension.
+- **View Custom Category**: Enable the user to view `passwordStore`, `encryptionSettings`, `settings`
+- **View Custom Data**: Enable the user to view data in `passwordStore`, `encryptionSettings`, `settings`
+- **Create Custom Data**: Enable the user to create data in `passwordStore`
+- **Edit Custom Data**: Enable the user to edit data in `passwordStore`
+- **Delete Custom Data**: Enable the user to delete data in `passwordStore`
 
 These rights must be assigned through the ChurchTools rights management system. The username for your user can be chosen freely, so pick something easy to recognize later on.
 

@@ -127,6 +127,7 @@ If you prefer to focus only on the backend, you can find the standalone instruct
 - Write comprehensive unit tests for all components
 
 ### Fixes
+- Check that backend is available in SimpleClient->getJson() and throw more meaningfull error if not (currently json decoding just fails...)
 - Ensure wrong HTTP methods on endpoints return proper client responses with `405 Method Not Allowed` without side effects instead of internal server errors
 - Ensure HTTP methods on non-existing endpoints return `404 Not Found` without any side effects
 - Extend self-tests at the `/test` endpoint to also check whether reade and write access to the database work

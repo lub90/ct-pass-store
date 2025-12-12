@@ -5,31 +5,34 @@
     >
       Your setup is nearly finished. Last thing to do now is to set the rights to access and edit the data categories of this extension as follows:<br />
       <br />
-      <strong>Normal users</strong> and <strong>Read-access users</strong> (especially third-party systems using the secondary password)
+      <strong>Normal users / Read-access users</strong>
       <ul>
-        <li>View ctpassstore: Enable (<i>view</i>).</li>
-        <li>settings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
-        <li>encryptionSettings (category & data): No access required.</li>
-        <li>passwordStore (category & data): No access required.</li>
-        <li>setupCompleted (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
+        <li><strong>View Extension</strong>: Enable the user to view the CtPassStore extension.</li>
+        <li><strong>View Custom Category</strong>: Enable the user to view <code>settings</code>, <code>setupCompleted</code></li>
+        <li><strong>View Custom Data</strong>: Enable the user to view data in <code>settings</code>, <code>setupCompleted</code></li>
+        <li><strong>Create Custom Data</strong>: No access required.</li>
+        <li><strong>Edit Custom Data</strong>: No access required.</li>
+        <li><strong>Delete Custom Data</strong>: No access required.</li>
       </ul>
       <br />
       <strong>Administrators of the extension</strong>
       <ul>
-        <li>View ctpassstore: Enable (<i>view</i>).</li>
-        <li>settings (category & data): Needs read and write access. (<i>view custom category, view custom data, edit custom category, edit custom data</i>)</li>
-        <li>encryptionSettings (category & data): No access required.</li>
-        <li>passwordStore (category & data): No access required.</li>
-        <li>setupCompleted (category & data): Needs read access. (<i>view custom category, view custom data</i>)</li>
+        <li><strong>View Extension</strong>: Enable the user to view the CtPassStore extension.</li>
+        <li><strong>View Custom Category</strong>: Enable the user to view <code>settings</code>, <code>setupCompleted</code></li>
+        <li><strong>View Custom Data</strong>: Enable the user to view data in <code>settings</code>, <code>setupCompleted</code></li>
+        <li><strong>Create Custom Data</strong>: Enable the user to create data in <code>settings</code></li>
+        <li><strong>Edit Custom Data</strong>: Enable the user to edit data in <code>settings</code></li>
+        <li><strong>Delete Custom Data</strong>: Enable the user to delete data in <code>settings</code></li>
       </ul>
       <br />
       <strong>The PHP backend user</strong>
       <ul>
-        <li>View ctpassstore: No access required.</li>
-        <li>settings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
-        <li>encryptionSettings (category & data): Needs read access. No write access. (<i>view custom category, view custom data</i>)</li>
-        <li>passwordStore (category & data): Needs read/write access. (<i>view custom category, view custom data, edit custom category, edit custom data</i>)</li>
-        <li>setupCompleted (category & data): No access required.</li>
+        <li><strong>View Extension</strong>: Enable the user to view the CtPassStore extension.</li>
+        <li><strong>View Custom Category</strong>: Enable the user to view <code>passwordStore</code>, <code>encryptionSettings</code>, <code>settings</code></li>
+        <li><strong>View Custom Data</strong>: Enable the user to view data in <code>passwordStore</code>, <code>encryptionSettings</code>, <code>settings</code></li>
+        <li><strong>Create Custom Data</strong>: Enable the user to create data in <code>passwordStore</code></li>
+        <li><strong>Edit Custom Data</strong>: Enable the user to edit data in <code>passwordStore</code></li>
+        <li><strong>Delete Custom Data</strong>: Enable the user to delete data in <code>passwordStore</code></li>
       </ul>
       <br />
       <br />
