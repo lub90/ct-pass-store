@@ -26,7 +26,7 @@
           link
         >
         <template #prepend>
-          <v-avatar color="side-bar-selected" size="small" rounded="sm">
+          <v-avatar color="light-blue" size="small" rounded="sm">
             <v-icon color="primary">mdi-lock</v-icon>
           </v-avatar>
         </template>
@@ -40,7 +40,7 @@
           link
         >
           <template #prepend>
-            <v-avatar color="side-bar-selected" size="small" rounded="sm">
+            <v-avatar color="light-blue" size="small" rounded="sm">
               <v-icon color="primary">mdi-cog</v-icon>
             </v-avatar>
           </template>
@@ -55,7 +55,7 @@
           link
         >
           <template #prepend>
-            <v-avatar color="side-bar-selected" size="small" rounded="sm">
+            <v-avatar color="light-blue" size="small" rounded="sm">
               <v-icon color="primary">mdi-wrench</v-icon>
             </v-avatar>
           </template>

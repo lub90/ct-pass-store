@@ -11,7 +11,7 @@
 }
 
 .v-list-item.v-list-item--active {
-  background-color: rgb(var(--v-theme-side-bar-selected)) !important;
+  background-color: rgb(var(--v-theme-light-blue)) !important;
 }
 
 .v-list-item .v-icon {

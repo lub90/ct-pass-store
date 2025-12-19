@@ -29,7 +29,7 @@ export default createVuetify({
           warning: '#FBC02D',
           text: '#0F172B',
           muted: '#6C757D',
-          'side-bar-selected': '#dbeafe',
+          'light-blue': '#dbeafe',
           'dark-blue': '#0e204b'
         },
         variables: {
