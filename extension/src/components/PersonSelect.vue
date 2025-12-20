@@ -2,51 +2,50 @@
   <v-autocomplete
     :items="users"
     :loading="loading"
-    item-title="fullName"
+    :item-title="getFullName"
     item-value="id"
-    v-model="props.modelValue"
+    v-model="internalValue"
     @update:modelValue="emit('update:modelValue', $event)"
-    label="Select user"
-    clearable
+    :label="label"
+    :clearable="clearable"
+    :multiple="multiple"
   >
-    <!-- How each item looks in the dropdown -->
+    <!-- Dropdown items -->
     <template #item="{ props, item }">
       <v-list-item v-bind="props">
         <template #prepend>
           <v-avatar size="32" color="light-blue">
             <img
               :src="item.raw.imageUrl"
-              :alt="`${item.raw.firstName?.charAt(0) ?? ''}${item.raw.lastName?.charAt(0) ?? ''}`"
+              :alt="getAlt(item.raw)"
             />
           </v-avatar>
         </template>
-
         <v-list-item-title>
-          {{ item.raw.firstName }} {{ item.raw.lastName }}
+          {{ getFullName(item.raw) }}
         </v-list-item-title>
       </v-list-item>
     </template>
 
-    <!-- How the selected item looks in the input -->
+    <!-- Selected item(s) -->
     <template #selection="{ item }">
       <v-chip>
         <template #prepend>
-            <v-avatar start size="24" color="light-blue">
+          <v-avatar start size="24" color="light-blue">
             <img
-                :src="item.raw.imageUrl"
-                :alt="`${item.raw.firstName?.charAt(0) ?? ''}${item.raw.lastName?.charAt(0) ?? ''}`"
-                />
-            </v-avatar>
+              :src="item.raw.imageUrl"
+              :alt="getAlt(item.raw)"
+            />
+          </v-avatar>
         </template>
-        {{ item.raw.firstName }} {{ item.raw.lastName }}
+        {{ getFullName(item.raw) }}
       </v-chip>
     </template>
   </v-autocomplete>
 </template>
 
-
 <script setup lang="ts">
-import { ref, onMounted, inject } from "vue";
+import { ref, computed } from "vue";
 
 interface Person {
   id: number;
@@ -56,42 +55,29 @@ interface Person {
 }
 
 const props = defineProps<{
-  modelValue: number | null;
+  modelValue: number | number[] | null; // single or multiple
+  users: Person[];                      // list of persons passed in
+  label?: string;                       // configurable label
+  clearable?: boolean;                  // configurable clearable
+  multiple?: boolean;                   // single vs multiple select
+  loading?: boolean;                    // allow parent to control loading state
 }>();
 
 const emit = defineEmits(["update:modelValue"]);
 
-// Inject ChurchTools client
-const client = inject<any>("churchtoolsClient");
+// Internal binding for v-model
+const internalValue = computed({
+  get: () => props.modelValue,
+  set: (val) => emit("update:modelValue", val),
+});
 
-const users = ref<Person[]>([]);
-const loading = ref(false);
-
-// Fetch all users with pagination
-async function loadAllUsers() {
-    loading.value = true;
-
-    const all: Person[] = [];
-    const res: Person[] = await client.getAllPages("/persons");
-
-    // If client returns only the array, treat `res` as the page content
-    // TODO: Make more consistent check...
-    const pageItems = res;
-    //if (!pageItems.length) break;
-
-    all.push(
-        ...pageItems.map(p => ({
-            ...p,
-            fullName: `${p.firstName} ${p.lastName}`,
-        }))
-    );
-
-    users.value = all;
-    loading.value = false;
+// Helper: full name
+function getFullName(person: Person): string {
+  return `${person.firstName} ${person.lastName}`;
 }
 
-onMounted(() => {
-  loadAllUsers();
-});
+// Helper: alt text (first + last initial)
+function getAlt(person: Person): string {
+  return `${person.firstName?.charAt(0) ?? ""}${person.lastName?.charAt(0) ?? ""}`;
+}
 </script>
-

@@ -139,6 +139,8 @@ The following rights must be set for the different user types in ChurchTools' ri
 
 ### Code Quality & Refactoring
 - Improve `SetupProcessElements`: currently uses `public result: Promise<SetupProcessElementResult> | SetupProcessElementResult`. Use two separate variables instead.
+- Improve `ExtensionData` to rely on the utils for the kv-store and integrate the api folder into the utils folder.
+- Provide the `ExtensionData` as a global utils via injection?
 - Problem in `ProcessSetupItem` component with dynamically adding new items → `resultPending` is read as undefined even when it is not.
 - Problem in `ProcessSetup` component with dynamically adding new items or starting with an empty list → positive result message shows up too early.
 - Remove dependencies on Angular.
