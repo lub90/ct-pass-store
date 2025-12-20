@@ -48,13 +48,12 @@
           </v-sheet>
 
           <!-- Case: admins can select for whom they want to reset the password -->
-          <v-sheet v-if="isAdmin" class="mt-6">
-            <PersonSelect
-              v-model="selectedPersonId"
-              :users="persons"
-              label="Select the person whose password you want to change"
-            />
-          </v-sheet>
+            
+          <PersonSelectInput
+            v-if="isAdmin"
+            v-model="selectedPersonId"
+            :users="persons"
+          />
 
 
           <!-- Case: allow custom password -->
@@ -93,7 +92,7 @@ import { ref, computed, inject, watch } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { AppConfig } from '../AppConfig';
-import PersonSelect from './PersonSelect.vue';
+import PersonSelectInput from './passwordPage/PersonSelectInput.vue';
 import type { Person } from '../utils/ct-types.d.ts';
 import { loadWithState } from "../composables/loadWithState.ts";
 import LoadingGuard from './LoadingGuard.vue';
