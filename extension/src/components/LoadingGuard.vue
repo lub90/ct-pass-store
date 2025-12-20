@@ -25,8 +25,11 @@
   </v-alert>
 
   <!-- Success -->
-  <v-sheet v-else  class="pa-0" elevation="0" color="transparent">
-    <slot />
+  <v-sheet
+    v-else-if="state === ViewState.Ready"
+    elevation="0"
+    color="transparent">
+      <slot />
   </v-sheet>
 </template>
 

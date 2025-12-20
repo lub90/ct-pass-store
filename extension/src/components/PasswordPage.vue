@@ -6,35 +6,15 @@
       <!-- Guard page while loading everything -->
       <LoadingGuard :state="loadState" :error="loadError">
 
-        <!-- While saving the password -->
-        <v-alert
-          v-if="saving"
-          type="info"
-          density="compact"
-          class="mx-auto my-4"
-          >
-          <template #prepend>
-              <v-progress-circular indeterminate color="primary" size="20" />
-          </template>
-          Setting new password - please wait...
-        </v-alert>
+        <!-- Feedback and settings messages -->
+        <AlertMessages
+          :state="alertState"
+          :success="successMessage"
+          :error="errorMessage"
+          loading-text="Setting new password - please wait..."
+        />
 
-        <!-- Feedback messages -->
-        <v-alert
-          v-if="successMessage"
-          type="success"
-          density="compact"
-        >
-          <div v-html="successMessage"></div>
-        </v-alert>
-        <v-alert
-          v-if="errorMessage"
-          type="error"
-          density="compact">
-          <div v-html="errorMessage"></div>
-        </v-alert>
-
-        <v-form ref="form">
+        <v-form @submit.prevent="saveResetPassword" ref="form">
 
           <!-- Case: only reset allowed -->
           <v-sheet v-if="!settings.allowCustomPassword">
@@ -71,10 +51,9 @@
 
           <!-- Save/Reset button -->
           <v-btn
-            class="mt-4"
+            type="submit"
             color="primary"
             :disabled="!formValid || saving"
-            @click="saveResetPassword"
           >
             <v-icon start>mdi-content-save</v-icon>
             {{ settings.allowCustomPassword ? 'Save secondary password' : 'Reset secondary password' }}
@@ -98,6 +77,8 @@ import { loadWithState } from "../composables/loadWithState.ts";
 import LoadingGuard from './LoadingGuard.vue';
 import PrimaryPasswordInput from './passwordPage/PrimaryPasswordInput.vue'
 import CustomPasswordInput from './passwordPage/CustomPasswordInput.vue'
+import { AlertState } from '../types/AlertState'
+import AlertMessages from './AlertMessages.vue'
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
@@ -118,7 +99,7 @@ const primaryPassword = ref('');
 const newPassword = ref('');
 
 // Person selection related variables
-const selectedPersonId = ref<number | null>(null);
+const selectedPersonId = ref<number>(-1);
 const persons = ref<Person[]>([]);
 
 // Form related variables
@@ -127,6 +108,12 @@ const formValid = ref(false);
 const saving = ref(false);
 const successMessage = ref('');
 const errorMessage = ref('');
+const alertState = computed(() => {
+  if (saving.value) return AlertState.Loading;
+  if (errorMessage.value) return AlertState.Error;
+  if (successMessage.value) return AlertState.Success;
+  return AlertState.Idle;
+});
 
 // Check if form is valid
 watch(
@@ -147,26 +134,6 @@ watch([newPassword, primaryPassword], () => {
 });
 
 
-function resetForm() {
-  suppressMessageClear.value = true;
-
-  // 1. Reset the actual values
-  newPassword.value = '';
-  primaryPassword.value = '';
-
-  // 2. Reset validation state
-  form.value?.reset();            // resets values + validation
-  form.value?.resetValidation();  // ensures no red borders
-
-  selectedPersonId.value = ownUserId.value;
-
-  // 3. Allow watchers again on next tick
-  queueMicrotask(() => {
-    suppressMessageClear.value = false;
-  });
-}
-
-
 
 
 // Use the load guard to load -> Replaces onMounted
@@ -175,14 +142,13 @@ const {
   error: loadError
 } = loadWithState<void>(async () => {
   ownUserId.value = (await churchtoolsClient.get('/whoami'))['id'];
+  selectedPersonId.value = ownUserId.value;
 
   await loadSettings();
 
   if (isAdmin.value) {
     await loadAllUsers();
   }
-
-  selectedPersonId.value = ownUserId.value;
 });
 
 
@@ -236,6 +202,27 @@ async function saveResetPassword() {
     }
   }
   saving.value = false;
+}
+
+
+function resetForm() {
+  suppressMessageClear.value = true;
+
+  // 1. Reset the actual values
+  newPassword.value = '';
+  primaryPassword.value = '';
+  selectedPersonId.value = ownUserId.value;
+
+  // 2. Reset validation state
+  form.value?.reset();            // resets values + validation
+  form.value?.resetValidation();  // ensures no red borders
+
+  // 3. Allow watchers again on next tick
+  queueMicrotask(() => {
+    suppressMessageClear.value = false;
+    // Set the selected person id delayed to not interfere with the form reset
+    selectedPersonId.value = ownUserId.value;
+  });
 }
 
 async function updatePassword(userId: number, body: any, token: string) {
