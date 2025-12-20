@@ -35,7 +35,7 @@ const props = defineProps<{
 const emit = defineEmits(["update:modelValue", "valid"]);
 
 const internalValue = ref(props.modelValue);
-const isValid = computed(() => internalValue.value.trim() !== "");
+const isValid = computed(() => internalValue.value?.trim() !== "");
 
 // Sync internal → parent
 watch(internalValue, (val) => emit("update:modelValue", val));

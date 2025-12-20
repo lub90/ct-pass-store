@@ -13,6 +13,7 @@
         type="password"
         label="New secondary password"
         placeholder="New secondary password"
+        :rules="newPasswordRules"
         variant="outlined"
         density="comfortable"
         style="max-width: 400px;"
@@ -32,6 +33,7 @@
         type="password"
         label="Repeat new secondary password"
         placeholder="Repeat new secondary password"
+        :rules="repeatPasswordRules"
         variant="outlined"
         density="comfortable"
         style="max-width: 400px;"
@@ -121,7 +123,7 @@ const repeatPassword = ref("");
 // Criteria logic
 // TODO: Move special characters in string of AppConfig
 const criteria = computed(() => ({
-  length: newPassword.value.length >= props.passwordLength,
+  length: newPassword.value?.length >= props.passwordLength,
   special: /[!@$%&*\-_\+=?.]/.test(newPassword.value),
   hasDigit: /\d/.test(newPassword.value),
   hasLetter: /[A-Za-z]/.test(newPassword.value),
@@ -143,6 +145,18 @@ watch(
     }
   }
 );
+
+const newPasswordRules = [
+  () => criteria.value.length || `Minimum length: ${props.passwordLength} characters`,
+  () => criteria.value.special || "Must contain at least one special character (!@$%&*-_+=?.)",
+  () => criteria.value.hasDigit || "Must contain at least one digit (0–9)",
+  () => criteria.value.hasLetter || "Must contain at least one letter",
+  () => criteria.value.onlyValidChars || "Contains invalid characters",
+];
+
+const repeatPasswordRules = [
+  () => criteria.value.match || "Passwords do not match",
+];
 
 onMounted(() => {
   emit("valid", allCriteriaMet.value);

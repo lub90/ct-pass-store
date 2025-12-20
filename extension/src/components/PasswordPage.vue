@@ -36,6 +36,17 @@
 
         <v-form ref="form">
 
+          <!-- Case: only reset allowed -->
+          <v-sheet v-if="!settings.allowCustomPassword">
+            <v-alert
+              type="info"
+              density="compact"
+              class="mx-auto my-4"
+              >
+              Your administrator has set up secondary passwords so that you cannot create one yourself. Click below to generate a random password. Once you do, the new password will be displayed to you.
+            </v-alert>
+          </v-sheet>
+
           <!-- Case: admins can select for whom they want to reset the password -->
           <v-sheet v-if="isAdmin" class="mt-6">
             <PersonSelect
@@ -52,17 +63,6 @@
             v-model="newPassword"
             :password-length="settings.passwordLength"
           />
-
-          <!-- Case: only reset allowed -->
-          <v-sheet v-if="!settings.allowCustomPassword">
-            <v-alert
-              type="info"
-              density="compact"
-              class="mx-auto my-4"
-              >
-              Your administrator has set up secondary passwords so that you cannot create one yourself. Click below to generate a random password. Once you do, the new password will be displayed to you.
-            </v-alert>
-          </v-sheet>
 
           <!-- Primary password field if required -->
           <PrimaryPasswordInput
@@ -129,12 +129,6 @@ const saving = ref(false);
 const successMessage = ref('');
 const errorMessage = ref('');
 
-// TODO: Test
-watch(() => form.value?.items, (items) => {
-  console.log("Form items:", items);
-});
-
-
 // Check if form is valid
 watch(
   () => form.value?.isValid,
@@ -143,11 +137,38 @@ watch(
   }
 );
 
+// Helper to suppress message clear as soon as somebody types something new...
+const suppressMessageClear = ref(false);
+
 // Let success message disappear as soon as somebody types something new
 watch([newPassword, primaryPassword], () => {
+  if (suppressMessageClear.value) return;   // ignore programmatic changes
   successMessage.value = '';
   errorMessage.value = '';
 });
+
+
+function resetForm() {
+  suppressMessageClear.value = true;
+
+  // 1. Reset the actual values
+  newPassword.value = '';
+  primaryPassword.value = '';
+
+  // 2. Reset validation state
+  form.value?.reset();            // resets values + validation
+  form.value?.resetValidation();  // ensures no red borders
+
+  selectedPersonId.value = ownUserId.value;
+
+  // 3. Allow watchers again on next tick
+  queueMicrotask(() => {
+    suppressMessageClear.value = false;
+  });
+}
+
+
+
 
 // Use the load guard to load -> Replaces onMounted
 const {
@@ -203,10 +224,10 @@ async function saveResetPassword() {
   if (response.status == 200) {
     const data = await response.json();
     successMessage.value = `Your new secondary password is: <br\><b> ${data.secondaryPwd} </b><br \>Please remember it or store it securely. You will only see it here once.`;
-    form.value?.resetValidation();
+    resetForm();
   } else if (response.status == 204) {
     successMessage.value = 'Password has been saved successfully.';
-    form.value?.resetValidation();
+    resetForm();
   } else {
     const data = await response.json().catch(() => null);
     if (data && data.error && data.message) {
