@@ -8,6 +8,7 @@
     :label="label"
     :clearable="clearable"
     :multiple="multiple"
+    v-bind="$attrs"
   >
     <!-- Dropdown items -->
     <template #item="{ props, item }">
@@ -45,6 +46,9 @@
 
 <script setup lang="ts">
 import { computed } from "vue";
+
+// Do not apply the style elements to the overall element
+defineOptions({ inheritAttrs: false })
 
 interface Person {
   id: number;

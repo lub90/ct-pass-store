@@ -13,12 +13,12 @@
   <v-tooltip :text="tooltip">
     <template #activator="{ props: tooltipProps }">
       <v-text-field
+        v-bind="{ ...$attrs, ...tooltipProps }"
         v-model="internalValue"
         :label="label"
         :variant="variant"
         :density="density"
         :rules="rules"
-        v-bind="tooltipProps"
       />
     </template>
   </v-tooltip>
@@ -26,6 +26,9 @@
 
 <script setup lang="ts">
 import { ref, watch, computed } from "vue";
+
+// Do not try to apply styles to the root element
+defineOptions({ inheritAttrs: false })
 
 const props = defineProps<{
   modelValue: string;

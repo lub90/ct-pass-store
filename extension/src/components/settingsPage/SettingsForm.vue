@@ -43,6 +43,7 @@
             :clearable=true
             :multiple=true
             v-bind="props"
+            class="mb-4"
           />
         </template>
       </v-tooltip>
@@ -58,6 +59,7 @@
             :clearable=true
             :multiple=true
             v-bind="props"
+            class="mb-4"
           />
         </template>
       </v-tooltip>
@@ -77,6 +79,7 @@
               v => !!v || 'Value is required',
               v => v >= 8 || 'Value must be at least 8'
             ]"
+            class="mb-4"
           />
         </template>
       </v-tooltip>
@@ -88,6 +91,7 @@
         tooltip='Including "https://..."'
         variant="outlined"
         density="comfortable"
+        class="mb-4"
       />
 
       <!-- Submit button -->
