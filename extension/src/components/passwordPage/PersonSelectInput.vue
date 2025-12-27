@@ -20,7 +20,7 @@
 
 <script setup lang="ts">
 import { ref, watch } from "vue";
-import PersonSelect from "../PersonSelect.vue";
+import PersonSelect from "@/ct-extension-utils/components/PersonSelect.vue";
 import type { Person } from "../utils/ct-types.d.ts";
 
 const props = defineProps<{

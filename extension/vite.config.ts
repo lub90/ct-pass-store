@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
-import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify'
+import vuetify, { transformAssetUrls } from 'vite-plugin-vuetify';
+import path from "path";
 
 // https://vitejs.dev/config/
 export default ({ mode }) => {
@@ -12,6 +13,11 @@ export default ({ mode }) => {
                 template: { transformAssetUrls }
             }),
             vuetify({ autoImport: true }) 
-        ]
+        ],
+        resolve: {
+            alias: {
+                "@": path.resolve(__dirname, "src")
+            }
+        }
     });
 };

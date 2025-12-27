@@ -111,12 +111,12 @@ import { ref, inject, computed, watch, reactive } from 'vue';
 import { ExtensionData } from '../../api/ExtensionData';
 import UrlInput from './UrlInput.vue';
 import { AppConfig } from '../../AppConfig';
-import { loadWithState } from '../../composables/loadWithState';
-import LoadingGuard from '../LoadingGuard.vue';
-import { AlertState } from '../../types/AlertState'
-import AlertMessages from '../AlertMessages.vue'
+import { loadWithState } from '@/ct-extension-utils/composables/loadWithState';
+import LoadingGuard from '@/ct-extension-utils/components/LoadingGuard.vue';
+import { AlertState } from '@/ct-extension-utils/types/AlertState'
+import AlertMessages from '@/ct-extension-utils/components/AlertMessages.vue'
 import type { Person } from '../../utils/ct-types.d.ts';
-import PersonSelect from "../PersonSelect.vue";
+import PersonSelect from "@/ct-extension-utils/components/PersonSelect.vue";
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);

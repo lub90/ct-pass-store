@@ -73,12 +73,12 @@ import { ExtensionData } from '../api/ExtensionData';
 import { AppConfig } from '../AppConfig';
 import PersonSelectInput from './passwordPage/PersonSelectInput.vue';
 import type { Person } from '../utils/ct-types.d.ts';
-import { loadWithState } from "../composables/loadWithState.ts";
-import LoadingGuard from './LoadingGuard.vue';
+import { loadWithState } from "@/ct-extension-utils/composables/loadWithState.ts";
+import LoadingGuard from '@/ct-extension-utils/components/LoadingGuard.vue';
 import PrimaryPasswordInput from './passwordPage/PrimaryPasswordInput.vue'
 import CustomPasswordInput from './passwordPage/CustomPasswordInput.vue'
-import { AlertState } from '../types/AlertState'
-import AlertMessages from './AlertMessages.vue'
+import { AlertState } from '@/ct-extension-utils/types/AlertState'
+import AlertMessages from '@/ct-extension-utils/components/AlertMessages.vue'
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);

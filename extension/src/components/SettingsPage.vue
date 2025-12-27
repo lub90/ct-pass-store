@@ -36,8 +36,8 @@ import SettingsForm from '../components/settingsPage/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { Permissions } from '../api/Permissions';
 import { AppConfig } from '../AppConfig';
-import LoadingGuard from '../components/LoadingGuard.vue';
-import { loadWithState } from '../composables/loadWithState';
+import LoadingGuard from '@/ct-extension-utils/components/LoadingGuard.vue';
+import { loadWithState } from '@/ct-extension-utils/composables/loadWithState';
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
