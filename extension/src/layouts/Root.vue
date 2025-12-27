@@ -71,14 +71,14 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue';
-import { Permissions } from '../api/Permissions';
+import { Permissions } from '@/ct-extension-utils/lib/Permissions';
 import { AppConfig } from '../AppConfig';
 import { ExtensionData } from '../api/ExtensionData';
 import { setupCompleted } from '../setup/SetupStatus';
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-const permissions = new Permissions(churchtoolsClient);
+const permissions = new Permissions(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
 const canEditSettings = ref(false);
 const setupFinished = ref(false);

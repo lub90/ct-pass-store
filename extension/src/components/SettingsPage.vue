@@ -34,14 +34,14 @@ import { ref, inject } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
 import SettingsForm from '../components/settingsPage/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
-import { Permissions } from '../api/Permissions';
+import { Permissions } from '@/ct-extension-utils/lib/Permissions';
 import { AppConfig } from '../AppConfig';
 import LoadingGuard from '@/ct-extension-utils/components/LoadingGuard.vue';
 import { loadWithState } from '@/ct-extension-utils/composables/loadWithState';
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-const permissions = new Permissions(churchtoolsClient);
+const permissions = new Permissions(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
 const isAdmin = ref(false);
 

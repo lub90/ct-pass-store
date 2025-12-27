@@ -56,7 +56,7 @@ import { ref, onMounted } from 'vue';
 import { inject } from 'vue';
 import { AppConfig } from '../AppConfig'
 import { ExtensionData } from '../api/ExtensionData';
-import { Permissions } from '../api/Permissions';
+import { Permissions } from '@/ct-extension-utils/lib/Permissions';
 import { setupCompleted } from '../setup/SetupStatus';
 
 const churchtoolsClient = inject('churchtoolsClient');
@@ -73,7 +73,7 @@ onMounted(async () => {
 
 async function setupAlreadyCompleted(): Promise<void> {
     const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
-    const permissions = new Permissions(churchtoolsClient);
+    const permissions = new Permissions(churchtoolsClient, AppConfig.EXTENSION_KEY);
 
     // Step 1: Check if user has permission to view custom data
     // TODO: This is just a rough check. Because read access might also be enabled for another category. Sadly we cannot determine whether we have the read access to the right categories. As such, this must be sufficient.
