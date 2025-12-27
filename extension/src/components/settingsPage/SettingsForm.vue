@@ -14,7 +14,7 @@
 
       <!-- Require primary password -->
       <v-switch
-        v-model="requireOldPassword"
+        v-model="settings.requirePasswordForPasswordChange"
         color='success'
         label="Require primary password for secondary password change"
         inset
@@ -24,7 +24,7 @@
       <v-tooltip text="If enabled, users can choose their own passwords. If disabled, passwords will be generated automatically and can only be reset by the users.">
         <template #activator="{ props }">
           <v-switch
-            v-model="allowCustomPassword"
+            v-model="settings.allowCustomPassword"
             color='success'
             label="Allow custom passwords"
             inset
@@ -37,7 +37,7 @@
       <v-tooltip text="Admin users can read, set and/or reset the secondary password for other users. Use this feature carefully!">
         <template #activator="{ props }">
           <PersonSelect
-            v-model="adminUserInput"
+            v-model="settings.adminUsers"
             :users="persons"
             label="Admin users"
             :clearable=true
@@ -52,7 +52,7 @@
       <v-tooltip text="Read access users can read the secondary password for other users. Use this feature carefully!">
         <template #activator="{ props }">
           <PersonSelect
-            v-model="readAccessUserInput"
+            v-model="settings.readAccessUsers"
             :users="persons"
             label="Read access users"
             :clearable=true
@@ -66,7 +66,7 @@
       <v-tooltip text="Must be greater than 8.">
         <template #activator="{ props }">
           <v-text-field
-            v-model.number="passwordLength"
+            v-model.number="settings.passwordLength"
             type="number"
             min="8"
             label="Minimum password length"
@@ -83,7 +83,7 @@
 
       <!-- Backend URL -->
       <UrlInput
-        v-model="backendUrl"
+        v-model="settings.backendUrl"
         label="PHP Backend URL"
         tooltip='Including "https://..."'
         variant="outlined"
@@ -103,7 +103,7 @@
 
 
 <script setup lang="ts">
-import { ref, inject, computed, watch } from 'vue';
+import { ref, inject, computed, watch, reactive } from 'vue';
 import { ExtensionData } from '../../api/ExtensionData';
 import UrlInput from './UrlInput.vue';
 import { AppConfig } from '../../AppConfig';
@@ -123,12 +123,14 @@ const emit = defineEmits<{
 }>();
 
 // Settings related variables
-const requireOldPassword = ref(true);
-const allowCustomPassword = ref(true);
-const adminUserInput = ref<number[]>([]);
-const readAccessUserInput = ref<number[]>([]);
-const passwordLength = ref(12);
-const backendUrl = ref('');
+const settings = reactive({
+  requirePasswordForPasswordChange: true,
+  allowCustomPassword: true,
+  adminUsers: [] as number[],
+  readAccessUsers: [] as number[],
+  passwordLength: 12,
+  backendUrl: "",
+});
 
 // All persons that can be selected
 const persons = ref<Person[]>([]);
@@ -145,30 +147,28 @@ const alertState = computed(() => {
 });
 
 // Let success message disappear as soon as somebody types something new
-watch([requireOldPassword, allowCustomPassword, adminUserInput, readAccessUserInput, passwordLength, backendUrl], () => {
+watch(settings, () => {
   successMessage.value = '';
   errorMessage.value = '';
-});
+}, { deep: true });
 
 const { state: loadState, error: loadError } = loadWithState(async () => {
+  await loadSettings();
+  await loadAllUsers();
+});
+
+async function loadSettings() {
   try {
     const hasData = await extensionData.categoryHasData(AppConfig.SETTINGS_CATEGORY);
     if (hasData) {
       const entry = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY, true);
       const values = JSON.parse(entry.value);
-      requireOldPassword.value = values.requirePasswordForPasswordChange ?? true;
-      allowCustomPassword.value = values.allowCustomPassword ?? true;
-      adminUserInput.value = (values.adminUsers ?? []);
-      readAccessUserInput.value = (values.readAccessUsers ?? []);
-      passwordLength.value = values.passwordLength ?? 12;
-      backendUrl.value = values.backendUrl ?? '';
+      Object.assign(settings, values);
     }
   } catch (error) {
     console.warn('Could not load existing settings:', error);
   }
-
-  await loadAllUsers();
-});
+}
 
 async function loadAllUsers() {
     const loadedPersons: Person[] = await churchtoolsClient.getAllPages("/persons");
@@ -178,21 +178,6 @@ async function loadAllUsers() {
 async function handleSave() {
   saving.value = true;
 
-  const adminUsers = adminUserInput.value
-    .filter(id => !isNaN(id) && id >= 1);
-
-  const readAccessUsers = readAccessUserInput.value
-    .filter(id => !isNaN(id) && id >= 1);
-
-  const payload = {
-    requirePasswordForPasswordChange: requireOldPassword.value,
-    allowCustomPassword: allowCustomPassword.value,
-    adminUsers,
-    readAccessUsers,
-    passwordLength: passwordLength.value,
-    backendUrl: backendUrl.value,
-  };
-
   try {
     const hasData = await extensionData.categoryHasData(AppConfig.SETTINGS_CATEGORY);
 
@@ -200,18 +185,18 @@ async function handleSave() {
       const existing = await extensionData.getCategoryData(AppConfig.SETTINGS_CATEGORY);
       if (existing.length > 0) {
         const entry = existing[0];
-        await extensionData.updateCategoryEntry(AppConfig.SETTINGS_CATEGORY, entry.id, payload);
+        await extensionData.updateCategoryEntry(AppConfig.SETTINGS_CATEGORY, entry.id, settings);
       } else {
-        await extensionData.createCategoryEntry(AppConfig.SETTINGS_CATEGORY, payload);
+        await extensionData.createCategoryEntry(AppConfig.SETTINGS_CATEGORY, settings);
       }
     } else {
-      await extensionData.createCategoryEntry(AppConfig.SETTINGS_CATEGORY, payload);
+      await extensionData.createCategoryEntry(AppConfig.SETTINGS_CATEGORY, settings);
     }
 
     // Success message
     successMessage.value = 'Settings were successfully saved.';
 
-    emit('saved', payload);
+    emit('saved', settings);
   } catch (error) {
     errorMessage.value = 'Failed to save settings. See console for further details.';
     console.error('Failed to save settings:', error);
