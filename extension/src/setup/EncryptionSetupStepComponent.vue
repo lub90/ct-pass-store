@@ -65,7 +65,7 @@ import SetupCheckboxBox from './SetupCheckboxBox.vue'
 
 import { ref, onMounted, watch } from 'vue'
 import { inject } from 'vue'
-import { ExtensionData } from '../api/ExtensionData'
+import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData'
 import { AppConfig } from '../AppConfig'
 import forge from 'node-forge'
 

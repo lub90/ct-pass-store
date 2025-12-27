@@ -108,7 +108,7 @@
 
 <script setup lang="ts">
 import { ref, inject, computed, watch, reactive } from 'vue';
-import { ExtensionData } from '../../api/ExtensionData';
+import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
 import UrlInput from './UrlInput.vue';
 import { AppConfig } from '../../AppConfig';
 import { loadWithState } from '@/ct-extension-utils/composables/loadWithState';

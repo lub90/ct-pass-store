@@ -73,7 +73,7 @@
 import { ref, onMounted, inject } from 'vue';
 import { Permissions } from '@/ct-extension-utils/lib/Permissions';
 import { AppConfig } from '../AppConfig';
-import { ExtensionData } from '../api/ExtensionData';
+import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
 import { setupCompleted } from '../setup/SetupStatus';
 
 const churchtoolsClient = inject('churchtoolsClient');

@@ -14,7 +14,7 @@
 import { inject } from 'vue';
 import SetupStep from './SetupStep.vue';
 import SettingsForm from '../components/settingsPage/SettingsForm.vue';
-import { ExtensionData } from '../api/ExtensionData';
+import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
 import { AppConfig } from '../AppConfig';
 
 const emit = defineEmits<{

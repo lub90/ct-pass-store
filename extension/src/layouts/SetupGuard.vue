@@ -55,7 +55,7 @@
 import { ref, onMounted } from 'vue';
 import { inject } from 'vue';
 import { AppConfig } from '../AppConfig'
-import { ExtensionData } from '../api/ExtensionData';
+import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
 import { Permissions } from '@/ct-extension-utils/lib/Permissions';
 import { setupCompleted } from '../setup/SetupStatus';
 
