@@ -6,18 +6,14 @@
       Configure your extension's settings and click "Save Settings"!
     </v-card-text>
 
-    <SettingsForm
-      :extension-data="extensionData"
-      :category-name="AppConfig.SETTINGS_CATEGORY"
-      @saved="emit('completed')"
-    />
+    <SettingsForm @saved="emit('completed')" />
   </SetupStep>
 </template>
 
 <script setup lang="ts">
 import { inject } from 'vue';
 import SetupStep from './SetupStep.vue';
-import SettingsForm from '../components/SettingsForm.vue';
+import SettingsForm from '../components/settingsPage/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { AppConfig } from '../AppConfig';
 

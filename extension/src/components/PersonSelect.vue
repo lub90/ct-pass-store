@@ -5,7 +5,6 @@
     :item-title="getFullName"
     item-value="id"
     v-model="internalValue"
-    @update:modelValue="emit('update:modelValue', $event)"
     :label="label"
     :clearable="clearable"
     :multiple="multiple"
@@ -45,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed } from "vue";
 
 interface Person {
   id: number;
@@ -67,7 +66,7 @@ const emit = defineEmits(["update:modelValue"]);
 
 // Internal binding for v-model
 const internalValue = computed({
-  get: () => props.modelValue,
+  get: () => props.modelValue ?? (props.multiple ? [] : null),
   set: (val) => emit("update:modelValue", val),
 });
 

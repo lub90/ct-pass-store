@@ -1,70 +1,53 @@
 <template>
-    <BaseLayout>
-        <template #title>🛠 Settings</template>
-        <template #subtitle>Manage the CtPassStore extension</template>
+  <BaseLayout>
+    <template #title>🛠 Settings</template>
+    <template #subtitle>Manage the CtPassStore extension</template>
 
-        <!-- While loading the settings and checking access rights -->
-        <v-alert
-          v-if="loading"
-          type="info"
-          density="compact"
-          class="mx-auto my-4"
-          max-width="1200"
-          >
-          <template #prepend>
-              <v-progress-circular indeterminate color="primary" size="20" />
-          </template>
-          Checking access rights...
-        </v-alert>
+    <LoadingGuard :state="loadState" :error="loadError" loading-text="Checking access rights...">
 
-        <v-alert
-          v-if="!isAdmin"
-          type="error"
-          density="compact"
-          class="mx-auto my-4">
-          You do not have permission to view or edit the settings.
-        </v-alert>
+      <!-- Access denied -->
+      <v-alert
+        v-if="!isAdmin"
+        type="error"
+        density="compact"
+        class="mx-auto my-4"
+      >
+        You do not have permission to view or edit the settings.
+      </v-alert>
 
+      <!-- Settings form -->
+      <v-sheet
+        v-else
+        color="transparent"
+        elevation="0"
+        class="pa-0 ma-0"
+      >
+        <SettingsForm />
+      </v-sheet>
 
-        <v-sheet v-if="isAdmin">
-          <SettingsForm
-            :extension-data="extensionData"
-            :category-name="AppConfig.SETTINGS_CATEGORY"
-          />
-        </v-sheet>
-    </BaseLayout>
+    </LoadingGuard>
+  </BaseLayout>
 </template>
 
-
 <script setup lang="ts">
+import { ref, inject } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
-import { inject, ref, onMounted } from 'vue';
-import SettingsForm from '../components/SettingsForm.vue';
+import SettingsForm from '../components/settingsPage/SettingsForm.vue';
 import { ExtensionData } from '../api/ExtensionData';
 import { Permissions } from '../api/Permissions';
 import { AppConfig } from '../AppConfig';
-
-
+import LoadingGuard from '../components/LoadingGuard.vue';
+import { loadWithState } from '../composables/loadWithState';
 
 const churchtoolsClient = inject('churchtoolsClient');
 const extensionData = new ExtensionData(churchtoolsClient, AppConfig.EXTENSION_KEY);
 const permissions = new Permissions(churchtoolsClient);
 
 const isAdmin = ref(false);
-const loading = ref(true);
 
-onMounted(async () => {
-  try {
-    const category = await extensionData.getCategoryByName(AppConfig.SETTINGS_CATEGORY);
-    const canEdit = await permissions.canEditCustomDataForCategory(category.id);
-
-    isAdmin.value = canEdit;
-
-  } catch (error) {
-    console.warn('Could not verify admin rights:', error);
-  } finally {
-    loading.value = false;
-  }
+const { state: loadState, error: loadError } = loadWithState(async () => {
+  const category = await extensionData.getCategoryByName(AppConfig.SETTINGS_CATEGORY);
+  const canEdit = await permissions.canEditCustomDataForCategory(category.id);
+  isAdmin.value = canEdit;
 });
-
 </script>
