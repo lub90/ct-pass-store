@@ -1,4 +1,4 @@
-import type { GlobalPermissions } from '@/utils/ct-types.d'
+import type { GlobalPermissions } from '@/utils/ct-types.d';
 
 export class Permissions {
 
@@ -20,7 +20,7 @@ export class Permissions {
     try {
 
       this.globalPermissions = await this.churchtoolsClient.get('/permissions/global');
-      return this.globalPermissions;
+      return this.globalPermissions!;
 
     } catch (error) {
 
