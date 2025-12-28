@@ -20,7 +20,7 @@ import SetupProcess from './SetupProcess.vue'
 import { SetupProcessElement } from '../types/SetupProcessElement'
 import { SetupProcessElementResult } from '../types/SetupProcessElementResult'
 import { inject, ref, onMounted } from 'vue';
-import { Permissions } from '@/ct-extension-utils/lib/Permissions';
+import { Permissions } from '@/ct-utils/lib/Permissions';
 
 const churchtoolsClient = inject('churchtoolsClient');
 const permissions = new Permissions(churchtoolsClient, AppConfig.EXTENSION_KEY);

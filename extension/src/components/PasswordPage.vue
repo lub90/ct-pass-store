@@ -69,7 +69,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
-import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
+import { ExtensionData } from '@/ct-utils/lib/ExtensionData';
 import { AppConfig } from '../AppConfig';
 import PersonSelectInput from './passwordPage/PersonSelectInput.vue';
 import type { Person } from '../utils/ct-types.d.ts';

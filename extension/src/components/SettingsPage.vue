@@ -33,8 +33,8 @@
 import { ref, inject } from 'vue';
 import BaseLayout from '../layouts/BaseLayout.vue';
 import SettingsForm from '../components/settingsPage/SettingsForm.vue';
-import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
-import { Permissions } from '@/ct-extension-utils/lib/Permissions';
+import { ExtensionData } from '@/ct-utils/lib/ExtensionData';
+import { Permissions } from '@/ct-utils/lib/Permissions';
 import { AppConfig } from '../AppConfig';
 import LoadingGuard from '@/ct-extension-utils/components/LoadingGuard.vue';
 import { loadWithState } from '@/ct-extension-utils/composables/loadWithState';

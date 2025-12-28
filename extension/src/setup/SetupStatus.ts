@@ -1,4 +1,4 @@
-import type { ExtensionData } from "@/ct-extension-utils/lib/ExtensionData";
+import type { ExtensionData } from "@/ct-utils/lib/ExtensionData";
 import { AppConfig } from "@/AppConfig";
 
 export async function setupCompleted(extensionData: ExtensionData): Promise<boolean> {

@@ -56,7 +56,7 @@ import SetupStep from './SetupStep.vue';
 import SetupInfoBox from './SetupInfoBox.vue';
 import SetupCheckboxBox from './SetupCheckboxBox.vue';
 
-import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
+import { ExtensionData } from '@/ct-utils/lib/ExtensionData';
 import { AppConfig } from '../AppConfig';
 
 const emit = defineEmits<{

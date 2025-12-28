@@ -71,9 +71,9 @@
 
 <script setup lang="ts">
 import { ref, onMounted, inject } from 'vue';
-import { Permissions } from '@/ct-extension-utils/lib/Permissions';
+import { Permissions } from '@/ct-utils/lib/Permissions';
 import { AppConfig } from '../AppConfig';
-import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
+import { ExtensionData } from '@/ct-utils/lib/ExtensionData';
 import { setupCompleted } from '../setup/SetupStatus';
 
 const churchtoolsClient = inject('churchtoolsClient');

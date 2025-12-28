@@ -30,7 +30,7 @@ import SetupProcess from '../components/SetupProcess.vue';
 import SetupResultBox from './SetupResultBox.vue';
 import { ref, onMounted } from 'vue';
 import { inject } from 'vue';
-import { ExtensionData } from '@/ct-extension-utils/lib/ExtensionData';
+import { ExtensionData } from '@/ct-utils/lib/ExtensionData';
 import { AppConfig } from '../AppConfig'
 import { SetupProcessElementResult } from '../types/SetupProcessElementResult'
 import { SetupProcessElement } from '../types/SetupProcessElement'
