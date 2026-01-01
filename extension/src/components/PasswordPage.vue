@@ -53,7 +53,7 @@
           <v-btn
             type="submit"
             color="primary"
-            :disabled="!formValid || saving"
+            :disabled="!canSubmit || saving"
           >
             <v-icon start>mdi-content-save</v-icon>
             {{ settings.allowCustomPassword ? 'Save secondary password' : 'Reset secondary password' }}
@@ -122,6 +122,18 @@ watch(
     formValid.value = val ?? false;
   }
 );
+
+// Helper to express business logic that form is allowed to submit if no input is required
+const canSubmit = computed(() => {
+  // Case: only reset allowed → always valid
+  if (!settings.value.allowCustomPassword &&
+      !settings.value.requirePasswordForPasswordChange) {
+    return true;
+  }
+
+  // Otherwise rely on Vuetify validation
+  return formValid.value;
+});
 
 // Helper to suppress message clear as soon as somebody types something new...
 const suppressMessageClear = ref(false);
