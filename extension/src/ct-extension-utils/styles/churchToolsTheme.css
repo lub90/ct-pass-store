@@ -1,0 +1,19 @@
+
+
+.v-btn.bg-primary:hover {
+  background-color: #1753D5 !important;
+  color: #FFFFFF !important;
+}
+
+.v-btn {
+  text-transform: none !important;
+  box-shadow: none !important;
+}
+
+.v-list-item.v-list-item--active {
+  background-color: rgb(var(--v-theme-light-blue)) !important;
+}
+
+.v-list-item .v-icon {
+  opacity: 1 !important; /* override medium emphasis */
+}
