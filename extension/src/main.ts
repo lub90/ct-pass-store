@@ -33,10 +33,10 @@ import router from './router';
 // Setup vuetify
 import 'vuetify/dist/vuetify.min.css'
 import '@mdi/font/css/materialdesignicons.css' 
-import vuetify from './plugins/vuetify'
+import vuetify from './ct-extension-utils/styles/vuetify'
 
 // Import own css stylesheet
-import './plugins/churchToolsTheme.css'
+import './ct-extension-utils/styles/churchToolsTheme.css'
 
 // Import vuetify fonts
 import '@fontsource/roboto/100.css'
