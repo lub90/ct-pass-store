@@ -3,7 +3,7 @@
 use CtPassStore\Tests\EndToEnd\EntriesPutTestPrototype;
 
 
-class EntriesPutFalseFalse12 extends EntriesPutTestPrototype {
+class EntriesPutFalseFalse12Test extends EntriesPutTestPrototype {
 
 
     public function getSettingsPath(): string
