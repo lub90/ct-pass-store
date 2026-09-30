@@ -84,9 +84,12 @@ Open issues and planned improvements, roughly ordered by severity.
 - [ ] **Consider publishing the shared libraries as packages**
   Subtrees work for a single developer. If other extensions will reuse `ct-utils` and `ct-extension-utils`, publish them as versioned npm packages (private or GitHub-hosted is fine) instead of copying them in.
 
-- [ ] **Stop depending on a branch of the PHP-client fork**
-  [`backend/composer.json`](backend/composer.json) requires `churchtools/php-client` from the fork `lub90/ct-php-client` as `dev-version/3.126.2`, which is a branch. `composer.lock` pins the commit, but `composer update` pulls whatever is currently on that branch.
-  - Tag a release of the fork and depend on the tag.
+- [ ] **Replace `churchtools/php-client` with our own thin ChurchTools client**
+  [`backend/composer.json`](backend/composer.json) requires `churchtools/php-client` from the fork `lub90/ct-php-client` as `dev-version/3.126.2`, which is a branch. The library is 59 MB and about 3,800 files, but the backend uses only `SimpleClient`, `GeneralApi::getWhoami()`, `Configuration`, `ApiException` and one model.
+  - Decided in [`specs/backend-spec.md`](specs/backend-spec.md) (D1); the client's behavior is specified in section 5.6.
+  - Write a small client on top of Guzzle behind an interface: `whoami`, global permissions, login check and the KV store calls. It gets central timeouts, `429` handling and one exception type per error case.
+  - Do this before writing the unit tests for authentication and the store.
+  - Afterwards, remove the library and the fork repository from `composer.json`.
 
 ## Code Cleanup
 
