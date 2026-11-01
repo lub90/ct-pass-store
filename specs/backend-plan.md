@@ -48,7 +48,7 @@ only to the backend) isn't part of it.
 
 ## Phase 2 – Errors and correctness
 
-Needs ❓ Q6, Q7, Q8, Q9, Q10.
+Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 
 - [ ] **2.0 API test layer** (spec 6.6; **at the latest here**)
   - Make the app buildable in tests: configuration and the ChurchTools client are injected instead of being read from
@@ -71,10 +71,16 @@ Needs ❓ Q6, Q7, Q8, Q9, Q10.
   - Maximum length 128, the `violations` member, a secure shuffle.
 - [ ] **2.5 Upstream errors** (spec 6.2)
   - `502 upstream-unavailable` / `upstream-invalid`, and `503 upstream-rate-limited` with `Retry-After`.
+- [ ] **2.6 Banned functions via PHPStan** (spec 6.6)
+  - Add a disallowed-calls rule set (e.g. `spaze/phpstan-disallowed-calls`): `eval`, `unserialize`, `exec` and other
+    shell calls, `str_shuffle`, `rand`, `mt_rand`, and loose comparisons of secrets. This replaces source scans in
+    tests (catalog IJ-06, PG-05, TR-01).
+  - Add a pull request template with a short security checklist, e.g. "no secret is compared with `==`/`===`", "no
+    secret, token or password is logged", "new problem types are documented in `problems.md`".
 
 ## Phase 3 – Authentication (D4, D5)
 
-Needs ❓ Q4, Q5, Q20, Q21, Q23.
+Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
 
 - [ ] **3.1 Token service**
   - Issue and validate backend JWTs (HS256, pinned algorithm) with a small, well-known library such as
@@ -87,7 +93,8 @@ Needs ❓ Q4, Q5, Q20, Q21, Q23.
   - EdDSA verification against `settings.machineClients`, claim checks, the `jti` replay cache.
 - [ ] **3.4 New auth middleware and authorization** (spec 4.3)
   - Bearer tokens only: remove the `Login` scheme.
-  - Roles from the cached settings, the access matrix, the `/v1` prefix if Q20 is confirmed.
+  - Typed principals (person vs. machine client), roles from the cached settings, the access matrix.
+  - All paths under `/v1/`; the old paths answer `404`. `readAccessUsers` is removed.
 - [ ] **3.5 Primary password check** (spec 5.5, 6.3)
   - Simple rate limiting per person.
   - Upstream errors no longer count as a wrong password.
@@ -96,12 +103,14 @@ Needs ❓ Q4, Q5, Q20, Q21, Q23.
     status codes, problem types).
   - Keep only what needs real ChurchTools: KV read/write and `meta.count`, service-user permissions, primary password
     check, OAuth code exchange errors, a few smoke tests against the running backend.
-  - A test helper mints backend tokens directly with the test `JWT_SECRET`, and machine tokens with a test key.
+  - A test helper mints backend tokens directly with the test `JWT_SECRET`, and machine tokens with a test key. The
+    smoke tests against a deployed test backend use the same helper (catalog section 14); document it in
+    `backend/docs/testing.md`.
   - The real OAuth flow (it needs a browser) is checked by hand before each release, with a short checklist.
 
 ## Phase 4 – Operations and release
 
-Needs ❓ Q11, Q14, Q17, Q18.
+Decided: Q11, Q14, Q17, Q18 (spec section 7).
 
 - [ ] **4.1 Cache** (spec 6.1)
   - A file cache outside the web root for settings, the public key, the module and category IDs, and the `jti` replay

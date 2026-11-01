@@ -156,7 +156,7 @@ These items belong to the separate repository [lub90/ct-radius](https://github.c
   The only backend call is in `typescript/src/core/modules/ct-groups/CtPasswordService.ts` (`getEncryptedPwd`).
   - Today every `404` counts as "user has no password", so a wrong backend URL or route silently rejects every login. With the new error format, check the problem `type` and treat everything except "no entry" as an error.
   - Log `title`/`detail` of problem responses instead of the raw body.
-  - Switch to the new authentication scheme. The header is built in one place (line ~56), but the token is currently the same `CT_API_TOKEN` that's used for ChurchTools itself. Separate the two.
+  - Switch to the new authentication scheme. The ct-radius account no longer needs to be a "Read Access User" in the ct-pass-store settings (`readAccessUsers` is removed); it's registered as a machine client instead (update ct-radius' `docs/setup.md`). Use the new paths under `/v1/`. The header is built in one place (line ~56), but the token is currently the same `CT_API_TOKEN` that's used for ChurchTools itself. Separate the two.
   - ct-radius starts a new Node process for every RADIUS request, so in-memory caches don't survive. If the new scheme uses short-lived tokens, persist them (e.g. in the existing SQLite cache) instead of fetching a new one per login.
   - Update the tests that assert the exact request and the `404` handling (`tests/core/modules/ct-groups/CtPasswordService.test.ts`).
 
