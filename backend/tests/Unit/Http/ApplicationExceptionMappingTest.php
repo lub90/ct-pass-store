@@ -16,6 +16,7 @@ use CtPassStore\Application\Exception\OAuthCodeInvalidException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
 use CtPassStore\Application\Exception\TokenExpiredException;
+use CtPassStore\Application\Exception\TooManyAttemptsException;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
@@ -71,6 +72,7 @@ final class ApplicationExceptionMappingTest extends TestCase
         yield 'oauth code invalid' => [new OAuthCodeInvalidException('code'), 400, 'oauth-code-invalid'];
         yield 'no service access' => [new NoServiceAccessException('view'), 403, 'no-service-access'];
         yield 'invalid redirect uri' => [new InvalidRedirectUriException('uri'), 400, 'invalid-body'];
+        yield 'too many attempts' => [new TooManyAttemptsException('wait', 120), 429, 'too-many-attempts'];
     }
 
     public function testEveryApplicationExceptionIsCovered(): void

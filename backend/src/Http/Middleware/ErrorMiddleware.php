@@ -16,6 +16,7 @@ use CtPassStore\Application\Exception\OAuthCodeInvalidException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
 use CtPassStore\Application\Exception\TokenExpiredException;
+use CtPassStore\Application\Exception\TooManyAttemptsException;
 use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
@@ -115,10 +116,20 @@ final class ErrorMiddleware implements MiddlewareInterface
             $e instanceof OAuthCodeInvalidException => ProblemType::OauthCodeInvalid,
             $e instanceof NoServiceAccessException => ProblemType::NoServiceAccess,
             $e instanceof InvalidRedirectUriException => ProblemType::InvalidBody,
+            $e instanceof TooManyAttemptsException => ProblemType::TooManyAttempts,
             default => throw new \LogicException('No problem type for ' . $e::class . '.', 0, $e),
         };
 
-        return new ProblemException($type, $e->getMessage(), $e instanceof PasswordRejectedException ? ['violations' => $e->violations] : []);
+        return match (true) {
+            $e instanceof PasswordRejectedException => new ProblemException($type, $e->getMessage(), ['violations' => $e->violations]),
+            $e instanceof TooManyAttemptsException => new ProblemException(
+                $type,
+                $e->getMessage(),
+                ['retryAfter' => $e->retryAfterSeconds],
+                ['Retry-After' => (string) $e->retryAfterSeconds],
+            ),
+            default => new ProblemException($type, $e->getMessage()),
+        };
     }
 
     private function logged(\Throwable $cause, ProblemException $problem): ProblemException

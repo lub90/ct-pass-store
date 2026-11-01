@@ -21,6 +21,7 @@ use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\BearerAuthenticator;
+use CtPassStore\Infrastructure\Auth\FileAttemptLimiter;
 use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;
 use CtPassStore\Infrastructure\Auth\ReplayGuard;
 use CtPassStore\Infrastructure\Auth\TokenService;
@@ -60,7 +61,8 @@ final class Application
         $extensionData = new ExtensionData($churchTools);
         $settings = new KvSettingsRepository($extensionData);
         $passwords = new KvPasswordRepository($extensionData, $logger);
-        $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), $logger);
+        $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
+        $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
 
         /** @var App<null> $app */
         $app = AppFactory::create();
@@ -80,7 +82,7 @@ final class Application
 
         $authenticator = new BearerAuthenticator(
             $tokens,
-            new MachineTokenVerifier($settings, new ReplayGuard(new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger)), $clock),
+            new MachineTokenVerifier($settings, new ReplayGuard($securityStore), $clock),
         );
 
         // Every path lives under /v1 (Q20); the old paths without prefix are unknown routes (404).

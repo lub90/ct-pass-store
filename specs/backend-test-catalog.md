@@ -310,31 +310,31 @@ normal case names it ("→ PV-05").
 - [x] **PP-04** (! · A) An admin changing someone else's entry is checked against **their own** password, not the
   target's — 4.6.2
 - [x] **PP-05** (! · A) ChurchTools unreachable → `502`, **not** "wrong password" and **not** "allowed" — 5.5.3
-- [ ] **PP-06** (! · A) 4 wrong attempts don't block; after the 5th wrong attempt within 15 minutes, the next attempt
+- [x] **PP-06** (! · A) 4 wrong attempts don't block; after the 5th wrong attempt within 15 minutes, the next attempt
   gets `429 too-many-attempts` with `Retry-After`, even with the correct password, and ChurchTools isn't called — 6.3
-- [ ] **PP-13** (E · A) The block lifts 15 minutes after the 5th failure; a correct password before the 5th failure
+- [x] **PP-13** (E · A) The block lifts 15 minutes after the 5th failure; a correct password before the 5th failure
   resets the counter — 6.3
-- [ ] **PP-18** (E · A) Sliding window: 5 failures spread over more than 15 minutes (e.g. one every 4 minutes) don't block
+- [x] **PP-18** (E · A) Sliding window: 5 failures spread over more than 15 minutes (e.g. one every 4 minutes) don't block
   — 6.3
-- [ ] **PP-19** (! · A) Attempts during a block don't extend it: the block still ends 15 minutes after the 5th failure,
+- [x] **PP-19** (! · A) Attempts during a block don't extend it: the block still ends 15 minutes after the 5th failure,
   and ChurchTools isn't called during the block — 6.3
-- [ ] **PP-20** (N · A) `Retry-After` and `retryAfter` give the remaining seconds of the block (checked at two moments
+- [x] **PP-20** (N · A) `Retry-After` and `retryAfter` give the remaining seconds of the block (checked at two moments
   with a controllable clock) — 6.3, 4.9
-- [ ] **PP-14** (! · A) Failures count against the **caller**: an admin's wrong attempts on other people's entries block
+- [x] **PP-14** (! · A) Failures count against the **caller**: an admin's wrong attempts on other people's entries block
   the admin, not the target person — 4.6.2, 6.3
-- [ ] **PP-15** (! · A) ChurchTools errors (timeout, `5xx`) during the check don't count as failures — 5.5.3, 6.3
-- [ ] **PP-16** (N · A) The limit also applies to `DELETE`, sharing the counter with `PUT` — 4.7, 6.3
-- [ ] **PP-07** (E · A) The limit is per person: person B isn't blocked by person A's failures — 6.3
-- [ ] **PP-08** (! · A) The primary password appears in no response, problem detail or log entry — 6.3
-- [ ] **PP-09** (N · A) `requirePasswordForPasswordChange = false` → no check, ChurchTools isn't called — 4.6.2
+- [x] **PP-15** (! · A) ChurchTools errors (timeout, `5xx`) during the check don't count as failures — 5.5.3, 6.3
+- [x] **PP-16** (N · A) The limit also applies to `DELETE`, sharing the counter with `PUT` — 4.7, 6.3
+- [x] **PP-07** (E · A) The limit is per person: person B isn't blocked by person A's failures — 6.3
+- [x] **PP-08** (! · A) The primary password appears in no response, problem detail or log entry — 6.3
+- [x] **PP-09** (N · A) `requirePasswordForPasswordChange = false` → no check, ChurchTools isn't called — 4.6.2
 - [x] **PP-12** (! · A) The request can't choose whose password is checked: a `username` or `personId` field in the body
   is rejected (`400 invalid-body`); the username always comes from the token's `username` claim. The correct password
   of **another** user is rejected — 4.6.2, 5.5.3
-- [ ] **PP-17** (! · A) ChurchTools answers `200` but with a person ID different from the token's `sub` (e.g. a
+- [x] **PP-17** (! · A) ChurchTools answers `200` but with a person ID different from the token's `sub` (e.g. a
   reassigned username) → counts as a wrong password, logged as `warning` — 5.5.3
 - [x] **PP-10** (N · C) Contract: correct and wrong passwords give the status codes the backend expects from
   `POST /api/login` — 5.5.3
-- [ ] **PP-11** (N · A) Two-factor users (Q13): ChurchTools answers `200` with `status` `totp` or `twoFactorSetup` and the
+- [x] **PP-11** (N · A) Two-factor users (Q13): ChurchTools answers `200` with `status` `totp` or `twoFactorSetup` and the
   caller's person ID → the primary password counts as correct; a wrong password (`400`) still fails — 5.5.3
 - [ ] **PP-11a** (N · C) Contract: for a test user with two-factor authentication, `POST /api/login` with the correct
   password answers `200` with `status: "totp"` and the person ID, and with a wrong password `400` — 5.5.3

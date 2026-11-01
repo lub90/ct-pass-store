@@ -113,7 +113,7 @@ Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
   - Typed principals (person vs. machine client), roles from the cached settings, the access matrix.
   - All paths under `/v1/`; the old paths answer `404`. `readAccessUsers` is removed.
   - `/v1/test` refuses machine clients; restricting it to admins follows with 4.2.
-- [ ] **3.5 Primary password check** (spec 5.5, 6.3)
+- [x] **3.5 Primary password check** (spec 5.5, 6.3)
   - Simple rate limiting per person.
   - Upstream errors no longer count as a wrong password.
 - [ ] **3.6 Shrink the end-to-end tests to contract tests**
