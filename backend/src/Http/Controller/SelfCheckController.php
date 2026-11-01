@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Controller;
 
+use CtPassStore\Domain\PersonPrincipal;
+use CtPassStore\Http\Middleware\AuthMiddleware;
+use CtPassStore\Http\Problem\ProblemException;
+use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -21,6 +25,11 @@ final class SelfCheckController
 
     public function get(Request $request, Response $response): Response
     {
+        // Machine clients never run the self-check (spec 4.8). Restricting it to admins follows in plan item 4.2.
+        if (!$request->getAttribute(AuthMiddleware::PRINCIPAL) instanceof PersonPrincipal) {
+            throw new ProblemException(ProblemType::Forbidden, 'Only users can run the self-check.');
+        }
+
         $allPassed = true;
 
         $tests = [];

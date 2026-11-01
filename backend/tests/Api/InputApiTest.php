@@ -19,7 +19,7 @@ final class InputApiTest extends ApiTestCase
 
     public function testLargeValidIdIsAccepted(): void
     {
-        $response = $this->request('GET', '/entries/' . PHP_INT_MAX, self::ADMIN);
+        $response = $this->request('GET', '/v1/entries/' . PHP_INT_MAX, self::ADMIN);
 
         $this->assertProblem(ProblemType::EntryNotFound, $response);
     }
@@ -43,7 +43,7 @@ final class InputApiTest extends ApiTestCase
     public function testInvalidIdsAre400WithoutTouchingTheStore(string $id): void
     {
         foreach (['GET', 'PUT', 'DELETE'] as $method) {
-            $response = $this->request($method, '/entries/' . $id, self::USER);
+            $response = $this->request($method, '/v1/entries/' . $id, self::USER);
 
             $this->assertProblem(ProblemType::InvalidId, $response);
         }
@@ -55,19 +55,19 @@ final class InputApiTest extends ApiTestCase
 
     public function testWithoutTokenAnInvalidIdIs401(): void
     {
-        $this->assertProblem(ProblemType::MissingToken, $this->request('GET', '/entries/abc'));
+        $this->assertProblem(ProblemType::MissingToken, $this->request('GET', '/v1/entries/abc'));
     }
 
     public function testInvalidBodyComesBeforeAuthorization(): void
     {
-        $response = $this->rawRequest('PUT', '/entries/' . self::OTHER, self::USER, '{"secondaryPwd": 1}');
+        $response = $this->rawRequest('PUT', '/v1/entries/' . self::OTHER, self::USER, '{"secondaryPwd": 1}');
 
         $this->assertProblem(ProblemType::InvalidBody, $response);
     }
 
     public function testValidBodyOnAnotherPersonsEntryIs403(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         $this->assertProblem(ProblemType::Forbidden, $response);
     }
@@ -76,8 +76,8 @@ final class InputApiTest extends ApiTestCase
     {
         $this->seedEntry(self::OTHER);
 
-        $existing = $this->request('GET', '/entries/' . self::OTHER, self::USER);
-        $missing = $this->request('GET', '/entries/' . (self::OTHER + 1000), self::USER);
+        $existing = $this->request('GET', '/v1/entries/' . self::OTHER, self::USER);
+        $missing = $this->request('GET', '/v1/entries/' . (self::OTHER + 1000), self::USER);
 
         $this->assertProblem(ProblemType::Forbidden, $existing);
         $this->assertProblem(ProblemType::Forbidden, $missing);
@@ -92,7 +92,7 @@ final class InputApiTest extends ApiTestCase
     {
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER, []);
+        $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::USER, []);
 
         $this->assertProblem(ProblemType::Forbidden, $response);
         self::assertSame(0, $this->churchTools->countCalls(['verifyLogin']));
@@ -102,7 +102,7 @@ final class InputApiTest extends ApiTestCase
     {
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'short']);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'short']);
 
         $this->assertProblem(ProblemType::PrimaryPasswordRequired, $response);
     }
@@ -111,8 +111,8 @@ final class InputApiTest extends ApiTestCase
 
     public function testEmptyBodyOrEmptyObjectGeneratesAPassword(): void
     {
-        self::assertSame(200, $this->request('PUT', '/entries/' . self::USER, self::USER)->getStatusCode());
-        self::assertSame(200, $this->request('PUT', '/entries/' . self::USER, self::USER, [])->getStatusCode());
+        self::assertSame(200, $this->request('PUT', '/v1/entries/' . self::USER, self::USER)->getStatusCode());
+        self::assertSame(200, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, [])->getStatusCode());
     }
 
     /**
@@ -133,7 +133,7 @@ final class InputApiTest extends ApiTestCase
     #[DataProvider('invalidBodies')]
     public function testInvalidBodiesAre400AndWriteNothing(string $body): void
     {
-        $response = $this->rawRequest('PUT', '/entries/' . self::USER, self::USER, $body);
+        $response = $this->rawRequest('PUT', '/v1/entries/' . self::USER, self::USER, $body);
 
         $this->assertProblem(ProblemType::InvalidBody, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -143,7 +143,7 @@ final class InputApiTest extends ApiTestCase
     {
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->rawRequest('PUT', '/entries/' . self::USER, self::USER, json_encode([
+        $response = $this->rawRequest('PUT', '/v1/entries/' . self::USER, self::USER, json_encode([
             'primaryPwd' => $this->primaryPasswordOf(self::OTHER),
             'username' => 'other',
         ], JSON_THROW_ON_ERROR));
@@ -156,14 +156,14 @@ final class InputApiTest extends ApiTestCase
     {
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::OTHER)]);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::OTHER)]);
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $response);
     }
 
     public function testFormEncodedBodyIs415(): void
     {
-        $response = $this->rawRequest('PUT', '/entries/' . self::USER, self::USER, 'secondaryPwd=Custom-pass12!', ['Content-Type' => 'application/x-www-form-urlencoded']);
+        $response = $this->rawRequest('PUT', '/v1/entries/' . self::USER, self::USER, 'secondaryPwd=Custom-pass12!', ['Content-Type' => 'application/x-www-form-urlencoded']);
 
         $this->assertProblem(ProblemType::UnsupportedMediaType, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -171,14 +171,14 @@ final class InputApiTest extends ApiTestCase
 
     public function testBodyOver16KbIs413(): void
     {
-        $response = $this->rawRequest('PUT', '/entries/' . self::USER, self::USER, '{"secondaryPwd": "' . str_repeat('a', 17_000) . '"}');
+        $response = $this->rawRequest('PUT', '/v1/entries/' . self::USER, self::USER, '{"secondaryPwd": "' . str_repeat('a', 17_000) . '"}');
 
         $this->assertProblem(ProblemType::PayloadTooLarge, $response);
     }
 
     public function testDeleteAcceptsOnlyThePrimaryPassword(): void
     {
-        $response = $this->rawRequest('DELETE', '/entries/' . self::USER, self::USER, '{"secondaryPwd": "x"}');
+        $response = $this->rawRequest('DELETE', '/v1/entries/' . self::USER, self::USER, '{"secondaryPwd": "x"}');
 
         $this->assertProblem(ProblemType::InvalidBody, $response);
     }
@@ -187,7 +187,7 @@ final class InputApiTest extends ApiTestCase
 
     public function testEmptyCustomPasswordIsACustomPasswordNotAGeneratedOne(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => '']);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => '']);
 
         $body = $this->assertProblem(ProblemType::PasswordInvalid, $response);
         self::assertContains(PasswordPolicy::TOO_SHORT, $body['violations']);
@@ -211,7 +211,7 @@ final class InputApiTest extends ApiTestCase
     #[DataProvider('policyViolations')]
     public function testPolicyViolationsAreListedAndNothingIsStored(string $password, array $expected): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => $password]);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => $password]);
 
         $body = $this->assertProblem(ProblemType::PasswordInvalid, $response);
         self::assertSame($expected, $body['violations']);
@@ -222,7 +222,7 @@ final class InputApiTest extends ApiTestCase
     {
         $this->setSettings(['passwordLength' => 20]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
 
         self::assertSame(20, strlen((string) $this->json($response)['secondaryPwd']));
     }

@@ -24,7 +24,6 @@ final class KvSchema
     public const SETTING_ALLOW_CUSTOM_PASSWORD = 'allowCustomPassword';
     public const SETTING_PASSWORD_LENGTH = 'passwordLength';
     public const SETTING_ADMIN_USERS = 'adminUsers';
-    public const SETTING_READ_ACCESS_USERS = 'readAccessUsers';
     public const SETTING_BACKEND_URL = 'backendUrl';
     public const SETTING_MACHINE_CLIENTS = 'machineClients';
 

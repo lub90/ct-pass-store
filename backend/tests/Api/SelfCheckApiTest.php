@@ -11,7 +11,7 @@ final class SelfCheckApiTest extends ApiTestCase
 {
     public function testAllChecksPassWithAValidSetup(): void
     {
-        $response = $this->request('GET', '/test', self::USER);
+        $response = $this->request('GET', '/v1/test', self::USER);
 
         self::assertSame(200, $response->getStatusCode());
         $body = $this->json($response);
@@ -28,7 +28,7 @@ final class SelfCheckApiTest extends ApiTestCase
     {
         $this->churchTools->clearValues($this->categoryIds['settings']);
 
-        $response = $this->request('GET', '/test', self::USER);
+        $response = $this->request('GET', '/v1/test', self::USER);
 
         self::assertSame(207, $response->getStatusCode());
         $failed = array_filter($this->json($response)['tests'], static fn(array $t): bool => $t['status'] === 'fail');
@@ -37,6 +37,6 @@ final class SelfCheckApiTest extends ApiTestCase
 
     public function testRequiresAuthentication(): void
     {
-        $this->assertProblem(\CtPassStore\Http\Problem\ProblemType::MissingToken, $this->request('GET', '/test'));
+        $this->assertProblem(\CtPassStore\Http\Problem\ProblemType::MissingToken, $this->request('GET', '/v1/test'));
     }
 }

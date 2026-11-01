@@ -24,7 +24,7 @@ final class AccessPolicyTest extends TestCase
 
     private static function settings(): Settings
     {
-        return new Settings(true, true, 16, [self::ADMIN], [self::READER], null);
+        return new Settings(true, true, 16, [self::ADMIN], null);
     }
 
     private static function person(int $id): PersonPrincipal
@@ -52,8 +52,9 @@ final class AccessPolicyTest extends TestCase
         yield 'another person' => [self::USER, self::OTHER, false, false];
         yield 'admin, another person' => [self::ADMIN, self::USER, true, true];
         yield 'admin, own entry' => [self::ADMIN, self::ADMIN, true, true];
-        yield 'reader, another person' => [self::READER, self::USER, true, false];
-        yield 'reader, own entry' => [self::READER, self::READER, true, true];
+        // Former read-access users (Q23) are ordinary users now.
+        yield 'former reader, another person' => [self::READER, self::USER, false, false];
+        yield 'former reader, own entry' => [self::READER, self::READER, true, true];
     }
 
     public function testAnUnknownKindOfPrincipalGetsNothing(): void

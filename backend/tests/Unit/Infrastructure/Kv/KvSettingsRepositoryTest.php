@@ -68,6 +68,17 @@ final class KvSettingsRepositoryTest extends TestCase
 
     // ---------------------------------------------------------------- SE-01, SE-02, SE-09
 
+    /**
+     * Q23: read-access users are gone. Old settings may still contain the list; it's ignored, even if it's invalid.
+     */
+    public function testALeftoverReadAccessListIsIgnored(): void
+    {
+        $settings = $this->settings(['readAccessUsers' => 'not even a list'] + self::validSettings())->settings();
+
+        // No error, and the list grants nothing: only adminUsers carries rights.
+        self::assertSame([7, 8], $settings->adminUsers);
+    }
+
     public function testValidSettingsAreTyped(): void
     {
         $settings = $this->settings(self::validSettings());
@@ -76,7 +87,6 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertFalse($settings->settings()->allowCustomPasswords);
         self::assertSame(16, $settings->settings()->passwordLength);
         self::assertSame([7, 8], $settings->settings()->adminUsers);
-        self::assertSame([9], $settings->settings()->readAccessUsers);
         self::assertSame('https://backend.example.org/ctpassstore', $settings->settings()->backendUrl, 'A trailing slash is removed.');
     }
 
@@ -87,7 +97,6 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->settings($raw);
 
         self::assertSame([], $settings->settings()->adminUsers);
-        self::assertSame([], $settings->settings()->readAccessUsers);
         self::assertNull($settings->settings()->backendUrl);
     }
 
@@ -138,7 +147,6 @@ final class KvSettingsRepositoryTest extends TestCase
         yield 'adminUsers with null' => ['adminUsers', [null]];
         yield 'adminUsers not a list' => ['adminUsers', ['a' => 1]];
         yield 'adminUsers a number' => ['adminUsers', 7];
-        yield 'readAccessUsers with a string' => ['readAccessUsers', ['x']];
         yield 'requirePassword as string' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 'false'];
         yield 'requirePassword as 0' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 0];
         yield 'requirePassword as 1' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 1];

@@ -50,7 +50,7 @@ final class NodeSignedMachineTokenTest extends TestCase
 
         $key = base64_decode(strtr((string) $signed['publicKey'], '-_', '+/'), true);
         self::assertIsString($key);
-        $settings = new Settings(true, true, 16, [], [], self::BACKEND_URL, [
+        $settings = new Settings(true, true, 16, [], self::BACKEND_URL, [
             'ct-radius' => new MachineClient('ct-radius', 'WiFi RADIUS', [$key], [MachineClient::PERMISSION_READ_ENTRIES]),
         ]);
         $repository = new class ($settings) implements SettingsRepository {

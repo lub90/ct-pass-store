@@ -40,7 +40,6 @@ final class KvSettingsRepository implements SettingsRepository
             allowCustomPasswords: self::boolean($raw, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD),
             passwordLength: self::passwordLength($raw),
             adminUsers: self::personIds($raw, KvSchema::SETTING_ADMIN_USERS),
-            readAccessUsers: self::personIds($raw, KvSchema::SETTING_READ_ACCESS_USERS),
             backendUrl: self::backendUrl($raw),
             machineClients: $clients,
             machineClientProblems: $problems,

@@ -43,7 +43,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     #[DataProvider('withAndWithoutToken')]
     public function testWrongMethodIs405WithAllowHeader(?int $asPerson): void
     {
-        $response = $this->request('POST', '/entries/' . self::USER, $asPerson);
+        $response = $this->request('POST', '/v1/entries/' . self::USER, $asPerson);
 
         $this->assertProblem(ProblemType::MethodNotAllowed, $response);
         $allowed = array_map('trim', explode(',', $response->getHeaderLine('Allow')));
@@ -56,7 +56,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->seedEntry(self::USER);
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER, headers: ['X-HTTP-Method-Override' => 'DELETE']);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER, headers: ['X-HTTP-Method-Override' => 'DELETE']);
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame(0, $this->churchTools->writeCount());
@@ -64,9 +64,9 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testRejectedRequestsDontCallChurchToolsAtAll(): void
     {
-        $this->request('GET', '/entries/' . self::USER);
+        $this->request('GET', '/v1/entries/' . self::USER);
         $this->request('GET', '/nothing-here');
-        $this->request('POST', '/entries/' . self::USER);
+        $this->request('POST', '/v1/entries/' . self::USER);
 
         self::assertSame([], $this->churchTools->calls(), 'Requests rejected before authentication must not cost ChurchTools calls.');
     }
@@ -77,7 +77,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->seedEntry(self::USER);
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
@@ -99,16 +99,20 @@ final class ErrorFormatApiTest extends ApiTestCase
      */
     public static function churchToolsFailures(): iterable
     {
-        yield 'unreachable' => [new UnavailableException('GET whoami: unreachable.'), ProblemType::UpstreamUnavailable];
-        yield 'unusable answer' => [new InvalidResponseException('GET whoami: not JSON.'), ProblemType::UpstreamInvalid];
+        yield 'unreachable' => [new UnavailableException('GET custommodules: unreachable.'), ProblemType::UpstreamUnavailable];
+        yield 'unusable answer' => [new InvalidResponseException('GET custommodules: not JSON.'), ProblemType::UpstreamInvalid];
     }
 
+    /**
+     * Authentication needs no ChurchTools call any more (spec 4.3); ChurchTools failures during the request are
+     * upstream problems, never 401.
+     */
     #[DataProvider('churchToolsFailures')]
-    public function testChurchToolsFailuresDuringAuthenticationAreNot401(ChurchToolsException $failure, ProblemType $expected): void
+    public function testChurchToolsFailuresAreNot401(ChurchToolsException $failure, ProblemType $expected): void
     {
-        $this->churchTools->failNext('whoami', $failure);
+        $this->churchTools->failNext('getModuleByKey', $failure);
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         $this->assertProblem($expected, $response);
     }
@@ -117,7 +121,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('getValues', new RateLimitedException('GET values: 429.', 120));
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         $body = $this->assertProblem(ProblemType::UpstreamRateLimited, $response);
         self::assertSame('120', $response->getHeaderLine('Retry-After'));
@@ -128,7 +132,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('getValues', new ServiceCredentialRejectedException('GET values: 403.'));
 
-        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/entries/' . self::USER, self::USER));
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::USER, self::USER));
 
         self::assertStringContainsString('service user', (string) $body['detail']);
         self::assertStringNotContainsString('service-token', (string) $body['detail'], 'The detail names the key, never its value.');
@@ -138,7 +142,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('getModuleByKey', new NotFoundException('GET custommodules/ctpassstore: 404.'));
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         $this->assertProblem(ProblemType::Misconfigured, $response);
         self::assertNotSame(ProblemType::EntryNotFound->uri(), $this->json($response)['type'], 'A missing module must never look like "no password".');
@@ -148,7 +152,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->clearValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY]);
 
-        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/entries/' . self::OTHER, self::USER));
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
 
         self::assertStringContainsString('settings', (string) $body['detail']);
     }
@@ -158,7 +162,7 @@ final class ErrorFormatApiTest extends ApiTestCase
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
         $this->churchTools->failNext('verifyLogin', new UnavailableException('POST login: unreachable.'));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
 
         $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -168,7 +172,7 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('getValues', new \LogicException('Bug in /var/www/secret/path.php with Custom-pass12!'));
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         $body = $this->assertProblem(ProblemType::InternalError, $response);
         $raw = (string) $response->getBody();
@@ -192,7 +196,7 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testErrorResponsesCarryCorsHeadersForAllowedOrigins(): void
     {
-        $response = $this->request('GET', '/entries/' . self::USER, headers: ['Origin' => self::ORIGIN]);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => self::ORIGIN]);
 
         $this->assertProblem(ProblemType::MissingToken, $response);
         self::assertSame(self::ORIGIN, $response->getHeaderLine('Access-Control-Allow-Origin'));
@@ -200,7 +204,7 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testErrorResponsesCarryNoCorsHeadersForForeignOrigins(): void
     {
-        $response = $this->request('GET', '/entries/' . self::USER, headers: ['Origin' => 'https://evil.example']);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => 'https://evil.example']);
 
         $this->assertProblem(ProblemType::MissingToken, $response);
         self::assertFalse($response->hasHeader('Access-Control-Allow-Origin'));

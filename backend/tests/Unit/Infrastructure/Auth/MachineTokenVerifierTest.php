@@ -72,7 +72,7 @@ final class MachineTokenVerifierTest extends TestCase
         foreach ($clients as $client) {
             $byId[$client->id] = $client;
         }
-        $this->settings = new Settings(true, true, 16, [], [], $backendUrl, $byId);
+        $this->settings = new Settings(true, true, 16, [], $backendUrl, $byId);
     }
 
     private function verifier(?string $cacheDir = null): MachineTokenVerifier

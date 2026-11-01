@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\EndToEnd;
 
+use CtPassStore\Config\BackendConfig;
+use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Domain\PersonId;
+use CtPassStore\Domain\PersonPrincipal;
+use CtPassStore\Infrastructure\Auth\TokenService;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Time\SystemClock;
 use CtPassStore\Tests\EndToEnd\Helpers\BackendSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\EndToEndPrerequisites;
 use GuzzleHttp\Client;
-use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\Promise\Utils;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Crypt\RSA;
@@ -35,10 +40,12 @@ final class LiveEntriesTest extends TestCase
 
     private static BackendSandboxManager $backend;
 
+    private static BackendConfig $config;
+
     private ExtensionData $kv;
     private Client $http;
     private int $personId;
-    private string $loginToken;
+    private string $accessToken;
 
     /** Set once it's clear the test may write; only then does tearDown clean up. */
     private bool $mayWrite = false;
@@ -49,6 +56,11 @@ final class LiveEntriesTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         EndToEndPrerequisites::assertMet();
+        try {
+            self::$config = BackendConfig::fromArray(require __DIR__ . '/../../config/credentials.php', 'credentials.php', sys_get_temp_dir());
+        } catch (ConfigurationException $e) {
+            self::markTestSkipped('The local backend isn\'t configured completely: ' . $e->getMessage());
+        }
         // Several workers, so parallel requests really overlap in the backend.
         self::$backend = new BackendSandboxManager('127.0.0.1', self::PORT, 'public', self::PARALLEL_PUTS);
         self::$backend->start();
@@ -68,7 +80,10 @@ final class LiveEntriesTest extends TestCase
         self::assertIsArray($users[0] ?? null, 'normal_users.json needs at least one user.');
         $user = $users[0];
         $this->personId = (int) $user['id'];
-        $this->loginToken = self::loginTokenOf($this->personId, (string) $user['username'], (string) $user['pwd']);
+        // A backend token minted with the local JWT_SECRET, as POST /v1/auth/token would issue it (catalog section 14).
+        // The real OAuth login needs a browser and is checked by hand.
+        $this->accessToken = (new TokenService(self::$config->jwtSecret, new SystemClock()))
+            ->issue(new PersonPrincipal(new PersonId($this->personId), (string) $user['username']))->token;
 
         if ($this->storedCiphertexts() !== []) {
             self::markTestSkipped("Fixture user {$this->personId} already has an entry on the test instance; it's left alone.");
@@ -83,7 +98,7 @@ final class LiveEntriesTest extends TestCase
         $this->http = new Client([
             'base_uri' => self::$backend->getBaseUrl(),
             'http_errors' => false,
-            'headers' => ['Authorization' => 'Login ' . $this->loginToken],
+            'headers' => ['Authorization' => 'Bearer ' . $this->accessToken],
         ]);
     }
 
@@ -140,7 +155,7 @@ final class LiveEntriesTest extends TestCase
         $start = hrtime(true);
         for ($i = 0; $i < self::PARALLEL_PUTS; $i++) {
             $password = "Parallel-$i-" . bin2hex(random_bytes(4)) . '!1';
-            $promises[$i] = $this->http->requestAsync('PUT', '/entries/' . $this->personId, ['json' => ['secondaryPwd' => $password]]);
+            $promises[$i] = $this->http->requestAsync('PUT', '/v1/entries/' . $this->personId, ['json' => ['secondaryPwd' => $password]]);
         }
         $responses = Utils::unwrap($promises);
         $parallelMs = (hrtime(true) - $start) / 1e6;
@@ -218,12 +233,12 @@ final class LiveEntriesTest extends TestCase
         // An empty array must go out as the JSON object {}, not as [].
         $options = $json === null ? [] : ['body' => $json === [] ? '{}' : json_encode($json, JSON_THROW_ON_ERROR), 'headers' => ['Content-Type' => 'application/json']];
 
-        $response = $this->http->request($method, '/entries/' . $this->personId, $options);
+        $response = $this->http->request($method, '/v1/entries/' . $this->personId, $options);
         if ($this->isOutage($response)) {
             // Retried once: the requests here are idempotent, and a connect timeout means ChurchTools got nothing.
             $this->outages++;
             sleep(self::COOL_DOWN_SECONDS);
-            $response = $this->http->request($method, '/entries/' . $this->personId, $options);
+            $response = $this->http->request($method, '/v1/entries/' . $this->personId, $options);
         }
 
         return $response;
@@ -283,15 +298,5 @@ final class LiveEntriesTest extends TestCase
         self::assertInstanceOf(RSA\PrivateKey::class, $key);
         $plaintext = $key->withPadding(RSA::ENCRYPTION_OAEP)->withHash('sha256')->withMGFHash('sha256')->decrypt((string) base64_decode($ciphertext, true));
         self::assertSame($expected, $plaintext);
-    }
-
-    private static function loginTokenOf(int $personId, string $username, string $password): string
-    {
-        $client = new Client(['base_uri' => rtrim((string) getenv('CT_API_URL'), '/') . '/', 'cookies' => new CookieJar()]);
-        $client->post('login', ['json' => ['username' => $username, 'password' => $password, 'rememberMe' => false]]);
-        $token = json_decode((string) $client->get("persons/$personId/logintoken")->getBody(), true)['data'] ?? null;
-        self::assertIsString($token, "Couldn't get a login token for fixture user $personId.");
-
-        return $token;
     }
 }

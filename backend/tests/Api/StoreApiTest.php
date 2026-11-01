@@ -18,7 +18,7 @@ final class StoreApiTest extends ApiTestCase
         $this->seedEntry(self::USER, 'b2xk');
         $this->seedEntry(self::USER, 'bmV3');
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('bmV3', $this->json($response)['secondaryPwd']);
@@ -30,7 +30,7 @@ final class StoreApiTest extends ApiTestCase
         $this->seedEntry(self::USER, 'b2xkMg==');
         $this->seedEntry(self::OTHER);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         self::assertSame(204, $response->getStatusCode());
         $mine = array_values(array_filter($this->storedEntries(), static fn(array $e): bool => $e[KvSchema::ENTRY_PERSON_ID] === self::USER));
@@ -45,7 +45,7 @@ final class StoreApiTest extends ApiTestCase
         $this->seedEntry(self::USER);
         $this->seedEntry(self::OTHER);
 
-        $response = $this->request('DELETE', '/entries/' . self::USER, self::USER);
+        $response = $this->request('DELETE', '/v1/entries/' . self::USER, self::USER);
 
         self::assertSame(204, $response->getStatusCode());
         self::assertSame([self::OTHER], array_column($this->storedEntries(), KvSchema::ENTRY_PERSON_ID));
@@ -56,7 +56,7 @@ final class StoreApiTest extends ApiTestCase
         $this->seedEntry(self::USER, 'b2xk');
         $this->churchTools->failNext('updateValue', new UnavailableException('PUT: unreachable.'));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
 
         $body = $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
         self::assertArrayNotHasKey('secondaryPwd', $body, 'A password that was never saved must not be returned.');
@@ -67,7 +67,7 @@ final class StoreApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('createValue', new UnavailableException('POST: unreachable.'));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
 
         $body = $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
         self::assertArrayNotHasKey('secondaryPwd', $body);
@@ -80,11 +80,11 @@ final class StoreApiTest extends ApiTestCase
         $this->seedEntry(self::USER, 'b2xkMg==');
         $this->churchTools->failNext('deleteValue', new UnavailableException('DELETE: unreachable.'));
 
-        $put = $this->request('PUT', '/entries/' . self::USER, self::USER);
+        $put = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
 
         self::assertSame(200, $put->getStatusCode());
         $generated = $this->json($put)['secondaryPwd'];
-        $read = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $read = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
         self::assertSame($generated, $this->decrypt((string) $this->json($read)['secondaryPwd']));
         $warnings = array_filter($this->log->getRecords(), static fn(array $r): bool => $r['level_name'] === 'WARNING');
         self::assertNotEmpty($warnings);

@@ -24,7 +24,7 @@ final class AccessPolicy
         }
 
         return self::isOwner($principal, $target)
-            || ($principal instanceof PersonPrincipal && ($settings->isAdmin($principal->id) || $settings->hasReadAccess($principal->id)));
+            || ($principal instanceof PersonPrincipal && $settings->isAdmin($principal->id));
     }
 
     /**

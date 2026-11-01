@@ -21,10 +21,10 @@ final class MisconfiguredApiTest extends TestCase
      */
     public static function requests(): iterable
     {
-        yield 'GET entry' => ['GET', '/entries/1'];
-        yield 'PUT entry' => ['PUT', '/entries/1'];
+        yield 'GET entry' => ['GET', '/v1/entries/1'];
+        yield 'PUT entry' => ['PUT', '/v1/entries/1'];
         yield 'unknown route' => ['GET', '/nothing'];
-        yield 'preflight' => ['OPTIONS', '/entries/1'];
+        yield 'preflight' => ['OPTIONS', '/v1/entries/1'];
     }
 
     #[DataProvider('requests')]

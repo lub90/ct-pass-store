@@ -22,17 +22,17 @@ final class ConcurrencyApiTest extends ApiTestCase
     {
         $second = $this->interleave('createValue', 'PUT', ['secondaryPwd' => 'Second-pass12!']);
 
-        $first = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
+        $first = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
 
         self::assertSame(204, $first->getStatusCode());
         self::assertSame(204, $second()->getStatusCode());
         self::assertCount(2, $this->entriesOf(self::USER), 'Without locking, both writes create an entry.');
 
-        $read = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $read = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
         self::assertSame(200, $read->getStatusCode());
         self::assertSame('First-pass12!', $this->decrypt((string) $this->json($read)['secondaryPwd']), 'The newest entry wins.');
 
-        $heal = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Third-pass12!']);
+        $heal = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Third-pass12!']);
         self::assertSame(204, $heal->getStatusCode());
         $entries = $this->entriesOf(self::USER);
         self::assertCount(1, $entries, 'The next write removes the duplicate.');
@@ -47,7 +47,7 @@ final class ConcurrencyApiTest extends ApiTestCase
         $this->seedEntry(self::USER);
         $second = $this->interleave('updateValue', 'PUT', ['secondaryPwd' => 'Second-pass12!']);
 
-        $first = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
+        $first = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
 
         self::assertSame(204, $first->getStatusCode());
         self::assertSame(204, $second()->getStatusCode());
@@ -65,7 +65,7 @@ final class ConcurrencyApiTest extends ApiTestCase
         $this->seedEntry(self::USER);
         $delete = $this->interleave('updateValue', 'DELETE', []);
 
-        $put = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
+        $put = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
 
         self::assertSame(204, $delete()->getStatusCode());
         self::assertSame(204, $put->getStatusCode());
@@ -83,7 +83,7 @@ final class ConcurrencyApiTest extends ApiTestCase
         $this->seedEntry(self::USER);
         $second = $this->interleave('deleteValue', 'DELETE', []);
 
-        $first = $this->request('DELETE', '/entries/' . self::USER, self::USER, []);
+        $first = $this->request('DELETE', '/v1/entries/' . self::USER, self::USER, []);
 
         self::assertSame(204, $second()->getStatusCode());
         self::assertSame(204, $first->getStatusCode());
@@ -98,9 +98,9 @@ final class ConcurrencyApiTest extends ApiTestCase
         $other = $this->seedEntry(self::OTHER, 'b3RoZXI=');
         $second = $this->interleave('createValue', 'PUT', ['secondaryPwd' => 'Second-pass12!']);
 
-        $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
+        $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'First-pass12!']);
         $second();
-        $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Third-pass12!']);
+        $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Third-pass12!']);
 
         self::assertSame(['b3RoZXI='], array_column($this->entriesOf(self::OTHER), KvSchema::ENTRY_CIPHERTEXT));
         self::assertContains($other, array_column($this->churchTools->storedValues($this->categoryIds[KvSchema::PASSWORD_CATEGORY]), 'id'));
@@ -116,7 +116,7 @@ final class ConcurrencyApiTest extends ApiTestCase
     {
         $response = null;
         $this->churchTools->beforeNext($method, function () use (&$response, $httpMethod, $body): void {
-            $response = $this->request($httpMethod, '/entries/' . self::USER, self::USER, $body);
+            $response = $this->request($httpMethod, '/v1/entries/' . self::USER, self::USER, $body);
         });
 
         return static function () use (&$response): ResponseInterface {

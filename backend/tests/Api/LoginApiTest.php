@@ -9,7 +9,6 @@ use CtPassStore\Infrastructure\Auth\TokenService;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
-use CtPassStore\Infrastructure\Time\SystemClock;
 use Firebase\JWT\JWT;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
@@ -112,7 +111,7 @@ final class LoginApiTest extends ApiTestCase
         self::assertSame('Bearer', $body['tokenType']);
         self::assertSame(900, $body['expiresIn']);
 
-        $person = (new TokenService(self::JWT_SECRET, new SystemClock()))->verify((string) $body['accessToken']);
+        $person = (new TokenService(self::JWT_SECRET, $this->clock))->verify((string) $body['accessToken']);
         self::assertSame(self::PERSON, $person->id->value);
         self::assertSame('alice', $person->username, 'AX-17: username comes from whoami.');
     }

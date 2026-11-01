@@ -271,7 +271,7 @@ normal case names it ("→ PV-05").
 - [x] **MC-02** (N · U) Each of a client's several keys is accepted (rotation) — 4.4a
 - [x] **MC-14** (! · U) Counterpart of MC-02: after a key is removed from a client (the client stays registered), tokens
   signed with it are rejected once the settings cache has expired; the client's other keys keep working — 4.4a
-- [ ] **MC-15** (! · U) Counterparts of MC-01: a token missing `jti`, `exp`, `iat`, `aud` or `kid`, or a client without
+- [x] **MC-15** (! · U) Counterparts of MC-01: a token missing `jti`, `exp`, `iat`, `aud` or `kid`, or a client without
   any permission → rejected or `403` — 4.4a
 - [x] **MC-03** (! · U) A signature with an unregistered key, or with another client's key → rejected — 4.4a.2
 - [x] **MC-04** (! · U) Unknown `kid` → rejected — 4.4a.1
@@ -341,30 +341,30 @@ normal case names it ("→ PV-05").
 
 ## 7. Authorization (spec 4.3)
 
-- [ ] **AZ-01** (! · A) The complete matrix: every caller (user, admin, machine client with `entries:read`, machine
+- [x] **AZ-01** (! · A) The complete matrix: every caller (user, admin, machine client with `entries:read`, machine
   client without permissions) × every operation (GET, PUT, DELETE) × own/other entry gives exactly the expected `2xx`
   or `403` — 4.3.4
 - [x] **AZ-02** (! · A) A user can't read, change or delete another person's entry by varying the ID: `07`, `7.0`, `+7`
   give `400 invalid-id`, never access to person 7 — 4.3.4, 4.1
 - [x] **AZ-11** (! · A) No existence oracle: a user asking for another person's entry gets the same `403` whether or not
   that entry exists, and the store isn't queried (the fake records no read) — 4.1 (order of checks)
-- [ ] **AZ-12** (! · A) Principal confusion: a machine client with `id` `123` isn't person 123 (no "own" entry, no
+- [x] **AZ-12** (! · A) Principal confusion: a machine client with `id` `123` isn't person 123 (no "own" entry, no
   write on entry 123). A user token with `sub` `123` gets none of client `123`'s permissions — 4.3
-- [ ] **AZ-03** (! · A) A machine client can't write or delete, even with `entries:read` — 4.3.4
-- [ ] **AZ-04** (! · A) Removing a person from `adminUsers` takes away admin rights once the settings cache has expired,
+- [x] **AZ-03** (! · A) A machine client can't write or delete, even with `entries:read` — 4.3.4
+- [x] **AZ-04** (! · A) Removing a person from `adminUsers` takes away admin rights once the settings cache has expired,
   even with a still-valid token — 4.3
-- [ ] **AZ-05** (N · A) Adding a person to `adminUsers` grants the rights without a new login — 4.3
+- [x] **AZ-05** (N · A) Adding a person to `adminUsers` grants the rights without a new login — 4.3
 - [x] **AZ-06a** (N · A) Requests rejected before authentication (missing token, unknown route, wrong method) make no
   ChurchTools call at all. (Regression: the public key used to be loaded on every request.) — 4.1, 6.1
-- [ ] **AZ-06** (N · A) Authenticated requests make **no** ChurchTools calls for authentication (counted on the fake) —
+- [x] **AZ-06** (N · A) Authenticated requests make **no** ChurchTools calls for authentication (counted on the fake) —
   4.3
-- [ ] **AZ-07** (! · A) A `403` causes no write at all (the fake records no write calls) — 4.1
-- [ ] **AZ-08** (N · A) Missing header → `401 missing-token`; wrong scheme (`Login …`, `Basic …`) → `401 invalid-token`
+- [x] **AZ-07** (! · A) A `403` causes no write at all (the fake records no write calls) — 4.1
+- [x] **AZ-08** (N · A) Missing header → `401 missing-token`; wrong scheme (`Login …`, `Basic …`) → `401 invalid-token`
   — 4.3.1–2
-- [ ] **AZ-09** (N · A) Expired user token → `401 token-expired` — 4.3.3
+- [x] **AZ-09** (N · A) Expired user token → `401 token-expired` — 4.3.3
 - [ ] **AZ-10** (! · A) Every protected endpoint requires a token; only `POST /v1/auth/token` and `OPTIONS` work without
   one. `/v1/test` additionally requires an admin; users and machine clients get `403` — 4.1, 4.8
-- [ ] **PR-01** (N · A) Order of checks (4.1): unknown route without a token → `404`; wrong method without a token →
+- [x] **PR-01** (N · A) Order of checks (4.1): unknown route without a token → `404`; wrong method without a token →
   `405`; `GET /v1/entries/abc` without a token → `401`; `GET /v1/entries/abc` with a token → `400`; another person's
   entry with an invalid body → `400`, with a valid body → `403` — 4.1
 

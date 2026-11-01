@@ -7,8 +7,6 @@ namespace CtPassStore\Tests\Api;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
@@ -25,12 +23,9 @@ final class UpstreamApiTest extends ApiTestCase
      */
     public static function failuresPerStep(): iterable
     {
-        yield 'token rejected at whoami' => ['whoami', new NotAuthenticatedException('401'), ProblemType::InvalidToken];
-        yield 'token rejected at permissions' => ['globalPermissions', new NotAuthenticatedException('401'), ProblemType::InvalidToken];
-        yield 'permissions forbidden' => ['globalPermissions', new NotPermittedException('403'), ProblemType::NoServiceAccess];
-        yield 'whoami unreachable' => ['whoami', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
-        yield 'permissions unreachable' => ['globalPermissions', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
-        yield 'whoami rate limited' => ['whoami', new RateLimitedException('429', 60), ProblemType::UpstreamRateLimited];
+        // Authentication makes no ChurchTools call any more (spec 4.3); login failures are in LoginApiTest.
+        yield 'module lookup rate limited' => ['getModuleByKey', new RateLimitedException('429', 60), ProblemType::UpstreamRateLimited];
+        yield 'categories unreachable' => ['getCategories', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
         yield 'module lookup unusable' => ['getModuleByKey', new InvalidResponseException('no JSON'), ProblemType::UpstreamInvalid];
         yield 'values incomplete (meta.count)' => ['getValues', new InvalidResponseException('meta.count'), ProblemType::UpstreamInvalid];
         yield 'values unreachable' => ['getValues', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
@@ -41,7 +36,7 @@ final class UpstreamApiTest extends ApiTestCase
     {
         $this->churchTools->failNext($method, $failure);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         $this->assertProblem($expected, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -52,7 +47,7 @@ final class UpstreamApiTest extends ApiTestCase
         $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
         $this->churchTools->failNext('verifyLogin', new RateLimitedException('429', 90));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
 
         $body = $this->assertProblem(ProblemType::UpstreamRateLimited, $response);
         self::assertSame('90', $response->getHeaderLine('Retry-After'));
@@ -64,7 +59,7 @@ final class UpstreamApiTest extends ApiTestCase
     {
         $this->churchTools->failNext('getValues', new RateLimitedException('429', 60));
 
-        $response = $this->request('GET', '/entries/' . self::USER, self::USER);
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
         $body = $this->assertProblem(ProblemType::UpstreamRateLimited, $response);
         self::assertSame((string) $body['retryAfter'], $response->getHeaderLine('Retry-After'));

@@ -20,8 +20,10 @@ use CtPassStore\Http\Middleware\CorsMiddleware;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\Auth\BearerAuthenticator;
+use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;
+use CtPassStore\Infrastructure\Auth\ReplayGuard;
 use CtPassStore\Infrastructure\Auth\TokenService;
-use CtPassStore\Infrastructure\ChurchTools\ChurchToolsAuthenticator;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsIdentityProvider;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPasswordVerifier;
@@ -29,6 +31,7 @@ use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -75,16 +78,22 @@ final class Application
             $logger,
         ));
 
-        // The only route without an access token (spec 4.1).
+        $authenticator = new BearerAuthenticator(
+            $tokens,
+            new MachineTokenVerifier($settings, new ReplayGuard(new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger)), $clock),
+        );
+
+        // Every path lives under /v1 (Q20); the old paths without prefix are unknown routes (404).
+        // The only route without an access token (spec 4.1):
         $app->post('/v1/auth/token', [$login, 'token']);
 
         // Authentication runs per route, after routing, so unknown routes and wrong methods get 404/405 first.
-        $app->group('', function (RouteCollectorProxyInterface $group) use ($entries, $selfCheck): void {
+        $app->group('/v1', function (RouteCollectorProxyInterface $group) use ($entries, $selfCheck): void {
             $group->get('/entries/{id}', [$entries, 'get']);
             $group->put('/entries/{id}', [$entries, 'put']);
             $group->delete('/entries/{id}', [$entries, 'delete']);
             $group->get('/test', [$selfCheck, 'get']);
-        })->add(new AuthMiddleware(new ChurchToolsAuthenticator($churchTools), $logger));
+        })->add(new AuthMiddleware($authenticator, $logger));
 
         // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):
         // CORS → error handling → routing (404/405) → authentication (per route) → endpoint.

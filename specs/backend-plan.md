@@ -99,19 +99,20 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 
 Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
 
-- [ ] **3.1 Token service**
+- [x] **3.1 Token service**
   - Issue and validate backend JWTs (HS256, pinned algorithm) with a small, well-known library such as
     `firebase/php-jwt`, which also supports EdDSA.
   - New configuration keys `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `JWT_SECRET`.
-- [ ] **3.2 `POST /auth/token`** (spec 4.4)
+- [x] **3.2 `POST /auth/token`** (spec 4.4)
   - OAuth code exchange, checks on the ChurchTools token, `whoami` and the `view` permission.
   - Discard the ChurchTools tokens, then issue the backend token.
-- [ ] **3.3 Machine client tokens** (spec 4.4a)
+- [x] **3.3 Machine client tokens** (spec 4.4a)
   - EdDSA verification against `settings.machineClients`, claim checks, the `jti` replay cache.
-- [ ] **3.4 New auth middleware and authorization** (spec 4.3)
+- [x] **3.4 New auth middleware and authorization** (spec 4.3)
   - Bearer tokens only: remove the `Login` scheme.
   - Typed principals (person vs. machine client), roles from the cached settings, the access matrix.
   - All paths under `/v1/`; the old paths answer `404`. `readAccessUsers` is removed.
+  - `/v1/test` refuses machine clients; restricting it to admins follows with 4.2.
 - [ ] **3.5 Primary password check** (spec 5.5, 6.3)
   - Simple rate limiting per person.
   - Upstream errors no longer count as a wrong password.
