@@ -13,7 +13,9 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedEx
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
+use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 use GuzzleHttp\RequestOptions;
 use Psr\Http\Message\ResponseInterface;
 
@@ -212,8 +214,16 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
         try {
             return $this->http->request($method, $path, $options);
         } catch (GuzzleException $e) {
-            // Guzzle's messages may contain the request; only the class name is passed on.
-            throw new UnavailableException(sprintf('%s %s: ChurchTools is unreachable (%s).', $method, $path, (new \ReflectionClass($e))->getShortName()));
+            // Guzzle's messages may contain the request; only the class name and cURL's error number are passed on.
+            // The number tells a DNS failure (6) from a refused connection (7) or a timeout (28).
+            $errno = $e instanceof ConnectException || $e instanceof RequestException ? ($e->getHandlerContext()['errno'] ?? null) : null;
+            throw new UnavailableException(sprintf(
+                '%s %s: ChurchTools is unreachable (%s%s).',
+                $method,
+                $path,
+                (new \ReflectionClass($e))->getShortName(),
+                is_int($errno) ? ", cURL error $errno" : '',
+            ));
         }
     }
 

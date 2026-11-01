@@ -391,6 +391,20 @@ final class GuzzleChurchToolsClientTest extends TestCase
         }
     }
 
+    public function testNetworkErrorsNameTheCurlErrorNumber(): void
+    {
+        $client = $this->client();
+        $this->mock->append(new ConnectException('cURL error 6: Could not resolve host', new Request('GET', 'x'), null, ['errno' => 6]));
+
+        try {
+            $client->getCategories(7);
+            self::fail('Expected an exception.');
+        } catch (UnavailableException $e) {
+            self::assertStringContainsString('ConnectException, cURL error 6', $e->getMessage());
+            self::assertStringNotContainsString('resolve host', $e->getMessage(), "Guzzle's own message isn't passed on.");
+        }
+    }
+
     // ---------------------------------------------------------------- CC-06 no secrets in messages
 
     public function testExceptionMessagesNeverContainSecrets(): void

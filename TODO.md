@@ -33,10 +33,13 @@ Open issues and planned improvements, roughly ordered by severity.
 
 - [ ] **ChurchTools connections time out under parallel load**
   With 10 parallel PUTs through the local backend (plan 2.7, `LiveEntriesTest`), several `whoami` calls failed with a
-  connect timeout after 5 s and the backend answered `502 upstream-unavailable`. With 5 parallel PUTs everything
-  passed. The backend fails closed and no data was damaged. Unclear whether ChurchTools hosting limits concurrent
-  connections per IP or the local network was the cause; check from the production web host. Relevant for bursts
-  (e.g. ct-radius) and another reason for the cache in plan 4.1.
+  connect timeout after 5 s (cURL error 28) and the backend answered `502 upstream-unavailable`. With 5 parallel PUTs
+  it happens in roughly one of five runs, sometimes on a sequential request right after the burst. The backend fails
+  closed and no data was damaged.
+  - Checked: the instance has three IPv4 addresses and no IPv6; each answers in ~40 ms on its own.
+  - Unclear: connection limiting at the ChurchTools edge, or the local DNS resolver (cURL counts DNS toward the connect
+    timeout). Check from the production web host; the log now names the cURL error number.
+  - Relevant for bursts (e.g. ct-radius) and another reason for the cache in plan 4.1.
 
 - [ ] **Harden the primary-password check**
   [`ChurchToolsPasswordVerifier.php`](backend/src/Infrastructure/ChurchTools/ChurchToolsPasswordVerifier.php) (formerly `ChurchtoolsAuthVerifier.php`) checks the primary password by calling the real `POST /api/login`.
