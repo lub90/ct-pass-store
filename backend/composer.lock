@@ -4,72 +4,8 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "e5f3609176eb3fa778fec9bf75958d37",
+    "content-hash": "8ac032cf91d617a2ac308a1f18042cfd",
     "packages": [
-        {
-            "name": "churchtools/php-client",
-            "version": "dev-version/3.126.2",
-            "source": {
-                "type": "git",
-                "url": "https://github.com/lub90/ct-php-client.git",
-                "reference": "2168e79c5631a7c28d65b3e84a721fce5b5ebbb3"
-            },
-            "dist": {
-                "type": "zip",
-                "url": "https://api.github.com/repos/lub90/ct-php-client/zipball/2168e79c5631a7c28d65b3e84a721fce5b5ebbb3",
-                "reference": "2168e79c5631a7c28d65b3e84a721fce5b5ebbb3",
-                "shasum": ""
-            },
-            "require": {
-                "ext-curl": "*",
-                "ext-json": "*",
-                "ext-mbstring": "*",
-                "guzzlehttp/guzzle": "^7.3",
-                "guzzlehttp/psr7": "^1.7 || ^2.0",
-                "php": "^8.1"
-            },
-            "require-dev": {
-                "friendsofphp/php-cs-fixer": "^3.5",
-                "phpunit/phpunit": "^8.0 || ^9.0"
-            },
-            "default-branch": true,
-            "type": "library",
-            "autoload": {
-                "psr-4": {
-                    "ChurchTools\\": "lib/"
-                }
-            },
-            "autoload-dev": {
-                "psr-4": {
-                    "ChurchTools\\Test\\": "test/"
-                }
-            },
-            "license": [
-                "unlicense"
-            ],
-            "authors": [
-                {
-                    "name": "OpenAPI",
-                    "homepage": "https://openapi-generator.tech"
-                }
-            ],
-            "description": "The ChurchTools REST API is the best entry point for developers to access ChurchTools. <br><br> **Authentication:** You need to be authorized to use some endpoints. Those endpoints are marked by a gray lock symbol. If you view the documentation, while you are logged into ChurchTools, all requests are already authorized. If you want to authorized a request, you need to provide a `Login Token` as `Authorization` header in the format `Authorization: Login <token>` or send a valid cookie. You can use the green \"Authorize\" dialog to enter those details and see how a request would look like in detail. <br><br> **Missing Endpoints:** Not all features are yet available by our new REST API. This documentation will grow in the future. We are working hard to add new endpoints with every ChurchTools version. The documentation will always show only those endpoints you can use with your ChurchTools installation.",
-            "homepage": "https://openapi-generator.tech",
-            "keywords": [
-                "api",
-                "openapi",
-                "openapi-generator",
-                "openapitools",
-                "php",
-                "rest",
-                "sdk"
-            ],
-            "support": {
-                "source": "https://github.com/lub90/ct-php-client/tree/version/3.126.2",
-                "issues": "https://github.com/lub90/ct-php-client/issues"
-            },
-            "time": "2025-11-15T21:26:43+00:00"
-        },
         {
             "name": "fig/http-message-util",
             "version": "1.1.5",
@@ -6000,9 +5936,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "churchtools/php-client": 20
-    },
+    "stability-flags": [],
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {

@@ -4,54 +4,40 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use CtPassStore\Config\AppConfig;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\RequestException;
+use CtPassStore\ChurchTools\ChurchToolsClient;
+use CtPassStore\ChurchTools\Exception\ChurchToolsException;
 use Psr\Log\LoggerInterface;
 
+/**
+ * Checks a user's primary ChurchTools password.
+ */
 class ChurchToolsAuthVerifier extends BaseService
 {
-    private string $apiUrl;
-    private Client $http;
-
-    public function __construct(string $apiUrl, LoggerInterface $logger)
-    {
+    public function __construct(
+        private readonly ChurchToolsClient $client,
+        LoggerInterface $logger,
+    ) {
         parent::__construct($logger);
-
-        $this->apiUrl = rtrim($apiUrl, '/');
-        $this->http = new Client([
-            'base_uri' => $this->apiUrl,
-            'timeout' => AppConfig::EXTERNAL_REQUEST_TIMEOUT,
-            'http_errors' => false,
-        ]);
     }
 
-    public function verifyUserPassword(string $username, string $password): bool
+    public function verifyUserPassword(string $username, #[\SensitiveParameter] string $password): bool
     {
         try {
-            $response = $this->http->post('/api/login', [
-                'json' => [
-                    'username' => $username,
-                    'password' => $password,
-                ],
-                'headers' => [
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                ],
-            ]);
-
-            $status = $response->getStatusCode();
-
-            if ($status === 200) {
-                return true;
-            }
-
-            $this->logger->info("ChurchTools password check failed for user {$username} with status {$status}");
-            return false;
-
-        } catch (RequestException $e) {
+            $result = $this->client->verifyLogin($username, $password);
+        } catch (ChurchToolsException $e) {
             $this->logger->error("ChurchTools password check error for user {$username}: " . $e->getMessage());
+
             return false;
         }
+
+        if ($result === null) {
+            $this->logger->info("ChurchTools password check failed for user {$username}");
+
+            return false;
+        }
+
+        // Unchanged behavior: an accepted password counts as valid even if a second factor is still pending.
+        // Whether that's intended is open question Q13 of the spec; the change belongs to plan item 3.5.
+        return true;
     }
 }

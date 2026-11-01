@@ -28,7 +28,7 @@ only to the backend) isn't part of it.
   - A GitHub Actions workflow on push and pull request, PHP 8.3 / 8.4 / 8.5.
   - It runs `composer validate`, `composer audit`, the code-style check, PHPStan and the unit tests.
 
-- [ ] **0.5 Test catalog** (before any tests of phase 1 are written)
+- [x] **0.5 Test catalog** (before any tests of phase 1 are written)
   - `specs/backend-test-catalog.md` lists the test cases per unit and for the API and contract layers.
   - Cases are grouped as normal, edge, special and **security-critical**, and each one is assigned to a layer.
   - The tests in phases 1 to 4 are written against it and checked off. A case that's added during implementation goes
@@ -36,12 +36,12 @@ only to the backend) isn't part of it.
 
 ## Phase 1 – Own ChurchTools client (D1)
 
-- [ ] **1.1 `ChurchToolsClient` interface and Guzzle implementation** (spec 5.6)
+- [x] **1.1 `ChurchToolsClient` interface and Guzzle implementation** (spec 5.6)
   - URL normalization, a central timeout, `X-OnlyAuthenticated`, unwrapping of the `data` envelope.
   - The `meta.count` completeness check (spec 5.3 rule 9).
   - One exception type per error case, so the middleware can map them.
   - Unit tests with Guzzle's `MockHandler`.
-- [ ] **1.2 Migrate the services to it**
+- [x] **1.2 Migrate the services to it**
   - `ExtensionDataService`, `ChurchToolsStore`, `ServiceSettings`, the primary-password check.
   - Remove `churchtools/php-client` and the fork repository from `composer.json`.
   - The end-to-end suite stays green.

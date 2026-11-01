@@ -2,10 +2,6 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
-use ChurchTools\Api\GeneralApi;
-use ChurchTools\Api\PersonApi;
-use ChurchTools\Configuration;
-use ChurchTools\Model\PostLoginRequest;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\Helpers\Helpers;
 use GuzzleHttp\Client;
@@ -183,25 +179,19 @@ class ChurchToolsSandboxManager
                 throw new \RuntimeException("Each user must have 'id', 'username' and 'pwd' fields in $filename");
             }
 
-            // Log the user in
-            // Create a shared cookie jar
-            $cookieJar = new CookieJar();
+            // Log the user in with a session cookie, then fetch the user's login token
             $httpClient = new Client([
-                'cookies' => $cookieJar,
+                'base_uri' => rtrim((string) getenv('CT_API_URL'), '/') . '/',
+                'cookies' => new CookieJar(),
             ]);
-            $ctClientConfig = (new Configuration())->setHost(getenv('CT_API_URL'));
-            $ctGeneralClient = new GeneralApi($httpClient, $ctClientConfig);
-            $loginRequest = new PostLoginRequest();
-            $loginRequest->setUsername($user['username']);
-            $loginRequest->setPassword($user['pwd']);
-            $loginRequest->setRememberMe(false);
-            $ctGeneralClient->postLogin($loginRequest);
+            $httpClient->post('login', ['json' => [
+                'username' => $user['username'],
+                'password' => $user['pwd'],
+                'rememberMe' => false,
+            ]]);
+            $tokenResponse = json_decode((string) $httpClient->get('persons/' . (int) $user['id'] . '/logintoken')->getBody(), true);
 
-            // Get the users access token
-            $ctPersonClient = new PersonApi($httpClient, $ctClientConfig);
-            $accessToken = $ctPersonClient->getPersonsIdLogintoken($user['id']);
-
-            $data[$i]['token'] = $accessToken->getData();
+            $data[$i]['token'] = $tokenResponse['data'] ?? throw new \RuntimeException("Could not get a login token for user {$user['username']}.");
         }
 
         return $data;

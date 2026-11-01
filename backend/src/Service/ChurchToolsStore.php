@@ -10,7 +10,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 {
     public function getPwd(int $personId): ?string
     {
-        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
+        $extension = $this->extension;
 
         $responseBody = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
@@ -30,7 +30,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
     public function putPwd(int $personId, string $encryptedPassword): void
     {
-        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
+        $extension = $this->extension;
 
         $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
         $existing = [];
@@ -64,7 +64,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
     public function deletePwd(int $personId): void
     {
-        $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
+        $extension = $this->extension;
 
         $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
         $existing = [];

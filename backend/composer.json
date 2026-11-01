@@ -3,12 +3,6 @@
   "description": "Secure secondary password store for ChurchTools authentication and IP filtering.",
   "type": "project",
   "license": "MIT",
-  "repositories": [
-    {
-      "type": "vcs",
-      "url": "https://github.com/lub90/ct-php-client.git"
-    }
-  ],
   "require": {
     "php": "^8.3",
     "slim/slim": "^4.12",
@@ -16,7 +10,6 @@
     "monolog/monolog": "^2.9",
     "php-di/php-di": "^7.1",
     "guzzlehttp/guzzle": "^7.10",
-    "churchtools/php-client": "dev-version/3.126.2",
     "phpseclib/phpseclib": "^3.0"
   },
   "require-dev": {

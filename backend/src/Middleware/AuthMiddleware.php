@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Middleware;
 
-use ChurchTools\ApiException;
+use CtPassStore\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Service\ChurchtoolsAuth;
 use Monolog\Logger;
@@ -51,17 +51,17 @@ class AuthMiddleware implements MiddlewareInterface
         $user = null;
         try {
             $user = $this->auth->validateToken($token);
-        } catch (ApiException $e) {
+        } catch (ChurchToolsException|\InvalidArgumentException) {
             // Do nothing, because user becomes null and we fire the unathorized access part below
         }
-        if (($user == null) || ($user->getId() == null) || ($user->getId() < 1)) {
+        if ($user === null || $user->id < 1) {
             $this->logger?->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Invalid ChurchTools token!');
         }
 
         // Check if the user has the right to access the service
         if (!$this->auth->hasAccessRights($token)) {
-            $this->logger?->warning("Forbidden access attempt: User {$user->getId()} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            $this->logger?->warning("Forbidden access attempt: User {$user->id} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->forbidden($request, 'User is not allowed to access the service!');
         }
 

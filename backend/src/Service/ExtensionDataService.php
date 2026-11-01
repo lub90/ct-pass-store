@@ -4,22 +4,25 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use ChurchTools\Configuration;
-use ChurchTools\SimpleClient;
+use CtPassStore\ChurchTools\ChurchToolsClient;
 use RuntimeException;
 
+/**
+ * Access to the extension's categories and values in the ChurchTools KV store, as the service user.
+ *
+ * Module and category IDs are resolved once per instance.
+ */
 class ExtensionDataService
 {
     private ?int $moduleId = null;
-    private ?array $categories = null;
-    private SimpleClient $client;
-    private readonly string $extensionKey;
 
-    public function __construct(Configuration $ctConfig, string $extensionKey)
-    {
-        $this->client = new SimpleClient($ctConfig);
-        $this->extensionKey = $extensionKey;
-    }
+    /** @var list<array<string, mixed>>|null */
+    private ?array $categories = null;
+
+    public function __construct(
+        private readonly ChurchToolsClient $client,
+        private readonly string $extensionKey,
+    ) {}
 
     private function resolveModuleId(): int
     {
@@ -27,92 +30,89 @@ class ExtensionDataService
             return $this->moduleId;
         }
 
-        $response = $this->client->getJson("custommodules/{$this->extensionKey}");
-
-        $this->moduleId = $response['data']['id'] ?? throw new RuntimeException('Module ID not found');
-        return $this->moduleId;
-    }
-
-    private function fetchCategories(): array
-    {
-        if ($this->categories !== null) {
-            return $this->categories;
+        $id = $this->client->getModuleByKey($this->extensionKey)['id'] ?? null;
+        if (!is_int($id)) {
+            throw new RuntimeException('Module ID not found');
         }
 
-        $moduleId = $this->resolveModuleId();
-
-        $this->categories = $this->client->getJson("custommodules/{$moduleId}/customdatacategories")['data'];
-
-        return $this->categories;
+        return $this->moduleId = $id;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchCategories(): array
+    {
+        return $this->categories ??= $this->client->getCategories($this->resolveModuleId());
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function getCategoryByName(string $name): array
     {
-        $categories = $this->fetchCategories();
-        foreach ($categories as $category) {
-            if ($category['name'] === $name) {
+        foreach ($this->fetchCategories() as $category) {
+            if (($category['name'] ?? null) === $name) {
                 return $category;
             }
         }
         throw new RuntimeException("Category \"$name\" not found.");
     }
 
+    /**
+     * The raw values of a category (each with `id`, `dataCategoryId` and the JSON string `value`).
+     *
+     * @return array<mixed> all values, or with `$single` the first value (an empty array if there's none)
+     */
     public function getCategoryData(string $name, bool $single = false): array
     {
-        $category = $this->getCategoryByName($name);
-        $result = $this->client->getJson("custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
+        $values = $this->client->getValues($this->resolveModuleId(), $this->categoryId($name));
 
         if ($single) {
-            $result = $result[0];
+            return $values[0] ?? [];
         }
 
-        return $result;
+        return $values;
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public function createCategoryEntry(string $name, array $data): int
     {
-        $moduleId = $this->resolveModuleId();
-        $category = $this->getCategoryByName($name);
-
-        $payload = [
-            'dataCategoryId' => $category['id'],
-            'value' => json_encode($data),
-        ];
-
-        $response = $this->client->postJson(
-            "custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues",
-            [
-                'json' => $payload,
-            ]
-        );
-
-        return $response['data']['id'] ?? throw new RuntimeException('Failed to create entry');
+        return $this->client->createValue($this->resolveModuleId(), $this->categoryId($name), $this->encode($data));
     }
 
+    /**
+     * @param array<string, mixed> $data
+     */
     public function updateCategoryEntry(string $name, int $valueId, array $data): int
     {
-        $moduleId = $this->resolveModuleId();
-        $category = $this->getCategoryByName($name);
+        $this->client->updateValue($this->resolveModuleId(), $this->categoryId($name), $valueId, $this->encode($data));
 
-        $payload = [
-            'dataCategoryId' => $category['id'],
-            'id' => $valueId,
-            'value' => json_encode($data),
-        ];
-
-        $response = $this->client->put("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", [
-            'json' => $payload,
-        ]);
-        $body = json_decode((string) $response->getBody(), true);
-
-        return $body['data']['id'] ?? throw new RuntimeException('Failed to update entry');
+        return $valueId;
     }
 
     public function deleteCategoryEntry(string $name, int $valueId): void
     {
-        $category = $this->getCategoryByName($name);
-        $moduleId = $this->resolveModuleId();
+        $this->client->deleteValue($this->resolveModuleId(), $this->categoryId($name), $valueId);
+    }
 
-        $this->client->delete("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}");
+    private function categoryId(string $name): int
+    {
+        $id = $this->getCategoryByName($name)['id'] ?? null;
+        if (!is_int($id)) {
+            throw new RuntimeException("Category \"$name\" has no valid ID.");
+        }
+
+        return $id;
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function encode(array $data): string
+    {
+        return json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
     }
 }

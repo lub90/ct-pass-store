@@ -4,67 +4,56 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use ChurchTools\Api\GeneralApi;
-use ChurchTools\Configuration;
-use ChurchTools\Model\PostCheckinPersons201ResponseData;
-use ChurchTools\SimpleClient;
+use CtPassStore\Auth\AuthenticatedPerson;
+use CtPassStore\ChurchTools\ChurchToolsClient;
+use CtPassStore\ChurchTools\Credential;
+use CtPassStore\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Config\AppConfig;
 use Psr\Log\LoggerInterface;
 
 /**
- * Handles ChurchTools token validation via Authorization header.
+ * Validates a user's ChurchTools login token and checks their access to the extension.
  */
 class ChurchtoolsAuth extends BaseService
 {
-    protected string $apiUrl;
-
-    public function __construct(string $apiUrl, LoggerInterface $logger)
-    {
+    public function __construct(
+        private readonly ChurchToolsClient $client,
+        LoggerInterface $logger,
+    ) {
         parent::__construct($logger);
-
-        $this->apiUrl = $apiUrl;
-    }
-
-    protected function getCtConfig(string $apiToken): Configuration
-    {
-        return (new Configuration())
-            ->setHost($this->apiUrl)
-            ->setApiKey('Authorization', $apiToken)
-            ->setApiKeyPrefix('Authorization', 'Login');
     }
 
     /**
-     * Validates a ChurchTools token and returns user info.
+     * Returns the person the token belongs to.
      *
-     * @param string $token The ChurchTools API token.
-     * @return PostCheckinPersons201ResponseData Returns user data if valid, or throws a Churchtools\ApiException
+     * @throws ChurchToolsException if ChurchTools rejects the token or can't be asked
+     * @throws \InvalidArgumentException if the token is empty or contains whitespace
      */
-    public function validateToken(string $apiToken): PostCheckinPersons201ResponseData
+    public function validateToken(#[\SensitiveParameter] string $apiToken): AuthenticatedPerson
     {
-        $config = $this->getCtConfig($apiToken);
-        $generalApi = new GeneralApi(config: $config);
-        $whoAmI = $generalApi->getWhoami();
+        $person = $this->client->whoami(Credential::loginToken($apiToken));
 
-        return $whoAmI->getData();
-    }
-
-    public function hasAccessRights($apiToken): bool
-    {
-        $config = $this->getCtConfig($apiToken);
-        $simpleClient = new SimpleClient(config: $config);
-
-        $response = $simpleClient->getJson(AppConfig::PERMISSIONS_ENDPOINT);
-
-        // Check if 'ctpassstore' exists and has 'view' set to true
-        if (
-            isset($response['data'])
-            && isset($response['data'][AppConfig::CT_EXTENSION_ID])
-            && isset($response['data'][AppConfig::CT_EXTENSION_ID]['view'])
-            && $response['data'][AppConfig::CT_EXTENSION_ID]['view'] === true
-        ) {
-            return true;
+        $id = $person['id'] ?? null;
+        $username = $person['cmsUserId'] ?? '';
+        if (!is_int($id) || !is_string($username)) {
+            throw new InvalidResponseException('GET whoami: unexpected person data.');
         }
 
-        return false;
+        return new AuthenticatedPerson($id, $username);
+    }
+
+    /**
+     * Whether the token's owner has the extension's `view` permission.
+     *
+     * @throws ChurchToolsException if ChurchTools rejects the token or can't be asked
+     */
+    public function hasAccessRights(#[\SensitiveParameter] string $apiToken): bool
+    {
+        $permissions = $this->client->globalPermissions(Credential::loginToken($apiToken));
+
+        $extension = $permissions[AppConfig::CT_EXTENSION_ID] ?? null;
+
+        return is_array($extension) && ($extension['view'] ?? null) === true;
     }
 }
