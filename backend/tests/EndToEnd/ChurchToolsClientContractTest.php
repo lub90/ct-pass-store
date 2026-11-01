@@ -35,6 +35,19 @@ final class ChurchToolsClientContractTest extends ChurchToolsClientContractTestC
         return Credential::loginToken((string) getenv('CT_API_TOKEN'));
     }
 
+    protected function oauthClient(): ?array
+    {
+        $config = require __DIR__ . '/../../config/credentials.php';
+        $id = is_array($config) ? ($config['OAUTH_CLIENT_ID'] ?? null) : null;
+        $secret = is_array($config) ? ($config['OAUTH_CLIENT_SECRET'] ?? null) : null;
+        if (!is_string($id) || !is_string($secret) || $id === '' || $secret === '') {
+            return null;
+        }
+        $host = (string) parse_url((string) getenv('CT_API_URL'), PHP_URL_HOST);
+
+        return ['id' => $id, 'secret' => $secret, 'redirectUri' => "https://$host/ccm/ctpassstore/"];
+    }
+
     protected function loginUser(): array
     {
         $users = json_decode((string) file_get_contents(__DIR__ . '/fixtures/normal_users.json'), true, 8, JSON_THROW_ON_ERROR);

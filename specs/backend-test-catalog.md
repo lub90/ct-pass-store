@@ -225,7 +225,7 @@ normal case names it ("→ PV-05").
 - [x] **TK-12** (! · U) After `JWT_SECRET` changes, all old tokens are rejected — 6.3
 - [x] **TK-13** (! · U) Counterparts of TK-01/02: a token missing `exp`, `sub`, `aud`, `iss`, `jti` or `username`, or
   with an empty `sub`, is rejected — 4.4
-- [ ] **TK-14** (! · A) `iss` is the constant `ctpassstore-backend`: a manipulated `Host` or `X-Forwarded-Host` header
+- [x] **TK-14** (! · A) `iss` is the constant `ctpassstore-backend`: a manipulated `Host` or `X-Forwarded-Host` header
   changes neither the `iss` of issued tokens nor what validation accepts — 4.4
 - [x] **TK-15** (! · U) Order of validation: a token with a bad signature **and** an expired `exp` gives `invalid-token`,
   not `token-expired` (no information without a valid signature) — 4.3.3
@@ -233,36 +233,36 @@ normal case names it ("→ PV-05").
 
 ### Login (`POST /v1/auth/token`, spec 4.4)
 
-- [ ] **AX-01** (N · A) Valid code → `200` with `accessToken`, `tokenType: Bearer`, `expiresIn: 900` — 4.4
-- [ ] **AX-02** (N · A) The code exchange sends client ID, secret, `redirect_uri` and `code_verifier` — 4.4.2
-- [ ] **AX-03** (! · A) `redirectUri` outside the ChurchTools instance → `400 invalid-body`, without calling ChurchTools.
+- [x] **AX-01** (N · A) Valid code → `200` with `accessToken`, `tokenType: Bearer`, `expiresIn: 900` — 4.4
+- [x] **AX-02** (N · A) The code exchange sends client ID, secret, `redirect_uri` and `code_verifier` — 4.4.2
+- [x] **AX-03** (! · A) `redirectUri` outside the ChurchTools instance → `400 invalid-body`, without calling ChurchTools.
   The check compares the **parsed** scheme, host and port, not a string prefix. All of these are rejected:
   `https://<instance>.evil.com/…`, `https://<instance>@evil.com/…`, `http://<instance>/…`, `https://<instance>:444/…`,
   `//evil.com`, `javascript:…`, URLs with a backslash or encoded characters in the host — 4.4.1
-- [ ] **AX-04** (N · A) ChurchTools rejects the code → `400 oauth-code-invalid` — 4.4.2
-- [ ] **AX-05** (! · A) ChurchTools rejects client ID or secret → `500 misconfigured` — 4.4.2
-- [ ] **AX-06** (! · A) ChurchTools token without the `api` scope, or with a foreign `aud` → `502 upstream-invalid`, no
+- [x] **AX-04** (N · A) ChurchTools rejects the code → `400 oauth-code-invalid` — 4.4.2
+- [x] **AX-05** (! · A) ChurchTools rejects client ID or secret → `500 misconfigured` — 4.4.2
+- [x] **AX-06** (! · A) ChurchTools token without the `api` scope, or with a foreign `aud` → `502 upstream-invalid`, no
   token issued — 4.4.3
-- [ ] **AX-07** (! · A) `whoami` returns a different person than the token's `sub` → `502 upstream-invalid`, no token
+- [x] **AX-07** (! · A) `whoami` returns a different person than the token's `sub` → `502 upstream-invalid`, no token
   issued — 4.4.4
-- [ ] **AX-08** (! · A) No `view` permission → `403 no-service-access`, no token issued — 4.4.4
-- [ ] **AX-09** (! · A) The ChurchTools access and refresh tokens appear in neither the response nor the log — 4.4.5
-- [ ] **AX-10** (S · A) Missing fields, empty strings or wrong types → `400 invalid-body` — 4.4
-- [ ] **AX-10a** (E · A) Field length boundary: `code`, `codeVerifier` and `redirectUri` with 2,048 characters are
+- [x] **AX-08** (! · A) No `view` permission → `403 no-service-access`, no token issued — 4.4.4
+- [x] **AX-09** (! · A) The ChurchTools access and refresh tokens appear in neither the response nor the log — 4.4.5
+- [x] **AX-10** (S · A) Missing fields, empty strings or wrong types → `400 invalid-body` — 4.4
+- [x] **AX-10a** (E · A) Field length boundary: `code`, `codeVerifier` and `redirectUri` with 2,048 characters are
   accepted; with 2,049 → `400 invalid-body` — 4.4
-- [ ] **AX-11** (N · A) ChurchTools unreachable during the exchange → `502 upstream-unavailable` — 4.4
+- [x] **AX-11** (N · A) ChurchTools unreachable during the exchange → `502 upstream-unavailable` — 4.4
 - [ ] **AX-12** (N · C) Contract: an invalid or used code gives the error response the backend expects — 4.4.2
-- [ ] **AX-14** (! · A) `whoami` returns the anonymous person (`-1` or `0`) or a non-integer ID → `502 upstream-invalid`,
+- [x] **AX-14** (! · A) `whoami` returns the anonymous person (`-1` or `0`) or a non-integer ID → `502 upstream-invalid`,
   no token issued — 4.4.4
-- [ ] **AX-19** (! · A) `whoami` without `cmsUserId`, or with an empty one → `502 upstream-invalid`, no token issued (the
+- [x] **AX-19** (! · A) `whoami` without `cmsUserId`, or with an empty one → `502 upstream-invalid`, no token issued (the
   primary password check would otherwise have no username) — 4.4.4
-- [ ] **AX-15** (! · A) `permissions/global` without a `ctpassstore` key, or with `view` as `"true"`, `1`, `null` or a
+- [x] **AX-15** (! · A) `permissions/global` without a `ctpassstore` key, or with `view` as `"true"`, `1`, `null` or a
   list → `403 no-service-access` (fail closed) — 4.4.4
-- [ ] **AX-16** (N · A) `sub` `"5"` (string) and `whoami` `5` (number) match; `sub` `"05"`, `"5a"` or `5.5` don't — 4.4.3–4
-- [ ] **AX-17** (N · A) The issued token's `username` claim equals the `cmsUserId` from `whoami` — 4.4.4
-- [ ] **AX-18** (! · A) `scopes` as a string (`"api"`, `"apix"`), or as an array without the exact element `api`
+- [x] **AX-16** (N · A) `sub` `"5"` (string) and `whoami` `5` (number) match; `sub` `"05"`, `"5a"` or `5.5` don't — 4.4.3–4
+- [x] **AX-17** (N · A) The issued token's `username` claim equals the `cmsUserId` from `whoami` — 4.4.4
+- [x] **AX-18** (! · A) `scopes` as a string (`"api"`, `"apix"`), or as an array without the exact element `api`
   (`["apix"]`, `["API"]`) → no token issued — 4.4.3
-- [ ] **AX-13** (! · A) Counterparts of AX-01: a wrong or missing `codeVerifier` (PKCE), a code for another client, or
+- [x] **AX-13** (! · A) Counterparts of AX-01: a wrong or missing `codeVerifier` (PKCE), a code for another client, or
   the same code twice → no token issued (`400 oauth-code-invalid`) — 4.4.2
 
 ### Machine client tokens (spec 4.4a)

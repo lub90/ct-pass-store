@@ -42,6 +42,9 @@ abstract class ApiTestCase extends TestCase
     protected const NO_ACCESS = 300;
 
     protected const ORIGIN = 'https://example.church.tools';
+    protected const OAUTH_CLIENT_ID = 'oauth-client-id';
+    protected const OAUTH_CLIENT_SECRET = 'oauth-client-SECRET-4711';
+    protected const JWT_SECRET = 'api-test-jwt-secret-with-at-least-32-bytes';
     protected const CLIENT_IP = '203.0.113.7';
 
     /** @var array<int, string> */
@@ -246,7 +249,7 @@ abstract class ApiTestCase extends TestCase
         $logger->pushHandler($this->log);
 
         return Application::create(
-            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath),
+            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
             $this->churchTools,
             $logger,
         );

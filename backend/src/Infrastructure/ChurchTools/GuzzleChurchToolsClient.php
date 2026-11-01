@@ -8,6 +8,8 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
@@ -71,6 +73,51 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
             RequestOptions::COOKIES => false,
             RequestOptions::HTTP_ERRORS => false,
         ];
+    }
+
+    public function exchangeAuthorizationCode(
+        string $clientId,
+        #[\SensitiveParameter]
+        string $clientSecret,
+        #[\SensitiveParameter]
+        string $code,
+        string $redirectUri,
+        #[\SensitiveParameter]
+        string $codeVerifier,
+    ): string {
+        // The OAuth server lives at the instance root, next to /api. The relative path keeps the rule that paths never
+        // start with a slash, and resolves against the base URL `…/api/` to `…/oauth/access_token`.
+        $what = 'POST oauth/access_token';
+        $response = $this->request('POST', '../oauth/access_token', [
+            RequestOptions::HEADERS => ['Accept' => 'application/json'],
+            RequestOptions::FORM_PARAMS => [
+                'grant_type' => 'authorization_code',
+                'client_id' => $clientId,
+                'client_secret' => $clientSecret,
+                'redirect_uri' => $redirectUri,
+                'code' => $code,
+                'code_verifier' => $codeVerifier,
+            ],
+        ]);
+
+        $status = $response->getStatusCode();
+        if ($status === 400 || $status === 401) {
+            // RFC 6749 5.2: the error code tells a bad client from a bad code. Only the code is put in the message.
+            $error = json_decode((string) $response->getBody(), true)['error'] ?? null;
+            $error = is_string($error) && preg_match('/^[a-z_]{1,40}\z/', $error) === 1 ? $error : 'unknown';
+            if ($error === 'invalid_client' || ($status === 401 && $error === 'unknown')) {
+                throw new OAuthClientRejectedException(sprintf('%s: ChurchTools answered %d (%s).', $what, $status, $error));
+            }
+            throw new OAuthCodeRejectedException(sprintf('%s: ChurchTools answered %d (%s).', $what, $status, $error));
+        }
+        $this->throwForStatus($response, $what, null);
+
+        $token = $this->decode($response, $what)['access_token'] ?? null;
+        if (!is_string($token) || $token === '') {
+            throw new InvalidResponseException($what . ': the response has no access_token.');
+        }
+
+        return $token;
     }
 
     public function whoami(Credential $user): array

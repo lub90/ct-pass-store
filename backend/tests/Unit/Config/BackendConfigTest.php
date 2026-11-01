@@ -25,18 +25,30 @@ final class BackendConfigTest extends TestCase
             'CT_API_URL' => 'https://example.church.tools/api',
             'CT_API_TOKEN' => self::TOKEN,
             'CORS' => ['https://example.church.tools', 'http://localhost:5173'],
+            'OAUTH_CLIENT_ID' => 'oauth-client-id',
+            'OAUTH_CLIENT_SECRET' => 'oauth-client-SECRET-4711',
+            'JWT_SECRET' => str_repeat('j', 40),
         ];
     }
 
     public function testAValidConfigurationIsAccepted(): void
     {
-        $config = BackendConfig::fromArray(self::valid() + ['LOG_LEVEL' => 'warning', 'JWT_SECRET' => str_repeat('x', 32)], '/path/credentials.php');
+        $config = BackendConfig::fromArray(['LOG_LEVEL' => 'warning'] + self::valid(), '/path/credentials.php');
 
         self::assertSame('https://example.church.tools/api', $config->apiUrl);
         self::assertSame(self::TOKEN, $config->apiToken);
         self::assertSame(['https://example.church.tools', 'http://localhost:5173'], $config->corsOrigins);
         self::assertSame('warning', $config->logLevel);
         self::assertSame('/path/credentials.php', $config->credentialsPath);
+        self::assertSame('oauth-client-id', $config->oauthClientId);
+        self::assertSame('oauth-client-SECRET-4711', $config->oauthClientSecret);
+        self::assertSame(str_repeat('j', 40), $config->jwtSecret);
+    }
+
+    public function testInstanceOriginComesFromTheApiUrl(): void
+    {
+        self::assertSame('https://example.church.tools', BackendConfig::fromArray(self::valid(), 'x')->instanceOrigin());
+        self::assertSame('https://example.church.tools:8443', BackendConfig::fromArray(['CT_API_URL' => 'https://Example.church.tools:8443/api'] + self::valid(), 'x')->instanceOrigin());
     }
 
     public function testDefaultsForOptionalKeys(): void
@@ -44,8 +56,6 @@ final class BackendConfigTest extends TestCase
         $config = BackendConfig::fromArray(self::valid(), 'x');
 
         self::assertSame('info', $config->logLevel);
-        self::assertNull($config->oauthClientId);
-        self::assertNull($config->jwtSecret);
     }
 
     /**
@@ -54,7 +64,7 @@ final class BackendConfigTest extends TestCase
     public static function invalidConfigurations(): iterable
     {
         $v = self::valid();
-        foreach (['CT_API_URL', 'CT_API_TOKEN', 'CORS'] as $key) {
+        foreach (['CT_API_URL', 'CT_API_TOKEN', 'CORS', 'OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET', 'JWT_SECRET'] as $key) {
             $missing = $v;
             unset($missing[$key]);
             yield "$key missing" => [$missing, $key];

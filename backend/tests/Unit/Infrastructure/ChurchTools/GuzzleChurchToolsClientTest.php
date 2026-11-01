@@ -10,6 +10,8 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
@@ -403,6 +405,90 @@ final class GuzzleChurchToolsClientTest extends TestCase
             self::assertStringContainsString('ConnectException, cURL error 6', $e->getMessage());
             self::assertStringNotContainsString('resolve host', $e->getMessage(), "Guzzle's own message isn't passed on.");
         }
+    }
+
+    // ---------------------------------------------------------------- OAuth code exchange (spec 4.4.2)
+
+    private const CLIENT_SECRET = 'oauth-client-SECRET-77';
+    private const CODE = 'auth-code-SECRET-88';
+    private const VERIFIER = 'pkce-verifier-SECRET-99';
+
+    private function exchange(GuzzleChurchToolsClient $client): string
+    {
+        return $client->exchangeAuthorizationCode('client-id', self::CLIENT_SECRET, self::CODE, 'https://example.church.tools/ccm/ctpassstore/', self::VERIFIER);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function apiUrls(): iterable
+    {
+        yield 'without slash' => ['https://example.church.tools/api'];
+        yield 'with slash' => ['https://example.church.tools/api/'];
+    }
+
+    #[DataProvider('apiUrls')]
+    public function testTheCodeExchangeGoesToTheInstanceRoot(string $apiUrl): void
+    {
+        $client = $this->client($apiUrl);
+        $this->respond(200, ['token_type' => 'Bearer', 'expires_in' => 3600, 'access_token' => 'ct-access-token', 'refresh_token' => 'ct-refresh-token']);
+
+        self::assertSame('ct-access-token', $this->exchange($client));
+
+        $request = $this->lastRequest();
+        self::assertSame('POST', $request->getMethod());
+        self::assertSame('https://example.church.tools/oauth/access_token', (string) $request->getUri());
+        self::assertSame('application/x-www-form-urlencoded', $request->getHeaderLine('Content-Type'));
+        self::assertFalse($request->hasHeader('Authorization'), 'The service user\'s token is never sent to the OAuth server.');
+        parse_str((string) $request->getBody(), $form);
+        self::assertSame([
+            'grant_type' => 'authorization_code',
+            'client_id' => 'client-id',
+            'client_secret' => self::CLIENT_SECRET,
+            'redirect_uri' => 'https://example.church.tools/ccm/ctpassstore/',
+            'code' => self::CODE,
+            'code_verifier' => self::VERIFIER,
+        ], $form);
+    }
+
+    /**
+     * @param array<string, mixed>|string $body
+     * @param class-string<\Throwable> $exception
+     */
+    #[DataProvider('exchangeErrors')]
+    public function testCodeExchangeErrors(int $status, array|string $body, string $exception): void
+    {
+        $client = $this->client();
+        $this->respond($status, $body);
+
+        try {
+            $this->exchange($client);
+            self::fail('Expected ' . $exception);
+        } catch (\Throwable $e) {
+            self::assertInstanceOf($exception, $e);
+            foreach ([self::CLIENT_SECRET, self::CODE, self::VERIFIER] as $secret) {
+                self::assertStringNotContainsString($secret, $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * @return iterable<string, array{int, array<string, mixed>|string, class-string<\Throwable>}>
+     */
+    public static function exchangeErrors(): iterable
+    {
+        yield 'invalid_grant' => [400, ['error' => 'invalid_grant', 'error_description' => 'The authorization code has expired'], OAuthCodeRejectedException::class];
+        yield 'invalid_request' => [400, ['error' => 'invalid_request', 'hint' => 'Check the code_verifier ' . self::VERIFIER], OAuthCodeRejectedException::class];
+        yield '400 without JSON' => [400, 'Bad Request', OAuthCodeRejectedException::class];
+        yield 'invalid_client 401' => [401, ['error' => 'invalid_client'], OAuthClientRejectedException::class];
+        yield 'invalid_client 400' => [400, ['error' => 'invalid_client'], OAuthClientRejectedException::class];
+        yield '401 without JSON' => [401, '', OAuthClientRejectedException::class];
+        yield 'error code with odd characters' => [400, ['error' => "x\n" . self::CODE], OAuthCodeRejectedException::class];
+        yield '429' => [429, [], RateLimitedException::class];
+        yield '500' => [500, [], UnavailableException::class];
+        yield 'no access_token' => [200, ['token_type' => 'Bearer'], InvalidResponseException::class];
+        yield 'empty access_token' => [200, ['access_token' => ''], InvalidResponseException::class];
+        yield 'not JSON' => [200, 'nope', InvalidResponseException::class];
     }
 
     // ---------------------------------------------------------------- CC-06 no secrets in messages

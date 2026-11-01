@@ -23,13 +23,25 @@ final class BackendConfig
         public readonly string $apiToken,
         public readonly array $corsOrigins,
         public readonly string $credentialsPath,
+        public readonly string $oauthClientId,
+        #[\SensitiveParameter]
+        public readonly string $oauthClientSecret,
+        #[\SensitiveParameter]
+        public readonly string $jwtSecret,
         public readonly string $logLevel = 'info',
-        public readonly ?string $oauthClientId = null,
-        #[\SensitiveParameter]
-        public readonly ?string $oauthClientSecret = null,
-        #[\SensitiveParameter]
-        public readonly ?string $jwtSecret = null,
     ) {}
+
+    /**
+     * The ChurchTools instance as `https://host[:port]`, taken from CT_API_URL. Login redirect URIs must point there.
+     */
+    public function instanceOrigin(): string
+    {
+        $parts = parse_url($this->apiUrl);
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        $port = $parts['port'] ?? 443;
+
+        return 'https://' . $host . ($port === 443 ? '' : ':' . $port);
+    }
 
     /**
      * @param mixed $credentials the value returned by `credentials.php`
@@ -47,11 +59,10 @@ final class BackendConfig
             self::token($credentials['CT_API_TOKEN'] ?? null, 'CT_API_TOKEN'),
             self::corsOrigins($credentials['CORS'] ?? null),
             $credentialsPath,
-            self::logLevel($credentials['LOG_LEVEL'] ?? null),
-            // The OAuth keys become required with the login in plan item 3.1; until then they're checked if present.
-            self::optionalToken($credentials['OAUTH_CLIENT_ID'] ?? null, 'OAUTH_CLIENT_ID'),
-            self::optionalToken($credentials['OAUTH_CLIENT_SECRET'] ?? null, 'OAUTH_CLIENT_SECRET'),
+            self::token($credentials['OAUTH_CLIENT_ID'] ?? null, 'OAUTH_CLIENT_ID'),
+            self::token($credentials['OAUTH_CLIENT_SECRET'] ?? null, 'OAUTH_CLIENT_SECRET'),
             self::jwtSecret($credentials['JWT_SECRET'] ?? null),
+            self::logLevel($credentials['LOG_LEVEL'] ?? null),
         );
     }
 
@@ -85,16 +96,8 @@ final class BackendConfig
         return $value;
     }
 
-    private static function optionalToken(mixed $value, string $key): ?string
+    private static function jwtSecret(mixed $value): string
     {
-        return $value === null ? null : self::token($value, $key);
-    }
-
-    private static function jwtSecret(mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
         $secret = self::token($value, 'JWT_SECRET');
         if (strlen($secret) < self::MIN_JWT_SECRET_BYTES) {
             throw new ConfigurationException('JWT_SECRET in credentials.php must have at least ' . self::MIN_JWT_SECRET_BYTES . ' bytes.');

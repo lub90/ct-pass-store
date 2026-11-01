@@ -18,6 +18,25 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 interface ChurchToolsClient
 {
     /**
+     * Exchanges an OAuth authorization code (with PKCE) for a ChurchTools access token (spec 4.4.2). The token is
+     * returned as is; checking it is the caller's job.
+     *
+     * @throws Exception\OAuthCodeRejectedException if ChurchTools doesn't accept the code
+     * @throws Exception\OAuthClientRejectedException if ChurchTools doesn't accept the client ID or secret
+     * @throws Exception\ChurchToolsException for every other failure
+     */
+    public function exchangeAuthorizationCode(
+        string $clientId,
+        #[\SensitiveParameter]
+        string $clientSecret,
+        #[\SensitiveParameter]
+        string $code,
+        string $redirectUri,
+        #[\SensitiveParameter]
+        string $codeVerifier,
+    ): string;
+
+    /**
      * `GET /whoami` as the given user.
      *
      * @return array<string, mixed> the `data` member (the person)

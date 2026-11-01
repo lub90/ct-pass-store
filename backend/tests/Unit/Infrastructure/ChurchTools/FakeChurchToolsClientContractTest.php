@@ -28,6 +28,7 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
         $this->fake->seedValue($ids[KvSchema::PASSWORD_CATEGORY], '{"personId":5,"secondaryPwd":"x"}');
         $this->fake->addUser($this->validUserCredential(), 5, 'jdoe', [KvSchema::EXTENSION_KEY => ['view' => true]]);
         $this->fake->addLogin('jdoe', 'Secret-1!', 5);
+        $this->fake->setOAuthClient('oauth-client', 'oauth-secret');
     }
 
     protected function client(): ChurchToolsClient
@@ -38,6 +39,14 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
     protected function validUserCredential(): Credential
     {
         return Credential::loginToken('contract-user-token');
+    }
+
+    /**
+     * @return array{id: string, secret: string, redirectUri: string}
+     */
+    protected function oauthClient(): array
+    {
+        return ['id' => 'oauth-client', 'secret' => 'oauth-secret', 'redirectUri' => 'https://example.church.tools/ccm/ctpassstore/'];
     }
 
     protected function loginUser(): array

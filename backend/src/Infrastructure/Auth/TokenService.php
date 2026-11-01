@@ -6,6 +6,8 @@ namespace CtPassStore\Infrastructure\Auth;
 
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
+use CtPassStore\Application\IssuedToken;
+use CtPassStore\Application\Port\AccessTokenIssuer;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
@@ -16,7 +18,7 @@ use Firebase\JWT\Key;
  * Issues and validates the backend's own access tokens for users (spec 4.4, Q21): HS256 with `JWT_SECRET`, 15
  * minutes. The algorithm is pinned; `iss` and `aud` are constants and never come from the request.
  */
-final class TokenService
+final class TokenService implements AccessTokenIssuer
 {
     public const ALGORITHM = 'HS256';
     public const ISSUER = 'ctpassstore-backend';

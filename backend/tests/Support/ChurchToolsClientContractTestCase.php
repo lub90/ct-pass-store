@@ -8,6 +8,8 @@ use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\TestCase;
@@ -35,6 +37,13 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
      * @return array{username: string, password: string, personId: int}
      */
     abstract protected function loginUser(): array;
+
+    /**
+     * The backend's OAuth client, or null if it isn't configured (the OAuth cases are then skipped).
+     *
+     * @return array{id: string, secret: string, redirectUri: string}|null
+     */
+    abstract protected function oauthClient(): ?array;
 
     /** @var list<int> value IDs to delete after the test */
     private array $created = [];
@@ -179,6 +188,28 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         } catch (NotFoundException) {
             self::assertNull($this->valueById($id), 'The update must not bring the value back.');
         }
+    }
+
+    /**
+     * AX-12: an unknown code gives the "code rejected" error, not a misconfiguration (spec 4.4.2).
+     */
+    public function testAnUnknownAuthorizationCodeIsRejected(): void
+    {
+        $oauth = $this->oauthClient() ?? self::markTestSkipped('Add OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET to config/credentials.php for the OAuth cases.');
+
+        $this->expectException(OAuthCodeRejectedException::class);
+        $this->client()->exchangeAuthorizationCode($oauth['id'], $oauth['secret'], 'not-a-real-code-' . bin2hex(random_bytes(8)), $oauth['redirectUri'], str_repeat('v', 43));
+    }
+
+    /**
+     * A wrong client secret is a misconfiguration (500), never "code invalid" (spec 4.4.2, catalog AX-05).
+     */
+    public function testAWrongClientSecretIsRejectedAsClient(): void
+    {
+        $oauth = $this->oauthClient() ?? self::markTestSkipped('Add OAUTH_CLIENT_ID and OAUTH_CLIENT_SECRET to config/credentials.php for the OAuth cases.');
+
+        $this->expectException(OAuthClientRejectedException::class);
+        $this->client()->exchangeAuthorizationCode($oauth['id'], 'wrong-secret-' . bin2hex(random_bytes(8)), 'not-a-real-code', $oauth['redirectUri'], str_repeat('v', 43));
     }
 
     private function valueById(int $id): ?string

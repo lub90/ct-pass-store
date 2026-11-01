@@ -9,7 +9,10 @@ use CtPassStore\Application\Exception\ApplicationException;
 use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
 use CtPassStore\Application\Exception\EntryNotFoundException;
 use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
+use CtPassStore\Application\Exception\InvalidRedirectUriException;
 use CtPassStore\Application\Exception\InvalidTokenException;
+use CtPassStore\Application\Exception\NoServiceAccessException;
+use CtPassStore\Application\Exception\OAuthCodeInvalidException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
 use CtPassStore\Application\Exception\TokenExpiredException;
@@ -65,6 +68,9 @@ final class ApplicationExceptionMappingTest extends TestCase
         yield 'password rejected' => [new PasswordRejectedException('weak', ['too-short']), 400, 'password-invalid'];
         yield 'invalid token' => [new InvalidTokenException('bad'), 401, 'invalid-token'];
         yield 'token expired' => [new TokenExpiredException('old'), 401, 'token-expired'];
+        yield 'oauth code invalid' => [new OAuthCodeInvalidException('code'), 400, 'oauth-code-invalid'];
+        yield 'no service access' => [new NoServiceAccessException('view'), 403, 'no-service-access'];
+        yield 'invalid redirect uri' => [new InvalidRedirectUriException('uri'), 400, 'invalid-body'];
     }
 
     public function testEveryApplicationExceptionIsCovered(): void

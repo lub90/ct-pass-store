@@ -8,6 +8,8 @@ use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 
 /**
@@ -44,6 +46,12 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<string, list<\Throwable>> */
     private array $failures = [];
 
+    /** @var array{id: string, secret: string}|null */
+    private ?array $oauthClient = null;
+
+    /** @var array<string, array{verifier: string, redirectUri: string, token: string}> */
+    private array $codes = [];
+
     /** @var array<string, list<\Closure(): void>> */
     private array $hooks = [];
 
@@ -59,6 +67,32 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     {
         $this->people[$credential->authorizationHeader()] = ['id' => $personId, 'cmsUserId' => $username];
         $this->permissions[$credential->authorizationHeader()] = $permissions;
+    }
+
+    /**
+     * The OAuth client the fake accepts in exchangeAuthorizationCode().
+     */
+    public function setOAuthClient(string $clientId, string $clientSecret): void
+    {
+        $this->oauthClient = ['id' => $clientId, 'secret' => $clientSecret];
+    }
+
+    /**
+     * An authorization code that can be exchanged once for `$accessToken`, with this verifier and redirect URI.
+     */
+    public function addAuthorizationCode(string $code, string $codeVerifier, string $redirectUri, string $accessToken): void
+    {
+        $this->codes[$code] = ['verifier' => $codeVerifier, 'redirectUri' => $redirectUri, 'token' => $accessToken];
+    }
+
+    /**
+     * Replaces what `whoami` returns for the credential, e.g. with malformed data.
+     *
+     * @param array<string, mixed> $whoami
+     */
+    public function setWhoami(Credential $credential, array $whoami): void
+    {
+        $this->people[$credential->authorizationHeader()] = $whoami;
     }
 
     public function addLogin(string $username, string $password, int $personId, string $status = LoginResult::STATUS_SUCCESS): void
@@ -163,6 +197,31 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     // ---------------------------------------------------------------- ChurchToolsClient
+
+    public function exchangeAuthorizationCode(
+        string $clientId,
+        #[\SensitiveParameter]
+        string $clientSecret,
+        #[\SensitiveParameter]
+        string $code,
+        string $redirectUri,
+        #[\SensitiveParameter]
+        string $codeVerifier,
+    ): string {
+        $this->record(__FUNCTION__, [$clientId, $redirectUri]);
+
+        if ($this->oauthClient === null || $this->oauthClient['id'] !== $clientId || !hash_equals($this->oauthClient['secret'], $clientSecret)) {
+            throw new OAuthClientRejectedException('POST oauth/access_token: ChurchTools answered 401 (invalid_client).');
+        }
+        $grant = $this->codes[$code] ?? null;
+        // A code is used up by the first attempt, even a failed one, as with ChurchTools' OAuth server.
+        unset($this->codes[$code]);
+        if ($grant === null || $grant['redirectUri'] !== $redirectUri || !hash_equals($grant['verifier'], $codeVerifier)) {
+            throw new OAuthCodeRejectedException('POST oauth/access_token: ChurchTools answered 400 (invalid_grant).');
+        }
+
+        return $grant['token'];
+    }
 
     public function whoami(Credential $user): array
     {

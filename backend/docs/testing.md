@@ -128,6 +128,8 @@ vendor/bin/phpunit -c phpunit.xml --filter 'ChurchToolsClientContractTest|LiveEn
 ```
 
 - `ChurchToolsClientContractTest` writes only values with `personId` `0` and deletes them again.
+  Its OAuth cases (unknown code, wrong client secret) read `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` from
+  `config/credentials.php` and are skipped while those are missing. They send no valid code, so nothing changes.
 - `LiveEntriesTest` starts the backend locally (port 8091, several workers) and writes only the entry of the first user
   in `normal_users.json`. It skips if that user already has an entry, and it deletes what it created. It needs an
   instance that allows custom passwords without a primary password.

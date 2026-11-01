@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Infrastructure\Auth;
+namespace CtPassStore\Application;
 
+/**
+ * A backend access token as handed to the client.
+ */
 final class IssuedToken
 {
     public function __construct(

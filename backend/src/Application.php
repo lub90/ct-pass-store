@@ -7,9 +7,12 @@ namespace CtPassStore;
 use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
 use CtPassStore\Application\GetPassword;
+use CtPassStore\Application\Login;
+use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\SetPassword;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PasswordPolicy;
+use CtPassStore\Http\Controller\AuthController;
 use CtPassStore\Http\Controller\EntriesController;
 use CtPassStore\Http\Controller\SelfCheckController;
 use CtPassStore\Http\Middleware\AuthMiddleware;
@@ -17,13 +20,16 @@ use CtPassStore\Http\Middleware\CorsMiddleware;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\Auth\TokenService;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsAuthenticator;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsIdentityProvider;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPasswordVerifier;
 use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Time\SystemClock;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -31,6 +37,7 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Slim\App;
 use Slim\Factory\AppFactory;
+use Slim\Interfaces\RouteCollectorProxyInterface;
 
 /**
  * Builds the Slim app. The only place where the layers are wired together (composition root).
@@ -43,8 +50,10 @@ final class Application
     /**
      * @return App<null>
      */
-    public static function create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger): App
+    public static function create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): App
     {
+        $clock ??= new SystemClock();
+        $tokens = new TokenService($config->jwtSecret, $clock);
         $extensionData = new ExtensionData($churchTools);
         $settings = new KvSettingsRepository($extensionData);
         $passwords = new KvPasswordRepository($extensionData, $logger);
@@ -58,16 +67,27 @@ final class Application
             new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $logger),
             new DeletePassword($guard, $passwords),
         );
-        $app->get('/entries/{id}', [$entries, 'get']);
-        $app->put('/entries/{id}', [$entries, 'put']);
-        $app->delete('/entries/{id}', [$entries, 'delete']);
-
         $selfCheck = new SelfCheckController($settings, $config->credentialsPath);
-        $app->get('/test', [$selfCheck, 'get']);
+        $login = new AuthController(new Login(
+            $config->instanceOrigin(),
+            new ChurchToolsIdentityProvider($churchTools, $config->oauthClientId, $config->oauthClientSecret, $logger),
+            $tokens,
+            $logger,
+        ));
+
+        // The only route without an access token (spec 4.1).
+        $app->post('/v1/auth/token', [$login, 'token']);
+
+        // Authentication runs per route, after routing, so unknown routes and wrong methods get 404/405 first.
+        $app->group('', function (RouteCollectorProxyInterface $group) use ($entries, $selfCheck): void {
+            $group->get('/entries/{id}', [$entries, 'get']);
+            $group->put('/entries/{id}', [$entries, 'put']);
+            $group->delete('/entries/{id}', [$entries, 'delete']);
+            $group->get('/test', [$selfCheck, 'get']);
+        })->add(new AuthMiddleware(new ChurchToolsAuthenticator($churchTools), $logger));
 
         // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):
-        // CORS → error handling → routing (404/405) → authentication → endpoint.
-        $app->add(new AuthMiddleware(new ChurchToolsAuthenticator($churchTools), $logger));
+        // CORS → error handling → routing (404/405) → authentication (per route) → endpoint.
         $app->addRoutingMiddleware();
         $app->add(new ErrorMiddleware($logger));
         $app->add(new CorsMiddleware($config->corsOrigins));
