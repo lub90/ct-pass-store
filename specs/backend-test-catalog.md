@@ -27,7 +27,7 @@ normal case names it ("→ PV-05").
 
 ---
 
-## 1. Password policy (`PasswordValidator`, spec 5.1)
+## 1. Password policy (`PasswordPolicy`, spec 5.1)
 
 ### Validation
 
@@ -80,7 +80,7 @@ normal case names it ("→ PV-05").
 - [x] **PG-07** (E · U) `passwordLength` outside 12–64 never reaches the generator: it's a configuration error
   (`misconfigured`) when the settings are loaded — gen. 4
 
-## 2. Encryption (`EncryptionService`, spec 5.2)
+## 2. Encryption (`RsaPasswordCipher`, spec 5.2)
 
 - [ ] **EN-01** (N · U) Encrypt, then decrypt with the test private key, gives the plaintext back — 5.2.1–2
 - [ ] **EN-09** (! · U) Counterparts of EN-01: decrypting with another private key fails; a ciphertext with one flipped
@@ -98,7 +98,7 @@ normal case names it ("→ PV-05").
 - [ ] **EN-08** (N · C) A password encrypted by the backend is decrypted correctly by ct-radius' algorithm (Node.js
   `privateDecrypt`, OAEP, SHA-256). Checked once with a recorded sample. — 5.2.1
 
-## 3. Password store (`ChurchToolsStore`, spec 5.3)
+## 3. Password store (`KvPasswordRepository`, spec 5.3)
 
 - [x] **ST-01** (N · U) Read an existing entry → its ciphertext — 5.3.3
 - [x] **ST-02** (N · U) Read a missing entry → "none" — 5.3.3

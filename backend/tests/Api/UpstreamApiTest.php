@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
@@ -12,6 +11,7 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -41,7 +41,7 @@ final class UpstreamApiTest extends ApiTestCase
     {
         $this->churchTools->failNext($method, $failure);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         $this->assertProblem($expected, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -49,10 +49,10 @@ final class UpstreamApiTest extends ApiTestCase
 
     public function testRateLimitDuringThePrimaryPasswordCheckIsNotAWrongPassword(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
         $this->churchTools->failNext('verifyLogin', new RateLimitedException('429', 90));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::USER)]);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
 
         $body = $this->assertProblem(ProblemType::UpstreamRateLimited, $response);
         self::assertSame('90', $response->getHeaderLine('Retry-After'));

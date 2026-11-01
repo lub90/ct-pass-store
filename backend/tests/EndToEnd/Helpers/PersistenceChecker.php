@@ -22,7 +22,7 @@ class PersistenceChecker
      */
     public function saveStatus(): void
     {
-        $this->status = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
+        $this->status = Helpers::getExtensionData()->values($this->category);
     }
 
     /**
@@ -30,7 +30,7 @@ class PersistenceChecker
      */
     public function assertUnchanged(): void
     {
-        $current = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
+        $current = Helpers::getExtensionData()->values($this->category);
         Assert::assertSame(
             $this->status,
             $current,
@@ -43,7 +43,7 @@ class PersistenceChecker
      */
     public function assertChanged(): void
     {
-        $current = Helpers::getExtensionDataService()->getCategoryData($this->category, false);
+        $current = Helpers::getExtensionData()->values($this->category);
         Assert::assertNotSame(
             $this->status,
             $current,

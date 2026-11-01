@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
@@ -12,6 +11,7 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -146,7 +146,7 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testMissingSettingsAreMisconfigured(): void
     {
-        $this->churchTools->clearValues($this->categoryIds[AppConfig::CT_SETTINGS_CATEGORY_NAME]);
+        $this->churchTools->clearValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY]);
 
         $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/entries/' . self::OTHER, self::USER));
 
@@ -155,10 +155,10 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testChurchToolsFailureDuringThePrimaryPasswordCheckIsNotAWrongPassword(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
         $this->churchTools->failNext('verifyLogin', new UnavailableException('POST login: unreachable.'));
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::USER)]);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
 
         $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
         self::assertSame(0, $this->churchTools->writeCount());

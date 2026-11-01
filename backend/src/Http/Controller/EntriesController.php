@@ -4,59 +4,46 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Controller;
 
-use CtPassStore\Auth\AuthenticatedPerson;
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Application\DeletePassword;
+use CtPassStore\Application\GetPassword;
+use CtPassStore\Application\SetPassword;
+use CtPassStore\Domain\Principal;
 use CtPassStore\Http\JsonBody;
+use CtPassStore\Http\Middleware\AuthMiddleware;
 use CtPassStore\Http\PathId;
-use CtPassStore\Http\Problem\ProblemException;
-use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Service\BaseService;
-use CtPassStore\Service\ChurchToolsAuthVerifier;
-use CtPassStore\Service\ChurchToolsStore;
-use CtPassStore\Service\EncryptionService;
-use CtPassStore\Service\PasswordValidator;
-use CtPassStore\Service\ServiceSettings;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Log\LoggerInterface;
 
 /**
- * `GET|PUT|DELETE /entries/{id}`.
+ * `GET|PUT|DELETE /entries/{id}`: parses the request, runs the use case and writes the response.
  *
- * Order of checks (spec 4.1): authentication (middleware) → path ID and body syntax → authorization (before any
- * entry is looked up) → primary password → password policy → storage.
+ * Order of checks (spec 4.1): authentication (middleware) → path ID and body syntax (here) → authorization →
+ * primary password → password policy → storage (use cases).
  */
-class EntriesController extends BaseService
+final class EntriesController
 {
+    private const PRIMARY_PASSWORD = 'primaryPwd';
+    private const SECONDARY_PASSWORD = 'secondaryPwd';
+
     /** Bodies of PUT and DELETE (spec 4.6, 4.7). */
-    private const PUT_FIELDS = [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'string', AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'string'];
-    private const DELETE_FIELDS = [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'string'];
+    private const PUT_FIELDS = [self::PRIMARY_PASSWORD => 'string', self::SECONDARY_PASSWORD => 'string'];
+    private const DELETE_FIELDS = [self::PRIMARY_PASSWORD => 'string'];
 
     public function __construct(
-        private readonly ServiceSettings $settings,
-        private readonly ChurchToolsStore $store,
-        private readonly EncryptionService $encryption,
-        private readonly PasswordValidator $validator,
-        private readonly ChurchToolsAuthVerifier $authVerifier,
-        LoggerInterface $logger,
-    ) {
-        parent::__construct($logger);
-    }
+        private readonly GetPassword $getPassword,
+        private readonly SetPassword $setPassword,
+        private readonly DeletePassword $deletePassword,
+    ) {}
 
     /**
      * @param array<string, string> $args
      */
     public function get(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = PathId::parse($args['id'] ?? null);
-        $this->authorize($request, $targetId, true);
+        $target = PathId::parse($args['id'] ?? null);
+        $ciphertext = $this->getPassword->execute(self::principal($request), $target);
 
-        $ciphertext = $this->store->getPwd($targetId);
-        if ($ciphertext === null) {
-            throw new ProblemException(ProblemType::EntryNotFound, "Person {$targetId} has no secondary password.");
-        }
-
-        return $this->json($response, 200, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => $ciphertext]);
+        return self::json($response, 200, [self::SECONDARY_PASSWORD => $ciphertext]);
     }
 
     /**
@@ -64,39 +51,19 @@ class EntriesController extends BaseService
      */
     public function put(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = PathId::parse($args['id'] ?? null);
+        $target = PathId::parse($args['id'] ?? null);
         $body = JsonBody::parse($request, self::PUT_FIELDS);
-        $user = $this->authorize($request, $targetId, false);
-        $this->checkPrimaryPassword($user, $body);
 
-        $custom = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
-        if ($custom !== null) {
-            if (!$this->settings->allowCustomPasswords()) {
-                $this->logger->warning("User {$user->id} tried to set a custom password, but custom passwords are disabled.");
-                throw new ProblemException(ProblemType::CustomPasswordNotAllowed, 'Custom passwords are disabled; omit secondaryPwd to get a generated password.');
-            }
-            $violations = $this->validator->violations($custom, $this->settings->pwdLength());
-            if ($violations !== []) {
-                $this->logger->info("User {$user->id} tried to set a password that doesn't meet the policy.");
-                throw new ProblemException(ProblemType::PasswordInvalid, sprintf(
-                    'The password must have %d to %d characters, contain a letter, a digit and one of ! @ $ %% & * - _ + = ? . and no other characters.',
-                    $this->settings->pwdLength(),
-                    PasswordValidator::MAX_LENGTH,
-                ), ['violations' => $violations]);
-            }
-            $password = $custom;
-        } else {
-            $password = $this->validator->generateRandom($this->settings->pwdLength());
-        }
+        $generated = $this->setPassword->execute(
+            self::principal($request),
+            $target,
+            $body[self::SECONDARY_PASSWORD] ?? null,
+            $body[self::PRIMARY_PASSWORD] ?? null,
+        );
 
-        // Stored first; a generated password is only returned once it's saved (spec 4.6).
-        $this->store->putPwd($targetId, $this->encryption->encrypt($password));
-
-        if ($custom !== null) {
-            return $response->withStatus(204);
-        }
-
-        return $this->json($response, 200, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => $password]);
+        return $generated === null
+            ? $response->withStatus(204)
+            : self::json($response, 200, [self::SECONDARY_PASSWORD => $generated]);
     }
 
     /**
@@ -104,64 +71,28 @@ class EntriesController extends BaseService
      */
     public function delete(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = PathId::parse($args['id'] ?? null);
+        $target = PathId::parse($args['id'] ?? null);
         $body = JsonBody::parse($request, self::DELETE_FIELDS);
-        $user = $this->authorize($request, $targetId, false);
-        $this->checkPrimaryPassword($user, $body);
 
-        $this->store->deletePwd($targetId);
+        $this->deletePassword->execute(self::principal($request), $target, $body[self::PRIMARY_PASSWORD] ?? null);
 
         return $response->withStatus(204);
     }
 
-    /**
-     * Throws `403 forbidden` unless the caller may act on the target's entry. Runs before the entry is looked up,
-     * so the answer never reveals whether it exists.
-     */
-    private function authorize(ServerRequestInterface $request, int $targetId, bool $isRead): AuthenticatedPerson
+    private static function principal(ServerRequestInterface $request): Principal
     {
-        $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
-        if (!$user instanceof AuthenticatedPerson) {
-            throw new \LogicException('The request has no authenticated person.');
+        $principal = $request->getAttribute(AuthMiddleware::PRINCIPAL);
+        if (!$principal instanceof Principal) {
+            throw new \LogicException('The request has no authenticated principal.');
         }
 
-        if ($user->id !== $targetId) {
-            $allowed = in_array($user->id, $this->settings->adminUsers(), true)
-                || ($isRead && in_array($user->id, $this->settings->readAccessUsers(), true));
-            if (!$allowed) {
-                $this->logger->warning("User {$user->id} tried to access the entry of person {$targetId} without permission.");
-                throw new ProblemException(ProblemType::Forbidden, "You aren't allowed to access the entry of person {$targetId}.");
-            }
-        }
-
-        return $user;
+        return $principal;
     }
 
     /**
-     * @param array<string, string> $body
+     * @param array<string, string> $data
      */
-    private function checkPrimaryPassword(AuthenticatedPerson $user, array $body): void
-    {
-        if (!$this->settings->requirePasswordForPasswordChange()) {
-            return;
-        }
-
-        $primary = $body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '';
-        if ($primary === '') {
-            $this->logger->info("User {$user->id} tried to change an entry without the required primary password.");
-            throw new ProblemException(ProblemType::PrimaryPasswordRequired, 'This change needs your ChurchTools password in ' . AppConfig::REQUEST_PRIMARY_PWD_FIELD . '.');
-        }
-
-        // The username comes from the authenticated person, never from the request (spec 4.6).
-        if (!$this->authVerifier->verifyUserPassword($user->username, $primary)) {
-            throw new ProblemException(ProblemType::InvalidPrimaryPassword, 'The ChurchTools password is wrong.');
-        }
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function json(ResponseInterface $response, int $status, array $data): ResponseInterface
+    private static function json(ResponseInterface $response, int $status, array $data): ResponseInterface
     {
         $response->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
 

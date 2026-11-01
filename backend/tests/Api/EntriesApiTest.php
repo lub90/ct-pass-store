@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -61,7 +61,7 @@ final class EntriesApiTest extends ApiTestCase
         $response = $this->request('GET', '/entries/' . self::USER, self::USER);
 
         self::assertSame(200, $response->getStatusCode());
-        self::assertSame([AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Y2lwaGVydGV4dA=='], $this->json($response));
+        self::assertSame(['secondaryPwd' => 'Y2lwaGVydGV4dA=='], $this->json($response));
     }
 
     public function testMissingEntryIs404(): void
@@ -99,7 +99,7 @@ final class EntriesApiTest extends ApiTestCase
         $response = $this->request('GET', '/entries/' . self::OTHER, $reader);
 
         self::assertSame(200, $response->getStatusCode());
-        self::assertSame('b3RoZXI=', $this->json($response)[AppConfig::REQUEST_SECONDARY_PWD_FIELD]);
+        self::assertSame('b3RoZXI=', $this->json($response)['secondaryPwd']);
     }
 
     // ---------------------------------------------------------------- PUT
@@ -109,25 +109,25 @@ final class EntriesApiTest extends ApiTestCase
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER);
 
         self::assertSame(200, $response->getStatusCode());
-        $password = $this->json($response)[AppConfig::REQUEST_SECONDARY_PWD_FIELD];
+        $password = $this->json($response)['secondaryPwd'];
         self::assertIsString($password);
         self::assertSame(12, strlen($password));
 
         $entries = $this->storedEntries();
         self::assertCount(1, $entries);
-        self::assertSame(self::USER, $entries[0][AppConfig::CT_PERSON_ID_PWD_FIELD]);
-        self::assertSame($password, $this->decrypt($entries[0][AppConfig::CT_ENCRYPTED_PWD_FIELD]));
+        self::assertSame(self::USER, $entries[0][KvSchema::ENTRY_PERSON_ID]);
+        self::assertSame($password, $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));
     }
 
     public function testCustomPasswordIsStoredEncrypted(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         self::assertSame(204, $response->getStatusCode());
         self::assertSame('', (string) $response->getBody());
         $entries = $this->storedEntries();
         self::assertCount(1, $entries);
-        self::assertSame('Custom-pass12!', $this->decrypt($entries[0][AppConfig::CT_ENCRYPTED_PWD_FIELD]));
+        self::assertSame('Custom-pass12!', $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));
     }
 
     public function testUpdatingKeepsExactlyOneEntry(): void
@@ -135,20 +135,20 @@ final class EntriesApiTest extends ApiTestCase
         $this->seedEntry(self::USER);
         $this->seedEntry(self::OTHER);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         self::assertSame(204, $response->getStatusCode());
-        $mine = array_values(array_filter($this->storedEntries(), static fn(array $e): bool => $e[AppConfig::CT_PERSON_ID_PWD_FIELD] === self::USER));
+        $mine = array_values(array_filter($this->storedEntries(), static fn(array $e): bool => $e[KvSchema::ENTRY_PERSON_ID] === self::USER));
         self::assertCount(1, $mine);
-        self::assertSame('Custom-pass12!', $this->decrypt($mine[0][AppConfig::CT_ENCRYPTED_PWD_FIELD]));
+        self::assertSame('Custom-pass12!', $this->decrypt($mine[0][KvSchema::ENTRY_CIPHERTEXT]));
         self::assertCount(2, $this->storedEntries(), 'The other person\'s entry must stay.');
     }
 
     public function testCustomPasswordWhileNotAllowedIs400AndStoresNothing(): void
     {
-        $this->setSettings([AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME => false]);
+        $this->setSettings([KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => false]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         $this->assertProblem(ProblemType::CustomPasswordNotAllowed, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -156,7 +156,7 @@ final class EntriesApiTest extends ApiTestCase
 
     public function testInvalidCustomPasswordIs400AndStoresNothing(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'tooshort']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'tooshort']);
 
         $this->assertProblem(ProblemType::PasswordInvalid, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -183,14 +183,14 @@ final class EntriesApiTest extends ApiTestCase
         $response = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN);
 
         self::assertSame(200, $response->getStatusCode());
-        self::assertSame(self::OTHER, $this->storedEntries()[0][AppConfig::CT_PERSON_ID_PWD_FIELD]);
+        self::assertSame(self::OTHER, $this->storedEntries()[0][KvSchema::ENTRY_PERSON_ID]);
     }
 
     // ---------------------------------------------------------------- primary password
 
     public function testPrimaryPasswordRequiredButMissingIs400(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER, []);
 
@@ -200,9 +200,9 @@ final class EntriesApiTest extends ApiTestCase
 
     public function testWrongPrimaryPasswordIs403(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'wrong']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => 'wrong']);
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $response);
         self::assertSame(0, $this->churchTools->writeCount());
@@ -210,9 +210,9 @@ final class EntriesApiTest extends ApiTestCase
 
     public function testCorrectPrimaryPasswordAllowsTheChange(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::USER)]);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
 
         self::assertSame(200, $response->getStatusCode());
         self::assertCount(1, $this->storedEntries());
@@ -220,10 +220,10 @@ final class EntriesApiTest extends ApiTestCase
 
     public function testAdminIsCheckedAgainstTheirOwnPrimaryPassword(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $withTargetsPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::OTHER)]);
-        $withOwnPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::ADMIN)]);
+        $withTargetsPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, ['primaryPwd' => $this->primaryPasswordOf(self::OTHER)]);
+        $withOwnPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, ['primaryPwd' => $this->primaryPasswordOf(self::ADMIN)]);
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $withTargetsPassword);
         self::assertSame(200, $withOwnPassword->getStatusCode());
@@ -241,7 +241,7 @@ final class EntriesApiTest extends ApiTestCase
         self::assertSame(204, $response->getStatusCode());
         $remaining = $this->storedEntries();
         self::assertCount(1, $remaining);
-        self::assertSame(self::OTHER, $remaining[0][AppConfig::CT_PERSON_ID_PWD_FIELD]);
+        self::assertSame(self::OTHER, $remaining[0][KvSchema::ENTRY_PERSON_ID]);
     }
 
     public function testDeletingWithoutAnEntryIs204(): void
@@ -255,10 +255,10 @@ final class EntriesApiTest extends ApiTestCase
 
     public function testNoSecretReachesTheLog(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'wrong-primary', AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
-        $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::USER), AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => 'wrong-primary', 'secondaryPwd' => 'Custom-pass12!']);
+        $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER), 'secondaryPwd' => 'Custom-pass12!']);
         $this->request('GET', '/entries/' . self::USER, self::USER);
 
         $secrets = ['wrong-primary', $this->primaryPasswordOf(self::USER), 'Custom-pass12!', $this->tokenOf(self::USER)];

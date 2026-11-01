@@ -2,10 +2,12 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Service;
+namespace CtPassStore\Infrastructure\Kv;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Application\Port\PasswordRepository;
+use CtPassStore\Domain\PersonId;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use Psr\Log\LoggerInterface;
 
 /**
  * The encrypted passwords in the KV category `passwordStore`, one value per person (spec 5.3).
@@ -16,7 +18,7 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
  * - skips broken values without failing for other people,
  * - ignores values with the reserved person ID 0 (they belong to the self-test).
  */
-class ChurchToolsStore extends ChurchToolsBaseService
+final class KvPasswordRepository implements PasswordRepository
 {
     /** Values must stay under the KV store's limit (spec 5.3.8). */
     public const MAX_VALUE_LENGTH = 10_000;
@@ -24,12 +26,17 @@ class ChurchToolsStore extends ChurchToolsBaseService
     /** Reserved for the self-test (spec 5.3.11). */
     public const SELF_TEST_PERSON_ID = 0;
 
+    public function __construct(
+        private readonly ExtensionData $extension,
+        private readonly LoggerInterface $logger,
+    ) {}
+
     /**
      * The newest ciphertext stored for the person, or null if there's none.
      */
-    public function getPwd(int $personId): ?string
+    public function find(PersonId $person): ?string
     {
-        $this->assertPerson($personId);
+        $personId = $person->value;
 
         $valid = array_filter($this->entriesOf($personId), static fn(array $entry): bool => $entry['ciphertext'] !== null);
         if ($valid === []) {
@@ -48,13 +55,13 @@ class ChurchToolsStore extends ChurchToolsBaseService
      *
      * @throws ChurchToolsException if the entry can't be written; the previous entry then stays as it was
      */
-    public function putPwd(int $personId, string $ciphertext): void
+    public function save(PersonId $person, string $ciphertext): void
     {
-        $this->assertPerson($personId);
+        $personId = $person->value;
 
         $value = json_encode([
-            AppConfig::CT_PERSON_ID_PWD_FIELD => $personId,
-            AppConfig::CT_ENCRYPTED_PWD_FIELD => $ciphertext,
+            KvSchema::ENTRY_PERSON_ID => $personId,
+            KvSchema::ENTRY_CIPHERTEXT => $ciphertext,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
         if (strlen($value) > self::MAX_VALUE_LENGTH) {
             throw new \LogicException(sprintf('A password entry would have %d characters; the KV store allows %d.', strlen($value), self::MAX_VALUE_LENGTH));
@@ -62,7 +69,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
         $entries = $this->entriesOf($personId);
         if ($entries === []) {
-            $id = $this->extension->createCategoryEntryRaw(AppConfig::CT_PWD_CATEGORY_NAME, $value);
+            $id = $this->extension->create(KvSchema::PASSWORD_CATEGORY, $value);
             $this->logger->info("Created password entry $id for person $personId.");
 
             return;
@@ -70,12 +77,12 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
         // Update the newest entry first: if that fails, nothing has changed. Only then remove the others.
         $newest = array_pop($entries);
-        $this->extension->updateCategoryEntryRaw(AppConfig::CT_PWD_CATEGORY_NAME, $newest['id'], $value);
+        $this->extension->update(KvSchema::PASSWORD_CATEGORY, $newest['id'], $value);
         $this->logger->info("Updated password entry {$newest['id']} for person $personId.");
 
         foreach ($entries as $duplicate) {
             try {
-                $this->extension->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $duplicate['id']);
+                $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $duplicate['id']);
                 $this->logger->warning("Removed duplicate password entry {$duplicate['id']} of person $personId.");
             } catch (ChurchToolsException $e) {
                 // The new password is stored and read as the newest entry; the next write retries the cleanup.
@@ -87,12 +94,12 @@ class ChurchToolsStore extends ChurchToolsBaseService
     /**
      * Removes every entry of the person, including duplicates and broken ones.
      */
-    public function deletePwd(int $personId): void
+    public function delete(PersonId $person): void
     {
-        $this->assertPerson($personId);
+        $personId = $person->value;
 
         foreach ($this->entriesOf($personId) as $entry) {
-            $this->extension->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
+            $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $entry['id']);
             $this->logger->info("Deleted password entry {$entry['id']} of person $personId.");
         }
     }
@@ -106,11 +113,11 @@ class ChurchToolsStore extends ChurchToolsBaseService
     private function entriesOf(int $personId): array
     {
         $entries = [];
-        foreach ($this->extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME) as $raw) {
-            $id = is_array($raw) ? ($raw['id'] ?? null) : null;
-            $json = is_array($raw) ? ($raw['value'] ?? null) : null;
+        foreach ($this->extension->values(KvSchema::PASSWORD_CATEGORY) as $raw) {
+            $id = $raw['id'] ?? null;
+            $json = $raw['value'] ?? null;
             $decoded = is_string($json) ? json_decode($json, true) : null;
-            $owner = is_array($decoded) ? self::normalizePersonId($decoded[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) : null;
+            $owner = is_array($decoded) ? self::normalizePersonId($decoded[KvSchema::ENTRY_PERSON_ID] ?? null) : null;
 
             if (!is_int($id) || $owner === null) {
                 $this->logger->warning('Skipped a password entry without a valid person ID' . (is_int($id) ? " (value $id)." : '.'));
@@ -121,7 +128,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
                 continue;
             }
 
-            $ciphertext = $decoded[AppConfig::CT_ENCRYPTED_PWD_FIELD] ?? null;
+            $ciphertext = $decoded[KvSchema::ENTRY_CIPHERTEXT] ?? null;
             if (!is_string($ciphertext) || $ciphertext === '') {
                 $this->logger->warning("Password entry $id of person $personId has no usable password.");
                 $ciphertext = null;
@@ -148,12 +155,5 @@ class ChurchToolsStore extends ChurchToolsBaseService
         }
 
         return null;
-    }
-
-    private function assertPerson(int $personId): void
-    {
-        if ($personId < 1) {
-            throw new \InvalidArgumentException('Person IDs are positive; 0 is reserved for the self-test.');
-        }
     }
 }

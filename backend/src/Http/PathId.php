@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http;
 
+use CtPassStore\Domain\PersonId;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
 
@@ -17,13 +18,13 @@ final class PathId
     /**
      * @throws ProblemException `400 invalid-id`
      */
-    public static function parse(mixed $raw): int
+    public static function parse(mixed $raw): PersonId
     {
         if (!is_string($raw) || preg_match('/^[1-9][0-9]*\z/', $raw) !== 1 || !self::fitsInt($raw)) {
             throw new ProblemException(ProblemType::InvalidId, 'The person ID must be a positive whole number in decimal notation.');
         }
 
-        return (int) $raw;
+        return new PersonId((int) $raw);
     }
 
     private static function fitsInt(string $digits): bool

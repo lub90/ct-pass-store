@@ -2,9 +2,8 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Service;
+namespace CtPassStore\Domain;
 
-use Psr\Log\LoggerInterface;
 use Random\Engine\Secure;
 use Random\Randomizer;
 
@@ -13,9 +12,14 @@ use Random\Randomizer;
  *
  * The character set is a contract with ct-radius, which rejects any other character.
  */
-class PasswordValidator extends BaseService
+final class PasswordPolicy
 {
+    /** The longest password accepted (Q8). */
     public const MAX_LENGTH = 128;
+
+    /** The range of the `passwordLength` setting (Q7). */
+    public const MIN_CONFIGURABLE_LENGTH = 12;
+    public const MAX_CONFIGURABLE_LENGTH = 64;
 
     public const TOO_SHORT = 'too-short';
     public const TOO_LONG = 'too-long';
@@ -34,9 +38,8 @@ class PasswordValidator extends BaseService
     /**
      * @param Randomizer|null $randomizer only for tests (a seeded engine); by default a cryptographically secure one
      */
-    public function __construct(LoggerInterface $logger, ?Randomizer $randomizer = null)
+    public function __construct(?Randomizer $randomizer = null)
     {
-        parent::__construct($logger);
         $this->randomizer = $randomizer ?? new Randomizer(new Secure());
     }
 

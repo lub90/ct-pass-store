@@ -4,6 +4,13 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Middleware;
 
+use CtPassStore\Application\Exception\AccessDeniedException;
+use CtPassStore\Application\Exception\ApplicationException;
+use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
+use CtPassStore\Application\Exception\EntryNotFoundException;
+use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
+use CtPassStore\Application\Exception\PasswordRejectedException;
+use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
 use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
@@ -44,6 +51,7 @@ final class ErrorMiddleware implements MiddlewareInterface
     {
         return match (true) {
             $e instanceof ProblemException => $e,
+            $e instanceof ApplicationException => self::fromApplication($e),
             $e instanceof HttpNotFoundException => new ProblemException(
                 ProblemType::NotFound,
                 'There is no endpoint ' . $request->getUri()->getPath() . '.',
@@ -83,6 +91,24 @@ final class ErrorMiddleware implements MiddlewareInterface
                 'An unexpected error occurred. Details are in the backend log.',
             )),
         };
+    }
+
+    /**
+     * Refused requests: the client gets the use case's message; the use cases log what's worth logging.
+     */
+    private static function fromApplication(ApplicationException $e): ProblemException
+    {
+        $type = match (true) {
+            $e instanceof AccessDeniedException => ProblemType::Forbidden,
+            $e instanceof EntryNotFoundException => ProblemType::EntryNotFound,
+            $e instanceof PrimaryPasswordRequiredException => ProblemType::PrimaryPasswordRequired,
+            $e instanceof InvalidPrimaryPasswordException => ProblemType::InvalidPrimaryPassword,
+            $e instanceof CustomPasswordNotAllowedException => ProblemType::CustomPasswordNotAllowed,
+            $e instanceof PasswordRejectedException => ProblemType::PasswordInvalid,
+            default => throw new \LogicException('No problem type for ' . $e::class . '.', 0, $e),
+        };
+
+        return new ProblemException($type, $e->getMessage(), $e instanceof PasswordRejectedException ? ['violations' => $e->violations] : []);
     }
 
     private function logged(\Throwable $cause, ProblemException $problem): ProblemException

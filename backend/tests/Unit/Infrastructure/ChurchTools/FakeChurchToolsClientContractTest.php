@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Infrastructure\ChurchTools;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\Support\ChurchToolsClientContractTestCase;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 
@@ -20,13 +20,13 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
     protected function setUp(): void
     {
         $this->fake = new FakeChurchToolsClient();
-        $ids = $this->fake->addModule(AppConfig::CT_EXTENSION_ID, [
-            AppConfig::CT_SETTINGS_CATEGORY_NAME,
-            AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME,
-            AppConfig::CT_PWD_CATEGORY_NAME,
+        $ids = $this->fake->addModule(KvSchema::EXTENSION_KEY, [
+            KvSchema::SETTINGS_CATEGORY,
+            KvSchema::ENCRYPTION_CATEGORY,
+            KvSchema::PASSWORD_CATEGORY,
         ]);
-        $this->fake->seedValue($ids[AppConfig::CT_PWD_CATEGORY_NAME], '{"personId":5,"secondaryPwd":"x"}');
-        $this->fake->addUser($this->validUserCredential(), 5, 'jdoe', [AppConfig::CT_EXTENSION_ID => ['view' => true]]);
+        $this->fake->seedValue($ids[KvSchema::PASSWORD_CATEGORY], '{"personId":5,"secondaryPwd":"x"}');
+        $this->fake->addUser($this->validUserCredential(), 5, 'jdoe', [KvSchema::EXTENSION_KEY => ['view' => true]]);
         $this->fake->addLogin('jdoe', 'Secret-1!', 5);
     }
 

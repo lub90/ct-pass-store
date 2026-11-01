@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\EndToEnd\Helpers\AccessTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
@@ -42,7 +42,7 @@ class TestAccessTest extends AccessTestPrototype
     public function testAuthorizedUsersHaveAccess(string $authHeader): void
     {
         // Save previous database status
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // Start request

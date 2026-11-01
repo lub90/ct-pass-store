@@ -9,7 +9,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface as Handler;
 
-class CorsMiddleware implements MiddlewareInterface
+final class CorsMiddleware implements MiddlewareInterface
 {
     /**
      * @param list<string> $allowedOrigins

@@ -504,7 +504,7 @@ real bugs are `internal-error`.
 
 These sections describe behavior per unit. Each numbered rule should map to at least one unit test.
 
-### 5.1 Password policy (`PasswordValidator`)
+### 5.1 Password policy (`PasswordPolicy`)
 
 **Validation** *(current, unless marked)*:
 
@@ -533,7 +533,7 @@ These sections describe behavior per unit. Each numbered rule should map to at l
    choosing characters and for shuffling. Tests pass a randomizer with a fixed seed to check positions
    deterministically.
 
-### 5.2 Encryption (`EncryptionService`)
+### 5.2 Encryption (`RsaPasswordCipher`)
 
 1. The algorithm is RSA with OAEP padding, SHA-256 as hash and SHA-256 for MGF1 *(current)*. ct-radius decrypts with
    exactly these parameters.
@@ -546,7 +546,7 @@ These sections describe behavior per unit. Each numbered rule should map to at l
 
 ### 5.3 Password store
 
-This covers the lookup and write logic in `ChurchToolsStore`.
+This covers the lookup and write logic in `KvPasswordRepository`.
 
 1. Entries are matched by `personId` using **one consistent comparison**: both sides are normalized to `int`.
    **(change)** Today `getPwd` uses `==` while `putPwd`/`deletePwd` use `===`.
@@ -580,7 +580,7 @@ This covers the lookup and write logic in `ChurchToolsStore`.
     person, and they don't count as duplicates. Only the self-test reads, writes and deletes them. A leftover test value
     therefore disturbs nothing.
 
-### 5.4 Settings (`ServiceSettings`)
+### 5.4 Settings (`KvSettingsRepository`)
 
 1. Settings and the public key are loaded lazily and at most once per request *(current)*.
 2. **(change)** They're cached across requests (6.1).

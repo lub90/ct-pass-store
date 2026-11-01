@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\Helpers\Helpers;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
@@ -45,49 +45,49 @@ class ChurchToolsSandboxManager
 
     public function loadSettings(array $settings): void
     {
-        $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
+        $currentSettings = Helpers::getExtensionData()->values(KvSchema::SETTINGS_CATEGORY);
 
         if (!is_array($currentSettings)) {
             throw new \RuntimeException('Expected current settings to be an array, got ' . gettype($currentSettings));
         }
 
         if (!empty($currentSettings)) {
-            throw new \RuntimeException("Settings category '" . AppConfig::CT_SETTINGS_CATEGORY_NAME . "' is not empty.");
+            throw new \RuntimeException("Settings category '" . KvSchema::SETTINGS_CATEGORY . "' is not empty.");
         }
 
-        Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $settings);
+        Helpers::createEntry(KvSchema::SETTINGS_CATEGORY, $settings);
     }
 
     public function loadPublicKey(array $publicKey): void
     {
-        $currentPublicKey = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME);
+        $currentPublicKey = Helpers::getExtensionData()->values(KvSchema::ENCRYPTION_CATEGORY);
 
         if (!is_array($currentPublicKey)) {
             throw new \RuntimeException('Expected current public key to be an array, got ' . gettype($publicKey));
         }
 
         if (!empty($currentPublicKey)) {
-            throw new \RuntimeException("Public key category '" . AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME . "' is not empty.");
+            throw new \RuntimeException("Public key category '" . KvSchema::ENCRYPTION_CATEGORY . "' is not empty.");
         }
 
-        Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, $publicKey);
+        Helpers::createEntry(KvSchema::ENCRYPTION_CATEGORY, $publicKey);
     }
 
     public function unloadSettings(): void
     {
-        $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
-        Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_SETTINGS_CATEGORY_NAME, $currentSettings['id']);
+        $currentSettings = Helpers::getExtensionData()->values(KvSchema::SETTINGS_CATEGORY)[0];
+        Helpers::getExtensionData()->delete(KvSchema::SETTINGS_CATEGORY, $currentSettings['id']);
     }
 
     public function unloadPublicKey(): void
     {
-        $currentPublicKey = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, true);
-        Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, $currentPublicKey['id']);
+        $currentPublicKey = Helpers::getExtensionData()->values(KvSchema::ENCRYPTION_CATEGORY)[0];
+        Helpers::getExtensionData()->delete(KvSchema::ENCRYPTION_CATEGORY, $currentPublicKey['id']);
     }
 
     public function checkPwdDatabase(): void
     {
-        $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $entries = Helpers::getExtensionData()->values(KvSchema::PASSWORD_CATEGORY);
 
         if (!is_array($entries)) {
             throw new \RuntimeException('Expected pwd store category data to be an array, got ' . gettype($entries));
@@ -100,7 +100,7 @@ class ChurchToolsSandboxManager
 
     public function cleanPwdDatabase(): void
     {
-        $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $entries = Helpers::getExtensionData()->values(KvSchema::PASSWORD_CATEGORY);
 
         if (!is_array($entries)) {
             throw new \RuntimeException('Expected pwd store category data to be an array, got ' . gettype($entries));
@@ -111,7 +111,7 @@ class ChurchToolsSandboxManager
                 throw new \RuntimeException("Pwd store entry is missing 'id' field");
             }
 
-            Helpers::getExtensionDataService()->deleteCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $entry['id']);
+            Helpers::getExtensionData()->delete(KvSchema::PASSWORD_CATEGORY, $entry['id']);
         }
     }
 

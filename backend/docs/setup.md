@@ -99,34 +99,14 @@ Once everything is set up, test your backend by calling the `/test` endpoint wit
             "message": "credentials.php file permissions too loose: 664. Expected 0600 or stricter."
         },
         {
-            "name": "ServiceSettings::requirePasswordForPasswordChange()",
+            "name": "Extension settings",
             "status": "ok",
-            "message": "Settings object for requirePasswordForPasswordChange can be accessed."
+            "message": "Extension settings can be loaded."
         },
         {
-            "name": "ServiceSettings::allowCustomPasswords()",
+            "name": "Public key",
             "status": "ok",
-            "message": "Settings object for allowCustomPasswords can be accessed."
-        },
-        {
-            "name": "ServiceSettings::adminUsers()",
-            "status": "ok",
-            "message": "Settings object for adminUsers can be accessed."
-        },
-        {
-            "name": "ServiceSettings::readAccessUsers()",
-            "status": "ok",
-            "message": "Settings object for readAccessUsers can be accessed."
-        },
-        {
-            "name": "ServiceSettings::pwdLength()",
-            "status": "ok",
-            "message": "Settings object for pwdLength can be accessed."
-        },
-        {
-            "name": "ServiceSettings::publicKey()",
-            "status": "ok",
-            "message": "Settings object for publicKey can be accessed."
+            "message": "Public key can be loaded."
         }
     ]
 }

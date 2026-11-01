@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
@@ -36,9 +36,9 @@ class EntriesGetTest extends AbstractTestPrototype
             // For simplicity, we generate a deterministic password per target user
             $password = $this->getPwdForUser($entry);
 
-            Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
-                AppConfig::CT_PERSON_ID_PWD_FIELD => $entry,
-                AppConfig::CT_ENCRYPTED_PWD_FIELD => $password,
+            Helpers::createEntry(KvSchema::PASSWORD_CATEGORY, [
+                KvSchema::ENTRY_PERSON_ID => $entry,
+                KvSchema::ENTRY_CIPHERTEXT => $password,
             ]);
         }
     }
@@ -58,7 +58,7 @@ class EntriesGetTest extends AbstractTestPrototype
         $this->generateEntries($allPwdEntries);
 
         // 2. Save current database state
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // 3. Perform GET request as acting user
@@ -73,8 +73,8 @@ class EntriesGetTest extends AbstractTestPrototype
 
             $body = json_decode((string) $response->getBody(), true);
             $this->assertIsArray($body);
-            $this->assertArrayHasKey(AppConfig::REQUEST_SECONDARY_PWD_FIELD, $body);
-            $this->assertSame($this->getPwdForUser($targetId), $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD], "Password mismatch for user $userId accessing $targetId");
+            $this->assertArrayHasKey('secondaryPwd', $body);
+            $this->assertSame($this->getPwdForUser($targetId), $body['secondaryPwd'], "Password mismatch for user $userId accessing $targetId");
         } else {
             // 4b. Not allowed → expect 401/403
             $this->assertSame(
@@ -98,7 +98,7 @@ class EntriesGetTest extends AbstractTestPrototype
         $this->generateEntries($allPwdEntries);
 
         // 2. Save current database state
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // 3. Perform GET request as acting user

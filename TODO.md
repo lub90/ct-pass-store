@@ -5,7 +5,7 @@ Open issues and planned improvements, roughly ordered by severity.
 ## Bugs & Robustness
 
 - [ ] **Race condition creates duplicate password entries**
-  [`ChurchToolsStore.php`](backend/src/Service/ChurchToolsStore.php) does read-all → filter → create without any locking. Two concurrent PUTs for the same person (e.g. a double-click) can create two entries. After that, `getPwd()` returns `null` (it requires exactly one match) and `putPwd()` throws on every call, so the user is locked out until the data is cleaned up by hand.
+  [`KvPasswordRepository.php`](backend/src/Infrastructure/Kv/KvPasswordRepository.php) (formerly `ChurchToolsStore.php`) does read-all → filter → create without any locking. Two concurrent PUTs for the same person (e.g. a double-click) can create two entries. After that, `getPwd()` returns `null` (it requires exactly one match) and `putPwd()` throws on every call, so the user is locked out until the data is cleaned up by hand.
   - Make PUT tolerate existing duplicates (keep the newest entry, delete the rest).
   - Unify the ID comparison: `getPwd()` uses `==`, while `putPwd()`/`deletePwd()` use `===`. An entry stored with a string `personId` is found by one and missed by the other.
   - Add a test for this scenario.
@@ -32,7 +32,7 @@ Open issues and planned improvements, roughly ordered by severity.
 ## Security
 
 - [ ] **Harden the primary-password check**
-  [`ChurchtoolsAuthVerifier.php`](backend/src/Service/ChurchtoolsAuthVerifier.php) checks the primary password by calling the real `POST /api/login`.
+  [`ChurchToolsPasswordVerifier.php`](backend/src/Infrastructure/ChurchTools/ChurchToolsPasswordVerifier.php) (formerly `ChurchtoolsAuthVerifier.php`) checks the primary password by calling the real `POST /api/login`.
   - Every check opens a new ChurchTools session.
   - The backend has no rate limiting, so it can be used to guess primary passwords. It's unverified whether ChurchTools' own login lockout would then block the backend's IP for all users.
   - The behaviour for users with 2FA enabled is untested.
@@ -136,9 +136,9 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Code Cleanup
 
-- [ ] Controllers extend `BaseService`. `PasswordController` has an unused `json()` method and unused imports.
-- [ ] `PasswordValidator::generateRandom()` shuffles with `str_shuffle`, which isn't cryptographically secure. The characters themselves come from `random_int`, so this is minor, but a CSPRNG-based shuffle would be better.
-- [ ] The class name is spelled two ways: `ChurchtoolsAuthVerifier` and `ChurchToolsAuthVerifier`.
+- [x] Controllers extend `BaseService`. `PasswordController` has an unused `json()` method and unused imports. (Plan 2.7: no base classes; thin `EntriesController`.)
+- [x] `PasswordValidator::generateRandom()` shuffles with `str_shuffle`, which isn't cryptographically secure. The characters themselves come from `random_int`, so this is minor, but a CSPRNG-based shuffle would be better. (Plan 2.4: `Random\Randomizer` with the secure engine, now in `PasswordPolicy`.)
+- [x] The class name is spelled two ways: `ChurchtoolsAuthVerifier` and `ChurchToolsAuthVerifier`. (Now `ChurchToolsPasswordVerifier`.)
 - [ ] Translate the remaining German code comments to English.
 - [ ] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
 - [ ] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).

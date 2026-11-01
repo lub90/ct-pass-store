@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Support;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -53,7 +53,7 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
 
     private function moduleId(): int
     {
-        $id = $this->client()->getModuleByKey(AppConfig::CT_EXTENSION_ID)['id'] ?? null;
+        $id = $this->client()->getModuleByKey(KvSchema::EXTENSION_KEY)['id'] ?? null;
         self::assertIsInt($id);
 
         return $id;
@@ -62,7 +62,7 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
     private function passwordStoreId(): int
     {
         foreach ($this->client()->getCategories($this->moduleId()) as $category) {
-            if (($category['name'] ?? null) === AppConfig::CT_PWD_CATEGORY_NAME) {
+            if (($category['name'] ?? null) === KvSchema::PASSWORD_CATEGORY) {
                 self::assertIsInt($category['id']);
 
                 return $category['id'];
@@ -73,14 +73,14 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
 
     private function testValue(string $marker): string
     {
-        return json_encode([AppConfig::CT_PERSON_ID_PWD_FIELD => 0, AppConfig::CT_ENCRYPTED_PWD_FIELD => $marker], JSON_THROW_ON_ERROR);
+        return json_encode([KvSchema::ENTRY_PERSON_ID => 0, KvSchema::ENTRY_CIPHERTEXT => $marker], JSON_THROW_ON_ERROR);
     }
 
     // ---------------------------------------------------------------- module and categories
 
     public function testModuleIsFoundByItsKeyWithAnIntegerId(): void
     {
-        $module = $this->client()->getModuleByKey(AppConfig::CT_EXTENSION_ID);
+        $module = $this->client()->getModuleByKey(KvSchema::EXTENSION_KEY);
 
         self::assertIsInt($module['id'] ?? null);
         self::assertGreaterThan(0, $module['id']);
@@ -103,7 +103,7 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
             self::assertIsString($category['name'] ?? null);
             $names[] = $category['name'];
         }
-        foreach ([AppConfig::CT_PWD_CATEGORY_NAME, AppConfig::CT_SETTINGS_CATEGORY_NAME, AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME] as $required) {
+        foreach ([KvSchema::PASSWORD_CATEGORY, KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY] as $required) {
             self::assertContains($required, $names);
         }
     }
@@ -190,8 +190,8 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
     {
         $permissions = $this->client()->globalPermissions($this->validUserCredential());
 
-        self::assertIsArray($permissions[AppConfig::CT_EXTENSION_ID] ?? null);
-        self::assertIsBool($permissions[AppConfig::CT_EXTENSION_ID]['view'] ?? null);
+        self::assertIsArray($permissions[KvSchema::EXTENSION_KEY] ?? null);
+        self::assertIsBool($permissions[KvSchema::EXTENSION_KEY]['view'] ?? null);
     }
 
     public function testUnknownTokenIsNotAuthenticated(): void

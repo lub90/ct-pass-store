@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
@@ -26,11 +26,11 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         $body = [];
 
         if ($this->allowCustomPassword()) {
-            $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] = $newPwd;
+            $body['secondaryPwd'] = $newPwd;
         }
 
         if ($this->requirePasswordForPasswordChange()) {
-            $body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] = $ctPwd;
+            $body['primaryPwd'] = $ctPwd;
         }
 
         return $body;
@@ -47,9 +47,9 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             // For simplicity, we generate a deterministic password per target user
             $password = $this->getPwdForUser($entry);
 
-            Helpers::getExtensionDataService()->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, [
-                AppConfig::CT_PERSON_ID_PWD_FIELD => $entry,
-                AppConfig::CT_ENCRYPTED_PWD_FIELD => $password,
+            Helpers::createEntry(KvSchema::PASSWORD_CATEGORY, [
+                KvSchema::ENTRY_PERSON_ID => $entry,
+                KvSchema::ENTRY_CIPHERTEXT => $password,
             ]);
         }
     }
@@ -83,7 +83,7 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
     protected function performAndCheckNormalPutPwd(int $userId, string $token, int $targetId, bool $hasAccess, string $ctPwd, array $otherPwdEntryIds, string $newPwd): void
     {
         // 1. Save current database state
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // 2. Perform PUT request as acting user
@@ -104,8 +104,8 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 
                 $body = json_decode((string) $response->getBody(), true);
                 $this->assertIsArray($body);
-                $this->assertArrayHasKey(AppConfig::REQUEST_SECONDARY_PWD_FIELD, $body);
-                $returnedPwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD];
+                $this->assertArrayHasKey('secondaryPwd', $body);
+                $returnedPwd = $body['secondaryPwd'];
                 $this->assertNotEmpty($returnedPwd);
                 $expectedPwd = $returnedPwd;
             } else {
@@ -134,12 +134,12 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 
     protected function checkUniqueUsers(): void
     {
-        $extensionDataService = Helpers::getExtensionDataService();
-        $allPwdEntries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
+        $extensionData = Helpers::getExtensionData();
+        $allPwdEntries = $extensionData->values(KvSchema::PASSWORD_CATEGORY);
 
         $allPwdIds = [];
         foreach ($allPwdEntries as $pwdEntry) {
-            $allPwdIds[] = json_decode($pwdEntry['value'], true)[AppConfig::CT_PERSON_ID_PWD_FIELD];
+            $allPwdIds[] = json_decode($pwdEntry['value'], true)[KvSchema::ENTRY_PERSON_ID];
         }
 
         $this->assertSame(count($allPwdIds), count(array_unique($allPwdIds)), 'Duplicate password entries found!');
@@ -161,9 +161,9 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 
         $body = json_decode((string) $response->getBody(), true);
         $this->assertIsArray($body);
-        $this->assertArrayHasKey(AppConfig::REQUEST_SECONDARY_PWD_FIELD, $body);
+        $this->assertArrayHasKey('secondaryPwd', $body);
 
-        $encryptedPwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD];
+        $encryptedPwd = $body['secondaryPwd'];
 
         // 2. Load private key
         $privateKey = $this->getPrivateKey();

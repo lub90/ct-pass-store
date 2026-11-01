@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\Unit\Service;
+namespace CtPassStore\Tests\Unit\Infrastructure\Kv;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Domain\PersonId;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
-use CtPassStore\Service\ChurchToolsStore;
-use CtPassStore\Service\ExtensionDataService;
+use CtPassStore\Infrastructure\Kv\ExtensionData;
+use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
@@ -17,32 +18,32 @@ use PHPUnit\Framework\TestCase;
 /**
  * Catalog section 3: ST-01 to ST-11, ST-14, ST-15, ST-17, ST-20 to ST-22.
  */
-final class ChurchToolsStoreTest extends TestCase
+final class KvPasswordRepositoryTest extends TestCase
 {
     private FakeChurchToolsClient $fake;
 
     private TestHandler $log;
 
-    private ChurchToolsStore $store;
+    private KvPasswordRepository $store;
 
     private int $category;
 
     protected function setUp(): void
     {
         $this->fake = new FakeChurchToolsClient();
-        $ids = $this->fake->addModule(AppConfig::CT_EXTENSION_ID, [AppConfig::CT_PWD_CATEGORY_NAME]);
-        $this->category = $ids[AppConfig::CT_PWD_CATEGORY_NAME];
+        $ids = $this->fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::PASSWORD_CATEGORY]);
+        $this->category = $ids[KvSchema::PASSWORD_CATEGORY];
         $this->log = new TestHandler();
         $logger = new Logger('test');
         $logger->pushHandler($this->log);
-        $this->store = new ChurchToolsStore(new ExtensionDataService($this->fake, AppConfig::CT_EXTENSION_ID), $logger);
+        $this->store = new KvPasswordRepository(new ExtensionData($this->fake), $logger);
     }
 
     private function seed(mixed $personId, mixed $ciphertext = 'c2VjcmV0'): int
     {
         return $this->fake->seedValue($this->category, json_encode([
-            AppConfig::CT_PERSON_ID_PWD_FIELD => $personId,
-            AppConfig::CT_ENCRYPTED_PWD_FIELD => $ciphertext,
+            KvSchema::ENTRY_PERSON_ID => $personId,
+            KvSchema::ENTRY_CIPHERTEXT => $ciphertext,
         ], JSON_THROW_ON_ERROR));
     }
 
@@ -69,12 +70,12 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(6, 'b3RoZXI=');
         $this->seed(5, 'bWluZQ==');
 
-        self::assertSame('bWluZQ==', $this->store->getPwd(5));
+        self::assertSame('bWluZQ==', $this->store->find(new PersonId(5)));
     }
 
     public function testReturnsNullWithoutEntry(): void
     {
-        self::assertNull($this->store->getPwd(5));
+        self::assertNull($this->store->find(new PersonId(5)));
     }
 
     public function testNeverReturnsAnEntryOfASimilarPersonId(): void
@@ -83,7 +84,7 @@ final class ChurchToolsStoreTest extends TestCase
             $this->seed($other);
         }
 
-        self::assertNull($this->store->getPwd(5));
+        self::assertNull($this->store->find(new PersonId(5)));
     }
 
     public function testWithDuplicatesTheNewestEntryWinsAndAWarningIsLogged(): void
@@ -91,7 +92,7 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(5, 'b2xk');
         $this->seed(5, 'bmV3');
 
-        self::assertSame('bmV3', $this->store->getPwd(5));
+        self::assertSame('bmV3', $this->store->find(new PersonId(5)));
         self::assertSame(1, $this->warnings());
     }
 
@@ -106,7 +107,7 @@ final class ChurchToolsStoreTest extends TestCase
         $ten = $this->seed(5, 'dGVu');
         self::assertSame([9, 10], [$nine, $ten]);
 
-        self::assertSame('dGVu', $this->store->getPwd(5));
+        self::assertSame('dGVu', $this->store->find(new PersonId(5)));
     }
 
     // ---------------------------------------------------------------- ST-07, ST-08 person ID normalization
@@ -141,20 +142,20 @@ final class ChurchToolsStoreTest extends TestCase
     #[DataProvider('personIds')]
     public function testPersonIdNormalization(mixed $raw, ?int $expected): void
     {
-        self::assertSame($expected, ChurchToolsStore::normalizePersonId($raw));
+        self::assertSame($expected, KvPasswordRepository::normalizePersonId($raw));
     }
 
     public function testStringPersonIdsAreTheSamePersonForReadWriteAndDelete(): void
     {
         $this->seed('5', 'c3RyaW5n');
 
-        self::assertSame('c3RyaW5n', $this->store->getPwd(5));
+        self::assertSame('c3RyaW5n', $this->store->find(new PersonId(5)));
 
-        $this->store->putPwd(5, 'dXBkYXRlZA==');
+        $this->store->save(new PersonId(5), 'dXBkYXRlZA==');
         self::assertCount(1, $this->stored());
-        self::assertSame(5, $this->stored()[0][AppConfig::CT_PERSON_ID_PWD_FIELD], 'The rewritten entry stores the ID as an integer.');
+        self::assertSame(5, $this->stored()[0][KvSchema::ENTRY_PERSON_ID], 'The rewritten entry stores the ID as an integer.');
 
-        $this->store->deletePwd(5);
+        $this->store->delete(new PersonId(5));
         self::assertSame([], $this->stored());
     }
 
@@ -166,8 +167,8 @@ final class ChurchToolsStoreTest extends TestCase
         $this->fake->seedValue($this->category, '{"personId": 5.5, "secondaryPwd": "eA=="}');
         $this->fake->seedValue($this->category, '{"personId": true, "secondaryPwd": "eA=="}');
 
-        self::assertNull($this->store->getPwd(5));
-        $this->store->deletePwd(5);
+        self::assertNull($this->store->find(new PersonId(5)));
+        $this->store->delete(new PersonId(5));
         self::assertCount(6, $this->stored(), 'None of them may be deleted for person 5.');
     }
 
@@ -175,24 +176,24 @@ final class ChurchToolsStoreTest extends TestCase
 
     public function testWriteWithoutEntryCreatesExactlyOneWithAnIntegerPersonId(): void
     {
-        $this->store->putPwd(5, 'bmV3');
+        $this->store->save(new PersonId(5), 'bmV3');
 
         self::assertSame(1, $this->fake->countCalls(['createValue']));
         self::assertSame(0, $this->fake->countCalls(['updateValue', 'deleteValue']));
         $stored = $this->stored();
         self::assertCount(1, $stored);
-        self::assertSame(5, $stored[0][AppConfig::CT_PERSON_ID_PWD_FIELD]);
-        self::assertSame('bmV3', $stored[0][AppConfig::CT_ENCRYPTED_PWD_FIELD]);
+        self::assertSame(5, $stored[0][KvSchema::ENTRY_PERSON_ID]);
+        self::assertSame('bmV3', $stored[0][KvSchema::ENTRY_CIPHERTEXT]);
     }
 
     public function testWriteWithOneEntryUpdatesIt(): void
     {
         $id = $this->seed(5, 'b2xk');
 
-        $this->store->putPwd(5, 'bmV3');
+        $this->store->save(new PersonId(5), 'bmV3');
 
         self::assertSame(0, $this->fake->countCalls(['createValue', 'deleteValue']));
-        self::assertSame([['id' => $id, AppConfig::CT_PERSON_ID_PWD_FIELD => 5, AppConfig::CT_ENCRYPTED_PWD_FIELD => 'bmV3']], $this->stored());
+        self::assertSame([['id' => $id, KvSchema::ENTRY_PERSON_ID => 5, KvSchema::ENTRY_CIPHERTEXT => 'bmV3']], $this->stored());
     }
 
     public function testWriteWithDuplicatesUpdatesTheNewestAndDeletesTheRest(): void
@@ -201,10 +202,10 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(5, 'Mg==');
         $newest = $this->seed(5, 'Mw==');
 
-        $this->store->putPwd(5, 'bmV3');
+        $this->store->save(new PersonId(5), 'bmV3');
 
-        self::assertSame([['id' => $newest, AppConfig::CT_PERSON_ID_PWD_FIELD => 5, AppConfig::CT_ENCRYPTED_PWD_FIELD => 'bmV3']], $this->stored());
-        self::assertSame('bmV3', $this->store->getPwd(5));
+        self::assertSame([['id' => $newest, KvSchema::ENTRY_PERSON_ID => 5, KvSchema::ENTRY_CIPHERTEXT => 'bmV3']], $this->stored());
+        self::assertSame('bmV3', $this->store->find(new PersonId(5)));
     }
 
     public function testWritingAndDeletingNeverTouchOtherPersons(): void
@@ -216,9 +217,9 @@ final class ChurchToolsStoreTest extends TestCase
             $this->seed(7, null),
         ];
 
-        $this->store->putPwd(5, 'Zml2ZQ==');
-        $this->store->putPwd(5, 'Zml2ZS0y');
-        $this->store->deletePwd(5);
+        $this->store->save(new PersonId(5), 'Zml2ZQ==');
+        $this->store->save(new PersonId(5), 'Zml2ZS0y');
+        $this->store->delete(new PersonId(5));
 
         foreach ($this->fake->calls() as $call) {
             if (in_array($call['method'], ['updateValue', 'deleteValue'], true)) {
@@ -234,13 +235,13 @@ final class ChurchToolsStoreTest extends TestCase
         $this->fake->failNext('updateValue', new UnavailableException('PUT: unreachable.'));
 
         try {
-            $this->store->putPwd(5, 'bmV3');
+            $this->store->save(new PersonId(5), 'bmV3');
             self::fail('Expected the write to fail.');
         } catch (UnavailableException) {
         }
 
         self::assertSame(0, $this->fake->countCalls(['createValue']));
-        self::assertSame('b2xk', $this->store->getPwd(5));
+        self::assertSame('b2xk', $this->store->find(new PersonId(5)));
     }
 
     public function testFailedCreateIsReported(): void
@@ -248,7 +249,7 @@ final class ChurchToolsStoreTest extends TestCase
         $this->fake->failNext('createValue', new UnavailableException('POST: unreachable.'));
 
         $this->expectException(UnavailableException::class);
-        $this->store->putPwd(5, 'bmV3');
+        $this->store->save(new PersonId(5), 'bmV3');
     }
 
     public function testFailedDuplicateRemovalStillStoresTheNewPassword(): void
@@ -257,20 +258,20 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(5, 'b2xkMg==');
         $this->fake->failNext('deleteValue', new UnavailableException('DELETE: unreachable.'));
 
-        $this->store->putPwd(5, 'bmV3');
+        $this->store->save(new PersonId(5), 'bmV3');
 
-        self::assertSame('bmV3', $this->store->getPwd(5), 'The updated newest entry wins.');
+        self::assertSame('bmV3', $this->store->find(new PersonId(5)), 'The updated newest entry wins.');
         self::assertCount(2, $this->stored(), 'The duplicate stays until the next write.');
         self::assertGreaterThanOrEqual(1, $this->warnings());
 
-        $this->store->putPwd(5, 'bmV3ZXI=');
+        $this->store->save(new PersonId(5), 'bmV3ZXI=');
         self::assertCount(1, $this->stored(), 'The next write heals it.');
     }
 
     public function testValuesOverTheKvLimitAreRefusedBeforeWriting(): void
     {
         try {
-            $this->store->putPwd(5, str_repeat('A', ChurchToolsStore::MAX_VALUE_LENGTH));
+            $this->store->save(new PersonId(5), str_repeat('A', KvPasswordRepository::MAX_VALUE_LENGTH));
             self::fail('Expected an exception.');
         } catch (\LogicException) {
             self::assertSame(0, $this->fake->writeCount());
@@ -279,7 +280,7 @@ final class ChurchToolsStoreTest extends TestCase
 
     public function testRegularCiphertextsFitTheKvLimit(): void
     {
-        $this->store->putPwd(5, base64_encode(random_bytes(1024)));
+        $this->store->save(new PersonId(5), base64_encode(random_bytes(1024)));
 
         self::assertCount(1, $this->stored());
     }
@@ -303,11 +304,11 @@ final class ChurchToolsStoreTest extends TestCase
         $this->fake->seedValue($this->category, $broken);
         $this->seed(5, 'Zml2ZQ==');
 
-        self::assertSame('Zml2ZQ==', $this->store->getPwd(5));
+        self::assertSame('Zml2ZQ==', $this->store->find(new PersonId(5)));
         self::assertSame(1, $this->warnings());
 
-        $this->store->putPwd(6, 'c2l4');
-        self::assertSame('c2l4', $this->store->getPwd(6));
+        $this->store->save(new PersonId(6), 'c2l4');
+        self::assertSame('c2l4', $this->store->find(new PersonId(6)));
     }
 
     /**
@@ -326,17 +327,17 @@ final class ChurchToolsStoreTest extends TestCase
     {
         $corrupt = $this->seed(5, $password);
 
-        self::assertNull($this->store->getPwd(5));
+        self::assertNull($this->store->find(new PersonId(5)));
 
-        $this->store->putPwd(5, 'Zml4ZWQ=');
-        self::assertSame([['id' => $corrupt, AppConfig::CT_PERSON_ID_PWD_FIELD => 5, AppConfig::CT_ENCRYPTED_PWD_FIELD => 'Zml4ZWQ=']], $this->stored(), 'Overwritten, no duplicate next to it.');
+        $this->store->save(new PersonId(5), 'Zml4ZWQ=');
+        self::assertSame([['id' => $corrupt, KvSchema::ENTRY_PERSON_ID => 5, KvSchema::ENTRY_CIPHERTEXT => 'Zml4ZWQ=']], $this->stored(), 'Overwritten, no duplicate next to it.');
     }
 
     public function testCorruptOwnEntryIsDeleted(): void
     {
         $this->seed(5, null);
 
-        $this->store->deletePwd(5);
+        $this->store->delete(new PersonId(5));
 
         self::assertSame([], $this->stored());
     }
@@ -349,15 +350,15 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(5);
         $this->seed(6);
 
-        $this->store->deletePwd(5);
+        $this->store->delete(new PersonId(5));
 
         self::assertCount(1, $this->stored());
-        self::assertSame(6, $this->stored()[0][AppConfig::CT_PERSON_ID_PWD_FIELD]);
+        self::assertSame(6, $this->stored()[0][KvSchema::ENTRY_PERSON_ID]);
     }
 
     public function testDeleteWithoutEntryDoesNothing(): void
     {
-        $this->store->deletePwd(5);
+        $this->store->delete(new PersonId(5));
 
         self::assertSame(0, $this->fake->writeCount());
     }
@@ -370,9 +371,9 @@ final class ChurchToolsStoreTest extends TestCase
         $this->seed(0, 'dGVzdDI=');
         $this->seed('0', 'dGVzdDM=');
 
-        self::assertNull($this->store->getPwd(5));
-        $this->store->putPwd(5, 'Zml2ZQ==');
-        $this->store->deletePwd(5);
+        self::assertNull($this->store->find(new PersonId(5)));
+        $this->store->save(new PersonId(5), 'Zml2ZQ==');
+        $this->store->delete(new PersonId(5));
 
         self::assertCount(3, $this->stored());
         self::assertSame(0, $this->warnings(), 'Self-test values are skipped silently.');
@@ -381,6 +382,6 @@ final class ChurchToolsStoreTest extends TestCase
     public function testPersonOperationsRejectTheReservedId(): void
     {
         $this->expectException(\InvalidArgumentException::class);
-        $this->store->putPwd(ChurchToolsStore::SELF_TEST_PERSON_ID, 'eA==');
+        new PersonId(KvPasswordRepository::SELF_TEST_PERSON_ID);
     }
 }

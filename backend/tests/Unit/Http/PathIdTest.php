@@ -28,7 +28,7 @@ final class PathIdTest extends TestCase
     #[DataProvider('valid')]
     public function testValidIds(string $raw, int $expected): void
     {
-        self::assertSame($expected, PathId::parse($raw));
+        self::assertSame($expected, PathId::parse($raw)->value);
     }
 
     /**

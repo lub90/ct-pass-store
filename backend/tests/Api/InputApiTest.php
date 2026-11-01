@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Service\PasswordValidator;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -67,7 +67,7 @@ final class InputApiTest extends ApiTestCase
 
     public function testValidBodyOnAnotherPersonsEntryIs403(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
+        $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
 
         $this->assertProblem(ProblemType::Forbidden, $response);
     }
@@ -83,14 +83,14 @@ final class InputApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::Forbidden, $missing);
         $storeReads = array_filter(
             $this->churchTools->calls(),
-            fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categoryIds[AppConfig::CT_PWD_CATEGORY_NAME],
+            fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categoryIds[KvSchema::PASSWORD_CATEGORY],
         );
         self::assertSame([], $storeReads, 'The password store isn\'t read before authorization.');
     }
 
     public function testAuthorizationComesBeforeThePrimaryPassword(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
         $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER, []);
 
@@ -100,9 +100,9 @@ final class InputApiTest extends ApiTestCase
 
     public function testPrimaryPasswordComesBeforeThePolicy(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'short']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => 'short']);
 
         $this->assertProblem(ProblemType::PrimaryPasswordRequired, $response);
     }
@@ -141,10 +141,10 @@ final class InputApiTest extends ApiTestCase
 
     public function testUsernameInTheBodyIsRejected(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
         $response = $this->rawRequest('PUT', '/entries/' . self::USER, self::USER, json_encode([
-            AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::OTHER),
+            'primaryPwd' => $this->primaryPasswordOf(self::OTHER),
             'username' => 'other',
         ], JSON_THROW_ON_ERROR));
 
@@ -154,9 +154,9 @@ final class InputApiTest extends ApiTestCase
 
     public function testAnotherUsersCorrectPrimaryPasswordIsRejected(): void
     {
-        $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
 
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::OTHER)]);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::OTHER)]);
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $response);
     }
@@ -187,10 +187,10 @@ final class InputApiTest extends ApiTestCase
 
     public function testEmptyCustomPasswordIsACustomPasswordNotAGeneratedOne(): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => '']);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => '']);
 
         $body = $this->assertProblem(ProblemType::PasswordInvalid, $response);
-        self::assertContains(PasswordValidator::TOO_SHORT, $body['violations']);
+        self::assertContains(PasswordPolicy::TOO_SHORT, $body['violations']);
     }
 
     /**
@@ -198,11 +198,11 @@ final class InputApiTest extends ApiTestCase
      */
     public static function policyViolations(): iterable
     {
-        yield 'too short' => ['Aa1!bbbb', [PasswordValidator::TOO_SHORT]];
-        yield 'too long' => ['Aa1!' . str_repeat('b', 125), [PasswordValidator::TOO_LONG]];
-        yield 'only letters' => ['Abcdefghijkl', [PasswordValidator::MISSING_DIGIT, PasswordValidator::MISSING_SYMBOL]];
-        yield 'invalid character' => ['Abcdefgh12!#', [PasswordValidator::INVALID_CHARACTER]];
-        yield 'umlaut' => ['Abcdefgh12!ä', [PasswordValidator::INVALID_CHARACTER]];
+        yield 'too short' => ['Aa1!bbbb', [PasswordPolicy::TOO_SHORT]];
+        yield 'too long' => ['Aa1!' . str_repeat('b', 125), [PasswordPolicy::TOO_LONG]];
+        yield 'only letters' => ['Abcdefghijkl', [PasswordPolicy::MISSING_DIGIT, PasswordPolicy::MISSING_SYMBOL]];
+        yield 'invalid character' => ['Abcdefgh12!#', [PasswordPolicy::INVALID_CHARACTER]];
+        yield 'umlaut' => ['Abcdefgh12!ä', [PasswordPolicy::INVALID_CHARACTER]];
     }
 
     /**
@@ -211,7 +211,7 @@ final class InputApiTest extends ApiTestCase
     #[DataProvider('policyViolations')]
     public function testPolicyViolationsAreListedAndNothingIsStored(string $password, array $expected): void
     {
-        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => $password]);
+        $response = $this->request('PUT', '/entries/' . self::USER, self::USER, ['secondaryPwd' => $password]);
 
         $body = $this->assertProblem(ProblemType::PasswordInvalid, $response);
         self::assertSame($expected, $body['violations']);
@@ -224,6 +224,6 @@ final class InputApiTest extends ApiTestCase
 
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER);
 
-        self::assertSame(20, strlen((string) $this->json($response)[AppConfig::REQUEST_SECONDARY_PWD_FIELD]));
+        self::assertSame(20, strlen((string) $this->json($response)['secondaryPwd']));
     }
 }

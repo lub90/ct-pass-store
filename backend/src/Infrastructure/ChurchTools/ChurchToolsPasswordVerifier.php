@@ -2,28 +2,26 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Service;
+namespace CtPassStore\Infrastructure\ChurchTools;
 
-use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Application\Port\PrimaryPasswordVerifier;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use Psr\Log\LoggerInterface;
 
 /**
- * Checks a user's primary ChurchTools password.
+ * Checks a primary password with a ChurchTools login.
  */
-class ChurchToolsAuthVerifier extends BaseService
+final class ChurchToolsPasswordVerifier implements PrimaryPasswordVerifier
 {
     public function __construct(
         private readonly ChurchToolsClient $client,
-        LoggerInterface $logger,
-    ) {
-        parent::__construct($logger);
-    }
+        private readonly LoggerInterface $logger,
+    ) {}
 
     /**
      * @throws ChurchToolsException if ChurchTools can't be asked
      */
-    public function verifyUserPassword(string $username, #[\SensitiveParameter] string $password): bool
+    public function verify(string $username, #[\SensitiveParameter] string $password): bool
     {
         // ChurchTools errors propagate: they are never a wrong password (spec 5.5.3).
         $result = $this->client->verifyLogin($username, $password);

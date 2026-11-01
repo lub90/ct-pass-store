@@ -8,7 +8,6 @@ ini_set('display_errors', '0');
 require __DIR__ . '/../vendor/autoload.php';
 
 use CtPassStore\Application;
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
@@ -37,7 +36,6 @@ $logger->pushHandler(new StreamHandler(__DIR__ . '/../logs/app.log', Logger::toM
 $churchTools = new GuzzleChurchToolsClient(
     $config->apiUrl,
     Credential::loginToken($config->apiToken),
-    AppConfig::EXTERNAL_REQUEST_TIMEOUT,
 );
 
 Application::create($config, $churchTools, $logger)->run();

@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use GuzzleHttp\Client;
 use PHPUnit\Framework\TestCase;
 
@@ -69,7 +69,7 @@ abstract class AbstractTestPrototype extends TestCase
         $rawContent = file_get_contents($path);
 
         $result = [];
-        $result[AppConfig::CT_PUBLIC_KEY_FIELD_NAME] = $rawContent;
+        $result[KvSchema::PUBLIC_KEY] = $rawContent;
 
         return $result;
     }
@@ -107,12 +107,12 @@ abstract class AbstractTestPrototype extends TestCase
 
     public function allowCustomPassword(): bool
     {
-        return $this->getSettings()[AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME];
+        return $this->getSettings()[KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD];
     }
 
     protected function requirePasswordForPasswordChange(): bool
     {
-        return $this->getSettings()[AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME];
+        return $this->getSettings()[KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD];
     }
 
     protected function loadPublicKey(): void

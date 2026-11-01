@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Application;
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
@@ -65,10 +65,10 @@ abstract class ApiTestCase extends TestCase
     protected function setUp(): void
     {
         $this->churchTools = new FakeChurchToolsClient();
-        $this->categoryIds = $this->churchTools->addModule(AppConfig::CT_EXTENSION_ID, [
-            AppConfig::CT_SETTINGS_CATEGORY_NAME,
-            AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME,
-            AppConfig::CT_PWD_CATEGORY_NAME,
+        $this->categoryIds = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [
+            KvSchema::SETTINGS_CATEGORY,
+            KvSchema::ENCRYPTION_CATEGORY,
+            KvSchema::PASSWORD_CATEGORY,
         ]);
 
         foreach (self::NAMES as $personId => $name) {
@@ -76,15 +76,15 @@ abstract class ApiTestCase extends TestCase
                 Credential::loginToken($this->tokenOf($personId)),
                 $personId,
                 $name,
-                [AppConfig::CT_EXTENSION_ID => ['view' => $personId !== self::NO_ACCESS]],
+                [KvSchema::EXTENSION_KEY => ['view' => $personId !== self::NO_ACCESS]],
             );
             $this->churchTools->addLogin($name, $this->primaryPasswordOf($personId), $personId);
         }
 
         $this->setSettings([]);
         $this->churchTools->seedValue(
-            $this->categoryIds[AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME],
-            json_encode([AppConfig::CT_PUBLIC_KEY_FIELD_NAME => file_get_contents(__DIR__ . '/../keys/publicKey1.pem')], JSON_THROW_ON_ERROR),
+            $this->categoryIds[KvSchema::ENCRYPTION_CATEGORY],
+            json_encode([KvSchema::PUBLIC_KEY => file_get_contents(__DIR__ . '/../keys/publicKey1.pem')], JSON_THROW_ON_ERROR),
         );
 
         $this->credentialsPath = (string) tempnam(sys_get_temp_dir(), 'ctps-credentials-');
@@ -106,11 +106,11 @@ abstract class ApiTestCase extends TestCase
      */
     protected function setSettings(array $overrides): void
     {
-        $categoryId = $this->categoryIds[AppConfig::CT_SETTINGS_CATEGORY_NAME];
+        $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
         $this->churchTools->seedValue($categoryId, json_encode($overrides + [
-            AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => false,
-            AppConfig::CT_ALLOW_CUSTOM_PASSWORD_FIELD_NAME => true,
+            KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false,
+            KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true,
             'passwordLength' => 12,
             'adminUsers' => [self::ADMIN],
             'readAccessUsers' => [self::READER],
@@ -133,8 +133,8 @@ abstract class ApiTestCase extends TestCase
     protected function seedEntry(int $personId, string $ciphertext = 'c2VlZGVkLWNpcGhlcnRleHQ='): int
     {
         return $this->churchTools->seedValue(
-            $this->categoryIds[AppConfig::CT_PWD_CATEGORY_NAME],
-            json_encode([AppConfig::CT_PERSON_ID_PWD_FIELD => $personId, AppConfig::CT_ENCRYPTED_PWD_FIELD => $ciphertext], JSON_THROW_ON_ERROR),
+            $this->categoryIds[KvSchema::PASSWORD_CATEGORY],
+            json_encode([KvSchema::ENTRY_PERSON_ID => $personId, KvSchema::ENTRY_CIPHERTEXT => $ciphertext], JSON_THROW_ON_ERROR),
         );
     }
 
@@ -145,7 +145,7 @@ abstract class ApiTestCase extends TestCase
     {
         return array_map(
             static fn(array $value): array => json_decode((string) $value['value'], true, 512, JSON_THROW_ON_ERROR),
-            $this->churchTools->storedValues($this->categoryIds[AppConfig::CT_PWD_CATEGORY_NAME]),
+            $this->churchTools->storedValues($this->categoryIds[KvSchema::PASSWORD_CATEGORY]),
         );
     }
 
@@ -238,7 +238,7 @@ abstract class ApiTestCase extends TestCase
     }
 
     /**
-     * @return \Slim\App<\DI\Container>
+     * @return \Slim\App<null>
      */
     private function app(): \Slim\App
     {

@@ -2,7 +2,7 @@
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
-use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\Kv\KvSchema;
 
 abstract class AccessTestPrototype extends AbstractTestPrototype
 {
@@ -23,7 +23,7 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
     protected function invalidAuthHeaderReturns401PerMethod(string $method, ?string $authHeader): void
     {
         // Save previous database status
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // Start request
@@ -89,7 +89,7 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
     protected function invalidTokenReturns401PerMethod(string $method, string $authHeader): void
     {
         // Save previous database status
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // Start request
@@ -159,7 +159,7 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
     protected function unauthorizedTokenReturns403PerMethod(string $method, string $authHeader): void
     {
         // Save previous database status
-        $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
+        $persCheck = new PersistenceChecker(KvSchema::PASSWORD_CATEGORY);
         $persCheck->saveStatus();
 
         // Start request

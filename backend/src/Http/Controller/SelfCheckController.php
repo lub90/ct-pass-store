@@ -4,23 +4,20 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Controller;
 
-use CtPassStore\Service\BaseService;
-use CtPassStore\Service\ServiceSettings;
+use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Log\LoggerInterface;
 use Throwable;
 
-class SelfCheckController extends BaseService
+/**
+ * `GET /test`. Phase 4 (plan item 4.2) extends the checks and restricts access to admins.
+ */
+final class SelfCheckController
 {
-    private ServiceSettings $settings;
-
-    public function __construct(ServiceSettings $settings, LoggerInterface $logger, private readonly string $credentialsPath)
-    {
-        parent::__construct($logger);
-
-        $this->settings = $settings;
-    }
+    public function __construct(
+        private readonly KvSettingsRepository $settings,
+        private readonly string $credentialsPath,
+    ) {}
 
     public function get(Request $request, Response $response): Response
     {
@@ -62,28 +59,23 @@ class SelfCheckController extends BaseService
             ];
         }
 
-        // List of methods to test
-        $methods = [
-            'requirePasswordForPasswordChange',
-            'allowCustomPasswords',
-            'adminUsers',
-            'readAccessUsers',
-            'pwdLength',
-            'publicKey',
+        $checks = [
+            'Extension settings' => fn() => $this->settings->settings(),
+            'Public key' => fn() => $this->settings->publicKey(),
         ];
 
-        foreach ($methods as $method) {
+        foreach ($checks as $name => $check) {
             try {
-                $result = $this->settings->{$method}();
+                $check();
                 $tests[] = [
-                    'name' => "ServiceSettings::{$method}()",
+                    'name' => $name,
                     'status' => 'ok',
-                    'message' => "Settings object for {$method} can be accessed.",
+                    'message' => "$name can be loaded.",
                 ];
             } catch (Throwable $e) {
                 $allPassed = false;
                 $tests[] = [
-                    'name' => "ServiceSettings::{$method}()",
+                    'name' => $name,
                     'status' => 'fail',
                     'message' => $e->getMessage(),
                 ];
