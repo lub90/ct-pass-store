@@ -1,7 +1,24 @@
 # PHP Backend Testing
 
-This project uses **PHPUnit** to run tests against a ChurchTools backend.  
-Currently, only **end‑to‑end tests** are implemented.
+The backend has three test layers (see `specs/backend-spec.md`, section 6.6):
+
+| Layer | Suite | Needs | Command |
+| --- | --- | --- | --- |
+| Unit tests | `Unit` | nothing | `composer test` |
+| API tests (the whole app with a fake ChurchTools) | `Api` | nothing | `composer test` |
+| End-to-end tests | `EndToEnd` | a ChurchTools test instance, fixtures, local config | `composer test:e2e` |
+
+`composer test` runs the unit and API tests with the shared configuration `phpunit.xml.dist`. They need no network
+access and also run in the CI. `composer check` runs code style, PHPStan and these tests together, like the CI.
+
+The end-to-end tests run only on demand, with your local `phpunit.xml`. If something they need is missing, they abort
+with a message that says what's missing.
+
+Other checks:
+
+- `composer cs` / `composer cs:fix`: check or fix the code style (PHP-CS-Fixer)
+- `composer stan`: static analysis (PHPStan). Existing findings are recorded in `phpstan-baseline.neon`; new code must
+  not add any.
 
 
 ## ⚙️ End‑to‑End Test Setup
@@ -94,10 +111,10 @@ Additionally:
 
 ---
 
-## ▶️ Running the Tests
+## ▶️ Running the End-to-End Tests
 
-Run the test suite with:
+```bash
+composer test:e2e
+```
 
-###
-vendor/bin/phpunit
-###
+Keep the local files with credentials private (`chmod 600 config/credentials.php phpunit.xml tests/EndToEnd/fixtures/*.json`).

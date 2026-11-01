@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Local configuration for the end-to-end tests. Copy it to phpunit.xml (gitignored) and fill in your
+    test instance. Run with `composer test:e2e`. See docs/testing.md.
+-->
 <phpunit bootstrap="vendor/autoload.php"
+         cacheDirectory=".phpunit.cache"
          colors="true">
 
-    <!-- Suite for all tests -->
     <testsuites>
-        <!-- Suite for all end-to-end tests -->
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Api">
+            <directory>tests/Api</directory>
+        </testsuite>
         <testsuite name="EndToEnd">
             <directory>tests/EndToEnd</directory>
         </testsuite>

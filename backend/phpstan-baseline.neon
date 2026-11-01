@@ -1,0 +1,421 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Anonymous function has an unused use \$credentials\.$#'
+			identifier: closure.unusedUse
+			count: 2
+			path: src/Config/bootstrap.php
+
+		-
+			message: '#^Call to an undefined method Psr\\Container\\ContainerInterface\:\:set\(\)\.$#'
+			identifier: method.notFound
+			count: 7
+			path: src/Config/bootstrap.php
+
+		-
+			message: '#^Class CtPassStore\\Service\\ChurchToolsAuthVerifier referenced with incorrect case\: CtPassStore\\Service\\ChurchtoolsAuthVerifier\.$#'
+			identifier: class.nameCase
+			count: 3
+			path: src/Config/bootstrap.php
+
+		-
+			message: '#^Class CtPassStore\\Service\\ChurchToolsAuthVerifier referenced with incorrect case\: CtPassStore\\Service\\ChurchtoolsAuthVerifier\.$#'
+			identifier: class.nameCase
+			count: 3
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:authorizeAndValidate\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:delete\(\) has parameter \$args with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:get\(\) has parameter \$args with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:json\(\) is unused\.$#'
+			identifier: method.unused
+			count: 1
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:put\(\) has parameter \$args with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Controller/PasswordController.php
+
+		-
+			message: '#^Class CtPassStore\\Service\\ChurchToolsAuthVerifier referenced with incorrect case\: CtPassStore\\Service\\ChurchtoolsAuthVerifier\.$#'
+			identifier: class.nameCase
+			count: 2
+			path: src/Controller/routes.php
+
+		-
+			message: '#^Expression on left side of \?\? is not nullable\.$#'
+			identifier: nullCoalesce.expr
+			count: 1
+			path: src/Middleware/AuthMiddleware.php
+
+		-
+			message: '#^Using nullsafe method call on non\-nullable type Monolog\\Logger\. Use \-\> instead\.$#'
+			identifier: nullsafe.neverNull
+			count: 4
+			path: src/Middleware/AuthMiddleware.php
+
+		-
+			message: '#^Method CtPassStore\\Middleware\\CorsMiddleware\:\:__construct\(\) has parameter \$allowedOrigins with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Middleware/CorsMiddleware.php
+
+		-
+			message: '#^Property CtPassStore\\Middleware\\CorsMiddleware\:\:\$allowedOrigins type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Middleware/CorsMiddleware.php
+
+		-
+			message: '#^Instanceof between Psr\\Log\\LoggerInterface and Psr\\Log\\LoggerInterface will always evaluate to true\.$#'
+			identifier: instanceof.alwaysTrue
+			count: 1
+			path: src/Service/BaseService.php
+
+		-
+			message: '#^Strict comparison using \=\=\= between Psr\\Log\\LoggerInterface and null will always evaluate to false\.$#'
+			identifier: identical.alwaysFalse
+			count: 1
+			path: src/Service/BaseService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ChurchtoolsAuth\:\:hasAccessRights\(\) has parameter \$apiToken with no type specified\.$#'
+			identifier: missingType.parameter
+			count: 1
+			path: src/Service/ChurchtoolsAuth.php
+
+		-
+			message: '#^PHPDoc tag @param references unknown parameter\: \$token$#'
+			identifier: parameter.notFound
+			count: 1
+			path: src/Service/ChurchtoolsAuth.php
+
+		-
+			message: '#^Call to an undefined method phpseclib3\\Crypt\\Common\\PublicKey\:\:withPadding\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: src/Service/EncryptionService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ExtensionDataService\:\:createCategoryEntry\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ExtensionDataService\:\:fetchCategories\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ExtensionDataService\:\:getCategoryByName\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ExtensionDataService\:\:getCategoryData\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ExtensionDataService\:\:updateCategoryEntry\(\) has parameter \$data with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Property CtPassStore\\Service\\ExtensionDataService\:\:\$categories type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ExtensionDataService.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 2
+			path: src/Service/ServiceSettings.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ServiceSettings\:\:loadEncryptionSettings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ServiceSettings.php
+
+		-
+			message: '#^Method CtPassStore\\Service\\ServiceSettings\:\:loadSettings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ServiceSettings.php
+
+		-
+			message: '#^Property CtPassStore\\Service\\ServiceSettings\:\:\$encryptionSettings type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ServiceSettings.php
+
+		-
+			message: '#^Property CtPassStore\\Service\\ServiceSettings\:\:\$settings type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: src/Service/ServiceSettings.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGeneralAccessTest\:\:getMethods\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesGeneralAccessTest.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGetTest\:\:generateEntries\(\) has parameter \$allPwdEntries with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesGetTest.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGetTest\:\:normalAccessProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesGetTest.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGetTest\:\:testMissingEntry\(\) has parameter \$otherPwdEntryIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesGetTest.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGetTest\:\:testNormalAccess\(\) has parameter \$otherPwdEntryIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesGetTest.php
+
+		-
+			message: '#^Call to an undefined method phpseclib3\\Crypt\\Common\\PrivateKey\:\:withPadding\(\)\.$#'
+			identifier: method.notFound
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:generateEntries\(\) has parameter \$allPwdEntries with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:getBody\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:getValidPwds\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:normalAccessProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:performAndCheckNormalPutPwd\(\) has parameter \$otherPwdEntryIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:testNormalSetPwd\(\) has parameter \$otherPwdEntryIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesPutTestPrototype\:\:testNormalUpdatePwd\(\) has parameter \$otherPwdEntryIds with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/EntriesPutTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AbstractTestPrototype\:\:getPublicKey\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AbstractTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AbstractTestPrototype\:\:getSettings\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AbstractTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AccessTestPrototype\:\:getMethods\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AccessTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AccessTestPrototype\:\:invalidAuthHeaderProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AccessTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AccessTestPrototype\:\:invalidTokenProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AccessTestPrototype.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\AccessTestPrototype\:\:unauthorizedTokenProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/AccessTestPrototype.php
+
+		-
+			message: '#^Call to function is_array\(\) with array will always evaluate to true\.$#'
+			identifier: function.alreadyNarrowedType
+			count: 4
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:getAdminUsers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:getInvalidAccessTokens\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:getNoAccessAllowedUsers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:getNormalUsers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:getReadAccessUsers\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:loadFixture\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:loadPublicKey\(\) has parameter \$publicKey with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:loadSettings\(\) has parameter \$settings with no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:loadUsersFromFixture\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$adminUsers \(array\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$adminUsers type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$noAccessAllowedUsers \(array\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$noAccessAllowedUsers type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$normalUsers \(array\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$normalUsers type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$readAccessUsers \(array\|null\) is never assigned null so it can be removed from the property type\.$#'
+			identifier: property.unusedType
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\ChurchToolsSandboxManager\:\:\$readAccessUsers type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/ChurchToolsSandboxManager.php
+
+		-
+			message: '#^Property CtPassStore\\Tests\\EndToEnd\\Helpers\\PersistenceChecker\:\:\$status type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/Helpers/PersistenceChecker.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\TestAccessTest\:\:authorizedUserProvider\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/TestAccessTest.php
+
+		-
+			message: '#^Method CtPassStore\\Tests\\EndToEnd\\TestAccessTest\:\:getMethods\(\) return type has no value type specified in iterable type array\.$#'
+			identifier: missingType.iterableValue
+			count: 1
+			path: tests/EndToEnd/TestAccessTest.php

@@ -550,7 +550,7 @@ ChurchTools communication goes through it.
   | Settings, public key | 60 s | Admin changes take up to 1 minute to apply |
 
 - `passwordStore` values are **never** cached. Reads must always see the latest write.
-- **Cache backend:** a file cache outside the web root by default; APCu if available. ❓ Q3
+- **Cache backend:** a file cache outside the web root. No APCu, to keep the backend lean (Q3).
 - Cache files contain no secrets.
 - Consumers matter too: ct-radius starts a new process per RADIUS request and has no cache of its own, so every login
   reaches the backend.
@@ -609,8 +609,16 @@ ChurchTools communication goes through it.
 
 - PHPStan at an agreed level. Start with a baseline, then raise the level step by step.
 - A code-style check.
-- A unit test suite without network access. ChurchTools is replaced by a fake implementation of the client interface
-  (5.6).
+- **Three test layers**, each its own PHPUnit suite and folder:
+
+  | Layer | Suite / folder | What it tests | Runs |
+  | --- | --- | --- | --- |
+  | Unit | `Unit` / `tests/Unit` | Single classes in isolation (validator, encryption, store logic, token checks, error mapping) | CI, every push |
+  | API | `Api` / `tests/Api` | The complete Slim app in-process: real HTTP requests and responses, ChurchTools replaced by a fake implementation of the client interface (5.6). The whole authorization matrix, every status code and every problem type are covered here. | CI, every push |
+  | Contract | `Contract` / `tests/Contract` (today `tests/EndToEnd`) | Only what a fake can't prove: that ChurchTools really behaves as assumed (KV read/write and `meta.count`, service-user permissions, primary password check, OAuth code exchange errors), plus a few smoke tests against the running backend. Needs a test instance. | By hand, before each release |
+
+  Neither the unit nor the API layer needs network access. The API layer must exist at the latest in phase 2 of the
+  plan.
 - A GitHub Actions workflow runs on every push and pull request, for PHP 8.3, 8.4 and 8.5:
   - `composer validate`
   - `composer audit`
@@ -621,14 +629,13 @@ ChurchTools communication goes through it.
   (tests, `phpunit.xml`, fixtures), and the expected layout.
 - **A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
-- The end-to-end suite against a real ChurchTools instance is run manually before each release. Without its
-  configuration (`phpunit.xml`, fixtures) its tests are reported as **skipped**, never as passed.
+- The contract suite isn't part of the default test run or the CI. Run without its configuration (`phpunit.xml`,
+  fixtures), it aborts with a clear message naming what's missing. It's never reported as passed.
 
 ## 7. Open questions
 
 | # | Question | Proposal |
 | --- | --- | --- |
-| Q3 | Cache backend? | File cache by default, APCu if available |
 | Q4 | When an admin changes someone else's password, whose primary password is checked? | The admin's own (as today) |
 | Q5 | Should `DELETE` require the primary password? | Yes (as today). Deleting breaks the user's access just like a change does. |
 | Q6 | Status code for a wrong primary password? | `403 invalid-primary-password` instead of `401` |
@@ -647,7 +654,7 @@ ChurchTools communication goes through it.
 | Q22 | Should admin and read access be granted via ChurchTools groups instead of person-ID lists in the settings? | Later. The consent includes group memberships, and the `api` scope can read them, so it's possible. |
 | Q23 | Is `readAccessUsers` still needed once machine clients exist? | Probably not: it existed for the accounts of external systems. Remove it, unless there's a human use case. |
 
-**Answered:** Q1 (authentication; users via OAuth, D4), Q2 (PHP version, D3), Q12 (error format, D2), Q15 (token
+**Answered:** Q1 (authentication; users via OAuth, D4), Q3 (cache; file cache only), Q2 (PHP version, D3), Q12 (error format, D2), Q15 (token
 cache; replaced by Q21), Q19 (machine clients; signed JWTs, D5), Q24 (person and group lookups for ct-radius;
 deferred to a possible second step, see section 9).
 

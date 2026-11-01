@@ -1,0 +1,13 @@
+# PHPStan configuration (see specs/backend-plan.md, item 0.3).
+# Existing findings are recorded in phpstan-baseline.neon; new code must not add any.
+# Raise the level step by step; shrink the baseline as code gets cleaned up.
+includes:
+    - phpstan-baseline.neon
+
+parameters:
+    level: 6
+    paths:
+        - src
+        - public
+        - tests
+    tmpDir: .phpstan.cache

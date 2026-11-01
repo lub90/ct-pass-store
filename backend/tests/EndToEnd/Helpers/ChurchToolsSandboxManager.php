@@ -31,6 +31,7 @@ class ChurchToolsSandboxManager
     public static function getInstance(string $fixturePath = __DIR__ . '/../fixtures'): ChurchToolsSandboxManager
     {
         if (self::$instance === null) {
+            EndToEndPrerequisites::assertMet();
             self::$instance = new ChurchToolsSandboxManager($fixturePath);
         }
         return self::$instance;

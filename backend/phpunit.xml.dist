@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Shared PHPUnit configuration (committed, no secrets).
+
+    Three test layers (see specs/backend-spec.md, section 6.6):
+      - Unit:      single classes in isolation, no network
+      - Api:       the complete app in-process with a fake ChurchTools client, no network
+      - EndToEnd:  against a real ChurchTools test instance (opt-in, needs a local phpunit.xml)
+
+    `composer test` runs Unit and Api. `composer test:e2e` runs EndToEnd with your local phpunit.xml,
+    created from phpunit-example.xml.
+-->
+<phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+         bootstrap="vendor/autoload.php"
+         cacheDirectory=".phpunit.cache"
+         colors="true"
+         failOnWarning="true"
+         failOnRisky="true"
+         failOnDeprecation="true"
+         failOnPhpunitDeprecation="true"
+         beStrictAboutOutputDuringTests="true">
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+        <testsuite name="Api">
+            <directory>tests/Api</directory>
+        </testsuite>
+        <testsuite name="EndToEnd">
+            <directory>tests/EndToEnd</directory>
+        </testsuite>
+    </testsuites>
+
+    <source>
+        <include>
+            <directory>src</directory>
+        </include>
+    </source>
+</phpunit>

@@ -15,6 +15,7 @@ abstract class AbstractTestPrototype extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        EndToEndPrerequisites::assertMet();
         self::$thisBackend = new BackendSandboxManager();
         self::$thisBackend->start();
     }
