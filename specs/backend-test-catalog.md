@@ -100,41 +100,41 @@ normal case names it ("→ PV-05").
 
 ## 3. Password store (`ChurchToolsStore`, spec 5.3)
 
-- [ ] **ST-01** (N · U) Read an existing entry → its ciphertext — 5.3.3
-- [ ] **ST-02** (N · U) Read a missing entry → "none" — 5.3.3
-- [ ] **ST-03** (N · U) Write without an entry → exactly one `create` call with `personId` as an integer — 5.3.2, 4
-- [ ] **ST-04** (N · U) Write with one entry → exactly one `update` call on that value ID — 5.3.4
-- [ ] **ST-17** (S · U) Counterparts of ST-03/04: `create` or `update` fails at ChurchTools → the error is reported (no
+- [x] **ST-01** (N · U) Read an existing entry → its ciphertext — 5.3.3
+- [x] **ST-02** (N · U) Read a missing entry → "none" — 5.3.3
+- [x] **ST-03** (N · U) Write without an entry → exactly one `create` call with `personId` as an integer — 5.3.2, 4
+- [x] **ST-04** (N · U) Write with one entry → exactly one `update` call on that value ID — 5.3.4
+- [x] **ST-17** (S · U) Counterparts of ST-03/04: `create` or `update` fails at ChurchTools → the error is reported (no
   "success"), and a failed `update` doesn't fall back to a `create` that would produce a duplicate — 5.3.4
-- [ ] **ST-05** (S · U) Read with duplicates → the entry with the highest value ID, plus a warning log — 5.3.3
-- [ ] **ST-06** (S · U) Write with duplicates → the highest is updated, all others deleted — 5.3.4
-- [ ] **ST-20** (E · U) "Highest value ID" compares integers: value IDs `9` and `10` → `10` wins, also when the IDs
+- [x] **ST-05** (S · U) Read with duplicates → the entry with the highest value ID, plus a warning log — 5.3.3
+- [x] **ST-06** (S · U) Write with duplicates → the highest is updated, all others deleted — 5.3.4
+- [x] **ST-20** (E · U) "Highest value ID" compares integers: value IDs `9` and `10` → `10` wins, also when the IDs
   arrive as strings — 5.3.3
-- [ ] **ST-07** (S · U) `personId` stored as a string (`"5"`) is matched like `5`, for read, write and delete — 5.3.1
-- [ ] **ST-08** (! · U) `personId` `5` doesn't match `"05"`, `"5a"`, `5.5`, `"5 "` or `true`. Loose comparison must not
+- [x] **ST-07** (S · U) `personId` stored as a string (`"5"`) is matched like `5`, for read, write and delete — 5.3.1
+- [x] **ST-08** (! · U) `personId` `5` doesn't match `"05"`, `"5a"`, `5.5`, `"5 "` or `true`. Loose comparison must not
   hand out another person's entry — 5.3.1
-- [ ] **ST-08a** (! · U) Counterpart of ST-01: reading person 5 while only persons 50, 15, 55 and 6 have entries gives
+- [x] **ST-08a** (! · U) Counterpart of ST-01: reading person 5 while only persons 50, 15, 55 and 6 have entries gives
   "none", not one of their entries — 5.3.3
-- [ ] **ST-09** (S · U) A value with broken JSON, or without a valid `personId`, is skipped with a warning; the other
+- [x] **ST-09** (S · U) A value with broken JSON, or without a valid `personId`, is skipped with a warning; the other
   entries are still read and written — 5.3.7
-- [ ] **ST-21** (S · U) A value with a valid `personId` but a missing or invalid `secondaryPwd` is that person's corrupt
+- [x] **ST-21** (S · U) A value with a valid `personId` but a missing or invalid `secondaryPwd` is that person's corrupt
   entry: reading treats it as absent; writing **updates** it (no duplicate appears next to it); deleting removes it —
   5.3.7
-- [ ] **ST-10** (N · U) Delete removes all entries of the person, including duplicates — 5.3.5
-- [ ] **ST-11** (E · U) Delete without an entry does nothing and doesn't fail — 5.3.5
+- [x] **ST-10** (N · U) Delete removes all entries of the person, including duplicates — 5.3.5
+- [x] **ST-11** (E · U) Delete without an entry does nothing and doesn't fail — 5.3.5
 - [ ] **ST-12** (! · U) The number of returned values differs from `meta.count`, or `meta.count` is missing or not an
   integer → `upstream-invalid`; nothing is written, and the result is never "none" — 5.3.9
 - [ ] **ST-13** (E · U) An empty category (`count = 0`) → "none" — 5.3.9
-- [ ] **ST-14** (! · U) Writing and deleting never touch other persons' entries (the fake records every call), also
+- [x] **ST-14** (! · U) Writing and deleting never touch other persons' entries (the fake records every call), also
   when they have duplicates or broken values — 5.3.4–5
-- [ ] **ST-15** (E · U) A stored value longer than 10,000 characters is refused before writing — 5.3.8
+- [x] **ST-15** (E · U) A stored value longer than 10,000 characters is refused before writing — 5.3.8
 - [x] **ST-16** (N · C) Create, read, update, delete against the real KV store; `meta.count` is present and matches —
   5.3
 - [ ] **ST-18** (! · U) Stale cached IDs: ChurchTools answers `404` for a cached module or category ID → the IDs are
   resolved **exactly once** more; if that works, the request succeeds; if not, `500 misconfigured`. Never
   `entry-not-found`. If the fake keeps answering `404`, the call count shows one re-resolution and no loop — 5.3.10,
   5.6.8
-- [ ] **ST-22** (S · U) Values with the reserved `personId` `0` (a leftover self-test value) are invisible to the normal
+- [x] **ST-22** (S · U) Values with the reserved `personId` `0` (a leftover self-test value) are invisible to the normal
   operations: reading, writing and deleting for persons neither return, change nor delete them, they don't count as
   duplicates, and no warning is logged — 5.3.11
 - [ ] **ST-19** (N · U) The module `ctpassstore` or the `passwordStore`/`settings`/`encryptionSettings` category doesn't
@@ -391,7 +391,7 @@ normal case names it ("→ PV-05").
 - [ ] **EG-01** (N · A) Existing entry → `200` with `secondaryPwd` (ciphertext) — 4.5
 - [ ] **EG-02** (N · A) No entry → `404 entry-not-found` — 4.5
 - [ ] **EG-03** (! · A) The response never contains plaintext, only the stored ciphertext — 4.5
-- [ ] **EG-04** (S · A) Duplicates → `200` with the newest — 4.5
+- [x] **EG-04** (S · A) Duplicates → `200` with the newest — 4.5
 
 ### `PUT /v1/entries/{id}` (4.6)
 
@@ -403,14 +403,14 @@ normal case names it ("→ PV-05").
 - [ ] **EP-05** (N · A) Invalid custom password → `400 password-invalid` with `violations` — 4.6.3
 - [ ] **EP-06** (! · A) The generated password is returned with `Cache-Control: no-store` — 4.1
 - [ ] **EP-07** (N · A) Setting the same password again works — 4.6
-- [ ] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
+- [x] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
 - [ ] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
   the custom password check — 4.6
 - [ ] **EP-10** (! · A) Two generated passwords for the same person differ, and the old one is no longer stored after
   the second `PUT` — 4.6
-- [ ] **EP-12** (! · A) Partial failure: encryption or the write fails → error response, the previous entry is unchanged,
+- [x] **EP-12** (! · A) Partial failure: encryption or the write fails → error response, the previous entry is unchanged,
   and the generated plaintext isn't returned — 4.6.5
-- [ ] **EP-13** (S · A) Healing partial failure: the update succeeds but deleting a duplicate fails → success, the new
+- [x] **EP-13** (S · A) Healing partial failure: the update succeeds but deleting a duplicate fails → success, the new
   password is the one read afterwards, and a `warning` is logged — 4.6.5
 - [ ] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
   `400 password-invalid` with the matching `violations`, and nothing is stored — 4.6.3
@@ -419,7 +419,7 @@ normal case names it ("→ PV-05").
 
 - [ ] **ED-01** (N · A) Existing entry → `204`, entry gone — 4.7
 - [ ] **ED-02** (E · A) No entry → `204` (idempotent) — 4.7
-- [ ] **ED-03** (S · A) Duplicates → all deleted — 4.7
+- [x] **ED-03** (S · A) Duplicates → all deleted — 4.7
 - [ ] **ED-04** (N · A) With `requirePasswordForPasswordChange`: correct primary password → `204`; missing or empty →
   `400 primary-password-required`; wrong → `403 invalid-primary-password`; nothing deleted in the error cases — 4.7
 - [ ] **ED-05** (! · A) Counterpart of ED-01: deleting person 7 leaves every other entry untouched — 4.7
@@ -617,7 +617,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
   *Review note (not a test):* reviewers also confirm that no secret is compared with `==` or `===`. This is part of the
   pull request checklist in the plan (item 2.6).
-- [ ] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
+- [x] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
   of the two passwords and the next write heals it (with ST-05/06) — 5.3.6
 - [ ] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
   locking) — 6.3, 4.4a.4

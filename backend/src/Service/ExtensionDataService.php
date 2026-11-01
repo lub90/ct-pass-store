@@ -80,7 +80,15 @@ class ExtensionDataService
      */
     public function createCategoryEntry(string $name, array $data): int
     {
-        return $this->client->createValue($this->resolveModuleId(), $this->categoryId($name), $this->encode($data));
+        return $this->createCategoryEntryRaw($name, $this->encode($data));
+    }
+
+    /**
+     * Creates a value from an already encoded JSON string.
+     */
+    public function createCategoryEntryRaw(string $name, string $json): int
+    {
+        return $this->client->createValue($this->resolveModuleId(), $this->categoryId($name), $json);
     }
 
     /**
@@ -88,7 +96,15 @@ class ExtensionDataService
      */
     public function updateCategoryEntry(string $name, int $valueId, array $data): int
     {
-        $this->client->updateValue($this->resolveModuleId(), $this->categoryId($name), $valueId, $this->encode($data));
+        return $this->updateCategoryEntryRaw($name, $valueId, $this->encode($data));
+    }
+
+    /**
+     * Replaces a value with an already encoded JSON string.
+     */
+    public function updateCategoryEntryRaw(string $name, int $valueId, string $json): int
+    {
+        $this->client->updateValue($this->resolveModuleId(), $this->categoryId($name), $valueId, $json);
 
         return $valueId;
     }

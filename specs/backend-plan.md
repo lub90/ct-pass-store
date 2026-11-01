@@ -64,10 +64,11 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
   - Missing or invalid configuration gives `500 misconfigured` with a precise `detail`.
   - The OAuth keys and `JWT_SECRET` are checked if present; they become required in 3.1. `machineClients` is
     validated in 3.3.
-- [ ] **2.3 Store fixes** (spec 5.3)
+- [x] **2.3 Store fixes** (spec 5.3)
   - One ID comparison everywhere.
   - Duplicate healing: read the newest, update it and delete the rest on write.
   - Skip broken values instead of crashing.
+  - *Moved to 4.1:* re-resolving stale cached module/category IDs (ST-18); IDs aren't cached across requests yet.
 - [ ] **2.4 Input validation and password policy** (spec 4.1, 5.1)
   - `invalid-id` and `invalid-body`.
   - Maximum length 128, the `violations` member, a secure shuffle.
