@@ -617,8 +617,14 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
   *Review note (not a test):* reviewers also confirm that no secret is compared with `==` or `===`. This is part of the
   pull request checklist in the plan (item 2.6).
-- [ ] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
+- [x] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
   of the two passwords and the next write heals it (with ST-05/06) — 5.3.6
+- [x] **TR-02a** (S · A) Two concurrent `PUT`s on an existing entry leave one entry; the last write wins — 5.3.6
+- [x] **TR-02b** (S · A) A `DELETE` between a `PUT`'s read and its update: the `PUT` still answers `204` and its
+  password is stored in a new entry, not `500` — 5.3.6
+- [x] **TR-02c** (S · A) Two concurrent `DELETE`s both answer `204` — 5.3.6
+- [x] **TR-02d** (S · C) Parallel `PUT`s through the local backend against the test instance: all succeed, the read
+  gives the newest entry, the next write leaves exactly one (LS-02) — 5.3.6
 - [ ] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
   locking) — 6.3, 4.4a.4
 - [ ] **TR-04** (! · U) The same machine token sent twice in parallel is accepted at most once — 4.4a.4
@@ -646,6 +652,13 @@ tester has; it's documented in `backend/docs/testing.md`.
 - [ ] **SM-05** (N · C) A full round on the deployed backend: with a test token, `PUT` → `GET` → decrypt with the test
   key → `DELETE` → `GET` gives `404 entry-not-found` — 4.5–4.7
 
+### Local backend against the test instance
+
+- [x] **LS-01** (N · C) A full round through the locally started backend with the instance's real settings and key:
+  `PUT` → `GET` (equals the stored ciphertext; decrypted if the private key is configured) → `DELETE` → `GET` gives
+  `404`. Writes only one fixture user's entry, and only if that user had none — 4.5–4.7
+- [x] **LS-02** (S · C) Parallel `PUT`s through the local backend, see TR-02d — 5.3.6
+
 ### Assumptions about ChurchTools (against the test instance)
 
 - [x] **CT-01** (S · C) New KV values get higher value IDs than existing ones. "Highest = newest" (Q9) depends on it — 5.3.3
@@ -662,6 +675,8 @@ tester has; it's documented in `backend/docs/testing.md`.
   CT-01, CT-03–05, PP-10, AX-12) are one shared test class, run against the real client — 6.6
 - [x] **CT-06a** (! · U) **The fake stays honest, fake side:** the same shared test class runs against the fake in the
   unit layer, so the fake can't drift from real ChurchTools — 6.6
+- [x] **CT-08** (S · C) Updating a value that was deleted gives `404` and doesn't bring the value back. TR-02b relies on
+  it — 5.3.6
 - [ ] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing
   and a non-zero exit code; it's never reported as passed (the test runs PHPUnit in a subprocess without the
   configuration) — 6.6

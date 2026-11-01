@@ -7,6 +7,7 @@ namespace CtPassStore\Infrastructure\Kv;
 use CtPassStore\Application\Port\PasswordRepository;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -77,8 +78,15 @@ final class KvPasswordRepository implements PasswordRepository
 
         // Update the newest entry first: if that fails, nothing has changed. Only then remove the others.
         $newest = array_pop($entries);
-        $this->extension->update(KvSchema::PASSWORD_CATEGORY, $newest['id'], $value);
-        $this->logger->info("Updated password entry {$newest['id']} for person $personId.");
+        try {
+            $this->extension->update(KvSchema::PASSWORD_CATEGORY, $newest['id'], $value);
+            $this->logger->info("Updated password entry {$newest['id']} for person $personId.");
+        } catch (NotFoundException) {
+            // A concurrent delete removed the entry after it was read (spec 5.3.6). The write still has to land.
+            // If the category itself is gone, creating fails too and that error propagates.
+            $id = $this->extension->create(KvSchema::PASSWORD_CATEGORY, $value);
+            $this->logger->info("Password entry {$newest['id']} of person $personId disappeared while writing; created entry $id.");
+        }
 
         foreach ($entries as $duplicate) {
             try {
@@ -99,8 +107,13 @@ final class KvPasswordRepository implements PasswordRepository
         $personId = $person->value;
 
         foreach ($this->entriesOf($personId) as $entry) {
-            $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $entry['id']);
-            $this->logger->info("Deleted password entry {$entry['id']} of person $personId.");
+            try {
+                $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $entry['id']);
+                $this->logger->info("Deleted password entry {$entry['id']} of person $personId.");
+            } catch (NotFoundException) {
+                // Already removed by a concurrent request (spec 5.3.6): that's what a delete wants.
+                $this->logger->info("Password entry {$entry['id']} of person $personId was already deleted.");
+            }
         }
     }
 

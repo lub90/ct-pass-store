@@ -44,6 +44,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<string, list<\Throwable>> */
     private array $failures = [];
 
+    /** @var array<string, list<\Closure(): void>> */
+    private array $hooks = [];
+
     /** @var array<string, mixed> */
     private array $servicePermissions = [];
 
@@ -125,6 +128,17 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     public function failNext(string $method, \Throwable $exception): void
     {
         $this->failures[$method][] = $exception;
+    }
+
+    /**
+     * Runs `$hook` once, right before the next call of `$method` takes effect. Used to interleave a second request
+     * with a first one, e.g. between its read and its write (catalog TR-02).
+     *
+     * @param \Closure(): void $hook
+     */
+    public function beforeNext(string $method, \Closure $hook): void
+    {
+        $this->hooks[$method][] = $hook;
     }
 
     /**
@@ -246,6 +260,12 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     private function record(string $method, array $args): void
     {
         $this->calls[] = ['method' => $method, 'args' => $args];
+
+        if (($this->hooks[$method] ?? []) !== []) {
+            // Removed before it runs, so calls made by the hook itself aren't intercepted again.
+            $hook = array_shift($this->hooks[$method]);
+            $hook();
+        }
 
         if (($this->failures[$method] ?? []) !== []) {
             throw array_shift($this->failures[$method]);

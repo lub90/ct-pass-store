@@ -83,7 +83,7 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
   - Add a pull request template with a short security checklist, e.g. "no secret is compared with `==`/`===`", "no
     secret, token or password is logged", "new problem types are documented in `problems.md`".
 
-- [ ] **2.7 Architecture refactoring** (behavior-neutral, before phase 3)
+- [x] **2.7 Architecture refactoring** (behavior-neutral, before phase 3)
   - Layers: `Domain` (value objects, policies), `Application` (use cases), `Infrastructure` (ChurchTools, KV
     repositories, crypto, clock), `Http` (controllers, middleware, problems, request parsing). `Application.php` is the
     only place where everything is wired.

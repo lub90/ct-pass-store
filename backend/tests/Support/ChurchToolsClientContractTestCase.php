@@ -162,6 +162,25 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         $this->client()->deleteValue($module, $category, $id);
     }
 
+    /**
+     * CT-08: a write that loses the race against a delete must be recognizable, so the store can create the entry
+     * again instead of failing (spec 5.3.6).
+     */
+    public function testUpdatingAMissingValueIsNotFound(): void
+    {
+        $module = $this->moduleId();
+        $category = $this->passwordStoreId();
+        $id = $this->client()->createValue($module, $category, $this->testValue('contract-update-deleted'));
+        $this->client()->deleteValue($module, $category, $id);
+
+        try {
+            $this->client()->updateValue($module, $category, $id, $this->testValue('contract-update-deleted-2'));
+            self::fail('Updating a deleted value must fail with NotFoundException.');
+        } catch (NotFoundException) {
+            self::assertNull($this->valueById($id), 'The update must not bring the value back.');
+        }
+    }
+
     private function valueById(int $id): ?string
     {
         foreach ($this->client()->getValues($this->moduleId(), $this->passwordStoreId()) as $value) {

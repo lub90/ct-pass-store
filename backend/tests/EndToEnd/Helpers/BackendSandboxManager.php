@@ -9,7 +9,10 @@ class BackendSandboxManager
     private int $port;
     private string $webroot;
 
-    public function __construct(string $host = 'localhost', int $port = 8080, string $webroot = 'public')
+    /**
+     * @param int $workers PHP_CLI_SERVER_WORKERS: more than 1 lets the built-in server handle requests in parallel
+     */
+    public function __construct(string $host = 'localhost', int $port = 8080, string $webroot = 'public', private readonly int $workers = 1)
     {
         $this->host = $host;
         $this->port = $port;
@@ -27,7 +30,7 @@ class BackendSandboxManager
         }
 
         // Start the server in the background and remember its PID
-        $command = sprintf('php -S %s:%d -t %s > /dev/null 2>&1 & echo $!', $this->host, $this->port, $this->webroot);
+        $command = sprintf('PHP_CLI_SERVER_WORKERS=%d php -S %s:%d -t %s > /dev/null 2>&1 & echo $!', $this->workers, $this->host, $this->port, $this->webroot);
         $output = [];
         exec($command, $output);
         $this->pid = isset($output[0]) ? (int) $output[0] : null;

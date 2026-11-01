@@ -118,3 +118,20 @@ composer test:e2e
 ```
 
 Keep the local files with credentials private (`chmod 600 config/credentials.php phpunit.xml tests/EndToEnd/fixtures/*.json`).
+
+### Tests that leave the instance's setup alone
+
+Two parts of the suite never change settings or keys and can run against a shared test instance:
+
+```bash
+vendor/bin/phpunit -c phpunit.xml --filter 'ChurchToolsClientContractTest|LiveEntriesTest'
+```
+
+- `ChurchToolsClientContractTest` writes only values with `personId` `0` and deletes them again.
+- `LiveEntriesTest` starts the backend locally (port 8091, several workers) and writes only the entry of the first user
+  in `normal_users.json`. It skips if that user already has an entry, and it deletes what it created. It needs an
+  instance that allows custom passwords without a primary password.
+  - Without the matching private key it compares ciphertexts with what ChurchTools stored. To also decrypt, add
+    `<env name="CT_TEST_PRIVATE_KEY_FILE" value="/path/to/private.pem"/>` to your local `phpunit.xml`.
+  - `testParallelPutsHeal` prints how long the parallel PUTs took compared with a single one, to show whether they
+    really overlapped.

@@ -559,6 +559,9 @@ This covers the lookup and write logic in `KvPasswordRepository`.
 5. **Delete:** removes all entries for `personId`. Doing nothing is fine if none exist *(current)*.
 6. The KV store has no transactions and no conflict detection. Two concurrent writes for the same person can still
    create a duplicate, but rules 3–5 guarantee it never blocks anyone and disappears on the next write.
+   **(change)** A value that disappears between reading and writing (a concurrent delete or heal) isn't an error: if
+   the update of the newest entry gets `404`, the write creates a new entry; a delete that gets `404` counts as done.
+   Only a `404` for the module or a category stays `500 misconfigured` (rule 10); creating fails in that case too.
 7. **(change)** Broken values must not crash reading or writing for other people:
    - A value without a valid `personId` (broken JSON, missing, wrong type) is skipped with a `warning` log entry.
      `personId` `0` is not "invalid" but reserved (rule 11).

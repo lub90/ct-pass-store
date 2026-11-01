@@ -4,7 +4,7 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Bugs & Robustness
 
-- [ ] **Race condition creates duplicate password entries**
+- [x] **Race condition creates duplicate password entries** (plan 2.3 and 2.7: duplicates heal, vanished values are tolerated; tested with interleaved and parallel requests)
   [`KvPasswordRepository.php`](backend/src/Infrastructure/Kv/KvPasswordRepository.php) (formerly `ChurchToolsStore.php`) does read-all → filter → create without any locking. Two concurrent PUTs for the same person (e.g. a double-click) can create two entries. After that, `getPwd()` returns `null` (it requires exactly one match) and `putPwd()` throws on every call, so the user is locked out until the data is cleaned up by hand.
   - Make PUT tolerate existing duplicates (keep the newest entry, delete the rest).
   - Unify the ID comparison: `getPwd()` uses `==`, while `putPwd()`/`deletePwd()` use `===`. An entry stored with a string `personId` is found by one and missed by the other.
@@ -30,6 +30,13 @@ Open issues and planned improvements, roughly ordered by severity.
   - Reduce or parallelize the remaining calls where possible.
 
 ## Security
+
+- [ ] **ChurchTools connections time out under parallel load**
+  With 10 parallel PUTs through the local backend (plan 2.7, `LiveEntriesTest`), several `whoami` calls failed with a
+  connect timeout after 5 s and the backend answered `502 upstream-unavailable`. With 5 parallel PUTs everything
+  passed. The backend fails closed and no data was damaged. Unclear whether ChurchTools hosting limits concurrent
+  connections per IP or the local network was the cause; check from the production web host. Relevant for bursts
+  (e.g. ct-radius) and another reason for the cache in plan 4.1.
 
 - [ ] **Harden the primary-password check**
   [`ChurchToolsPasswordVerifier.php`](backend/src/Infrastructure/ChurchTools/ChurchToolsPasswordVerifier.php) (formerly `ChurchtoolsAuthVerifier.php`) checks the primary password by calling the real `POST /api/login`.
