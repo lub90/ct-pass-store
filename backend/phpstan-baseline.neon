@@ -55,36 +55,6 @@ parameters:
 			path: src/Service/EncryptionService.php
 
 		-
-			message: '#^Call to function is_array\(\) with array\<mixed\> will always evaluate to true\.$#'
-			identifier: function.alreadyNarrowedType
-			count: 2
-			path: src/Service/ServiceSettings.php
-
-		-
-			message: '#^Method CtPassStore\\Service\\ServiceSettings\:\:loadEncryptionSettings\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/ServiceSettings.php
-
-		-
-			message: '#^Method CtPassStore\\Service\\ServiceSettings\:\:loadSettings\(\) return type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/ServiceSettings.php
-
-		-
-			message: '#^Property CtPassStore\\Service\\ServiceSettings\:\:\$encryptionSettings type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/ServiceSettings.php
-
-		-
-			message: '#^Property CtPassStore\\Service\\ServiceSettings\:\:\$settings type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Service/ServiceSettings.php
-
-		-
 			message: '#^Method CtPassStore\\Tests\\EndToEnd\\EntriesGeneralAccessTest\:\:getMethods\(\) return type has no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1

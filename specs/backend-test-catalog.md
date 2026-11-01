@@ -77,7 +77,7 @@ normal case names it ("→ PV-05").
 - [ ] **PG-06** (! · U) No position is fixed to a character class: with a fixed-seed test randomizer, the mandatory
   letter, digit and symbol end up at different positions across runs (deterministic). Separately, over 10,000 generated
   characters every allowed character occurs (with a fixed seed, so the test can't fail by chance) — gen. 3, 5
-- [ ] **PG-07** (E · U) `passwordLength` outside 12–64 never reaches the generator: it's a configuration error
+- [x] **PG-07** (E · U) `passwordLength` outside 12–64 never reaches the generator: it's a configuration error
   (`misconfigured`) when the settings are loaded — gen. 4
 
 ## 2. Encryption (`EncryptionService`, spec 5.2)
@@ -89,10 +89,10 @@ normal case names it ("→ PV-05").
 - [ ] **EN-03** (! · U) Encrypting the same plaintext twice gives different ciphertexts (OAEP is randomized) — 5.2.3
 - [ ] **EN-04** (! · U) The padding is OAEP with SHA-256 and MGF1-SHA-256: decrypting with PKCS#1 v1.5 or OAEP-SHA1
   fails — 5.2.1
-- [ ] **EN-05** (! · U) A 2048-bit public key is rejected as `misconfigured` — 5.2.4
-- [ ] **EN-06** (S · U) An unparsable key, an empty key or a private key instead of a public one is rejected as
+- [x] **EN-05** (! · U) A 2048-bit public key is rejected as `misconfigured` — 5.2.4
+- [x] **EN-06** (S · U) An unparsable key, an empty key or a private key instead of a public one is rejected as
   `misconfigured` — 5.2.4
-- [ ] **EN-10** (! · U) Key types and formats: an EC key, an Ed25519 key and an X.509 certificate are rejected
+- [x] **EN-10** (! · U) Key types and formats: an EC key, an Ed25519 key and an X.509 certificate are rejected
   (`misconfigured`); an RSA key with 8192 bits and a PEM with CRLF line endings are accepted — 3.2, 5.2.4
 - [ ] **EN-07** (! · U) Neither the exception message nor the log of a failed encryption contains the plaintext — 5.2.5
 - [ ] **EN-08** (N · C) A password encrypted by the backend is decrypted correctly by ct-radius' algorithm (Node.js
@@ -142,26 +142,26 @@ normal case names it ("→ PV-05").
 
 ## 4. Settings and configuration (spec 3)
 
-- [ ] **CF-01** (N · U) A complete, valid `credentials.php` is accepted — 3.1
-- [ ] **CF-02** (! · A) Each required key missing or empty (`CT_API_URL`, `CT_API_TOKEN`, `CORS`, `OAUTH_CLIENT_ID`,
+- [x] **CF-01** (N · U) A complete, valid `credentials.php` is accepted — 3.1
+- [x] **CF-02** (! · A) Each required key missing or empty (`CT_API_URL`, `CT_API_TOKEN`, `CORS`, `OAUTH_CLIENT_ID`,
   `OAUTH_CLIENT_SECRET`, `JWT_SECRET`) → every request answers `500 misconfigured` naming the key, without its value
   — 3.1
-- [ ] **CF-03** (! · U) `JWT_SECRET` shorter than 32 bytes → `misconfigured`; exactly 32 bytes is accepted — 3.1
-- [ ] **CF-05** (S · A) The `CORS` key itself is broken → every request, also `OPTIONS`, gets `500 misconfigured`
+- [x] **CF-03** (! · U) `JWT_SECRET` shorter than 32 bytes → `misconfigured`; exactly 32 bytes is accepted — 3.1
+- [x] **CF-05** (S · A) The `CORS` key itself is broken → every request, also `OPTIONS`, gets `500 misconfigured`
   without CORS headers — 3.1
-- [ ] **CF-04** (! · U) Wrong types and formats: `CT_API_URL` not a URL, with `http://`, with a query string or with
+- [x] **CF-04** (! · U) Wrong types and formats: `CT_API_URL` not a URL, with `http://`, with a query string or with
   credentials in it; `CORS` not a list or containing non-origins (`*`, a path); keys with wrong types → `misconfigured`
   naming the key — 3.1
-- [ ] **SE-01** (N · U) Valid settings are loaded and typed correctly — 3.2
-- [ ] **SE-02** (E · U) Missing `adminUsers` and missing `machineClients` mean empty lists; a leftover `readAccessUsers`
+- [x] **SE-01** (N · U) Valid settings are loaded and typed correctly — 3.2
+- [x] **SE-02** (E · U) Missing `adminUsers` and missing `machineClients` mean empty lists; a leftover `readAccessUsers`
   grants nothing (Q23) — 5.4.4
-- [ ] **SE-03** (! · U) `adminUsers` with non-numeric or negative entries (`"1; drop"`, `-1`, `0`, `1.5`, `null`) is a
+- [x] **SE-03** (! · U) `adminUsers` with non-numeric or negative entries (`"1; drop"`, `-1`, `0`, `1.5`, `null`) is a
   configuration error, not a cast to `0` or `1` — 3.2
-- [ ] **SE-04** (! · U) `passwordLength`: 12 and 64 are accepted; 11, 65, missing, `0`, negative, a string or a float →
+- [x] **SE-04** (! · U) `passwordLength`: 12 and 64 are accepted; 11, 65, missing, `0`, negative, a string or a float →
   `misconfigured`, never a silent fallback — 3.2
-- [ ] **SE-05** (S · U) Booleans given as `"false"`, `"true"`, `0`, `1` or `null`, or missing, are rejected, not
+- [x] **SE-05** (S · U) Booleans given as `"false"`, `"true"`, `0`, `1` or `null`, or missing, are rejected, not
   interpreted as `true` or `false` — 3.2
-- [ ] **SE-08** (! · U) `encryptionSettings` empty, with several values or without `publicKey` → `misconfigured` — 3.2
+- [x] **SE-08** (! · U) `encryptionSettings` empty, with several values or without `publicKey` → `misconfigured` — 3.2
 - [ ] **SE-06** (N · U) `machineClients`: a valid entry is accepted; an invalid `id`, an invalid key or a duplicate `id`
   disables only that entry and is reported — 3.2
 - [ ] **SE-06a** (E · U) Client `id` length boundaries: 2 and 41 characters are rejected, 3 and 40 accepted — 3.2
@@ -170,7 +170,7 @@ normal case names it ("→ PV-05").
 - [ ] **SE-09** (! · U) `backendUrl`: `https://host/path/` is normalized to `https://host/path`; `http://…`, an empty string,
   a query, a fragment or credentials are invalid. A missing or invalid `backendUrl` makes machine authentication fail
   closed (see MC-20) — 3.2
-- [ ] **SE-07** (S · U) The settings category is empty or holds several values → `misconfigured` — 3.2
+- [x] **SE-07** (S · U) The settings category is empty or holds several values → `misconfigured` — 3.2
 
 ## 5. ChurchTools client (`ChurchToolsClient`, spec 5.6)
 
@@ -493,7 +493,7 @@ normal case names it ("→ PV-05").
 - [ ] **LG-02** (N · A) Denied access is logged as `warning` with person ID and IP address — 6.4
 - [ ] **LG-03** (N · A) Logins, changes and deletions are logged as `info` — 6.4
 - [ ] **LG-04** (N · U) The log level from the configuration is applied — 6.4
-- [ ] **LG-05** (N · U) An invalid `LOG_LEVEL` (`verbose`, `INFO `, empty) → `misconfigured` — 3.1
+- [x] **LG-05** (N · U) An invalid `LOG_LEVEL` (`verbose`, `INFO `, empty) → `misconfigured` — 3.1
 - [ ] **LG-06** (N · U) Logs rotate daily and keep 14 files; older files are deleted — 6.4
 - [ ] **LG-07** (N · U) Every `error` entry carries the backend version in its context — 6.4
 
@@ -600,7 +600,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   → `400 invalid-body`; 10,000 levels → `400 invalid-body` without exhausting memory or the stack — 4.1
 - [ ] **RX-02** (! · A) A custom password of 1 MB is rejected as `too-long` **before** regex checks or encryption run
   — 5.1.4
-- [ ] **RX-03** (! · U) A huge `passwordLength` in the settings (e.g. `1000000000`) is a configuration error before the
+- [x] **RX-03** (! · U) A huge `passwordLength` in the settings (e.g. `1000000000`) is a configuration error before the
   generator allocates anything — 3.2
 - [ ] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap
   around or turn into `0`/negative values that pass a check — 4.1, 4.4

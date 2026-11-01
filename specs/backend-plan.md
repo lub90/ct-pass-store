@@ -60,8 +60,10 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 - [x] **2.1 Problem Details** (D2, spec 4.9)
   - Exception hierarchy and error middleware, `404 not-found`, `405 method-not-allowed`.
   - `backend/docs/problems.md` with one section per type.
-- [ ] **2.2 Configuration and settings validation** (spec 3.1, 3.2)
+- [x] **2.2 Configuration and settings validation** (spec 3.1, 3.2)
   - Missing or invalid configuration gives `500 misconfigured` with a precise `detail`.
+  - The OAuth keys and `JWT_SECRET` are checked if present; they become required in 3.1. `machineClients` is
+    validated in 3.3.
 - [ ] **2.3 Store fixes** (spec 5.3)
   - One ID comparison everywhere.
   - Duplicate healing: read the newest, update it and delete the rest on write.
@@ -143,6 +145,8 @@ These live outside the backend, but the new API is only usable once they're done
   - Setup wizard: create the OAuth application, show the secret once, and grant users the login right.
   - An admin UI for machine clients.
   - Stop fetching `/persons/{id}/logintoken`.
+  - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)
+    and in the settings form (today: minimum 8, no maximum).
 - [ ] **5.2 ct-radius** (see the ct-radius section in [`TODO.md`](../TODO.md))
   - Ed25519 key generation and token signing, and the problem `type` check for `404`.
   - A timeout on the backend call, the backend URL, updated tests.

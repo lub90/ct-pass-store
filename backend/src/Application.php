@@ -9,6 +9,8 @@ use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Controller\PasswordController;
 use CtPassStore\Controller\TestController;
+use CtPassStore\Http\Problem\ProblemResponseFactory;
+use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Middleware\AuthMiddleware;
 use CtPassStore\Middleware\CorsMiddleware;
 use CtPassStore\Middleware\ErrorMiddleware;
@@ -20,6 +22,10 @@ use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Service\PasswordValidator;
 use CtPassStore\Service\ServiceSettings;
 use DI\Container;
+use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface;
 use Psr\Log\LoggerInterface;
 use Slim\App;
 use Slim\Factory\AppFactory;
@@ -68,6 +74,28 @@ final class Application
         $app->addRoutingMiddleware();
         $app->add(new ErrorMiddleware($logger));
         $app->add(new CorsMiddleware($config->corsOrigins));
+
+        return $app;
+    }
+
+    /**
+     * An app that answers every request, including preflights, with `500 misconfigured` and no CORS headers. Used
+     * when `credentials.php` itself is broken, so nothing else can be trusted (spec 3.1).
+     *
+     * @return App<Container>
+     */
+    public static function misconfigured(string $detail): App
+    {
+        /** @var App<Container> $app */
+        $app = AppFactory::createFromContainer(new Container());
+        $app->add(new class ($detail) implements MiddlewareInterface {
+            public function __construct(private readonly string $detail) {}
+
+            public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
+            {
+                return ProblemResponseFactory::create(ProblemType::Misconfigured, $this->detail);
+            }
+        });
 
         return $app;
     }
