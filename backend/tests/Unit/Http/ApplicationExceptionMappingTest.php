@@ -9,8 +9,10 @@ use CtPassStore\Application\Exception\ApplicationException;
 use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
 use CtPassStore\Application\Exception\EntryNotFoundException;
 use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
+use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
+use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
@@ -61,6 +63,8 @@ final class ApplicationExceptionMappingTest extends TestCase
         yield 'invalid primary password' => [new InvalidPrimaryPasswordException('wrong'), 403, 'invalid-primary-password'];
         yield 'custom password not allowed' => [new CustomPasswordNotAllowedException('off'), 400, 'custom-password-not-allowed'];
         yield 'password rejected' => [new PasswordRejectedException('weak', ['too-short']), 400, 'password-invalid'];
+        yield 'invalid token' => [new InvalidTokenException('bad'), 401, 'invalid-token'];
+        yield 'token expired' => [new TokenExpiredException('old'), 401, 'token-expired'];
     }
 
     public function testEveryApplicationExceptionIsCovered(): void

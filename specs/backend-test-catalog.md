@@ -208,28 +208,28 @@ normal case names it ("→ PV-05").
 
 ### Backend access tokens (`TokenService`, spec 4.4, 5.5)
 
-- [ ] **TK-01** (N · U) An issued token validates and yields the person ID — 4.4
-- [ ] **TK-02** (N · U) Claims: `iss`, `aud` = `ctpassstore-api`, `sub` (string), `iat`, `nbf`, `exp` = `iat` + 900,
+- [x] **TK-01** (N · U) An issued token validates and yields the person ID — 4.4
+- [x] **TK-02** (N · U) Claims: `iss`, `aud` = `ctpassstore-api`, `sub` (string), `iat`, `nbf`, `exp` = `iat` + 900,
   unique `jti` — 4.4
-- [ ] **TK-03** (! · U) `alg: none` (with and without a signature) is rejected — 4.4
-- [ ] **TK-04** (! · U) A token signed with a different secret is rejected — 4.4
-- [ ] **TK-05** (! · U) Changing any claim (e.g. `sub` to another ID) without re-signing is rejected — 4.4
-- [ ] **TK-06** (! · U) Wrong `aud`, wrong `iss` → rejected — 4.4
-- [ ] **TK-07** (E · U) `exp` 29 s ago → valid; 31 s ago → `token-expired` (30 s clock skew) — 4.4
-- [ ] **TK-08** (E · U) `nbf` 29 s ahead → valid; 31 s ahead → rejected — 4.4
-- [ ] **TK-09** (! · U) Algorithm confusion: an HS256 token with a `kid`, an EdDSA token without a `kid`, an RS256 token
+- [x] **TK-03** (! · U) `alg: none` (with and without a signature) is rejected — 4.4
+- [x] **TK-04** (! · U) A token signed with a different secret is rejected — 4.4
+- [x] **TK-05** (! · U) Changing any claim (e.g. `sub` to another ID) without re-signing is rejected — 4.4
+- [x] **TK-06** (! · U) Wrong `aud`, wrong `iss` → rejected — 4.4
+- [x] **TK-07** (E · U) `exp` 29 s ago → valid; 31 s ago → `token-expired` (30 s clock skew) — 4.4
+- [x] **TK-08** (E · U) `nbf` 29 s ahead → valid; 31 s ahead → rejected — 4.4
+- [x] **TK-09** (! · U) Algorithm confusion: an HS256 token with a `kid`, an EdDSA token without a `kid`, an RS256 token
   → rejected — 4.3.3
-- [ ] **TK-10** (! · U) A ChurchTools OAuth access token sent directly to the backend is rejected — 4.3
-- [ ] **TK-11** (S · U) Garbage in the header (not three parts, broken base64, broken JSON, very long) → `invalid-token`
+- [x] **TK-10** (! · U) A ChurchTools OAuth access token sent directly to the backend is rejected — 4.3
+- [x] **TK-11** (S · U) Garbage in the header (not three parts, broken base64, broken JSON, very long) → `invalid-token`
   without a PHP error — 4.3.2
-- [ ] **TK-12** (! · U) After `JWT_SECRET` changes, all old tokens are rejected — 6.3
-- [ ] **TK-13** (! · U) Counterparts of TK-01/02: a token missing `exp`, `sub`, `aud`, `iss`, `jti` or `username`, or
+- [x] **TK-12** (! · U) After `JWT_SECRET` changes, all old tokens are rejected — 6.3
+- [x] **TK-13** (! · U) Counterparts of TK-01/02: a token missing `exp`, `sub`, `aud`, `iss`, `jti` or `username`, or
   with an empty `sub`, is rejected — 4.4
 - [ ] **TK-14** (! · A) `iss` is the constant `ctpassstore-backend`: a manipulated `Host` or `X-Forwarded-Host` header
   changes neither the `iss` of issued tokens nor what validation accepts — 4.4
-- [ ] **TK-15** (! · U) Order of validation: a token with a bad signature **and** an expired `exp` gives `invalid-token`,
+- [x] **TK-15** (! · U) Order of validation: a token with a bad signature **and** an expired `exp` gives `invalid-token`,
   not `token-expired` (no information without a valid signature) — 4.3.3
-- [ ] **TK-16** (! · U) Header parameters `jwk`, `jku`, `x5u`, `x5c` are ignored; a token with `crit` is rejected — 4.3.3
+- [x] **TK-16** (! · U) Header parameters `jwk`, `jku`, `x5u`, `x5c` are ignored; a token with `crit` is rejected — 4.3.3
 
 ### Login (`POST /v1/auth/token`, spec 4.4)
 

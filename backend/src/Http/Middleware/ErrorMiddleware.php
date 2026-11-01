@@ -9,8 +9,10 @@ use CtPassStore\Application\Exception\ApplicationException;
 use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
 use CtPassStore\Application\Exception\EntryNotFoundException;
 use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
+use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
+use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
@@ -105,6 +107,8 @@ final class ErrorMiddleware implements MiddlewareInterface
             $e instanceof InvalidPrimaryPasswordException => ProblemType::InvalidPrimaryPassword,
             $e instanceof CustomPasswordNotAllowedException => ProblemType::CustomPasswordNotAllowed,
             $e instanceof PasswordRejectedException => ProblemType::PasswordInvalid,
+            $e instanceof InvalidTokenException => ProblemType::InvalidToken,
+            $e instanceof TokenExpiredException => ProblemType::TokenExpired,
             default => throw new \LogicException('No problem type for ' . $e::class . '.', 0, $e),
         };
 
