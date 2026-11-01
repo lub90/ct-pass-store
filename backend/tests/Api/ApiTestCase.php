@@ -170,7 +170,26 @@ abstract class ApiTestCase extends TestCase
         if ($json !== null) {
             $request = $request
                 ->withHeader('Content-Type', 'application/json')
-                ->withBody((new StreamFactory())->createStream(json_encode($json, JSON_THROW_ON_ERROR)));
+                ->withBody((new StreamFactory())->createStream($json === [] ? '{}' : json_encode($json, JSON_THROW_ON_ERROR)));
+        }
+
+        return $this->app()->handle($request);
+    }
+
+    /**
+     * Sends a request with a raw body and headers, e.g. invalid JSON or another content type.
+     *
+     * @param array<string, string> $headers
+     */
+    protected function rawRequest(string $method, string $path, ?int $asPerson, string $body, array $headers = ['Content-Type' => 'application/json']): ResponseInterface
+    {
+        $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, ['REMOTE_ADDR' => self::CLIENT_IP])
+            ->withBody((new StreamFactory())->createStream($body));
+        if ($asPerson !== null) {
+            $request = $request->withHeader('Authorization', 'Login ' . $this->tokenOf($asPerson));
+        }
+        foreach ($headers as $name => $value) {
+            $request = $request->withHeader($name, $value);
         }
 
         return $this->app()->handle($request);

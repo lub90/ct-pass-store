@@ -114,7 +114,7 @@ final class BackendConfig
             throw new ConfigurationException('CORS in credentials.php must be a non-empty list of origins, e.g. [\'https://example.church.tools\'].');
         }
         foreach ($value as $index => $origin) {
-            if (!is_string($origin) || preg_match('#^https?://[a-z0-9.-]+(:[0-9]{1,5})?$#i', $origin) !== 1) {
+            if (!is_string($origin) || preg_match('#^https?://[a-z0-9.-]+(:[0-9]{1,5})?\z#i', $origin) !== 1) {
                 throw new ConfigurationException("CORS entry $index in credentials.php isn't an origin. An origin is scheme, host and optional port, without path or wildcard, e.g. https://example.church.tools.");
             }
         }

@@ -35,46 +35,46 @@ normal case names it ("→ PV-05").
   → counterparts PV-03, PV-05, PV-13, PV-14
 - [x] **PV-02** (N · U) A longer valid password is valid — 5.1.3 → counterpart PV-16
 - [x] **PV-03** (E · U) Exactly `passwordLength` characters is valid; one less is invalid — 5.1.3
-- [ ] **PV-03a** (E · U) Too short by several amounts: `passwordLength` − 1, − 2, half of it, 3 (one of each class),
+- [x] **PV-03a** (E · U) Too short by several amounts: `passwordLength` − 1, − 2, half of it, 3 (one of each class),
   1 — each invalid (`too-short`), while all classes are present — 5.1.3
 - [x] **PV-04** (E · U) The empty string is invalid — 5.1.3
 - [x] **PV-05** (N · U) Missing letter, missing digit, missing symbol: each is invalid on its own — 5.1.2
-- [ ] **PV-13** (N · U) Two classes missing: only letters, only digits, only symbols (each at full length) — invalid,
+- [x] **PV-13** (N · U) Two classes missing: only letters, only digits, only symbols (each at full length) — invalid,
   and both missing classes are reported — 5.1.2, 5.1.6
-- [ ] **PV-14** (N · U) Combinations: too short **and** one class missing; too short **and** two classes missing; valid
+- [x] **PV-14** (N · U) Combinations: too short **and** one class missing; too short **and** two classes missing; valid
   length **and** an invalid character **and** a class missing — invalid, every violation is reported — 5.1.2–6
 - [x] **PV-06** (N · U) Every allowed symbol `! @ $ % & * - _ + = ? .` is accepted — 5.1.1
-- [ ] **PV-06a** (N · U) Every letter `a–z`, `A–Z` and every digit `0–9` is accepted (exhaustive) — 5.1.1
-- [ ] **PV-15** (! · U) Exhaustive counterpart: every other byte value is rejected. All printable ASCII characters
+- [x] **PV-06a** (N · U) Every letter `a–z`, `A–Z` and every digit `0–9` is accepted (exhaustive) — 5.1.1
+- [x] **PV-15** (! · U) Exhaustive counterpart: every other byte value is rejected. All printable ASCII characters
   outside the set (`# " ' ( ) , / : ; < > [ \ ] ^ { | } ~`, the backtick and the space), all control characters `0x00–0x1F`
   and `0x7F`, and every byte `0x80–0xFF`, each inserted into an otherwise valid password — 5.1.1
 - [x] **PV-07** (! · U) Characters outside the set are rejected: space, `#`, umlaut, emoji, null byte, newline — 5.1.1
-- [ ] **PV-08** (! · U) Further characters outside the set are rejected: tab, `"`, `'`, `\`, `/`, `<`, `>`, `;`, a
+- [x] **PV-08** (! · U) Further characters outside the set are rejected: tab, `"`, `'`, `\`, `/`, `<`, `>`, `;`, a
   non-breaking space, a lookalike character (e.g. Cyrillic `а`) — 5.1.1
-- [ ] **PV-09** (E · U) 128 characters is valid; 129 is invalid (`too-long`) — 5.1.4
-- [ ] **PV-10** (! · U) A 128-character password still encrypts with RSA-4096/OAEP-SHA256 (with EN-01) — 5.1.4
-- [ ] **PV-11** (N · U) Each violated rule is reported with its code (`too-short`, `too-long`, `missing-letter`,
+- [x] **PV-09** (E · U) 128 characters is valid; 129 is invalid (`too-long`) — 5.1.4
+- [x] **PV-10** (! · U) A 128-character password still encrypts with RSA-4096/OAEP-SHA256 (with EN-01) — 5.1.4
+- [x] **PV-11** (N · U) Each violated rule is reported with its code (`too-short`, `too-long`, `missing-letter`,
   `missing-digit`, `missing-symbol`, `invalid-character`); several at once are all reported — 5.1.6
-- [ ] **PV-12** (E · U) Multibyte input is measured in bytes: `ä` counts as invalid, not as a short valid character
+- [x] **PV-12** (E · U) Multibyte input is measured in bytes: `ä` counts as invalid, not as a short valid character
   — 5.1.5
-- [ ] **PV-16** (N · U) Long passwords aren't automatically valid: a long password with a class missing, or with one
+- [x] **PV-16** (N · U) Long passwords aren't automatically valid: a long password with a class missing, or with one
   invalid character at the start, in the middle or at the end, is invalid — 5.1.1–2
-- [ ] **PV-17** (E · U) The minimum comes from the setting: the same password is valid for `passwordLength` = its
+- [x] **PV-17** (E · U) The minimum comes from the setting: the same password is valid for `passwordLength` = its
   length and invalid for its length + 1 (checked for several setting values, e.g. 12, 20, 64) — 5.1.3
 
 ### Generation
 
 - [x] **PG-01** (N · U) The result has exactly `passwordLength` characters (3, 12, 64) — 5.1 gen. 1
-- [ ] **PG-08** (N · U) A changed `passwordLength` setting changes the length of new passwords; it isn't fixed or
+- [x] **PG-08** (N · U) A changed `passwordLength` setting changes the length of new passwords; it isn't fixed or
   cached from an earlier value — gen. 1
 - [x] **PG-02** (N · U) The result always passes validation and uses only allowed characters (200 runs each) — gen. 2
 - [x] **PG-03** (! · U) 100 generated passwords are all different — gen. 3
 - [x] **PG-04** (E · U) The generator's internal guard: lengths below 3 throw `InvalidArgumentException` (a programming
   error; valid settings are 12–64, see SE-04) — gen. 4
-- [ ] **PG-05** (! · U) The generator draws from a cryptographically secure source, including for the shuffle: by
+- [x] **PG-05** (! · U) The generator draws from a cryptographically secure source, including for the shuffle: by
   default it gets a `Random\Randomizer` with the `Secure` engine (checked in a test). `str_shuffle`, `rand` and
   `mt_rand` are banned by the PHPStan rule set (spec 6.6) — gen. 3, 5
-- [ ] **PG-06** (! · U) No position is fixed to a character class: with a fixed-seed test randomizer, the mandatory
+- [x] **PG-06** (! · U) No position is fixed to a character class: with a fixed-seed test randomizer, the mandatory
   letter, digit and symbol end up at different positions across runs (deterministic). Separately, over 10,000 generated
   characters every allowed character occurs (with a fixed seed, so the test can't fail by chance) — gen. 3, 5
 - [x] **PG-07** (E · U) `passwordLength` outside 12–64 never reaches the generator: it's a configuration error
@@ -304,10 +304,10 @@ normal case names it ("→ PV-05").
 
 ### Primary password check (spec 4.6, 5.5, 6.3)
 
-- [ ] **PP-01** (N · A) Correct primary password → change allowed — 4.6.2
-- [ ] **PP-02** (N · A) Missing or empty → `400 primary-password-required` — 4.6.2
-- [ ] **PP-03** (N · A) Wrong → `403 invalid-primary-password` — 4.6.2
-- [ ] **PP-04** (! · A) An admin changing someone else's entry is checked against **their own** password, not the
+- [x] **PP-01** (N · A) Correct primary password → change allowed — 4.6.2
+- [x] **PP-02** (N · A) Missing or empty → `400 primary-password-required` — 4.6.2
+- [x] **PP-03** (N · A) Wrong → `403 invalid-primary-password` — 4.6.2
+- [x] **PP-04** (! · A) An admin changing someone else's entry is checked against **their own** password, not the
   target's — 4.6.2
 - [x] **PP-05** (! · A) ChurchTools unreachable → `502`, **not** "wrong password" and **not** "allowed" — 5.5.3
 - [ ] **PP-06** (! · A) 4 wrong attempts don't block; after the 5th wrong attempt within 15 minutes, the next attempt
@@ -327,7 +327,7 @@ normal case names it ("→ PV-05").
 - [ ] **PP-07** (E · A) The limit is per person: person B isn't blocked by person A's failures — 6.3
 - [ ] **PP-08** (! · A) The primary password appears in no response, problem detail or log entry — 6.3
 - [ ] **PP-09** (N · A) `requirePasswordForPasswordChange = false` → no check, ChurchTools isn't called — 4.6.2
-- [ ] **PP-12** (! · A) The request can't choose whose password is checked: a `username` or `personId` field in the body
+- [x] **PP-12** (! · A) The request can't choose whose password is checked: a `username` or `personId` field in the body
   is rejected (`400 invalid-body`); the username always comes from the token's `username` claim. The correct password
   of **another** user is rejected — 4.6.2, 5.5.3
 - [ ] **PP-17** (! · A) ChurchTools answers `200` but with a person ID different from the token's `sub` (e.g. a
@@ -344,9 +344,9 @@ normal case names it ("→ PV-05").
 - [ ] **AZ-01** (! · A) The complete matrix: every caller (user, admin, machine client with `entries:read`, machine
   client without permissions) × every operation (GET, PUT, DELETE) × own/other entry gives exactly the expected `2xx`
   or `403` — 4.3.4
-- [ ] **AZ-02** (! · A) A user can't read, change or delete another person's entry by varying the ID: `07`, `7.0`, `+7`
+- [x] **AZ-02** (! · A) A user can't read, change or delete another person's entry by varying the ID: `07`, `7.0`, `+7`
   give `400 invalid-id`, never access to person 7 — 4.3.4, 4.1
-- [ ] **AZ-11** (! · A) No existence oracle: a user asking for another person's entry gets the same `403` whether or not
+- [x] **AZ-11** (! · A) No existence oracle: a user asking for another person's entry gets the same `403` whether or not
   that entry exists, and the store isn't queried (the fake records no read) — 4.1 (order of checks)
 - [ ] **AZ-12** (! · A) Principal confusion: a machine client with `id` `123` isn't person 123 (no "own" entry, no
   write on entry 123). A user token with `sub` `123` gets none of client `123`'s permissions — 4.3
@@ -372,15 +372,15 @@ normal case names it ("→ PV-05").
 
 ### General
 
-- [ ] **IN-01** (N · A) `{id}` = `1` and a large valid integer are accepted — 4.1
-- [ ] **IN-02** (! · A) `{id}` = `0`, `-1`, `+1`, `01`, `1.5`, `1e3`, `abc`, `" 1"`, `0x1`, a number above `PHP_INT_MAX`,
+- [x] **IN-01** (N · A) `{id}` = `1` and a large valid integer are accepted — 4.1
+- [x] **IN-02** (! · A) `{id}` = `0`, `-1`, `+1`, `01`, `1.5`, `1e3`, `abc`, `" 1"`, `0x1`, a number above `PHP_INT_MAX`,
   empty → `400 invalid-id`, without calling ChurchTools — 4.1
-- [ ] **IN-03** (N · A) An empty body or `{}` is accepted where all fields are optional — 4.1
-- [ ] **IN-04** (S · A) Body `[]`, `"text"`, `42`, `null`, invalid JSON → `400 invalid-body` — 4.1
-- [ ] **IN-05** (S · A) Fields with the wrong type (`secondaryPwd: 123`, `primaryPwd: []`) → `400 invalid-body`, not a
+- [x] **IN-03** (N · A) An empty body or `{}` is accepted where all fields are optional — 4.1
+- [x] **IN-04** (S · A) Body `[]`, `"text"`, `42`, `null`, invalid JSON → `400 invalid-body` — 4.1
+- [x] **IN-05** (S · A) Fields with the wrong type (`secondaryPwd: 123`, `primaryPwd: []`) → `400 invalid-body`, not a
   PHP type error — 4.1
 - [ ] **IN-09** (N · A) The old paths without `/v1/` (`/entries/1`, `/auth/token`, `/test`) answer `404 not-found` — 4.1
-- [ ] **IN-06** (E · A) Body size limit: exactly 16 KB is accepted (if otherwise valid); 16 KB + 1 byte → `413
+- [x] **IN-06** (E · A) Body size limit: exactly 16 KB is accepted (if otherwise valid); 16 KB + 1 byte → `413
   payload-too-large` — 4.1
 - [x] **IN-07** (N · A) Unknown route → `404 not-found`; wrong method on a known route → `405` with an `Allow` header —
   4.1
@@ -399,12 +399,12 @@ normal case names it ("→ PV-05").
   password was stored (decrypted with the test key) — 4.6
 - [ ] **EP-02** (N · A) Valid custom password, custom passwords allowed → `204`, empty body, stored encrypted — 4.6
 - [ ] **EP-03** (N · A) Custom password while not allowed → `400 custom-password-not-allowed`, nothing stored — 4.6.3
-- [ ] **EP-04** (S · A) `secondaryPwd: ""` counts as a custom password (→ `400`), not as "generate" — 4.6.3
-- [ ] **EP-05** (N · A) Invalid custom password → `400 password-invalid` with `violations` — 4.6.3
+- [x] **EP-04** (S · A) `secondaryPwd: ""` counts as a custom password (→ `400`), not as "generate" — 4.6.3
+- [x] **EP-05** (N · A) Invalid custom password → `400 password-invalid` with `violations` — 4.6.3
 - [ ] **EP-06** (! · A) The generated password is returned with `Cache-Control: no-store` — 4.1
 - [ ] **EP-07** (N · A) Setting the same password again works — 4.6
 - [x] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
-- [ ] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
+- [x] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
   the custom password check — 4.6
 - [ ] **EP-10** (! · A) Two generated passwords for the same person differ, and the old one is no longer stored after
   the second `PUT` — 4.6
@@ -412,7 +412,7 @@ normal case names it ("→ PV-05").
   and the generated plaintext isn't returned — 4.6.5
 - [x] **EP-13** (S · A) Healing partial failure: the update succeeds but deleting a duplicate fails → success, the new
   password is the one read afterwards, and a `warning` is logged — 4.6.5
-- [ ] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
+- [x] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
   `400 password-invalid` with the matching `violations`, and nothing is stored — 4.6.3
 
 ### `DELETE /v1/entries/{id}` (4.7)
@@ -528,11 +528,11 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 ### Encoding
 
-- [ ] **EC-01** (! · A) A body that isn't valid UTF-8 (lone continuation bytes, overlong encodings such as `C0 AF`,
+- [x] **EC-01** (! · A) A body that isn't valid UTF-8 (lone continuation bytes, overlong encodings such as `C0 AF`,
   surrogate halves) → `400 invalid-body`, no PHP warning — 4.1
-- [ ] **EC-02** (S · A) A body with a UTF-8 BOM or in UTF-16 → `400 invalid-body`;
+- [x] **EC-02** (S · A) A body with a UTF-8 BOM or in UTF-16 → `400 invalid-body`;
   `Content-Type: application/json; charset=latin1` → `415`; `application/json; charset=utf-8` is accepted — 4.1
-- [ ] **EC-03** (! · U) A custom password in decomposed Unicode (`e` + combining accent) or with invisible characters
+- [x] **EC-03** (! · U) A custom password in decomposed Unicode (`e` + combining accent) or with invisible characters
   (zero-width space, soft hyphen, BOM, right-to-left mark) is rejected — 5.1.1
 - [ ] **EC-04** (! · A) Path encoding: `/v1/entries/%37` (= 7), `/v1/entries/7%00`, `/v1/entries/%2537` (double
   encoded), `/v1/entries/7%2F..%2Ftest`, `/v1/entries/7/`, `/v1/Entries/7`, `/v1/entries//7` either address exactly person
@@ -542,12 +542,12 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 ### Types and type juggling
 
-- [ ] **TY-01** (! · A) Duplicate JSON keys (`{"secondaryPwd": "a", "secondaryPwd": "b"}`) → `400 invalid-body`, so the
+- [x] **TY-01** (! · A) Duplicate JSON keys (`{"secondaryPwd": "a", "secondaryPwd": "b"}`) → `400 invalid-body`, so the
   value that's validated can never differ from the one that's stored — 4.1
-- [ ] **TY-02** (! · A) Mass assignment: extra fields in the body (`personId`, `id`, `dataCategoryId`, `role`, `isAdmin`,
+- [x] **TY-02** (! · A) Mass assignment: extra fields in the body (`personId`, `id`, `dataCategoryId`, `role`, `isAdmin`,
   `username`) → `400 invalid-body`. The stored value contains exactly `personId` (from the path) and `secondaryPwd` — 4.1,
   5.3
-- [ ] **TY-03** (S · A) JSON numbers where strings are expected, and vice versa (`"primaryPwd": 123456`,
+- [x] **TY-03** (S · A) JSON numbers where strings are expected, and vice versa (`"primaryPwd": 123456`,
   `"secondaryPwd": true`, `"code": ["x"]`) → `400 invalid-body`, never cast silently — 4.1
 - [ ] **TY-04** (! · U) Claim types in backend and machine tokens: `exp`/`iat`/`nbf` as strings, floats, negative or huge
   numbers; `sub` as a number; `aud` as an array; `kid` as a number, an array or empty → rejected or handled exactly as
@@ -579,7 +579,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   makes PHPStan fail) — 6.6
 - [ ] **IJ-07** (! · A) `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are not trusted: the logged IP address is always
   `REMOTE_ADDR` — 6.3, 6.4
-- [ ] **IJ-08** (! · A) `X-HTTP-Method-Override` and `_method` are ignored: a `POST`/`GET` can't be turned into a
+- [x] **IJ-08** (! · A) `X-HTTP-Method-Override` and `_method` are ignored: a `POST`/`GET` can't be turned into a
   `PUT` or `DELETE` — 4.1
 
 ### Header and protocol edge cases
@@ -590,16 +590,16 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   inside the token, two `Authorization` headers, a comma-joined value (`Bearer a, Bearer b`), a scheme with a typo
   (`Bearer:`, `Bearers`) — 4.3.2
 - [ ] **HP-02** (S · A) `HEAD` and unexpected methods (`PATCH`, `TRACE`) → `405`, never a write — 4.1
-- [ ] **HP-03** (S · A) A non-empty body with a missing or wrong `Content-Type` (`text/plain`,
+- [x] **HP-03** (S · A) A non-empty body with a missing or wrong `Content-Type` (`text/plain`,
   `multipart/form-data`, `application/x-www-form-urlencoded`) → `415 unsupported-media-type`, never parsed as form
   data. An empty body needs no `Content-Type` — 4.1
 
 ### Resource exhaustion and overflows
 
-- [ ] **RX-01** (! · A) Nesting depth: 32 levels are accepted by the parser (then rejected only for unknown fields), 33
+- [x] **RX-01** (! · A) Nesting depth: 32 levels are accepted by the parser (then rejected only for unknown fields), 33
   → `400 invalid-body`; 10,000 levels → `400 invalid-body` without exhausting memory or the stack — 4.1
-- [ ] **RX-02** (! · A) A custom password of 1 MB is rejected as `too-long` **before** regex checks or encryption run
-  — 5.1.4
+- [x] **RX-02** (! · A) Huge passwords cost nothing: a body over 16 KB is `413` before parsing; within a body, a password
+  over 128 characters is reported only as `too-long`, before any other rule runs or encryption starts — 4.1, 5.1.4
 - [x] **RX-03** (! · U) A huge `passwordLength` in the settings (e.g. `1000000000`) is a configuration error before the
   generator allocates anything — 3.2
 - [ ] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap

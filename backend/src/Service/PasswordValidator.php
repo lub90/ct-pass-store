@@ -4,50 +4,100 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
+use Psr\Log\LoggerInterface;
+use Random\Engine\Secure;
+use Random\Randomizer;
+
+/**
+ * The password policy (spec 5.1).
+ *
+ * The character set is a contract with ct-radius, which rejects any other character.
+ */
 class PasswordValidator extends BaseService
 {
+    public const MAX_LENGTH = 128;
+
+    public const TOO_SHORT = 'too-short';
+    public const TOO_LONG = 'too-long';
+    public const MISSING_LETTER = 'missing-letter';
+    public const MISSING_DIGIT = 'missing-digit';
+    public const MISSING_SYMBOL = 'missing-symbol';
+    public const INVALID_CHARACTER = 'invalid-character';
+
     private const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     private const DIGITS = '0123456789';
     private const SYMBOLS = '!@$%&*-_+=?.';
     private const ALLOWED_CHARS = self::LETTERS . self::DIGITS . self::SYMBOLS;
 
-    public function isValid(string $pwd, int $length): bool
+    private readonly Randomizer $randomizer;
+
+    /**
+     * @param Randomizer|null $randomizer only for tests (a seeded engine); by default a cryptographically secure one
+     */
+    public function __construct(LoggerInterface $logger, ?Randomizer $randomizer = null)
     {
-        if (strlen($pwd) < $length) {
-            return false;
-        }
-
-        // Enforce at least one letter, one digit, and one symbol
-        if (!preg_match('/[' . preg_quote(self::LETTERS, '/') . ']/', $pwd)) {
-            return false;
-        }
-        if (!preg_match('/[' . preg_quote(self::DIGITS, '/') . ']/', $pwd)) {
-            return false;
-        }
-        if (!preg_match('/[' . preg_quote(self::SYMBOLS, '/') . ']/', $pwd)) {
-            return false;
-        }
-
-        // Check that the string only contains valid chars
-        return strspn($pwd, self::ALLOWED_CHARS) === strlen($pwd);
+        parent::__construct($logger);
+        $this->randomizer = $randomizer ?? new Randomizer(new Secure());
     }
 
+    /**
+     * The rules the password breaks, as codes; empty if it's valid.
+     *
+     * The maximum length is checked first and alone, so huge inputs cost nothing.
+     *
+     * @return list<string>
+     */
+    public function violations(#[\SensitiveParameter] string $pwd, int $minLength): array
+    {
+        if (strlen($pwd) > self::MAX_LENGTH) {
+            return [self::TOO_LONG];
+        }
+
+        $violations = [];
+        if (strlen($pwd) < $minLength) {
+            $violations[] = self::TOO_SHORT;
+        }
+        if (strpbrk($pwd, self::LETTERS) === false) {
+            $violations[] = self::MISSING_LETTER;
+        }
+        if (strpbrk($pwd, self::DIGITS) === false) {
+            $violations[] = self::MISSING_DIGIT;
+        }
+        if (strpbrk($pwd, self::SYMBOLS) === false) {
+            $violations[] = self::MISSING_SYMBOL;
+        }
+        if (strspn($pwd, self::ALLOWED_CHARS) !== strlen($pwd)) {
+            $violations[] = self::INVALID_CHARACTER;
+        }
+
+        return $violations;
+    }
+
+    public function isValid(#[\SensitiveParameter] string $pwd, int $minLength): bool
+    {
+        return $this->violations($pwd, $minLength) === [];
+    }
+
+    /**
+     * A random password of exactly `$length` characters that passes the policy: one letter, one digit and one
+     * symbol, the rest from the whole set, shuffled. All randomness comes from the randomizer.
+     */
     public function generateRandom(int $length): string
     {
-        if ($length < 3) {
-            throw new \InvalidArgumentException('Password length must be at least 3 to satisfy complexity rules.');
+        if ($length < 3 || $length > self::MAX_LENGTH) {
+            throw new \InvalidArgumentException('Password length must be between 3 and ' . self::MAX_LENGTH . '.');
         }
 
-        $pwd = '';
-        $pwd .= self::LETTERS[random_int(0, strlen(self::LETTERS) - 1)];
-        $pwd .= self::DIGITS[random_int(0, strlen(self::DIGITS) - 1)];
-        $pwd .= self::SYMBOLS[random_int(0, strlen(self::SYMBOLS) - 1)];
-
-        $remainingLength = $length - 3;
-        for ($i = 0; $i < $remainingLength; $i++) {
-            $pwd .= self::ALLOWED_CHARS[random_int(0, strlen(self::ALLOWED_CHARS) - 1)];
+        $pwd = $this->pick(self::LETTERS) . $this->pick(self::DIGITS) . $this->pick(self::SYMBOLS);
+        for ($i = 3; $i < $length; $i++) {
+            $pwd .= $this->pick(self::ALLOWED_CHARS);
         }
 
-        return str_shuffle($pwd);
+        return $this->randomizer->shuffleBytes($pwd);
+    }
+
+    private function pick(string $chars): string
+    {
+        return $chars[$this->randomizer->getInt(0, strlen($chars) - 1)];
     }
 }

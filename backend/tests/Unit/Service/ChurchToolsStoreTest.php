@@ -133,6 +133,8 @@ final class ChurchToolsStoreTest extends TestCase
         yield 'array' => [[5], null];
         yield 'exponent' => ['5e0', null];
         yield 'hex' => ['0x5', null];
+        yield 'trailing newline' => ["5\n", null];
+        yield 'trailing CR LF' => ["5\r\n", null];
         yield 'too long' => ['1234567890123456789012', null];
     }
 

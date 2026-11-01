@@ -69,7 +69,7 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
   - Duplicate healing: read the newest, update it and delete the rest on write.
   - Skip broken values instead of crashing.
   - *Moved to 4.1:* re-resolving stale cached module/category IDs (ST-18); IDs aren't cached across requests yet.
-- [ ] **2.4 Input validation and password policy** (spec 4.1, 5.1)
+- [x] **2.4 Input validation and password policy** (spec 4.1, 5.1)
   - `invalid-id` and `invalid-body`.
   - Maximum length 128, the `violations` member, a secure shuffle.
 - [ ] **2.5 Upstream errors** (spec 6.2)

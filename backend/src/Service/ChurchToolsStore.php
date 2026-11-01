@@ -143,7 +143,7 @@ class ChurchToolsStore extends ChurchToolsBaseService
         if (is_int($value)) {
             return $value >= 0 ? $value : null;
         }
-        if (is_string($value) && preg_match('/^(0|[1-9][0-9]{0,17})$/', $value) === 1) {
+        if (is_string($value) && preg_match('/^(0|[1-9][0-9]{0,17})\z/', $value) === 1) {
             return (int) $value;
         }
 

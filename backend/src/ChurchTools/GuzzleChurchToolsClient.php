@@ -30,7 +30,7 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
     public const MIN_RETRY_AFTER_SECONDS = 60;
 
-    private const MODULE_KEY_PATTERN = '/^[a-z0-9-]{1,64}$/';
+    private const MODULE_KEY_PATTERN = '/^[a-z0-9-]{1,64}\z/';
 
     private readonly ClientInterface $http;
 
@@ -256,7 +256,7 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
         $header = trim($header);
         $seconds = null;
 
-        if (preg_match('/^\d{1,9}$/', $header) === 1) {
+        if (preg_match('/^\d{1,9}\z/', $header) === 1) {
             $seconds = (int) $header;
         } elseif ($header !== '') {
             $date = \DateTimeImmutable::createFromFormat(\DateTimeInterface::RFC7231, $header);

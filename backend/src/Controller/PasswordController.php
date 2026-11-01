@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace CtPassStore\Controller;
 
+use CtPassStore\Auth\AuthenticatedPerson;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Http\JsonBody;
+use CtPassStore\Http\PathId;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Service\BaseService;
@@ -14,156 +17,154 @@ use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
 use CtPassStore\Service\ServiceSettings;
 use Psr\Http\Message\ResponseInterface;
-use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface;
-use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Log\LoggerInterface;
 
+/**
+ * `GET|PUT|DELETE /entries/{id}`.
+ *
+ * Order of checks (spec 4.1): authentication (middleware) → path ID and body syntax → authorization (before any
+ * entry is looked up) → primary password → password policy → storage.
+ */
 class PasswordController extends BaseService
 {
-    private ServiceSettings $settings;
-    private ChurchToolsStore $store;
-    private EncryptionService $encryption;
-    private PasswordValidator $validator;
-    private ChurchToolsAuthVerifier $authVerifier;
+    /** Bodies of PUT and DELETE (spec 4.6, 4.7). */
+    private const PUT_FIELDS = [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'string', AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'string'];
+    private const DELETE_FIELDS = [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'string'];
 
     public function __construct(
-        ServiceSettings $settings,
-        ChurchToolsStore $store,
-        EncryptionService $encryption,
-        PasswordValidator $validator,
-        ChurchToolsAuthVerifier $authVerifier,
-        LoggerInterface $logger
+        private readonly ServiceSettings $settings,
+        private readonly ChurchToolsStore $store,
+        private readonly EncryptionService $encryption,
+        private readonly PasswordValidator $validator,
+        private readonly ChurchToolsAuthVerifier $authVerifier,
+        LoggerInterface $logger,
     ) {
         parent::__construct($logger);
-
-        $this->settings = $settings;
-        $this->store = $store;
-        $this->encryption = $encryption;
-        $this->validator = $validator;
-        $this->authVerifier = $authVerifier;
     }
 
-    public function get(Request $request, Response $response, array $args): ResponseInterface
+    /**
+     * @param array<string, string> $args
+     */
+    public function get(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = (int) $args['id'];
+        $targetId = PathId::parse($args['id'] ?? null);
+        $this->authorize($request, $targetId, true);
 
-        $this->authorizeAndValidate($request, $targetId, false, true);
-
-        $encryptedSecondaryPwd = $this->store->getPwd($targetId);
-
-        if ($encryptedSecondaryPwd === null) {
+        $ciphertext = $this->store->getPwd($targetId);
+        if ($ciphertext === null) {
             throw new ProblemException(ProblemType::EntryNotFound, "Person {$targetId} has no secondary password.");
         }
 
-        return $response
-            ->withHeader('Content-Type', 'application/json')
-            ->withStatus(200)
-            ->withBody((new \Slim\Psr7\Factory\StreamFactory())->createStream(json_encode([
-                AppConfig::REQUEST_SECONDARY_PWD_FIELD => $encryptedSecondaryPwd,
-            ])));
+        return $this->json($response, 200, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => $ciphertext]);
     }
 
-    public function put(Request $request, Response $response, array $args): ResponseInterface
+    /**
+     * @param array<string, string> $args
+     */
+    public function put(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = (int) $args['id'];
-        $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
-        $userId = $user->id;
+        $targetId = PathId::parse($args['id'] ?? null);
+        $body = JsonBody::parse($request, self::PUT_FIELDS);
+        $user = $this->authorize($request, $targetId, false);
+        $this->checkPrimaryPassword($user, $body);
 
-        $body = $this->authorizeAndValidate($request, $targetId, true, false)['body'];
-
-        $pwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
-
-        if ($pwd !== null) {
+        $custom = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
+        if ($custom !== null) {
             if (!$this->settings->allowCustomPasswords()) {
-                $this->logger->warning("User {$userId} tried to set a custom password, but custom passwords are disabled.");
+                $this->logger->warning("User {$user->id} tried to set a custom password, but custom passwords are disabled.");
                 throw new ProblemException(ProblemType::CustomPasswordNotAllowed, 'Custom passwords are disabled; omit secondaryPwd to get a generated password.');
             }
+            $violations = $this->validator->violations($custom, $this->settings->pwdLength());
+            if ($violations !== []) {
+                $this->logger->info("User {$user->id} tried to set a password that doesn't meet the policy.");
+                throw new ProblemException(ProblemType::PasswordInvalid, sprintf(
+                    'The password must have %d to %d characters, contain a letter, a digit and one of ! @ $ %% & * - _ + = ? . and no other characters.',
+                    $this->settings->pwdLength(),
+                    PasswordValidator::MAX_LENGTH,
+                ), ['violations' => $violations]);
+            }
+            $password = $custom;
         } else {
-            $pwd = $this->validator->generateRandom($this->settings->pwdLength());
+            $password = $this->validator->generateRandom($this->settings->pwdLength());
         }
 
-        if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
-            $this->logger->info("User {$userId} tried to set a password that doesn't meet the policy.");
-            throw new ProblemException(ProblemType::PasswordInvalid, "The password must have at least {$this->settings->pwdLength()} characters, contain a letter, a digit and one of ! @ \$ % & * - _ + = ? . and no other characters.");
-        }
+        // Stored first; a generated password is only returned once it's saved (spec 4.6).
+        $this->store->putPwd($targetId, $this->encryption->encrypt($password));
 
-        $ciphertext = $this->encryption->encrypt($pwd);
-        $this->store->putPwd($targetId, $ciphertext);
-
-        if ($body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null) {
-            // Custom password was provided and stored
+        if ($custom !== null) {
             return $response->withStatus(204);
         }
 
-        // Password was generated — return it in JSON
-        $response->getBody()->write(json_encode([
-            AppConfig::REQUEST_SECONDARY_PWD_FIELD => $pwd,
-        ]));
-        return $response
-            ->withHeader('Content-Type', 'application/json')
-            ->withStatus(200);
+        return $this->json($response, 200, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => $password]);
     }
 
-    public function delete(Request $request, Response $response, array $args): ResponseInterface
+    /**
+     * @param array<string, string> $args
+     */
+    public function delete(ServerRequestInterface $request, ResponseInterface $response, array $args): ResponseInterface
     {
-        $targetId = (int) $args['id'];
-
-        $this->authorizeAndValidate($request, $targetId, true, false);
+        $targetId = PathId::parse($args['id'] ?? null);
+        $body = JsonBody::parse($request, self::DELETE_FIELDS);
+        $user = $this->authorize($request, $targetId, false);
+        $this->checkPrimaryPassword($user, $body);
 
         $this->store->deletePwd($targetId);
+
         return $response->withStatus(204);
     }
 
-    private function authorizeAndValidate(
-        ServerRequestInterface $request,
-        int $targetId,
-        bool $requirePasswordCheck,
-        bool $checkReadAccess
-    ): array {
+    /**
+     * Throws `403 forbidden` unless the caller may act on the target's entry. Runs before the entry is looked up,
+     * so the answer never reveals whether it exists.
+     */
+    private function authorize(ServerRequestInterface $request, int $targetId, bool $isRead): AuthenticatedPerson
+    {
         $user = $request->getAttribute(AppConfig::USER_ATTRIBUTE);
-        $userId = $user->id;
-        $cmsUserId = $user->username;
+        if (!$user instanceof AuthenticatedPerson) {
+            throw new \LogicException('The request has no authenticated person.');
+        }
 
-        if ($userId !== $targetId) {
-            $hasSpecialAccess = in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true));
-            if (!$hasSpecialAccess) {
-                $this->logger->warning("User {$userId} tried to access the entry of person {$targetId} without permission.");
+        if ($user->id !== $targetId) {
+            $allowed = in_array($user->id, $this->settings->adminUsers(), true)
+                || ($isRead && in_array($user->id, $this->settings->readAccessUsers(), true));
+            if (!$allowed) {
+                $this->logger->warning("User {$user->id} tried to access the entry of person {$targetId} without permission.");
                 throw new ProblemException(ProblemType::Forbidden, "You aren't allowed to access the entry of person {$targetId}.");
             }
         }
 
-        $rawBody = (string) $request->getBody();
-        $body = [];
-        if ($rawBody !== '') {
-            try {
-                $body = json_decode($rawBody, true, 32, JSON_THROW_ON_ERROR);
-            } catch (\JsonException) {
-                $body = null;
-            }
-            if (!is_array($body) || ($body !== [] && array_is_list($body))) {
-                $this->logger->warning("User {$userId} sent a body that isn't a JSON object.");
-                throw new ProblemException(ProblemType::InvalidBody, 'The request body must be empty or a JSON object.');
-            }
+        return $user;
+    }
+
+    /**
+     * @param array<string, string> $body
+     */
+    private function checkPrimaryPassword(AuthenticatedPerson $user, array $body): void
+    {
+        if (!$this->settings->requirePasswordForPasswordChange()) {
+            return;
         }
 
-        if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
-            $primaryPwd = (string) ($body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '');
-            if ($primaryPwd === '') {
-                $this->logger->info("User {$userId} tried to change an entry without the required primary password.");
-                throw new ProblemException(ProblemType::PrimaryPasswordRequired, 'This change needs your ChurchTools password in ' . AppConfig::REQUEST_PRIMARY_PWD_FIELD . '.');
-            }
-
-            if (!$this->authVerifier->verifyUserPassword($cmsUserId, $primaryPwd)) {
-                // The verifier logs the failed check itself.
-                throw new ProblemException(ProblemType::InvalidPrimaryPassword, 'The ChurchTools password is wrong.');
-            }
+        $primary = $body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '';
+        if ($primary === '') {
+            $this->logger->info("User {$user->id} tried to change an entry without the required primary password.");
+            throw new ProblemException(ProblemType::PrimaryPasswordRequired, 'This change needs your ChurchTools password in ' . AppConfig::REQUEST_PRIMARY_PWD_FIELD . '.');
         }
 
-        return [
-            'userId' => $userId,
-            'cmsUserId' => $cmsUserId,
-            'body' => $body,
-        ];
+        // The username comes from the authenticated person, never from the request (spec 4.6).
+        if (!$this->authVerifier->verifyUserPassword($user->username, $primary)) {
+            throw new ProblemException(ProblemType::InvalidPrimaryPassword, 'The ChurchTools password is wrong.');
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    private function json(ResponseInterface $response, int $status, array $data): ResponseInterface
+    {
+        $response->getBody()->write(json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+
+        return $response->withHeader('Content-Type', 'application/json')->withStatus($status);
     }
 }
