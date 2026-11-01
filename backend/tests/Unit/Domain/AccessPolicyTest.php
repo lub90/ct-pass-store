@@ -71,4 +71,31 @@ final class AccessPolicyTest extends TestCase
         self::assertFalse(AccessPolicy::mayRead($machine, $target, self::settings()));
         self::assertFalse(AccessPolicy::mayChange($machine, $target, self::settings()));
     }
+
+    /**
+     * Spec 4.3 matrix, machine rows (catalog AZ-03, AZ-12 on the policy level).
+     */
+    public function testMachineClients(): void
+    {
+        $reader = new \CtPassStore\Domain\MachinePrincipal('ct-radius', [\CtPassStore\Domain\MachineClient::PERMISSION_READ_ENTRIES]);
+        $none = new \CtPassStore\Domain\MachinePrincipal('no-rights', []);
+
+        foreach ([self::USER, self::OTHER, self::ADMIN] as $target) {
+            $id = new PersonId($target);
+            self::assertTrue(AccessPolicy::mayRead($reader, $id, self::settings()));
+            self::assertFalse(AccessPolicy::mayChange($reader, $id, self::settings()));
+            self::assertFalse(AccessPolicy::isOwner($reader, $id));
+            self::assertFalse(AccessPolicy::mayRead($none, $id, self::settings()));
+            self::assertFalse(AccessPolicy::mayChange($none, $id, self::settings()));
+        }
+    }
+
+    public function testAMachineClientNamedLikeAnAdminGetsNoAdminRights(): void
+    {
+        // Principals are never compared across kinds: client "100" isn't admin person 100.
+        $client = new \CtPassStore\Domain\MachinePrincipal('100', []);
+
+        self::assertFalse(AccessPolicy::mayRead($client, new PersonId(self::USER), self::settings()));
+        self::assertFalse(AccessPolicy::isOwner($client, new PersonId(100)));
+    }
 }

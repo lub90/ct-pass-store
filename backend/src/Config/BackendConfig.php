@@ -23,6 +23,7 @@ final class BackendConfig
         public readonly string $apiToken,
         public readonly array $corsOrigins,
         public readonly string $credentialsPath,
+        public readonly string $cacheDir,
         public readonly string $oauthClientId,
         #[\SensitiveParameter]
         public readonly string $oauthClientSecret,
@@ -45,10 +46,11 @@ final class BackendConfig
 
     /**
      * @param mixed $credentials the value returned by `credentials.php`
+     * @param string $cacheDir the folder for the backend's caches and security stores (spec 6.1), outside the web root
      *
      * @throws ConfigurationException naming the first problem found
      */
-    public static function fromArray(mixed $credentials, string $credentialsPath): self
+    public static function fromArray(mixed $credentials, string $credentialsPath, string $cacheDir): self
     {
         if (!is_array($credentials)) {
             throw new ConfigurationException('credentials.php must return an array.');
@@ -59,6 +61,7 @@ final class BackendConfig
             self::token($credentials['CT_API_TOKEN'] ?? null, 'CT_API_TOKEN'),
             self::corsOrigins($credentials['CORS'] ?? null),
             $credentialsPath,
+            $cacheDir,
             self::token($credentials['OAUTH_CLIENT_ID'] ?? null, 'OAUTH_CLIENT_ID'),
             self::token($credentials['OAUTH_CLIENT_SECRET'] ?? null, 'OAUTH_CLIENT_SECRET'),
             self::jwtSecret($credentials['JWT_SECRET'] ?? null),

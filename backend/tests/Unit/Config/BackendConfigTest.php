@@ -33,7 +33,7 @@ final class BackendConfigTest extends TestCase
 
     public function testAValidConfigurationIsAccepted(): void
     {
-        $config = BackendConfig::fromArray(['LOG_LEVEL' => 'warning'] + self::valid(), '/path/credentials.php');
+        $config = BackendConfig::fromArray(['LOG_LEVEL' => 'warning'] + self::valid(), '/path/credentials.php', '/cache');
 
         self::assertSame('https://example.church.tools/api', $config->apiUrl);
         self::assertSame(self::TOKEN, $config->apiToken);
@@ -47,13 +47,13 @@ final class BackendConfigTest extends TestCase
 
     public function testInstanceOriginComesFromTheApiUrl(): void
     {
-        self::assertSame('https://example.church.tools', BackendConfig::fromArray(self::valid(), 'x')->instanceOrigin());
-        self::assertSame('https://example.church.tools:8443', BackendConfig::fromArray(['CT_API_URL' => 'https://Example.church.tools:8443/api'] + self::valid(), 'x')->instanceOrigin());
+        self::assertSame('https://example.church.tools', BackendConfig::fromArray(self::valid(), 'x', '/cache')->instanceOrigin());
+        self::assertSame('https://example.church.tools:8443', BackendConfig::fromArray(['CT_API_URL' => 'https://Example.church.tools:8443/api'] + self::valid(), 'x', '/cache')->instanceOrigin());
     }
 
     public function testDefaultsForOptionalKeys(): void
     {
-        $config = BackendConfig::fromArray(self::valid(), 'x');
+        $config = BackendConfig::fromArray(self::valid(), 'x', '/cache');
 
         self::assertSame('info', $config->logLevel);
     }
@@ -99,7 +99,7 @@ final class BackendConfigTest extends TestCase
     public function testInvalidConfigurationNamesTheKeyButNotItsValue(array $credentials, string $key): void
     {
         try {
-            BackendConfig::fromArray($credentials, 'x');
+            BackendConfig::fromArray($credentials, 'x', '/cache');
             self::fail('Expected a ConfigurationException.');
         } catch (ConfigurationException $e) {
             self::assertStringContainsString($key, $e->getMessage());
@@ -112,12 +112,12 @@ final class BackendConfigTest extends TestCase
 
     public function testJwtSecretOfExactly32BytesIsAccepted(): void
     {
-        self::assertSame(str_repeat('y', 32), BackendConfig::fromArray(['JWT_SECRET' => str_repeat('y', 32)] + self::valid(), 'x')->jwtSecret);
+        self::assertSame(str_repeat('y', 32), BackendConfig::fromArray(['JWT_SECRET' => str_repeat('y', 32)] + self::valid(), 'x', '/cache')->jwtSecret);
     }
 
     public function testCredentialsMustBeAnArray(): void
     {
         $this->expectException(ConfigurationException::class);
-        BackendConfig::fromArray(1, 'x');
+        BackendConfig::fromArray(1, 'x', '/cache');
     }
 }

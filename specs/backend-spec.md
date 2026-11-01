@@ -105,12 +105,15 @@ Data lives in three KV categories of the `ctpassstore` module:
 
     - `id` is unique and matches `^[a-z0-9-]{3,40}$` (lowercase ASCII only, so lookalike characters can't imitate a
       registered client).
-    - `publicKeys` is a non-empty list of valid Ed25519 public keys. Several keys allow rotation without downtime.
+    - `publicKeys` is a non-empty list of valid Ed25519 public keys (the raw 32 bytes, base64 or base64url encoded, as
+      Node.js exports them in a JWK's `x`). Several keys allow rotation without downtime.
     - `permissions` may contain only known values; today that's just `entries:read`. Unknown values (`entries:write`,
       `*`) grant nothing and are reported by `/test`.
     - A missing `machineClients` setting means an empty list.
     - A client with an invalid entry (bad `id`, duplicate `id`, empty or invalid `publicKeys`) is disabled and reported
-      by `/test`; it doesn't break the others.
+      by `/test`; it doesn't break the others. With a duplicate `id`, all entries with that `id` are disabled.
+    - If `machineClients` itself isn't a list, all machine clients are disabled and `/test` reports it. Users aren't
+      affected, because disabling machine clients never weakens security.
 - **(change)** Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 

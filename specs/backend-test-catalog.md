@@ -267,40 +267,40 @@ normal case names it ("→ PV-05").
 
 ### Machine client tokens (spec 4.4a)
 
-- [ ] **MC-01** (N · U) A correctly signed token of a registered client validates and yields the client — 4.4a
-- [ ] **MC-02** (N · U) Each of a client's several keys is accepted (rotation) — 4.4a
-- [ ] **MC-14** (! · U) Counterpart of MC-02: after a key is removed from a client (the client stays registered), tokens
+- [x] **MC-01** (N · U) A correctly signed token of a registered client validates and yields the client — 4.4a
+- [x] **MC-02** (N · U) Each of a client's several keys is accepted (rotation) — 4.4a
+- [x] **MC-14** (! · U) Counterpart of MC-02: after a key is removed from a client (the client stays registered), tokens
   signed with it are rejected once the settings cache has expired; the client's other keys keep working — 4.4a
 - [ ] **MC-15** (! · U) Counterparts of MC-01: a token missing `jti`, `exp`, `iat`, `aud` or `kid`, or a client without
   any permission → rejected or `403` — 4.4a
-- [ ] **MC-03** (! · U) A signature with an unregistered key, or with another client's key → rejected — 4.4a.2
-- [ ] **MC-04** (! · U) Unknown `kid` → rejected — 4.4a.1
-- [ ] **MC-05** (! · U) `iss` or `sub` different from `kid` → rejected — 4.4a.3
-- [ ] **MC-06** (! · U) Wrong `aud` (e.g. another backend's URL) → rejected — 4.4a.3
-- [ ] **MC-07** (E · U) Lifetime of exactly 300 s → valid; 301 s → rejected — 4.4a
-- [ ] **MC-08** (E · U) `iat` 29 s in the future → valid; 31 s → rejected. `exp` 29 s in the past → valid; 31 s in the
+- [x] **MC-03** (! · U) A signature with an unregistered key, or with another client's key → rejected — 4.4a.2
+- [x] **MC-04** (! · U) Unknown `kid` → rejected — 4.4a.1
+- [x] **MC-05** (! · U) `iss` or `sub` different from `kid` → rejected — 4.4a.3
+- [x] **MC-06** (! · U) Wrong `aud` (e.g. another backend's URL) → rejected — 4.4a.3
+- [x] **MC-07** (E · U) Lifetime of exactly 300 s → valid; 301 s → rejected — 4.4a
+- [x] **MC-08** (E · U) `iat` 29 s in the future → valid; 31 s → rejected. `exp` 29 s in the past → valid; 31 s in the
   past → `401 token-expired` (only with a valid signature, see TK-15) — 4.4a.3–4
-- [ ] **MC-16** (! · U) `exp` < `iat` and `exp` = `iat` (negative or zero lifetime) → rejected — 4.4a.3
-- [ ] **MC-09** (! · U) The same `jti` twice → the second request is rejected, even with a valid signature — 4.4a.5
-- [ ] **MC-17** (! · U) A `jti` is recorded only after the token was fully verified: an invalid token (bad signature,
+- [x] **MC-16** (! · U) `exp` < `iat` and `exp` = `iat` (negative or zero lifetime) → rejected — 4.4a.3
+- [x] **MC-09** (! · U) The same `jti` twice → the second request is rejected, even with a valid signature — 4.4a.5
+- [x] **MC-17** (! · U) A `jti` is recorded only after the token was fully verified: an invalid token (bad signature,
   wrong `aud`, expired) with a `jti` doesn't block a later valid token with the same `jti`. The cache is keyed by
   (`kid`, `jti`): two clients may use the same `jti` — 4.4a.5
-- [ ] **MC-18** (! · U) Keys embedded in the token header (`jwk` with the attacker's key, `jku`, `x5u`, `x5c`) are never
+- [x] **MC-18** (! · U) Keys embedded in the token header (`jwk` with the attacker's key, `jku`, `x5u`, `x5c`) are never
   used: a token signed with an embedded key is rejected — 4.4a.2
-- [ ] **MC-19** (! · U) The replay cache can't be read or written → machine requests are rejected (`500 misconfigured`),
+- [x] **MC-19** (! · U) The replay cache can't be read or written → machine requests are rejected (`500 misconfigured`),
   never accepted — 4.4a.5
-- [ ] **MC-21** (! · U) A token of a **disabled** client (its settings entry is invalid, e.g. an empty `publicKeys` list)
+- [x] **MC-21** (! · U) A token of a **disabled** client (its settings entry is invalid, e.g. an empty `publicKeys` list)
   is rejected at runtime like an unknown client, even when signed with a key that was valid before — 4.4a.1
-- [ ] **MC-22** (E · U) `aud` normalization: with `backendUrl` `https://host/path`, a token `aud` of `https://host/path`
+- [x] **MC-22** (E · U) `aud` normalization: with `backendUrl` `https://host/path`, a token `aud` of `https://host/path`
   and `https://host/path/` match; `http://host/path`, `https://host/Path`, `https://host:8443/path`,
   `https://host/path/x` and `https://host` don't — 4.4a.3
-- [ ] **MC-20** (! · U) `settings.backendUrl` missing or invalid → machine requests get `500 misconfigured`; a token with
+- [x] **MC-20** (! · U) `settings.backendUrl` missing or invalid → machine requests get `500 misconfigured`; a token with
   `aud: ""` never matches — 4.4a.3
-- [ ] **MC-10** (S · U) Two different `jti`s within the same second → both accepted — 4.4a.4
-- [ ] **MC-11** (! · U) A client removed from the settings is rejected once the settings cache has expired — 4.4a
-- [ ] **MC-12** (! · U) A token with `alg` `HS256` and a client `kid`, signed with the client's public key as HMAC
+- [x] **MC-10** (S · U) Two different `jti`s within the same second → both accepted — 4.4a.4
+- [x] **MC-11** (! · U) A client removed from the settings is rejected once the settings cache has expired — 4.4a
+- [x] **MC-12** (! · U) A token with `alg` `HS256` and a client `kid`, signed with the client's public key as HMAC
   secret → rejected (key confusion) — 4.3.3
-- [ ] **MC-13** (N · C) A token signed with Node.js (as in ct-radius) is accepted by the PHP backend — 4.4a
+- [x] **MC-13** (N · C) A token signed with Node.js (as in ct-radius) is accepted by the PHP backend — 4.4a
 
 ### Primary password check (spec 4.6, 5.5, 6.3)
 

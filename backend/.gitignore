@@ -42,3 +42,6 @@ Desktop.ini
 
 # PHPStan
 /.phpstan.cache/
+
+# Caches and security stores of the running backend
+/cache/

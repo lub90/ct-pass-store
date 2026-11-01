@@ -19,10 +19,17 @@ final class AccessPolicy
 
     public static function mayRead(Principal $principal, PersonId $target, Settings $settings): bool
     {
+        if ($principal instanceof MachinePrincipal) {
+            return $principal->may(MachineClient::PERMISSION_READ_ENTRIES);
+        }
+
         return self::isOwner($principal, $target)
             || ($principal instanceof PersonPrincipal && ($settings->isAdmin($principal->id) || $settings->hasReadAccess($principal->id)));
     }
 
+    /**
+     * Machine clients never change entries (spec 4.3).
+     */
     public static function mayChange(Principal $principal, PersonId $target, Settings $settings): bool
     {
         return self::isOwner($principal, $target)

@@ -275,4 +275,117 @@ final class KvSettingsRepositoryTest extends TestCase
         $this->expectException(ConfigurationException::class);
         $settings->publicKey();
     }
+
+    // ---------------------------------------------------------------- machineClients (spec 3.2, D5)
+
+    /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private static function client(array $overrides = []): array
+    {
+        return array_merge([
+            'id' => 'ct-radius',
+            'name' => 'WiFi RADIUS',
+            'publicKeys' => [base64_encode(str_repeat('k', 32))],
+            'permissions' => ['entries:read'],
+            'createdAt' => '2026-11-01',
+        ], $overrides);
+    }
+
+    /**
+     * @param mixed $machineClients
+     */
+    private function machineSettings(mixed $machineClients): \CtPassStore\Domain\Settings
+    {
+        return $this->settings(['machineClients' => $machineClients] + self::validSettings())->settings();
+    }
+
+    public function testMissingMachineClientsMeansNone(): void
+    {
+        $settings = $this->settings(self::validSettings())->settings();
+
+        self::assertSame([], $settings->machineClients);
+        self::assertSame([], $settings->machineClientProblems);
+    }
+
+    public function testAValidClientIsEnabled(): void
+    {
+        $settings = $this->machineSettings([self::client(), self::client(['id' => 'other-client', 'publicKeys' => [rtrim(strtr(base64_encode(str_repeat('o', 32)), '+/', '-_'), '=')]])]);
+
+        self::assertSame(['ct-radius', 'other-client'], array_keys($settings->machineClients));
+        $client = $settings->machineClients['ct-radius'];
+        self::assertSame('WiFi RADIUS', $client->name);
+        self::assertSame([str_repeat('k', 32)], $client->publicKeys);
+        self::assertSame(['entries:read'], $client->permissions);
+        self::assertSame([str_repeat('o', 32)], $settings->machineClients['other-client']->publicKeys, 'base64url without padding is accepted.');
+        self::assertSame([], $settings->machineClientProblems);
+    }
+
+    /**
+     * @param array<string, mixed>|string $entry
+     */
+    #[DataProvider('invalidClients')]
+    public function testAnInvalidEntryDisablesOnlyThatClient(array|string $entry, string $problem): void
+    {
+        $settings = $this->machineSettings([self::client(['id' => 'good-client']), $entry]);
+
+        self::assertSame(['good-client'], array_keys($settings->machineClients));
+        self::assertCount(1, $settings->machineClientProblems);
+        self::assertStringContainsString($problem, $settings->machineClientProblems[0]);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>|string, string}>
+     */
+    public static function invalidClients(): iterable
+    {
+        yield 'not an object' => ['ct-radius', 'isn\'t an object'];
+        yield 'uppercase id' => [self::client(['id' => 'CT-Radius']), 'the id must be'];
+        yield 'id too short' => [self::client(['id' => 'ab']), 'the id must be'];
+        yield 'id too long' => [self::client(['id' => str_repeat('a', 41)]), 'the id must be'];
+        yield 'id with lookalike' => [self::client(['id' => "ct-r\u{0430}dius"]), 'the id must be'];
+        yield 'id with space' => [self::client(['id' => 'ct radius']), 'the id must be'];
+        yield 'id missing' => [self::client(['id' => null]), 'the id must be'];
+        yield 'empty publicKeys' => [self::client(['publicKeys' => []]), 'publicKeys must be a non-empty list'];
+        yield 'publicKeys missing' => [self::client(['publicKeys' => null]), 'publicKeys must be a non-empty list'];
+        yield 'publicKeys a string' => [self::client(['publicKeys' => base64_encode(str_repeat('k', 32))]), 'publicKeys must be a non-empty list'];
+        yield 'key too short' => [self::client(['publicKeys' => [base64_encode(str_repeat('k', 31))]]), 'isn\'t a base64-encoded Ed25519'];
+        yield 'key not base64' => [self::client(['publicKeys' => ['not base64!']]), 'isn\'t a base64-encoded Ed25519'];
+        yield 'RSA PEM as key' => [self::client(['publicKeys' => ["-----BEGIN PUBLIC KEY-----\nMIIB\n-----END PUBLIC KEY-----"]]), 'isn\'t a base64-encoded Ed25519'];
+        yield 'permissions not a list' => [self::client(['permissions' => 'entries:read']), 'permissions must be a list'];
+    }
+
+    public function testDuplicateIdsDisableBothEntries(): void
+    {
+        $settings = $this->machineSettings([self::client(), self::client(['name' => 'Impostor']), self::client(['id' => 'good-client'])]);
+
+        self::assertSame(['good-client'], array_keys($settings->machineClients));
+        self::assertCount(2, $settings->machineClientProblems);
+    }
+
+    public function testUnknownPermissionsGrantNothingAndAreReported(): void
+    {
+        $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 42]])]);
+
+        self::assertSame(['entries:read'], $settings->machineClients['ct-radius']->permissions);
+        self::assertCount(3, $settings->machineClientProblems);
+        self::assertStringContainsString('entries:write', $settings->machineClientProblems[0]);
+    }
+
+    public function testAClientWithoutPermissionsIsEnabledWithoutRights(): void
+    {
+        $settings = $this->machineSettings([self::client(['permissions' => null])]);
+
+        self::assertSame([], $settings->machineClients['ct-radius']->permissions);
+    }
+
+    public function testABrokenListDisablesAllMachineClientsButNotTheSettings(): void
+    {
+        $settings = $this->machineSettings(['ct-radius' => self::client()]);
+
+        self::assertSame([], $settings->machineClients);
+        self::assertStringContainsString('isn\'t a list', $settings->machineClientProblems[0]);
+        self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
+    }
 }

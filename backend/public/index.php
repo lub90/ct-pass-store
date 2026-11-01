@@ -21,7 +21,7 @@ try {
     if (!is_readable($credentialsPath)) {
         throw new ConfigurationException('config/credentials.php is missing or not readable by PHP.');
     }
-    $config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath);
+    $config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath, __DIR__ . '/../cache');
 } catch (ConfigurationException $e) {
     // Without a valid configuration there's no trustworthy logger either; PHP's error log is the fallback.
     error_log('ctpassstore: misconfigured: ' . $e->getMessage());

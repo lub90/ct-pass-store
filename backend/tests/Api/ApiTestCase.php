@@ -65,6 +65,9 @@ abstract class ApiTestCase extends TestCase
 
     private string $credentialsPath;
 
+    /** A fresh, empty cache folder per test. */
+    protected string $cacheDir;
+
     protected function setUp(): void
     {
         $this->churchTools = new FakeChurchToolsClient();
@@ -92,6 +95,7 @@ abstract class ApiTestCase extends TestCase
 
         $this->credentialsPath = (string) tempnam(sys_get_temp_dir(), 'ctps-credentials-');
         chmod($this->credentialsPath, 0o600);
+        $this->cacheDir = sys_get_temp_dir() . '/ctps-cache-' . bin2hex(random_bytes(6));
 
         $this->log = new TestHandler();
     }
@@ -99,6 +103,12 @@ abstract class ApiTestCase extends TestCase
     protected function tearDown(): void
     {
         @unlink($this->credentialsPath);
+        foreach (glob($this->cacheDir . '/*') ?: [] as $file) {
+            @chmod($file, 0o600);
+            @unlink($file);
+        }
+        @chmod($this->cacheDir, 0o700);
+        @rmdir($this->cacheDir);
     }
 
     /**
@@ -249,7 +259,7 @@ abstract class ApiTestCase extends TestCase
         $logger->pushHandler($this->log);
 
         return Application::create(
-            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
+            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
             $this->churchTools,
             $logger,
         );

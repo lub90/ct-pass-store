@@ -13,6 +13,7 @@ parameters:
           message: 'runs shell commands; the backend never needs a shell (also bans the backtick operator)'
           allowIn:
               - tests/EndToEnd/Helpers/BackendSandboxManager.php
+              - tests/EndToEnd/NodeSignedMachineTokenTest.php
               - tests/Unit/Security/BannedCallsTest.php
         - function: ['putenv()', 'apache_setenv()', 'extract()']
           message: 'changes the environment or creates variables from data'
