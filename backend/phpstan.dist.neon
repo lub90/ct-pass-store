@@ -3,6 +3,7 @@
 # Raise the level step by step; shrink the baseline as code gets cleaned up.
 includes:
     - phpstan-baseline.neon
+    - phpstan-security.neon
 
 parameters:
     level: 6
@@ -11,3 +12,6 @@ parameters:
         - public
         - tests
     tmpDir: .phpstan.cache
+    excludePaths:
+        # Deliberately contains banned calls; analysed only by tests/Unit/Security/BannedCallsTest.php
+        - tests/Fixtures/BannedCalls

@@ -1,0 +1,46 @@
+# Banned calls (spec 6.6, plan item 2.6, catalog IJ-06, PG-05, TR-01).
+# Enforced by spaze/phpstan-disallowed-calls. tests/Unit/Security/BannedCallsTest.php checks that the rules are active.
+includes:
+    - vendor/spaze/phpstan-disallowed-calls/extension.neon
+    - vendor/spaze/phpstan-disallowed-calls/disallowed-loose-calls.neon
+
+parameters:
+    disallowedFunctionCalls:
+        # Code execution and process control
+        - function: ['eval()', 'create_function()', 'assert()', 'dl()']
+          message: 'executes or loads code at runtime'
+        - function: ['exec()', 'passthru()', 'proc_open()', 'shell_exec()', 'system()', 'popen()', 'pcntl_exec()']
+          message: 'runs shell commands; the backend never needs a shell (also bans the backtick operator)'
+          allowIn:
+              - tests/EndToEnd/Helpers/BackendSandboxManager.php
+              - tests/Unit/Security/BannedCallsTest.php
+        - function: ['putenv()', 'apache_setenv()', 'extract()']
+          message: 'changes the environment or creates variables from data'
+        - function: ['phpinfo()', 'highlight_file()', 'show_source()']
+          message: 'exposes internals'
+        # Deserialization
+        - function: ['unserialize()', 'serialize()']
+          message: 'use JSON; unserialize() can instantiate arbitrary objects'
+          allowIn:
+              # proves that a Credential refuses to be serialized
+              - tests/Unit/ChurchTools/GuzzleChurchToolsClientTest.php
+        # Randomness (spec 5.1): only random_int() / Random\Randomizer with the Secure engine
+        - function: ['rand()', 'mt_rand()', 'mt_srand()', 'srand()', 'lcg_value()', 'uniqid()', 'str_shuffle()', 'shuffle()', 'array_rand()']
+          message: 'not cryptographically secure; use Random\Randomizer with the Secure engine or random_int()'
+        # Weak hashes
+        - function: ['md5()', 'sha1()', 'md5_file()', 'sha1_file()', 'crc32()']
+          message: 'weak hash; use hash() with at least SHA-256'
+        # Comparisons that aren't constant-time (TR-01): use hash_equals() for secrets
+        - function: ['strcmp()', 'strcasecmp()', 'strncmp()', 'strncasecmp()', 'substr_compare()']
+          message: 'not timing-safe; compare secrets with hash_equals()'
+          allowIn:
+              - src/Http/PathId.php
+        # Debug output can leak secrets into responses or logs (spec 6.3)
+        - function: ['var_dump()', 'var_export()', 'print_r()', 'debug_zval_dump()', 'debug_print_backtrace()']
+          message: 'debug output may leak secrets'
+          allowIn:
+              # tests may dump to prove that nothing leaks; the banned-calls fixture must not be covered
+              - tests/Unit/*
+              - tests/Api/*
+              - tests/EndToEnd/*
+              - tests/Support/*

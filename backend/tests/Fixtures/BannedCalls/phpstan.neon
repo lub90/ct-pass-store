@@ -1,0 +1,9 @@
+# Analyses only the fixture, with the project's security rules (see BannedCallsTest).
+includes:
+    - ../../../phpstan-security.neon
+
+parameters:
+    level: 0
+    paths:
+        - BannedCalls.php
+    tmpDir: ../../../.phpstan.cache/banned-calls

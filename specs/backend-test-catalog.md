@@ -573,7 +573,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   an HTML error page (Slim's HTML error renderer had an XSS vulnerability) — 4.9
 - [ ] **IJ-05** (! · A) Header injection: an `Origin` or other header containing CR/LF is never reflected into a
   response header. A non-numeric `Retry-After` from ChurchTools is replaced by 60 — 4.2, 6.2
-- [ ] **IJ-06** (! · U) No dangerous functions in `src/`: `eval`, `unserialize`, `extract`, `assert` with strings,
+- [x] **IJ-06** (! · U) No dangerous functions in `src/`: `eval`, `unserialize`, `extract`, `assert` with strings,
   backticks, `exec`/`shell_exec`/`system`/`passthru`/`proc_open`, `include`/`require` with variable paths. Enforced by
   the PHPStan disallowed-calls rule set; a unit test checks that the rule set is active (a fixture file using `eval`
   makes PHPStan fail) — 6.6
@@ -611,7 +611,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 ### Timing and races
 
-- [ ] **TR-01** (! · U) Secrets are compared in constant time: signatures through the JWT library, the cache HMAC with
+- [x] **TR-01** (! · U) Secrets are compared in constant time: signatures through the JWT library, the cache HMAC with
   `hash_equals` (unit test on the cache's comparison helper). `strcmp` and similar on secrets are banned by the PHPStan
   rule set — 6.3, 6.6
 

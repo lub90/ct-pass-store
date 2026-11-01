@@ -76,7 +76,7 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
   - `502 upstream-unavailable` / `upstream-invalid`, and `503 upstream-rate-limited` with `Retry-After`.
   - Mostly done in 2.1; 2.5 added the mapping of rejected permission reads and tests for every step of a request.
     `Retry-After` for `too-many-attempts` follows with the rate limit in 3.5.
-- [ ] **2.6 Banned functions via PHPStan** (spec 6.6)
+- [x] **2.6 Banned functions via PHPStan** (spec 6.6)
   - Add a disallowed-calls rule set (e.g. `spaze/phpstan-disallowed-calls`): `eval`, `unserialize`, `exec` and other
     shell calls, `str_shuffle`, `rand`, `mt_rand`, and loose comparisons of secrets. This replaces source scans in
     tests (catalog IJ-06, PG-05, TR-01).
