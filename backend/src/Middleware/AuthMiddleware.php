@@ -7,11 +7,11 @@ namespace CtPassStore\Middleware;
 use CtPassStore\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Service\ChurchtoolsAuth;
-use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface as Handler;
+use Psr\Log\LoggerInterface;
 
 /**
  * Middleware that validates ChurchTools token and attaches user info to the request.
@@ -21,9 +21,9 @@ class AuthMiddleware implements MiddlewareInterface
     private const AUTH_HEADER_PREFIX = 'Login ';
 
     private ChurchtoolsAuth $auth;
-    private Logger $logger;
+    private LoggerInterface $logger;
 
-    public function __construct(ChurchtoolsAuth $auth, Logger $logger)
+    public function __construct(ChurchtoolsAuth $auth, LoggerInterface $logger)
     {
         $this->auth = $auth;
         $this->logger = $logger;
@@ -34,12 +34,12 @@ class AuthMiddleware implements MiddlewareInterface
         $requestHeader = $request->getHeaderLine('Authorization')  ?? '';
 
         if (empty($requestHeader)) {
-            $this->logger?->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            $this->logger->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Missing Authorization header!');
         }
 
         if (!str_starts_with($requestHeader, AuthMiddleware::AUTH_HEADER_PREFIX)) {
-            $this->logger?->warning('Unauthorized access attempt: Invalid or missing Login prefix in Authorization header!', [
+            $this->logger->warning('Unauthorized access attempt: Invalid or missing Login prefix in Authorization header!', [
                 'ip' => $request->getServerParams()['REMOTE_ADDR'],
             ]);
             return $this->unauthorized($request, 'Request header must startwith ' . AuthMiddleware::AUTH_HEADER_PREFIX);
@@ -55,13 +55,13 @@ class AuthMiddleware implements MiddlewareInterface
             // Do nothing, because user becomes null and we fire the unathorized access part below
         }
         if ($user === null || $user->id < 1) {
-            $this->logger?->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            $this->logger->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->unauthorized($request, 'Invalid ChurchTools token!');
         }
 
         // Check if the user has the right to access the service
         if (!$this->auth->hasAccessRights($token)) {
-            $this->logger?->warning("Forbidden access attempt: User {$user->id} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
+            $this->logger->warning("Forbidden access attempt: User {$user->id} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
             return $this->forbidden($request, 'User is not allowed to access the service!');
         }
 

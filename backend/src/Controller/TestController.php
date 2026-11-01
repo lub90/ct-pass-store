@@ -15,7 +15,7 @@ class TestController extends BaseService
 {
     private ServiceSettings $settings;
 
-    public function __construct(ServiceSettings $settings, LoggerInterface $logger)
+    public function __construct(ServiceSettings $settings, LoggerInterface $logger, private readonly string $credentialsPath)
     {
         parent::__construct($logger);
 
@@ -29,7 +29,7 @@ class TestController extends BaseService
         $tests = [];
 
         try {
-            $credentialsPath = dirname(__DIR__, 2) . '/config/credentials.php';
+            $credentialsPath = $this->credentialsPath;
 
             if (!file_exists($credentialsPath)) {
                 throw new \RuntimeException('credentials.php file does not exist.');

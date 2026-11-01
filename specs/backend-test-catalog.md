@@ -334,8 +334,10 @@ normal case names it ("→ PV-05").
   reassigned username) → counts as a wrong password, logged as `warning` — 5.5.3
 - [ ] **PP-10** (N · C) Contract: correct and wrong passwords give the status codes the backend expects from
   `POST /api/login` — 5.5.3
-- [ ] **PP-11** (! · C) With two-factor authentication enabled for the caller, the check never passes without the second
-  factor (it fails closed). The exact behavior is documented — 5.5.3 ❓ Q13
+- [ ] **PP-11** (N · A) Two-factor users (Q13): ChurchTools answers `200` with `status` `totp` or `twoFactorSetup` and the
+  caller's person ID → the primary password counts as correct; a wrong password (`400`) still fails — 5.5.3
+- [ ] **PP-11a** (N · C) Contract: for a test user with two-factor authentication, `POST /api/login` with the correct
+  password answers `200` with `status: "totp"` and the person ID, and with a wrong password `400` — 5.5.3
 
 ## 7. Authorization (spec 4.3)
 

@@ -8,7 +8,7 @@ use CtPassStore\Config\AppConfig;
 use CtPassStore\Exception\HttpResponseException;
 
 use CtPassStore\Service\BaseService;
-use CtPassStore\Service\ChurchtoolsAuthVerifier;
+use CtPassStore\Service\ChurchToolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
@@ -25,14 +25,14 @@ class PasswordController extends BaseService
     private ChurchToolsStore $store;
     private EncryptionService $encryption;
     private PasswordValidator $validator;
-    private ChurchtoolsAuthVerifier $authVerifier;
+    private ChurchToolsAuthVerifier $authVerifier;
 
     public function __construct(
         ServiceSettings $settings,
         ChurchToolsStore $store,
         EncryptionService $encryption,
         PasswordValidator $validator,
-        ChurchtoolsAuthVerifier $authVerifier,
+        ChurchToolsAuthVerifier $authVerifier,
         LoggerInterface $logger
     ) {
         parent::__construct($logger);

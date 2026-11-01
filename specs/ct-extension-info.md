@@ -131,6 +131,9 @@ may change between versions, so verify anything critical against your own instan
     ChurchTools to start requiring CSRF tokens for REST writes.
   - Never send a CSRF token with `POST /login`.
 - Checking a user's password via `POST /api/login` creates a real session each time. Rate-limit that yourself.
+  - The response is `{"data": {"status", "message", "personId", "location"}}`. `status` is `success` for a complete
+    login, or `totp` / `twoFactorSetup` when the password was correct but a second factor is still required. The
+    `personId` is included in all three cases. A wrong password gives `400`.
 
 ### OAuth: ChurchTools as authorization server
 

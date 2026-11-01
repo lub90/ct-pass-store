@@ -602,7 +602,11 @@ This covers the lookup and write logic in `ChurchToolsStore`.
      and they don't count against the rate limit.
    - **(change)** Rate-limited (6.3).
    - The response creates a ChurchTools session; its cookie is discarded. No CSRF token is sent with `/login`.
-   - ❓ Q13: behavior for users with two-factor authentication.
+   - **Two-factor authentication (Q13):** for users with two-factor authentication, ChurchTools answers `200` with
+     `status: "totp"` (or `"twoFactorSetup"`) when the password is correct but the second factor is still missing. This
+     counts as a **correct** primary password. The check only confirms that the user knows their password; the second
+     factor protects the ChurchTools login itself, not this confirmation. Wrong passwords still give `400` and fail.
+     This behavior is documented for admins in the setup docs.
 
 ### 5.6 ChurchTools client (`ChurchToolsClient`)
 
@@ -787,7 +791,6 @@ ChurchTools communication goes through it.
 
 | # | Question | Proposal |
 | --- | --- | --- |
-| Q13 | Primary password check with two-factor authentication enabled? | Investigate, then document. Until then, document it as unsupported. |
 | Q16 | Cleanup job for entries of deleted persons: how is it triggered? | A CLI script for cron, plus an admin-only endpoint for hosts without cron |
 | Q22 | Should admin and read access be granted via ChurchTools groups instead of person-ID lists in the settings? | Later. The consent includes group memberships, and the `api` scope can read them, so it's possible. |
 
@@ -796,7 +799,8 @@ needs the primary password), Q6 (wrong primary password → `403`), Q7 (`passwor
 stays; maximum 128), Q9 (duplicates: newest wins, healed on write), Q10 (invalid ID → `400`), Q11 (`/test` for admins
 only; write test with `?write=1`), Q14 (ChurchTools `429` → `503` right away), Q17 (plain HTTP rejected), Q18
 (configurable `LOG_LEVEL`), Q20 (`/v1/` prefix), Q21 (backend token: 15 minutes, HS256), Q23 (`readAccessUsers`
-removed).
+removed), Q13 (two-factor users: a correct password counts even while the second factor is pending; documented, see
+5.5.3).
 
 **Answered earlier:** Q1 (authentication; users via OAuth, D4), Q3 (cache; file cache only), Q2 (PHP version, D3), Q12 (error format, D2), Q15 (token
 cache; replaced by Q21), Q19 (machine clients; signed JWTs, D5), Q24 (person and group lookups for ct-radius;

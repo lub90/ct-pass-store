@@ -50,7 +50,7 @@ only to the backend) isn't part of it.
 
 Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 
-- [ ] **2.0 API test layer** (spec 6.6; **at the latest here**)
+- [x] **2.0 API test layer** (spec 6.6; **at the latest here**)
   - Make the app buildable in tests: configuration and the ChurchTools client are injected instead of being read from
     `credentials.php` and built inside `bootstrap.php`.
   - A test helper builds the Slim app with a fake `ChurchToolsClient` and in-memory settings, sends PSR-7 requests and

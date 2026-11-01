@@ -2,24 +2,26 @@
 
 declare(strict_types=1);
 
-// Autoload dependencies and classes
 require __DIR__ . '/../vendor/autoload.php';
 
-use DI\Container;
-use Slim\Factory\AppFactory;
+use CtPassStore\Application;
+use CtPassStore\ChurchTools\Credential;
+use CtPassStore\ChurchTools\GuzzleChurchToolsClient;
+use CtPassStore\Config\AppConfig;
+use CtPassStore\Config\BackendConfig;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
 
-// Create a new dependency injection container
-$container = new Container();
-AppFactory::setContainer($container);
+$credentialsPath = __DIR__ . '/../config/credentials.php';
+$config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath);
 
-// Create the Slim app instance
-$app = AppFactory::create();
+$logger = new Logger('ct-pass-store');
+$logger->pushHandler(new StreamHandler(__DIR__ . '/../logs/app.log', Logger::DEBUG));
 
-// Load environment variables and configure dependencies
-(require __DIR__ . '/../src/Config/bootstrap.php')($app);
+$churchTools = new GuzzleChurchToolsClient(
+    $config->apiUrl,
+    Credential::loginToken($config->apiToken),
+    AppConfig::EXTERNAL_REQUEST_TIMEOUT,
+);
 
-// Register application routes
-(require __DIR__ . '/../src/Controller/routes.php')($app);
-
-// Run the Slim application
-$app->run();
+Application::create($config, $churchTools, $logger)->run();

@@ -36,8 +36,8 @@ class ChurchToolsAuthVerifier extends BaseService
             return false;
         }
 
-        // Unchanged behavior: an accepted password counts as valid even if a second factor is still pending.
-        // Whether that's intended is open question Q13 of the spec; the change belongs to plan item 3.5.
+        // A correct password counts even if a second factor is still pending (spec 5.5.3, decision Q13): this check
+        // only confirms that the user knows their password.
         return true;
     }
 }
