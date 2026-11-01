@@ -2,23 +2,23 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use phpseclib3\Crypt\RSA;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
 use CtPassStore\Tests\Helpers\Helpers;
+use phpseclib3\Crypt\RSA;
 
 abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 {
-
-    public static function getValidPwdPath(): string {
-        throw new \LogicException("Subclass must override");
+    public static function getValidPwdPath(): string
+    {
+        throw new \LogicException('Subclass must override');
     }
 
     public function getEndpoint(): string
     {
-        return "entries";
+        return 'entries';
     }
 
     public function getBody(string $ctPwd, string $newPwd): array
@@ -36,13 +36,14 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         return $body;
     }
 
-
-    protected function getPwdForUser(int $targetId): string {
-        return "pwd-for-user-" . $targetId;
+    protected function getPwdForUser(int $targetId): string
+    {
+        return 'pwd-for-user-' . $targetId;
     }
 
-    protected function generateEntries(array $allPwdEntries): void {
-        foreach($allPwdEntries as $entry) {
+    protected function generateEntries(array $allPwdEntries): void
+    {
+        foreach ($allPwdEntries as $entry) {
             // For simplicity, we generate a deterministic password per target user
             $password = $this->getPwdForUser($entry);
 
@@ -79,7 +80,8 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         $this->performAndCheckNormalPutPwd($userId, $token, $targetId, $hasAccess, $ctPwd, $otherPwdEntryIds, $newPwd);
     }
 
-    protected function performAndCheckNormalPutPwd(int $userId, string $token, int $targetId, bool $hasAccess, string $ctPwd, array $otherPwdEntryIds, string $newPwd): void {
+    protected function performAndCheckNormalPutPwd(int $userId, string $token, int $targetId, bool $hasAccess, string $ctPwd, array $otherPwdEntryIds, string $newPwd): void
+    {
         // 1. Save current database state
         $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
         $persCheck->saveStatus();
@@ -88,9 +90,9 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         $client = $this->getClient();
 
         $response = $client->put($this->getEndpoint() . '/' . $targetId, [
-                    'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token],
-                    'json'    => $this->getBody($ctPwd, $newPwd),
-                ]);
+            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token],
+            'json'    => $this->getBody($ctPwd, $newPwd),
+        ]);
 
         if ($hasAccess) {
             // The new password might not have been set at all, if we have a config type, that does not allow custom passwords...
@@ -117,29 +119,30 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             // Ensure only one value is present per user in the databes. Make this check before getting an comparing the pwd, because otherwise we might fail to fetch
             $this->checkUniqueUsers();
 
-
             $this->getAndCheckPwd($targetId, $token, $expectedPwd);
-
-            
 
         } else {
             // 4b. Not allowed → expect 403
-            $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"
+            $this->assertSame(
+                403,
+                $response->getStatusCode(),
+                "Expected 403 for user $userId accessing $targetId"
             );
         }
-        
+
     }
 
-    protected function checkUniqueUsers(): void {
+    protected function checkUniqueUsers(): void
+    {
         $extensionDataService = Helpers::getExtensionDataService();
         $allPwdEntries = $extensionDataService->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         $allPwdIds = [];
-        foreach($allPwdEntries as $pwdEntry) {
-            $allPwdIds[] = json_decode($pwdEntry["value"], true)[AppConfig::CT_PERSON_ID_PWD_FIELD];
+        foreach ($allPwdEntries as $pwdEntry) {
+            $allPwdIds[] = json_decode($pwdEntry['value'], true)[AppConfig::CT_PERSON_ID_PWD_FIELD];
         }
 
-        $this->assertSame(count($allPwdIds), count(array_unique($allPwdIds)), "Duplicate password entries found!");
+        $this->assertSame(count($allPwdIds), count(array_unique($allPwdIds)), 'Duplicate password entries found!');
     }
 
     protected function getAndCheckPwd(int $userId, string $token, string $newPwd): void
@@ -147,7 +150,7 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
         // 1. GET request for the password
         $client = $this->getClient();
         $response = $client->get($this->getEndpoint() . '/' . $userId, [
-            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token]
+            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token],
         ]);
 
         $this->assertSame(
@@ -170,7 +173,6 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             throw new \RuntimeException("Could not load private key from $keyPath");
         }
 
-
         // 2. Load private key with phpseclib instead of openssl
         //    This allows us to configure OAEP with SHA-256
         $privateKeyPem = $this->getPrivateKey();
@@ -181,12 +183,11 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 
         // 3. Decode from Base64 and decrypt with RSA 4096 OAEP SHA256
         $decodedCipher = base64_decode($encryptedPwd, true);
-        $this->assertNotFalse($decodedCipher, "Encrypted password is not valid base64");
+        $this->assertNotFalse($decodedCipher, 'Encrypted password is not valid base64');
 
         $decrypted = $rsa->decrypt($decodedCipher);
         $this->assertNotFalse($decrypted, "Failed to decrypt password for user $userId");
-        
-        
+
         // 4. Check that both encrypted passwords are the same
         $this->assertSame(
             $newPwd,
@@ -234,7 +235,6 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
 
         $cases = [];
 
-
         // List of passwords to test
         $newPwdsToTest = self::getValidPwds();
 
@@ -245,7 +245,7 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             $targetId = $baseCase['targetId'];
 
             $variants[$label . ' (empty otherPwdEntryIds)'] = $baseCase + [
-                'otherPwdEntryIds' => []
+                'otherPwdEntryIds' => [],
             ];
 
             $oneId = null;
@@ -257,20 +257,20 @@ abstract class EntriesPutTestPrototype extends AbstractTestPrototype
             }
             if ($oneId !== null) {
                 $variants[$label . " (one otherPwdEntryId $oneId)"] = $baseCase + [
-                    'otherPwdEntryIds' => [$oneId]
+                    'otherPwdEntryIds' => [$oneId],
                 ];
             }
 
             $allExceptTarget = array_values(array_filter($allIds, fn($id) => $id !== $targetId));
             $variants[$label . ' (all otherPwdEntryIds)'] = $baseCase + [
-                'otherPwdEntryIds' => $allExceptTarget
+                'otherPwdEntryIds' => $allExceptTarget,
             ];
 
             // Now generate this foreach password possibility
             foreach ($variants as $variantLabel => $variantCase) {
                 foreach ($newPwdsToTest as $pwd) {
                     $cases[$variantLabel . " (newPwd=$pwd)"] = $variantCase + [
-                        'newPwd' => $pwd
+                        'newPwd' => $pwd,
                     ];
                 }
             }

@@ -12,7 +12,6 @@ final class AppConfig
 
     public const CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME = 'requirePasswordForPasswordChange';
 
-
     public const CT_ENCRYPTION_SETTINGS_CATEGORY_NAME = 'encryptionSettings';
 
     public const CT_PUBLIC_KEY_FIELD_NAME = 'publicKey';

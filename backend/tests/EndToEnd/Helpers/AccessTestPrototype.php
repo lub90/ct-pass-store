@@ -1,34 +1,27 @@
 <?php
 
-
-
-
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
 use CtPassStore\Config\AppConfig;
-use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
-use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
-use CtPassStore\Tests\EndToEnd\Helpers\AbstractTestPrototype;
 
 abstract class AccessTestPrototype extends AbstractTestPrototype
 {
-
     abstract public function getEndpoint(): string;
 
     abstract public function getMethods(): array;
-
 
     /**
      * @dataProvider invalidAuthHeaderProvider
      */
     public function testInvalidAuthHeaderReturns401(?string $authHeader): void
     {
-        foreach($this->getMethods() as $method) {
+        foreach ($this->getMethods() as $method) {
             $this->invalidAuthHeaderReturns401PerMethod($method, $authHeader);
         }
     }
 
-    protected function invalidAuthHeaderReturns401PerMethod(string $method, ?string $authHeader): void {
+    protected function invalidAuthHeaderReturns401PerMethod(string $method, ?string $authHeader): void
+    {
         // Save previous database status
         $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
         $persCheck->saveStatus();
@@ -42,12 +35,12 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         }
 
         $response = $client->request($method, $this->getEndpoint(), [
-            'headers' => $headers
+            'headers' => $headers,
         ]);
 
         $this->assertSame(401, $response->getStatusCode(), "Expected 401 for method $method and for header: " . ($authHeader ?? 'none'));
 
-        $body = json_decode((string)$response->getBody(), true);
+        $body = json_decode((string) $response->getBody(), true);
         $this->assertIsArray($body);
         $this->assertArrayHasKey('error', $body);
         $this->assertArrayHasKey('message', $body);
@@ -83,18 +76,18 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         return $cases;
     }
 
-
     /**
      * @dataProvider invalidTokenProvider
      */
     public function testInvalidTokenReturns401(string $authHeader): void
     {
-        foreach($this->getMethods() as $method) {
+        foreach ($this->getMethods() as $method) {
             $this->invalidTokenReturns401PerMethod($method, $authHeader);
         }
     }
 
-    protected function invalidTokenReturns401PerMethod(string $method, string $authHeader): void {
+    protected function invalidTokenReturns401PerMethod(string $method, string $authHeader): void
+    {
         // Save previous database status
         $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
         $persCheck->saveStatus();
@@ -103,12 +96,12 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         $client = $this->getClient();
 
         $response = $client->request($method, $this->getEndpoint(), [
-            'headers' => ['Authorization' => $authHeader]
+            'headers' => ['Authorization' => $authHeader],
         ]);
 
         $this->assertSame(401, $response->getStatusCode(), "Expected 401 for method $method and for header: $authHeader");
 
-        $body = json_decode((string)$response->getBody(), true);
+        $body = json_decode((string) $response->getBody(), true);
         $this->assertIsArray($body);
         $this->assertArrayHasKey('error', $body);
         $this->assertArrayHasKey('message', $body);
@@ -118,7 +111,6 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         // Check that there were no changes
         $persCheck->assertUnchanged();
     }
-
 
     public static function invalidTokenProvider(): array
     {
@@ -154,18 +146,18 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         return $cases;
     }
 
-
     /**
      * @dataProvider unauthorizedTokenProvider
      */
     public function testUnauthorizedTokenReturns403(string $authHeader): void
     {
-        foreach($this->getMethods() as $method) {
+        foreach ($this->getMethods() as $method) {
             $this->unauthorizedTokenReturns403PerMethod($method, $authHeader);
         }
     }
 
-    protected function unauthorizedTokenReturns403PerMethod(string $method, string $authHeader): void {
+    protected function unauthorizedTokenReturns403PerMethod(string $method, string $authHeader): void
+    {
         // Save previous database status
         $persCheck = new PersistenceChecker(AppConfig::CT_PWD_CATEGORY_NAME);
         $persCheck->saveStatus();
@@ -174,12 +166,12 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         $client = $this->getClient();
 
         $response = $client->request($method, $this->getEndpoint(), [
-            'headers' => ['Authorization' => $authHeader]
+            'headers' => ['Authorization' => $authHeader],
         ]);
 
         $this->assertSame(403, $response->getStatusCode(), "Expected 403 for method $method and for header: $authHeader");
 
-        $body = json_decode((string)$response->getBody(), true);
+        $body = json_decode((string) $response->getBody(), true);
         $this->assertIsArray($body);
         $this->assertArrayHasKey('error', $body);
         $this->assertArrayHasKey('message', $body);
@@ -189,7 +181,6 @@ abstract class AccessTestPrototype extends AbstractTestPrototype
         // Check that there were no changes
         $persCheck->assertUnchanged();
     }
-
 
     public static function unauthorizedTokenProvider(): array
     {

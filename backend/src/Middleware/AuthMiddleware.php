@@ -4,22 +4,21 @@ declare(strict_types=1);
 
 namespace CtPassStore\Middleware;
 
-use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\ResponseInterface as Response;
-use Psr\Http\Server\RequestHandlerInterface as Handler;
-use Psr\Http\Server\MiddlewareInterface;
-use CtPassStore\Service\ChurchtoolsAuth;
-use CtPassStore\Config\AppConfig;
-use Monolog\Logger;
 use ChurchTools\ApiException;
+use CtPassStore\Config\AppConfig;
+use CtPassStore\Service\ChurchtoolsAuth;
+use Monolog\Logger;
+use Psr\Http\Message\ResponseInterface as Response;
+use Psr\Http\Message\ServerRequestInterface as Request;
+use Psr\Http\Server\MiddlewareInterface;
+use Psr\Http\Server\RequestHandlerInterface as Handler;
 
 /**
  * Middleware that validates ChurchTools token and attaches user info to the request.
  */
 class AuthMiddleware implements MiddlewareInterface
 {
-
-    private const AUTH_HEADER_PREFIX = "Login ";
+    private const AUTH_HEADER_PREFIX = 'Login ';
 
     private ChurchtoolsAuth $auth;
     private Logger $logger;
@@ -41,14 +40,12 @@ class AuthMiddleware implements MiddlewareInterface
 
         if (!str_starts_with($requestHeader, AuthMiddleware::AUTH_HEADER_PREFIX)) {
             $this->logger?->warning('Unauthorized access attempt: Invalid or missing Login prefix in Authorization header!', [
-                'ip' => $request->getServerParams()['REMOTE_ADDR']
+                'ip' => $request->getServerParams()['REMOTE_ADDR'],
             ]);
             return $this->unauthorized($request, 'Request header must startwith ' . AuthMiddleware::AUTH_HEADER_PREFIX);
         }
 
-        $token = str_replace(AuthMiddleware::AUTH_HEADER_PREFIX, "", $requestHeader);
-
-        
+        $token = str_replace(AuthMiddleware::AUTH_HEADER_PREFIX, '', $requestHeader);
 
         // Check if we are able to login via the provided token
         $user = null;

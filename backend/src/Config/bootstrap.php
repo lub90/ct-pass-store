@@ -2,20 +2,18 @@
 
 declare(strict_types=1);
 
-use CtPassStore\Middleware\CorsMiddleware;
 use CtPassStore\Middleware\AuthMiddleware;
-use Slim\App;
-use Psr\Log\LoggerInterface;
-use Monolog\Logger;
-use Monolog\Handler\StreamHandler;
-use Psr\Container\ContainerInterface;
-use CtPassStore\Service\ServiceSettings;
+use CtPassStore\Middleware\CorsMiddleware;
 use CtPassStore\Service\ChurchtoolsAuth;
 use CtPassStore\Service\ChurchtoolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
-
+use CtPassStore\Service\ServiceSettings;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
+use Psr\Log\LoggerInterface;
+use Slim\App;
 
 return function (App $app): void {
 
@@ -83,5 +81,5 @@ return function (App $app): void {
 
     // Add the middleware for CORS
     $app->add(new CorsMiddleware($credentials['CORS']));
-    
+
 };

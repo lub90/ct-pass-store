@@ -7,7 +7,6 @@ use ChurchTools\Api\PersonApi;
 use ChurchTools\Configuration;
 use ChurchTools\Model\PostLoginRequest;
 use CtPassStore\Config\AppConfig;
-use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Tests\Helpers\Helpers;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
@@ -20,7 +19,6 @@ class ChurchToolsSandboxManager
     private static ?ChurchToolsSandboxManager $instance = null;
 
     private string $fixturePath;
-
 
     private ?array $adminUsers;
 
@@ -53,7 +51,7 @@ class ChurchToolsSandboxManager
         $currentSettings = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME);
 
         if (!is_array($currentSettings)) {
-            throw new \RuntimeException("Expected current settings to be an array, got " . gettype($currentSettings));
+            throw new \RuntimeException('Expected current settings to be an array, got ' . gettype($currentSettings));
         }
 
         if (!empty($currentSettings)) {
@@ -68,7 +66,7 @@ class ChurchToolsSandboxManager
         $currentPublicKey = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME);
 
         if (!is_array($currentPublicKey)) {
-            throw new \RuntimeException("Expected current public key to be an array, got " . gettype($publicKey));
+            throw new \RuntimeException('Expected current public key to be an array, got ' . gettype($publicKey));
         }
 
         if (!empty($currentPublicKey)) {
@@ -95,11 +93,11 @@ class ChurchToolsSandboxManager
         $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
-            throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
+            throw new \RuntimeException('Expected pwd store category data to be an array, got ' . gettype($entries));
         }
 
         if (!empty($entries)) {
-            throw new \RuntimeException("Pwd store is not empty!");
+            throw new \RuntimeException('Pwd store is not empty!');
         }
     }
 
@@ -108,7 +106,7 @@ class ChurchToolsSandboxManager
         $entries = Helpers::getExtensionDataService()->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
 
         if (!is_array($entries)) {
-            throw new \RuntimeException("Expected pwd store category data to be an array, got " . gettype($entries));
+            throw new \RuntimeException('Expected pwd store category data to be an array, got ' . gettype($entries));
         }
 
         foreach ($entries as $entry) {
@@ -152,7 +150,6 @@ class ChurchToolsSandboxManager
         }
         return $data;
     }
-
 
     private function loadFixture(string $filename): array
     {

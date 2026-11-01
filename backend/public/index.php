@@ -5,8 +5,8 @@ declare(strict_types=1);
 // Autoload dependencies and classes
 require __DIR__ . '/../vendor/autoload.php';
 
-use Slim\Factory\AppFactory;
 use DI\Container;
+use Slim\Factory\AppFactory;
 
 // Create a new dependency injection container
 $container = new Container();

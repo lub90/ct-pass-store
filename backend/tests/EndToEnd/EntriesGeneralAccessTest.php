@@ -2,27 +2,27 @@
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use CtPassStore\Config\AppConfig;
 use CtPassStore\Tests\EndToEnd\Helpers\AccessTestPrototype;
-use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
-use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
 
-
-class EntriesGeneralAccessTest extends AccessTestPrototype {
-
-    public function getEndpoint(): string {
+class EntriesGeneralAccessTest extends AccessTestPrototype
+{
+    public function getEndpoint(): string
+    {
         return '/entries/12';
     }
 
-    public function getPublicKeyPath(): string {
+    public function getPublicKeyPath(): string
+    {
         return __DIR__ . '/../keys/publicKey1.pem';
     }
 
-    public function getPrivateKeyPath(): string {
+    public function getPrivateKeyPath(): string
+    {
         return __DIR__ . '/../keys/privateKey1.pem';
     }
 
-    public function getMethods(): array {
+    public function getMethods(): array
+    {
         return ['get', 'put', 'delete'];
     }
 
@@ -30,7 +30,5 @@ class EntriesGeneralAccessTest extends AccessTestPrototype {
     {
         return __DIR__ . '/../settings/false_false_12.json';
     }
-    
-}
 
-    
+}

@@ -18,9 +18,15 @@ class PasswordValidator extends BaseService
         }
 
         // Enforce at least one letter, one digit, and one symbol
-        if (!preg_match('/[' . preg_quote(self::LETTERS, '/') . ']/', $pwd)) return false;
-        if (!preg_match('/[' . preg_quote(self::DIGITS, '/') . ']/', $pwd)) return false;
-        if (!preg_match('/[' . preg_quote(self::SYMBOLS, '/') . ']/', $pwd)) return false;
+        if (!preg_match('/[' . preg_quote(self::LETTERS, '/') . ']/', $pwd)) {
+            return false;
+        }
+        if (!preg_match('/[' . preg_quote(self::DIGITS, '/') . ']/', $pwd)) {
+            return false;
+        }
+        if (!preg_match('/[' . preg_quote(self::SYMBOLS, '/') . ']/', $pwd)) {
+            return false;
+        }
 
         // Check that the string only contains valid chars
         return strspn($pwd, self::ALLOWED_CHARS) === strlen($pwd);

@@ -55,7 +55,6 @@ class BackendSandboxManager
         return sprintf('http://%s:%d', $this->host, $this->port);
     }
 
-
     private function isPortAvailable(): bool
     {
         $connection = @fsockopen($this->host, $this->port);

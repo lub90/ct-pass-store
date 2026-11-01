@@ -5,11 +5,10 @@ declare(strict_types=1);
 namespace CtPassStore\Controller;
 
 use CtPassStore\Service\BaseService;
-use Psr\Log\LoggerInterface;
+use CtPassStore\Service\ServiceSettings;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use CtPassStore\Service\ServiceSettings;
-use Slim\Psr7\Factory\ResponseFactory;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 class TestController extends BaseService
@@ -28,7 +27,6 @@ class TestController extends BaseService
         $allPassed = true;
 
         $tests = [];
-
 
         try {
             $credentialsPath = dirname(__DIR__, 2) . '/config/credentials.php';
@@ -64,7 +62,6 @@ class TestController extends BaseService
             ];
         }
 
-
         // List of methods to test
         $methods = [
             'requirePasswordForPasswordChange',
@@ -72,7 +69,7 @@ class TestController extends BaseService
             'adminUsers',
             'readAccessUsers',
             'pwdLength',
-            'publicKey'
+            'publicKey',
         ];
 
         foreach ($methods as $method) {
@@ -92,7 +89,6 @@ class TestController extends BaseService
                 ];
             }
         }
-
 
         $summary = $allPassed
             ? 'All backend self-tests passed successfully.'

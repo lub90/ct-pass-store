@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
+use CtPassStore\Config\AppConfig;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\RequestException;
 use Psr\Log\LoggerInterface;
-use CtPassStore\Config\AppConfig;
 
 class ChurchToolsAuthVerifier extends BaseService
 {

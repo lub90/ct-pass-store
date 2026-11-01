@@ -4,20 +4,20 @@ declare(strict_types=1);
 
 namespace CtPassStore\Controller;
 
-use Psr\Http\Message\ServerRequestInterface as Request;
-use Psr\Http\Message\ResponseInterface as Response;
+use CtPassStore\Config\AppConfig;
+use CtPassStore\Exception\HttpResponseException;
 
-use CtPassStore\Service\ServiceSettings;
+use CtPassStore\Service\BaseService;
+use CtPassStore\Service\ChurchtoolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\EncryptionService;
 use CtPassStore\Service\PasswordValidator;
-use CtPassStore\Service\BaseService;
+use CtPassStore\Service\ServiceSettings;
 use Psr\Http\Message\ResponseInterface;
+use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Log\LoggerInterface;
-use CtPassStore\Service\ChurchtoolsAuthVerifier;
-use CtPassStore\Exception\HttpResponseException;
-use CtPassStore\Config\AppConfig;
 
 class PasswordController extends BaseService
 {
@@ -57,7 +57,7 @@ class PasswordController extends BaseService
         $encryptedSecondaryPwd = $this->store->getPwd($targetId);
 
         if ($encryptedSecondaryPwd === null) {
-            return $this->error(404, 'Not Found','No password entry found for this user.');
+            return $this->error(404, 'Not Found', 'No password entry found for this user.');
         }
 
         return $response
@@ -67,7 +67,6 @@ class PasswordController extends BaseService
                 AppConfig::REQUEST_SECONDARY_PWD_FIELD => $encryptedSecondaryPwd,
             ])));
     }
-
 
     public function put(Request $request, Response $response, array $args): ResponseInterface
     {
@@ -81,13 +80,13 @@ class PasswordController extends BaseService
         } catch (HttpResponseException $errorResponse) {
             return $errorResponse->getResponse();
         }
-        
+
         $pwd = $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null;
 
         if ($pwd !== null) {
             if (!$this->settings->allowCustomPasswords()) {
                 $this->logger->warning("User {$userId} tried to set a custom password, but it is not allowed to do so!");
-                return $this->error(400, 'Invalid parameters','Custom passwords are not allowed!');
+                return $this->error(400, 'Invalid parameters', 'Custom passwords are not allowed!');
             }
         } else {
             $pwd = $this->validator->generateRandom($this->settings->pwdLength());
@@ -95,12 +94,11 @@ class PasswordController extends BaseService
 
         if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
             $this->logger->info("User {$userId} tried to set a password with insufficient complexity!");
-            return $this->error(400, "Invalid parameters","Password must contain at least one letter, digit, and symbol, and be at least {$this->settings->pwdLength()}!");
+            return $this->error(400, 'Invalid parameters', "Password must contain at least one letter, digit, and symbol, and be at least {$this->settings->pwdLength()}!");
         }
 
         $ciphertext = $this->encryption->encrypt($pwd);
         $this->store->putPwd($targetId, $ciphertext);
-
 
         if ($body[AppConfig::REQUEST_SECONDARY_PWD_FIELD] ?? null) {
             // Custom password was provided and stored
@@ -130,7 +128,6 @@ class PasswordController extends BaseService
         return $response->withStatus(204);
     }
 
-
     private function authorizeAndValidate(
         ServerRequestInterface $request,
         int $targetId,
@@ -156,13 +153,12 @@ class PasswordController extends BaseService
         if (!empty($rawBody)) {
             $body = json_decode($rawBody, true);
         }
-        
-        
+
         if (json_last_error() !== JSON_ERROR_NONE) {
             $this->logger->warning("User {$userId} tried to send an invalid body, that cannot be converted to json!");
-                throw new HttpResponseException(
-                    $this->error(400, 'Bad Request', 'Body is not json!')
-                );
+            throw new HttpResponseException(
+                $this->error(400, 'Bad Request', 'Body is not json!')
+            );
         }
 
         if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
@@ -170,7 +166,7 @@ class PasswordController extends BaseService
             if ($primaryPwd === '') {
                 $this->logger->info("User {$userId} tried to update a password without providing a primary password!");
                 throw new HttpResponseException(
-                    $this->error(400, 'Invalid parameters', "Missing " . AppConfig::REQUEST_PRIMARY_PWD_FIELD . " for password change!")
+                    $this->error(400, 'Invalid parameters', 'Missing ' . AppConfig::REQUEST_PRIMARY_PWD_FIELD . ' for password change!')
                 );
             }
 
@@ -188,7 +184,6 @@ class PasswordController extends BaseService
             'body' => $body,
         ];
     }
-
 
     private function error(int $status, string $error, string $message): ResponseInterface
     {

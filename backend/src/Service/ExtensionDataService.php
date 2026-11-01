@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
+use ChurchTools\Configuration;
 use ChurchTools\SimpleClient;
 use RuntimeException;
-use ChurchTools\Configuration;
 
 class ExtensionDataService
 {
@@ -63,7 +63,7 @@ class ExtensionDataService
         $result = $this->client->getJson("custommodules/{$category['customModuleId']}/customdatacategories/{$category['id']}/customdatavalues")['data'];
 
         if ($single) {
-           $result = $result[0];
+            $result = $result[0];
         }
 
         return $result;
@@ -82,9 +82,10 @@ class ExtensionDataService
         $response = $this->client->postJson(
             "custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues",
             [
-                'json' => $payload
-            ]);
-        
+                'json' => $payload,
+            ]
+        );
+
         return $response['data']['id'] ?? throw new RuntimeException('Failed to create entry');
     }
 
@@ -102,7 +103,7 @@ class ExtensionDataService
         $response = $this->client->put("custommodules/{$moduleId}/customdatacategories/{$category['id']}/customdatavalues/{$valueId}", [
             'json' => $payload,
         ]);
-        $body = json_decode((string)$response->getBody(), true);
+        $body = json_decode((string) $response->getBody(), true);
 
         return $body['data']['id'] ?? throw new RuntimeException('Failed to update entry');
     }

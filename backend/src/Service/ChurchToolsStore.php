@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use CtPassStore\Config\AppConfig;
-use CtPassStore\Service\ExtensionDataService;
 
 class ChurchToolsStore extends ChurchToolsBaseService
 {
@@ -29,19 +28,18 @@ class ChurchToolsStore extends ChurchToolsBaseService
         return array_values($matching)[0][AppConfig::CT_ENCRYPTED_PWD_FIELD];
     }
 
-
     public function putPwd(int $personId, string $encryptedPassword): void
     {
         $extension = new ExtensionDataService($this->churchtoolsConfig, AppConfig::CT_EXTENSION_ID);
 
         $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
         $existing = [];
-        foreach($existingValueEntries as $existingEntry) {
+        foreach ($existingValueEntries as $existingEntry) {
             $encodedValues = json_decode($existingEntry['value'], true);
             if (($encodedValues[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === $personId) {
                 $existing[] = [
-                    "id" => $existingEntry["id"],
-                    "value" => $encodedValues,
+                    'id' => $existingEntry['id'],
+                    'value' => $encodedValues,
                 ];
             }
         }
@@ -50,13 +48,13 @@ class ChurchToolsStore extends ChurchToolsBaseService
             AppConfig::CT_PERSON_ID_PWD_FIELD => $personId,
             AppConfig::CT_ENCRYPTED_PWD_FIELD => $encryptedPassword,
         ];
-        
+
         if (count($existing) === 1) {
             $valueId = $existing[array_key_first($existing)]['id'];
             $extension->updateCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $valueId, $data);
             $this->logger->info("Updated password entry $valueId for person $personId");
         } elseif (count($existing) === 0) {
-            $newId = $extension->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $data + [AppConfig::CT_PERSON_ID_PWD_FIELD => (string)$personId]);
+            $newId = $extension->createCategoryEntry(AppConfig::CT_PWD_CATEGORY_NAME, $data + [AppConfig::CT_PERSON_ID_PWD_FIELD => (string) $personId]);
             $this->logger->info("Created new password entry $newId for person $personId");
         } else {
             throw new \RuntimeException("Multiple password entries found for person $personId");
@@ -70,12 +68,12 @@ class ChurchToolsStore extends ChurchToolsBaseService
 
         $existingValueEntries = $extension->getCategoryData(AppConfig::CT_PWD_CATEGORY_NAME);
         $existing = [];
-        foreach($existingValueEntries as $existingEntry) {
+        foreach ($existingValueEntries as $existingEntry) {
             $encodedValues = json_decode($existingEntry['value'], true);
             if (($encodedValues[AppConfig::CT_PERSON_ID_PWD_FIELD] ?? null) === $personId) {
                 $existing[] = [
-                    "id" => $existingEntry["id"],
-                    "value" => $encodedValues,
+                    'id' => $existingEntry['id'],
+                    'value' => $encodedValues,
                 ];
             }
         }

@@ -8,28 +8,31 @@ use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
 use CtPassStore\Tests\Helpers\Helpers;
 
-
-class EntriesGetTest extends AbstractTestPrototype {
-
+class EntriesGetTest extends AbstractTestPrototype
+{
     public function getSettingsPath(): string
     {
         return __DIR__ . '/../settings/false_false_12.json';
     }
 
-    public function getEndpoint(): string {
-        return "entries";
+    public function getEndpoint(): string
+    {
+        return 'entries';
     }
 
-    public function getPublicKeyPath(): string {
+    public function getPublicKeyPath(): string
+    {
         return __DIR__ . '/../keys/publicKey1.pem';
     }
 
-    public function getPrivateKeyPath(): string {
+    public function getPrivateKeyPath(): string
+    {
         return __DIR__ . '/../keys/privateKey1.pem';
     }
 
-    protected function generateEntries(array $allPwdEntries): void {
-        foreach($allPwdEntries as $entry) {
+    protected function generateEntries(array $allPwdEntries): void
+    {
+        foreach ($allPwdEntries as $entry) {
             // For simplicity, we generate a deterministic password per target user
             $password = $this->getPwdForUser($entry);
 
@@ -40,8 +43,9 @@ class EntriesGetTest extends AbstractTestPrototype {
         }
     }
 
-    protected function getPwdForUser(int $targetId): string {
-        return "pwd-for-user-" . $targetId;
+    protected function getPwdForUser(int $targetId): string
+    {
+        return 'pwd-for-user-' . $targetId;
     }
 
     /**
@@ -60,7 +64,7 @@ class EntriesGetTest extends AbstractTestPrototype {
         // 3. Perform GET request as acting user
         $client = $this->getClient();
         $response = $client->get($this->getEndpoint() . '/' . $targetId, [
-            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token]
+            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token],
         ]);
 
         if ($hasAccess) {
@@ -73,7 +77,10 @@ class EntriesGetTest extends AbstractTestPrototype {
             $this->assertSame($this->getPwdForUser($targetId), $body[AppConfig::REQUEST_SECONDARY_PWD_FIELD], "Password mismatch for user $userId accessing $targetId");
         } else {
             // 4b. Not allowed → expect 401/403
-            $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"
+            $this->assertSame(
+                403,
+                $response->getStatusCode(),
+                "Expected 403 for user $userId accessing $targetId"
             );
         }
 
@@ -97,7 +104,7 @@ class EntriesGetTest extends AbstractTestPrototype {
         // 3. Perform GET request as acting user
         $client = $this->getClient();
         $response = $client->get($this->getEndpoint() . '/' . $targetId, [
-            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token]
+            'headers' => ['Authorization' => self::AUTH_HEADER_PREFIX . $token],
         ]);
 
         if ($hasAccess) {
@@ -110,7 +117,10 @@ class EntriesGetTest extends AbstractTestPrototype {
             $this->assertArrayHasKey('message', $body);
         } else {
             // 4b. Not allowed → expect 401/403
-            $this->assertSame(403, $response->getStatusCode(), "Expected 403 for user $userId accessing $targetId"
+            $this->assertSame(
+                403,
+                $response->getStatusCode(),
+                "Expected 403 for user $userId accessing $targetId"
             );
         }
 
@@ -137,7 +147,7 @@ class EntriesGetTest extends AbstractTestPrototype {
 
             // 1. Empty array
             $cases[$label . ' (empty otherPwdEntryIds)'] = $baseCase + [
-                'otherPwdEntryIds' => []
+                'otherPwdEntryIds' => [],
             ];
 
             // 2. One element (pick first id that is not targetId)
@@ -150,14 +160,14 @@ class EntriesGetTest extends AbstractTestPrototype {
             }
             if ($oneId !== null) {
                 $cases[$label . " (one otherPwdEntryId $oneId)"] = $baseCase + [
-                    'otherPwdEntryIds' => [$oneId]
+                    'otherPwdEntryIds' => [$oneId],
                 ];
             }
 
             // 3. All ids (except targetId)
             $allExceptTarget = array_values(array_filter($allIds, fn($id) => $id !== $targetId));
             $cases[$label . ' (all otherPwdEntryIds)'] = $baseCase + [
-                'otherPwdEntryIds' => $allExceptTarget
+                'otherPwdEntryIds' => $allExceptTarget,
             ];
         };
 
@@ -204,8 +214,4 @@ class EntriesGetTest extends AbstractTestPrototype {
         return $cases;
     }
 
-
-
 }
-
-    

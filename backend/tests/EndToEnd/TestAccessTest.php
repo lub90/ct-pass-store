@@ -7,22 +7,25 @@ use CtPassStore\Tests\EndToEnd\Helpers\AccessTestPrototype;
 use CtPassStore\Tests\EndToEnd\Helpers\ChurchToolsSandboxManager;
 use CtPassStore\Tests\EndToEnd\Helpers\PersistenceChecker;
 
-
-class TestAccessTest extends AccessTestPrototype {
-
-    public function getEndpoint(): string {
+class TestAccessTest extends AccessTestPrototype
+{
+    public function getEndpoint(): string
+    {
         return '/test';
     }
 
-    public function getPublicKeyPath(): string {
+    public function getPublicKeyPath(): string
+    {
         return __DIR__ . '/../keys/publicKey1.pem';
     }
 
-    public function getPrivateKeyPath(): string {
+    public function getPrivateKeyPath(): string
+    {
         return __DIR__ . '/../keys/privateKey1.pem';
     }
 
-    public function getMethods(): array {
+    public function getMethods(): array
+    {
         return ['get'];
     }
 
@@ -45,8 +48,8 @@ class TestAccessTest extends AccessTestPrototype {
         // Start request
         $client = $this->getClient();
 
-        $response = $client->get( $this->getEndpoint(), [
-            'headers' => ['Authorization' => $authHeader]
+        $response = $client->get($this->getEndpoint(), [
+            'headers' => ['Authorization' => $authHeader],
         ]);
 
         // Status code must be 200 or 207
@@ -57,7 +60,7 @@ class TestAccessTest extends AccessTestPrototype {
         );
 
         // Body must contain summary and tests
-        $body = json_decode((string)$response->getBody(), true);
+        $body = json_decode((string) $response->getBody(), true);
         $this->assertIsArray($body);
 
         $this->assertArrayHasKey('summary', $body);
@@ -99,5 +102,3 @@ class TestAccessTest extends AccessTestPrototype {
     }
 
 }
-
-    

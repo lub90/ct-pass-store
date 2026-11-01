@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\EndToEnd\Helpers;
 
-use CtPassStore\Config\AppConfig;
-use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Tests\Helpers\Helpers;
 use PHPUnit\Framework\Assert;
 

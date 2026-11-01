@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use Psr\Log\LoggerInterface;
 use phpseclib3\Crypt\RSA;
+use Psr\Log\LoggerInterface;
 
 class EncryptionService extends BaseService
 {
@@ -34,7 +34,7 @@ class EncryptionService extends BaseService
             return base64_encode($ciphertext);
 
         } catch (\Throwable $e) {
-            $this->logger->error("Encryption failed: " . $e->getMessage());
+            $this->logger->error('Encryption failed: ' . $e->getMessage());
             throw new \RuntimeException('Encryption failed', 0, $e);
         }
     }
