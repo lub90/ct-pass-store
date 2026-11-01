@@ -2,6 +2,7 @@
   "name": "lub90/ct-pass-store",
   "description": "Secure secondary password store for ChurchTools authentication and IP filtering.",
   "type": "project",
+  "license": "MIT",
   "repositories": [
     {
       "type": "vcs",
@@ -9,7 +10,7 @@
     }
   ],
   "require": {
-    "php": "^8.1",
+    "php": "^8.3",
     "slim/slim": "^4.12",
     "slim/psr7": "^1.5",
     "monolog/monolog": "^2.9",
@@ -19,7 +20,9 @@
     "phpseclib/phpseclib": "^3.0"
   },
   "require-dev": {
-    "phpunit/phpunit": "^10.5"
+    "phpunit/phpunit": "^12.0",
+    "phpstan/phpstan": "^2.0",
+    "friendsofphp/php-cs-fixer": "^3.0"
   },
   "autoload": {
     "psr-4": {
@@ -32,8 +35,30 @@
     }
   },
   "scripts": {
-    "test": "phpunit"
+    "test": "phpunit -c phpunit.xml.dist --testsuite Unit",
+    "test:e2e": "phpunit -c phpunit.xml --testsuite EndToEnd",
+    "stan": "phpstan analyse --memory-limit=1G",
+    "cs": "php-cs-fixer check --diff",
+    "cs:fix": "php-cs-fixer fix",
+    "check": [
+      "@cs",
+      "@stan",
+      "@test"
+    ]
   },
   "minimum-stability": "stable",
-  "prefer-stable": true
+  "prefer-stable": true,
+  "config": {
+    "platform": {
+      "php": "8.3.0"
+    }
+  },
+  "scripts-descriptions": {
+    "test": "Run the unit tests (no network access needed)",
+    "test:e2e": "Run the end-to-end tests against a ChurchTools instance (needs a local phpunit.xml, see docs/testing.md)",
+    "stan": "Run PHPStan",
+    "cs": "Check the code style",
+    "cs:fix": "Fix the code style",
+    "check": "Run code style, PHPStan and unit tests, like the CI"
+  }
 }

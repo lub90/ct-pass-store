@@ -14,8 +14,12 @@
 
 # PHPUnit
 /phpunit.xml
-/phpunit.xml.dist
 /.phpunit.result.cache
+/.phpunit.cache/
+
+# PHP-CS-Fixer
+/.php-cs-fixer.cache
+/.php-cs-fixer.php
 /test-results/
 
 # IDE and editor files
@@ -35,3 +39,6 @@ Desktop.ini
 
 # Coverage reports
 /coverage/
+
+# PHPStan
+/.phpstan.cache/
