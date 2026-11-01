@@ -115,7 +115,9 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
             throw new \InvalidArgumentException('Invalid module key.');
         }
 
-        return $this->expectObject($this->data($this->send('GET', 'custommodules/' . $key, $this->serviceUser, true)), 'GET custommodules/{key}');
+        // ChurchTools answers 400 (validation.integer) instead of 404 for a key that doesn't exist: it then tries to
+        // read the key as a numeric module ID. Measured on the test instance (contract test).
+        return $this->expectObject($this->data($this->send('GET', 'custommodules/' . $key, $this->serviceUser, true, notFoundStatuses: [400, 404])), 'GET custommodules/{key}');
     }
 
     public function getCategories(int $moduleId): array
@@ -176,9 +178,10 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
      * Sends an authenticated request and throws for every non-2xx answer.
      *
      * @param array<string, mixed>|null $json
+     * @param list<int> $notFoundStatuses statuses that mean "not found" for this call
      * @return array{response: ResponseInterface, what: string}
      */
-    private function send(string $method, string $path, Credential $credential, bool $isServiceUser, ?array $json = null): array
+    private function send(string $method, string $path, Credential $credential, bool $isServiceUser, ?array $json = null, array $notFoundStatuses = [404]): array
     {
         $options = [
             RequestOptions::HEADERS => [
@@ -193,6 +196,9 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
 
         $what = $method . ' ' . $path;
         $response = $this->request($method, $path, $options);
+        if (in_array($response->getStatusCode(), $notFoundStatuses, true)) {
+            throw new NotFoundException(sprintf('%s: ChurchTools answered %d.', $what, $response->getStatusCode()));
+        }
         $this->throwForStatus($response, $what, $isServiceUser);
 
         return ['response' => $response, 'what' => $what];

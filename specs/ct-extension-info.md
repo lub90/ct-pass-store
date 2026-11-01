@@ -201,8 +201,10 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
 
 - **Finding the module:** Use `GET /custommodules/{extensionKey}` to get a module by its key; this works in practice.
   Cache the module ID and category IDs.
-  - Some calls have been seen failing with `400 validation.integer` because the key was taken for a numeric ID. If
-    that happens, check the exact URL your client actually sends (see the slash pitfall below).
+  - For a key that **doesn't exist** (or a module the user can't see), ChurchTools answers `400 validation.integer`,
+    not `404`: it then tries to read the key as a numeric module ID. Treat `400` from this endpoint as "module not
+    found". (Measured with a contract test on a test instance.) If an existing key gives `400`, check the exact URL
+    your client sends (see the slash pitfall below).
   - Another way is to list `GET /custommodules` and filter by `shorty` on the client. That's more cumbersome, and
     possibly less secure, since it fetches every module the user can see rather than only your own.
 - **Slash pitfall when joining URLs (e.g. Guzzle / the ChurchTools PHP client):** Resolving a relative path against a

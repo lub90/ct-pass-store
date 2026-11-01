@@ -128,7 +128,7 @@ normal case names it ("→ PV-05").
 - [ ] **ST-14** (! · U) Writing and deleting never touch other persons' entries (the fake records every call), also
   when they have duplicates or broken values — 5.3.4–5
 - [ ] **ST-15** (E · U) A stored value longer than 10,000 characters is refused before writing — 5.3.8
-- [ ] **ST-16** (N · C) Create, read, update, delete against the real KV store; `meta.count` is present and matches —
+- [x] **ST-16** (N · C) Create, read, update, delete against the real KV store; `meta.count` is present and matches —
   5.3
 - [ ] **ST-18** (! · U) Stale cached IDs: ChurchTools answers `404` for a cached module or category ID → the IDs are
   resolved **exactly once** more; if that works, the request succeeds; if not, `500 misconfigured`. Never
@@ -193,7 +193,7 @@ normal case names it ("→ PV-05").
   5.6.2
 - [ ] **CC-08** (E · U) The timeout from the configuration is applied (connect and total) — 5.6.5
 - [ ] **CC-09** (N · U) No automatic retry, including after `429` — 5.6.7
-- [ ] **CC-10** (N · C) `GET /custommodules/{key}` returns the module; categories and values have the assumed shape —
+- [x] **CC-10** (N · C) `GET /custommodules/{key}` returns the module; categories and values have the assumed shape —
   5.6
 - [ ] **CC-11** (! · C) An anonymous call with `X-OnlyAuthenticated: 1` gets `401`, not empty data — 5.6.2
 - [ ] **CC-15** (! · U) TLS verification is never disabled and redirects aren't followed: a `302` from ChurchTools isn't
@@ -332,7 +332,7 @@ normal case names it ("→ PV-05").
   of **another** user is rejected — 4.6.2, 5.5.3
 - [ ] **PP-17** (! · A) ChurchTools answers `200` but with a person ID different from the token's `sub` (e.g. a
   reassigned username) → counts as a wrong password, logged as `warning` — 5.5.3
-- [ ] **PP-10** (N · C) Contract: correct and wrong passwords give the status codes the backend expects from
+- [x] **PP-10** (N · C) Contract: correct and wrong passwords give the status codes the backend expects from
   `POST /api/login` — 5.5.3
 - [ ] **PP-11** (N · A) Two-factor users (Q13): ChurchTools answers `200` with `status` `totp` or `twoFactorSetup` and the
   caller's person ID → the primary password counts as correct; a wrong password (`400`) still fails — 5.5.3
@@ -648,7 +648,7 @@ tester has; it's documented in `backend/docs/testing.md`.
 
 ### Assumptions about ChurchTools (against the test instance)
 
-- [ ] **CT-01** (S · C) New KV values get higher value IDs than existing ones. "Highest = newest" (Q9) depends on it — 5.3.3
+- [x] **CT-01** (S · C) New KV values get higher value IDs than existing ones. "Highest = newest" (Q9) depends on it — 5.3.3
 - [ ] **CT-02** (N · C) A successful OAuth code exchange gives a token as measured: RS256, `aud` = client ID, `scopes`
   an array containing `api`, `sub` = person ID. Part of the manual OAuth checklist (plan 3.6), because it needs a
   browser — 4.4.3
@@ -658,9 +658,9 @@ tester has; it's documented in `backend/docs/testing.md`.
   (`churchcore` flags, `ctpassstore` category lists) — 4.8
 - [ ] **CT-05** (E · C) The KV value limit is real: 10,000 characters are accepted, 10,001 rejected with the status the
   client maps — 5.3.8
-- [ ] **CT-06** (! · C) **The fake stays honest, real side:** the client contract cases (CC-10, CC-11, CC-14, ST-16,
+- [x] **CT-06** (! · C) **The fake stays honest, real side:** the client contract cases (CC-10, CC-11, CC-14, ST-16,
   CT-01, CT-03–05, PP-10, AX-12) are one shared test class, run against the real client — 6.6
-- [ ] **CT-06a** (! · U) **The fake stays honest, fake side:** the same shared test class runs against the fake in the
+- [x] **CT-06a** (! · U) **The fake stays honest, fake side:** the same shared test class runs against the fake in the
   unit layer, so the fake can't drift from real ChurchTools — 6.6
 - [ ] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing
   and a non-zero exit code; it's never reported as passed (the test runs PHPUnit in a subprocess without the

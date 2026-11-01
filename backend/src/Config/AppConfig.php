@@ -29,6 +29,6 @@ final class AppConfig
     // TODO: Is the same as CT_PERSON_ID_PWD_FIELD
     public const REQUEST_PRIMARY_PWD_FIELD = 'primaryPwd';
 
-    // TODO: This is also a response field. Rename ist - is also the same as CT_ENCRUPTED_PWD_FIELD
+    // TODO: This is also a response field. Rename it; it's also the same as CT_ENCRYPTED_PWD_FIELD.
     public const REQUEST_SECONDARY_PWD_FIELD = 'secondaryPwd';
 }

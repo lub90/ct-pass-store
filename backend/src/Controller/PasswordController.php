@@ -76,7 +76,7 @@ class PasswordController extends BaseService
 
         if ($pwd !== null) {
             if (!$this->settings->allowCustomPasswords()) {
-                $this->logger->warning("User {$userId} tried to set a custom password, but it is not allowed to do so!");
+                $this->logger->warning("User {$userId} tried to set a custom password, but custom passwords are disabled.");
                 throw new ProblemException(ProblemType::CustomPasswordNotAllowed, 'Custom passwords are disabled; omit secondaryPwd to get a generated password.');
             }
         } else {
@@ -84,7 +84,7 @@ class PasswordController extends BaseService
         }
 
         if (!$this->validator->isValid($pwd, $this->settings->pwdLength())) {
-            $this->logger->info("User {$userId} tried to set a password with insufficient complexity!");
+            $this->logger->info("User {$userId} tried to set a password that doesn't meet the policy.");
             throw new ProblemException(ProblemType::PasswordInvalid, "The password must have at least {$this->settings->pwdLength()} characters, contain a letter, a digit and one of ! @ \$ % & * - _ + = ? . and no other characters.");
         }
 
@@ -128,7 +128,7 @@ class PasswordController extends BaseService
         if ($userId !== $targetId) {
             $hasSpecialAccess = in_array($userId, $this->settings->adminUsers(), true) || ($checkReadAccess && in_array($userId, $this->settings->readAccessUsers(), true));
             if (!$hasSpecialAccess) {
-                $this->logger->warning("User {$userId} tried to read/update password for user {$targetId} but is not allowed to so!");
+                $this->logger->warning("User {$userId} tried to access the entry of person {$targetId} without permission.");
                 throw new ProblemException(ProblemType::Forbidden, "You aren't allowed to access the entry of person {$targetId}.");
             }
         }
@@ -150,7 +150,7 @@ class PasswordController extends BaseService
         if ($requirePasswordCheck && $this->settings->requirePasswordForPasswordChange()) {
             $primaryPwd = (string) ($body[AppConfig::REQUEST_PRIMARY_PWD_FIELD] ?? '');
             if ($primaryPwd === '') {
-                $this->logger->info("User {$userId} tried to update a password without providing a primary password!");
+                $this->logger->info("User {$userId} tried to change an entry without the required primary password.");
                 throw new ProblemException(ProblemType::PrimaryPasswordRequired, 'This change needs your ChurchTools password in ' . AppConfig::REQUEST_PRIMARY_PWD_FIELD . '.');
             }
 

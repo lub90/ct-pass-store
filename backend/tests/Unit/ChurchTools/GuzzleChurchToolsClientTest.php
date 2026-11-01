@@ -102,6 +102,34 @@ final class GuzzleChurchToolsClientTest extends TestCase
         );
     }
 
+    /**
+     * @return iterable<string, array{int}>
+     */
+    public static function unknownModuleStatuses(): iterable
+    {
+        yield '404' => [404];
+        yield '400 validation.integer (real ChurchTools)' => [400];
+    }
+
+    #[DataProvider('unknownModuleStatuses')]
+    public function testUnknownModuleKeyIsNotFound(int $status): void
+    {
+        $client = $this->client();
+        $this->respond($status, ['message' => 'validation.integer']);
+
+        $this->expectException(NotFoundException::class);
+        $client->getModuleByKey('ctpassstore');
+    }
+
+    public function testA400OnOtherCallsIsNotNotFound(): void
+    {
+        $client = $this->client();
+        $this->respond(400, ['message' => 'bad']);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->getCategories(7);
+    }
+
     public function testModuleKeyIsValidatedBeforeItGoesIntoTheUrl(): void
     {
         $client = $this->client();

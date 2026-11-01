@@ -26,7 +26,7 @@ class BackendSandboxManager
             throw new \RuntimeException(sprintf('Port %d on host %s is already in use.', $this->port, $this->host));
         }
 
-        // Starte den Server im Hintergrund und speichere die PID
+        // Start the server in the background and remember its PID
         $command = sprintf('php -S %s:%d -t %s > /dev/null 2>&1 & echo $!', $this->host, $this->port, $this->webroot);
         $output = [];
         exec($command, $output);
