@@ -20,15 +20,13 @@ class ChurchToolsAuthVerifier extends BaseService
         parent::__construct($logger);
     }
 
+    /**
+     * @throws ChurchToolsException if ChurchTools can't be asked
+     */
     public function verifyUserPassword(string $username, #[\SensitiveParameter] string $password): bool
     {
-        try {
-            $result = $this->client->verifyLogin($username, $password);
-        } catch (ChurchToolsException $e) {
-            $this->logger->error("ChurchTools password check error for user {$username}: " . $e->getMessage());
-
-            return false;
-        }
+        // ChurchTools errors propagate: they are never a wrong password (spec 5.5.3).
+        $result = $this->client->verifyLogin($username, $password);
 
         if ($result === null) {
             $this->logger->info("ChurchTools password check failed for user {$username}");

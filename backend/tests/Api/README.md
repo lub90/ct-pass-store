@@ -1,6 +1,9 @@
 # API tests
 
-Tests of the complete Slim app in-process: real HTTP requests and responses, with ChurchTools replaced by a fake
-implementation of the client interface. No network access.
+Tests of the complete Slim app in-process: real HTTP requests and responses, with ChurchTools replaced by
+`tests/Support/FakeChurchToolsClient`. No network access. See `specs/backend-spec.md`, section 6.6.
 
-This layer is set up in phase 2 of `specs/backend-plan.md` (item 2.0). See `specs/backend-spec.md`, section 6.6.
+- `ApiTestCase` builds the app through `CtPassStore\Application::create()` with the fake, a test logger and test
+  settings, and offers `request()`, `assertProblem()`, `seedEntry()`, `storedEntries()` and `decrypt()`.
+- The fake records every call (`calls()`, `writeCount()`), so tests can assert that a request wrote nothing, and can
+  make single calls fail (`failNext()`).

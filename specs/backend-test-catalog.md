@@ -309,7 +309,7 @@ normal case names it ("→ PV-05").
 - [ ] **PP-03** (N · A) Wrong → `403 invalid-primary-password` — 4.6.2
 - [ ] **PP-04** (! · A) An admin changing someone else's entry is checked against **their own** password, not the
   target's — 4.6.2
-- [ ] **PP-05** (! · A) ChurchTools unreachable → `502`, **not** "wrong password" and **not** "allowed" — 5.5.3
+- [x] **PP-05** (! · A) ChurchTools unreachable → `502`, **not** "wrong password" and **not** "allowed" — 5.5.3
 - [ ] **PP-06** (! · A) 4 wrong attempts don't block; after the 5th wrong attempt within 15 minutes, the next attempt
   gets `429 too-many-attempts` with `Retry-After`, even with the correct password, and ChurchTools isn't called — 6.3
 - [ ] **PP-13** (E · A) The block lifts 15 minutes after the 5th failure; a correct password before the 5th failure
@@ -354,6 +354,8 @@ normal case names it ("→ PV-05").
 - [ ] **AZ-04** (! · A) Removing a person from `adminUsers` takes away admin rights once the settings cache has expired,
   even with a still-valid token — 4.3
 - [ ] **AZ-05** (N · A) Adding a person to `adminUsers` grants the rights without a new login — 4.3
+- [x] **AZ-06a** (N · A) Requests rejected before authentication (missing token, unknown route, wrong method) make no
+  ChurchTools call at all. (Regression: the public key used to be loaded on every request.) — 4.1, 6.1
 - [ ] **AZ-06** (N · A) Authenticated requests make **no** ChurchTools calls for authentication (counted on the fake) —
   4.3
 - [ ] **AZ-07** (! · A) A `403` causes no write at all (the fake records no write calls) — 4.1
@@ -380,7 +382,7 @@ normal case names it ("→ PV-05").
 - [ ] **IN-09** (N · A) The old paths without `/v1/` (`/entries/1`, `/auth/token`, `/test`) answer `404 not-found` — 4.1
 - [ ] **IN-06** (E · A) Body size limit: exactly 16 KB is accepted (if otherwise valid); 16 KB + 1 byte → `413
   payload-too-large` — 4.1
-- [ ] **IN-07** (N · A) Unknown route → `404 not-found`; wrong method on a known route → `405` with an `Allow` header —
+- [x] **IN-07** (N · A) Unknown route → `404 not-found`; wrong method on a known route → `405` with an `Allow` header —
   4.1
 - [ ] **IN-08** (! · A) No error response causes a write to ChurchTools — 4.1
 
@@ -449,9 +451,9 @@ normal case names it ("→ PV-05").
   `status` (equal to the HTTP status) and `detail` — 4.9
 - [ ] **ER-02** (N · A) Every problem type in the table of 4.9 is produced by at least one API test with the right
   status (this test fails when a type is added without a test) — 4.9
-- [ ] **ER-03** (N · U) Every `type` URI has a section in `backend/docs/problems.md`, and the `title` the code produces
+- [x] **ER-03** (N · U) Every `type` URI has a section in `backend/docs/problems.md`, and the `title` the code produces
   for each type is fixed and equals the title documented there (the test parses the file) — 4.9
-- [ ] **ER-04** (! · A) An unexpected exception → `500 internal-error` with a generic `detail`; class names, stack
+- [x] **ER-04** (! · A) An unexpected exception → `500 internal-error` with a generic `detail`; class names, stack
   traces, SQL or paths never reach the client — 4.9
 - [ ] **ER-05** (! · A) `misconfigured` names the setting or key, never its value — 4.9
 - [ ] **ER-06** (N · A) `upstream-rate-limited` and `too-many-attempts` carry a `Retry-After` header (at least 60 for
@@ -460,7 +462,7 @@ normal case names it ("→ PV-05").
   go to the log — 4.1
 - [ ] **ER-09** (N · A) The new problem types `payload-too-large` (413) and `unsupported-media-type` (415) are produced
   as specified — 4.9
-- [ ] **ER-07** (N · A) Counterpart of ER-01: successful responses (`200`, `204`) are plain JSON or empty, never
+- [x] **ER-07** (N · A) Counterpart of ER-01: successful responses (`200`, `204`) are plain JSON or empty, never
   `application/problem+json` — 4.1
 
 ## 10. HTTP behavior (spec 4.1, 4.2)
@@ -478,7 +480,7 @@ normal case names it ("→ PV-05").
 - [ ] **HT-08** (N · A) For allowed origins: `Access-Control-Allow-Headers` contains `Authorization` and `Content-Type`;
   `Access-Control-Allow-Credentials` is **not** set; `Access-Control-Allow-Origin` is never `*` — 4.2
 - [ ] **HT-09** (N · A) `Vary: Origin` is present on every response — 4.2
-- [ ] **HT-10** (! · A) Error responses (`400`, `401`, `403`, `404`, `500`) to an allowed origin carry the same CORS
+- [x] **HT-10** (! · A) Error responses (`400`, `401`, `403`, `404`, `500`) to an allowed origin carry the same CORS
   headers as successful ones, so the extension can read the problem details — 4.2
 - [ ] **HT-07** (! · A) Counterparts of HT-03: a preflight from a foreign origin gets no `Access-Control-Allow-*`
   headers, and a preflight never runs the endpoint's logic — 4.2
@@ -566,7 +568,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   or very long values can't escape the cache folder (keys are hashed before they're used as file names) — 6.1, 4.4a.4
 - [ ] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
   containing newlines or control characters can't forge additional log lines — 6.4
-- [ ] **IJ-04** (! · A) No reflected content: input echoed in a problem `detail` (e.g. the unknown path
+- [x] **IJ-04** (! · A) No reflected content: input echoed in a problem `detail` (e.g. the unknown path
   `/v1/entries/<script>`) is JSON-encoded. Even with `Accept: text/html` the answer is `application/problem+json`, never
   an HTML error page (Slim's HTML error renderer had an XSS vulnerability) — 4.9
 - [ ] **IJ-05** (! · A) Header injection: an `Origin` or other header containing CR/LF is never reflected into a

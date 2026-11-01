@@ -11,6 +11,7 @@ use CtPassStore\Controller\PasswordController;
 use CtPassStore\Controller\TestController;
 use CtPassStore\Middleware\AuthMiddleware;
 use CtPassStore\Middleware\CorsMiddleware;
+use CtPassStore\Middleware\ErrorMiddleware;
 use CtPassStore\Service\ChurchtoolsAuth;
 use CtPassStore\Service\ChurchToolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
@@ -61,8 +62,11 @@ final class Application
         $selfCheck = new TestController($settings, $logger, $config->credentialsPath);
         $app->get('/test', [$selfCheck, 'get']);
 
-        // Registration order is the reverse of the call order: CORS runs first, then authentication.
+        // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):
+        // CORS → error handling → routing (404/405) → authentication → endpoint.
         $app->add(new AuthMiddleware(new ChurchtoolsAuth($churchTools, $logger), $logger));
+        $app->addRoutingMiddleware();
+        $app->add(new ErrorMiddleware($logger));
         $app->add(new CorsMiddleware($config->corsOrigins));
 
         return $app;

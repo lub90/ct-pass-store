@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Http\Problem\ProblemType;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
@@ -21,7 +22,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('GET', '/entries/' . self::USER);
 
-        self::assertSame(401, $response->getStatusCode());
+        $this->assertProblem(ProblemType::MissingToken, $response);
         self::assertSame(0, $this->churchTools->countCalls(['whoami']));
     }
 
@@ -40,7 +41,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('PUT', '/entries/' . self::USER, headers: ['Authorization' => $header]);
 
-        self::assertSame(401, $response->getStatusCode());
+        $this->assertProblem(ProblemType::InvalidToken, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -48,7 +49,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('GET', '/entries/' . self::NO_ACCESS, self::NO_ACCESS);
 
-        self::assertSame(403, $response->getStatusCode());
+        $this->assertProblem(ProblemType::NoServiceAccess, $response);
     }
 
     // ---------------------------------------------------------------- GET
@@ -69,7 +70,7 @@ final class EntriesApiTest extends ApiTestCase
 
         $response = $this->request('GET', '/entries/' . self::USER, self::USER);
 
-        self::assertSame(404, $response->getStatusCode());
+        $this->assertProblem(ProblemType::EntryNotFound, $response);
     }
 
     public function testUserCantReadAnotherPersonsEntry(): void
@@ -78,7 +79,7 @@ final class EntriesApiTest extends ApiTestCase
 
         $response = $this->request('GET', '/entries/' . self::OTHER, self::USER);
 
-        self::assertSame(403, $response->getStatusCode());
+        $this->assertProblem(ProblemType::Forbidden, $response);
     }
 
     /**
@@ -149,7 +150,7 @@ final class EntriesApiTest extends ApiTestCase
 
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'Custom-pass12!']);
 
-        self::assertSame(400, $response->getStatusCode());
+        $this->assertProblem(ProblemType::CustomPasswordNotAllowed, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -157,7 +158,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'tooshort']);
 
-        self::assertSame(400, $response->getStatusCode());
+        $this->assertProblem(ProblemType::PasswordInvalid, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -165,7 +166,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('PUT', '/entries/' . self::OTHER, self::USER);
 
-        self::assertSame(403, $response->getStatusCode());
+        $this->assertProblem(ProblemType::Forbidden, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -173,7 +174,7 @@ final class EntriesApiTest extends ApiTestCase
     {
         $response = $this->request('PUT', '/entries/' . self::OTHER, self::READER);
 
-        self::assertSame(403, $response->getStatusCode());
+        $this->assertProblem(ProblemType::Forbidden, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -193,18 +194,17 @@ final class EntriesApiTest extends ApiTestCase
 
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER, []);
 
-        self::assertSame(400, $response->getStatusCode());
+        $this->assertProblem(ProblemType::PrimaryPasswordRequired, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
-    public function testWrongPrimaryPasswordIs401Today(): void
+    public function testWrongPrimaryPasswordIs403(): void
     {
         $this->setSettings([AppConfig::CT_REQUIRE_PWD_FOR_PWD_CHANGE_FIELD_NAME => true]);
 
         $response = $this->request('PUT', '/entries/' . self::USER, self::USER, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'wrong']);
 
-        // Spec Q6 changes this to 403 (plan item 2.1 / 3.5).
-        self::assertSame(401, $response->getStatusCode());
+        $this->assertProblem(ProblemType::InvalidPrimaryPassword, $response);
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
@@ -225,7 +225,7 @@ final class EntriesApiTest extends ApiTestCase
         $withTargetsPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::OTHER)]);
         $withOwnPassword = $this->request('PUT', '/entries/' . self::OTHER, self::ADMIN, [AppConfig::REQUEST_PRIMARY_PWD_FIELD => $this->primaryPasswordOf(self::ADMIN)]);
 
-        self::assertSame(401, $withTargetsPassword->getStatusCode());
+        $this->assertProblem(ProblemType::InvalidPrimaryPassword, $withTargetsPassword);
         self::assertSame(200, $withOwnPassword->getStatusCode());
     }
 

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use CtPassStore\ChurchTools\ChurchToolsClient;
-use RuntimeException;
+use CtPassStore\Exception\ConfigurationException;
 
 /**
  * Access to the extension's categories and values in the ChurchTools KV store, as the service user.
@@ -32,7 +32,7 @@ class ExtensionDataService
 
         $id = $this->client->getModuleByKey($this->extensionKey)['id'] ?? null;
         if (!is_int($id)) {
-            throw new RuntimeException('Module ID not found');
+            throw new ConfigurationException("ChurchTools returned no valid ID for the extension module '{$this->extensionKey}'.");
         }
 
         return $this->moduleId = $id;
@@ -56,7 +56,7 @@ class ExtensionDataService
                 return $category;
             }
         }
-        throw new RuntimeException("Category \"$name\" not found.");
+        throw new ConfigurationException("The extension's data category '$name' doesn't exist. Complete the extension's setup.");
     }
 
     /**
@@ -102,7 +102,7 @@ class ExtensionDataService
     {
         $id = $this->getCategoryByName($name)['id'] ?? null;
         if (!is_int($id)) {
-            throw new RuntimeException("Category \"$name\" has no valid ID.");
+            throw new ConfigurationException("The extension's data category '$name' has no valid ID.");
         }
 
         return $id;

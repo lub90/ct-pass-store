@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Middleware;
 
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Http\Problem\ProblemException;
+use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Service\ChurchtoolsAuth;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -14,84 +17,52 @@ use Psr\Http\Server\RequestHandlerInterface as Handler;
 use Psr\Log\LoggerInterface;
 
 /**
- * Middleware that validates ChurchTools token and attaches user info to the request.
+ * Validates the ChurchTools login token and attaches the authenticated person to the request.
+ *
+ * Only "ChurchTools doesn't accept this token" gives 401. If ChurchTools can't be asked, the ChurchTools exception
+ * propagates and the error middleware answers 502/503 (spec 4.3). Bearer tokens replace this in plan item 3.4.
  */
 class AuthMiddleware implements MiddlewareInterface
 {
     private const AUTH_HEADER_PREFIX = 'Login ';
 
-    private ChurchtoolsAuth $auth;
-    private LoggerInterface $logger;
-
-    public function __construct(ChurchtoolsAuth $auth, LoggerInterface $logger)
-    {
-        $this->auth = $auth;
-        $this->logger = $logger;
-    }
+    public function __construct(
+        private readonly ChurchtoolsAuth $auth,
+        private readonly LoggerInterface $logger,
+    ) {}
 
     public function process(Request $request, Handler $handler): Response
     {
-        $requestHeader = $request->getHeaderLine('Authorization')  ?? '';
+        $header = $request->getHeaderLine('Authorization');
+        $ip = (string) ($request->getServerParams()['REMOTE_ADDR'] ?? '');
 
-        if (empty($requestHeader)) {
-            $this->logger->warning('Unauthorized access attempt: Missing Authorization header!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
-            return $this->unauthorized($request, 'Missing Authorization header!');
+        if ($header === '') {
+            $this->logger->warning('Unauthorized access attempt: missing Authorization header.', ['ip' => $ip]);
+            throw new ProblemException(ProblemType::MissingToken, 'The request needs an Authorization header.');
         }
 
-        if (!str_starts_with($requestHeader, AuthMiddleware::AUTH_HEADER_PREFIX)) {
-            $this->logger->warning('Unauthorized access attempt: Invalid or missing Login prefix in Authorization header!', [
-                'ip' => $request->getServerParams()['REMOTE_ADDR'],
-            ]);
-            return $this->unauthorized($request, 'Request header must startwith ' . AuthMiddleware::AUTH_HEADER_PREFIX);
+        if (!str_starts_with($header, self::AUTH_HEADER_PREFIX)) {
+            $this->logger->warning('Unauthorized access attempt: wrong Authorization scheme.', ['ip' => $ip]);
+            throw new ProblemException(ProblemType::InvalidToken, 'The Authorization header must use the scheme ' . trim(self::AUTH_HEADER_PREFIX) . '.');
         }
 
-        $token = str_replace(AuthMiddleware::AUTH_HEADER_PREFIX, '', $requestHeader);
+        $token = substr($header, strlen(self::AUTH_HEADER_PREFIX));
 
-        // Check if we are able to login via the provided token
-        $user = null;
         try {
             $user = $this->auth->validateToken($token);
-        } catch (ChurchToolsException|\InvalidArgumentException) {
-            // Do nothing, because user becomes null and we fire the unathorized access part below
+        } catch (NotAuthenticatedException|NotPermittedException|\InvalidArgumentException) {
+            $user = null;
         }
         if ($user === null || $user->id < 1) {
-            $this->logger->warning('Unauthorized access attempt: Invalid ChurchTools token!', ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
-            return $this->unauthorized($request, 'Invalid ChurchTools token!');
+            $this->logger->warning('Unauthorized access attempt: invalid ChurchTools token.', ['ip' => $ip]);
+            throw new ProblemException(ProblemType::InvalidToken, 'ChurchTools doesn\'t accept the token.');
         }
 
-        // Check if the user has the right to access the service
         if (!$this->auth->hasAccessRights($token)) {
-            $this->logger->warning("Forbidden access attempt: User {$user->id} is not allowed to access the service!", ['ip' => $request->getServerParams()['REMOTE_ADDR']]);
-            return $this->forbidden($request, 'User is not allowed to access the service!');
+            $this->logger->warning("Forbidden access attempt: user {$user->id} has no access to the service.", ['ip' => $ip]);
+            throw new ProblemException(ProblemType::NoServiceAccess, 'You don\'t have the right to use the CtPassStore extension.');
         }
 
-        // Attach user info to request attributes
-        $request = $request->withAttribute(AppConfig::USER_ATTRIBUTE, $user);
-
-        return $handler->handle($request);
-    }
-
-    /**
-     * Returns a 403 response with a JSON error message.
-     */
-    private function unauthorized(Request $request, string $reason): Response
-    {
-        return $this->accessDenied($request, 401, $reason);
-    }
-
-    private function forbidden(Request $request, string $reason): Response
-    {
-        return $this->accessDenied($request, 403, $reason);
-    }
-
-    private function accessDenied(Request $request, int $code, string $reason): Response
-    {
-        $responseFactory = new \Slim\Psr7\Factory\ResponseFactory();
-        $response = $responseFactory->createResponse($code);
-        $response->getBody()->write(json_encode([
-            'error' => 'Unauthorized',
-            'message' => $reason,
-        ]));
-        return $response->withHeader('Content-Type', 'application/json');
+        return $handler->handle($request->withAttribute(AppConfig::USER_ATTRIBUTE, $user));
     }
 }

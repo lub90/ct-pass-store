@@ -37,6 +37,6 @@ final class SelfCheckApiTest extends ApiTestCase
 
     public function testRequiresAuthentication(): void
     {
-        self::assertSame(401, $this->request('GET', '/test')->getStatusCode());
+        $this->assertProblem(\CtPassStore\Http\Problem\ProblemType::MissingToken, $this->request('GET', '/test'));
     }
 }

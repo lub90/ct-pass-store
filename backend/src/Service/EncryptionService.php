@@ -9,28 +9,26 @@ use Psr\Log\LoggerInterface;
 
 class EncryptionService extends BaseService
 {
-    private string $publicKey;
-
-    public function __construct(ServiceSettings $settings, LoggerInterface $logger)
+    public function __construct(private readonly ServiceSettings $settings, LoggerInterface $logger)
     {
         parent::__construct($logger);
-
-        $this->publicKey = $settings->publicKey();
     }
 
-    public function encrypt(string $plaintext): string
+    public function encrypt(#[\SensitiveParameter] string $plaintext): string
     {
+        // The key is loaded only when it's needed: loading it in the constructor cost ChurchTools calls on every
+        // request, even on preflights and rejected ones.
+        $publicKey = $this->settings->publicKey();
+
         try {
-            // Load public key
-            $rsa = RSA::loadPublicKey($this->publicKey)
+            $rsa = RSA::loadPublicKey($publicKey)
                 ->withPadding(RSA::ENCRYPTION_OAEP)   // OAEP Padding
                 ->withHash('sha256')                  // OAEP Hash function
                 ->withMGFHash('sha256');              // MGF1 Hash function
 
-            // Verschlüsseln
             $ciphertext = $rsa->encrypt($plaintext);
 
-            // Base64 für Transport/Storage
+            // Base64 for transport and storage
             return base64_encode($ciphertext);
 
         } catch (\Throwable $e) {

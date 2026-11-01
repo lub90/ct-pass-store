@@ -6,7 +6,6 @@ namespace CtPassStore\Tests\Support;
 
 use CtPassStore\ChurchTools\ChurchToolsClient;
 use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\ChurchTools\Exception\NotFoundException;
 use CtPassStore\ChurchTools\LoginResult;
@@ -42,7 +41,7 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var list<array{method: string, args: list<mixed>}> */
     private array $calls = [];
 
-    /** @var array<string, list<ChurchToolsException>> */
+    /** @var array<string, list<\Throwable>> */
     private array $failures = [];
 
     /** @var array<string, mixed> */
@@ -123,7 +122,7 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /**
      * Lets the next call of `$method` throw `$exception`.
      */
-    public function failNext(string $method, ChurchToolsException $exception): void
+    public function failNext(string $method, \Throwable $exception): void
     {
         $this->failures[$method][] = $exception;
     }

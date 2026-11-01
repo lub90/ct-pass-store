@@ -8,6 +8,7 @@ use CtPassStore\Application;
 use CtPassStore\ChurchTools\Credential;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
+use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;
@@ -185,6 +186,25 @@ abstract class ApiTestCase extends TestCase
         self::assertIsArray($decoded, "Response body isn't a JSON object: $body");
 
         return $decoded;
+    }
+
+    /**
+     * Asserts a complete problem details response of the given type (spec 4.9).
+     *
+     * @return array<string, mixed> the body
+     */
+    protected function assertProblem(ProblemType $type, ResponseInterface $response): array
+    {
+        self::assertSame($type->status(), $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('application/problem+json', $response->getHeaderLine('Content-Type'));
+        $body = $this->json($response);
+        self::assertSame($type->uri(), $body['type'] ?? null);
+        self::assertSame($type->title(), $body['title'] ?? null);
+        self::assertSame($type->status(), $body['status'] ?? null);
+        self::assertIsString($body['detail'] ?? null);
+        self::assertNotSame('', $body['detail']);
+
+        return $body;
     }
 
     protected function decrypt(string $ciphertext): string

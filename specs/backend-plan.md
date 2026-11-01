@@ -57,7 +57,7 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
     asserts status, problem type and body.
   - The first API tests cover today's behavior of `/entries/{id}` and `/test`. Every item from 2.1 onward adds its API
     tests here.
-- [ ] **2.1 Problem Details** (D2, spec 4.9)
+- [x] **2.1 Problem Details** (D2, spec 4.9)
   - Exception hierarchy and error middleware, `404 not-found`, `405 method-not-allowed`.
   - `backend/docs/problems.md` with one section per type.
 - [ ] **2.2 Configuration and settings validation** (spec 3.1, 3.2)
@@ -71,6 +71,9 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
   - Maximum length 128, the `violations` member, a secure shuffle.
 - [ ] **2.5 Upstream errors** (spec 6.2)
   - `502 upstream-unavailable` / `upstream-invalid`, and `503 upstream-rate-limited` with `Retry-After`.
+  - *Done in 2.1:* the error middleware maps all ChurchTools exceptions; ChurchTools failures during authentication
+    and the primary password check are no longer a `401`/wrong password. *Left:* the remaining catalog cases (ER-06,
+    CC-16 at the API level) and the `Retry-After` minimum for `too-many-attempts`.
 - [ ] **2.6 Banned functions via PHPStan** (spec 6.6)
   - Add a disallowed-calls rule set (e.g. `spaze/phpstan-disallowed-calls`): `eval`, `unserialize`, `exec` and other
     shell calls, `str_shuffle`, `rand`, `mt_rand`, and loose comparisons of secrets. This replaces source scans in

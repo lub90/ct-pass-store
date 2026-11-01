@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use CtPassStore\Config\AppConfig;
-use RuntimeException;
+use CtPassStore\Exception\ConfigurationException;
 
 class ServiceSettings extends ChurchToolsBaseService
 {
@@ -23,12 +23,12 @@ class ServiceSettings extends ChurchToolsBaseService
         $entries = $extension->getCategoryData(AppConfig::CT_SETTINGS_CATEGORY_NAME, true);
 
         if (!is_array($entries) || !isset($entries['value'])) {
-            throw new RuntimeException('Settings entry is missing or malformed.');
+            throw new ConfigurationException('The extension settings are missing or malformed. Save the settings in the extension.');
         }
 
         $decoded = json_decode($entries['value'], true);
         if (!is_array($decoded)) {
-            throw new RuntimeException('Failed to decode settings JSON.');
+            throw new ConfigurationException('The extension settings aren\'t valid JSON. Save the settings in the extension.');
         }
 
         $this->settings = $decoded;
@@ -45,12 +45,12 @@ class ServiceSettings extends ChurchToolsBaseService
         $entries = $extension->getCategoryData(AppConfig::CT_ENCRYPTION_SETTINGS_CATEGORY_NAME, true);
 
         if (!is_array($entries) || !isset($entries['value'])) {
-            throw new RuntimeException('Settings entry is missing or malformed.');
+            throw new ConfigurationException('The encryption settings are missing or malformed. Run the encryption step of the extension setup.');
         }
 
         $decoded = json_decode($entries['value'], true);
         if (!is_array($decoded)) {
-            throw new RuntimeException('Failed to decode encryption settings JSON.');
+            throw new ConfigurationException('The encryption settings aren\'t valid JSON. Run the encryption step of the extension setup.');
         }
 
         $this->encryptionSettings = $decoded;

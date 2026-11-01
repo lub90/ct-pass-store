@@ -19,22 +19,10 @@ parameters:
 			path: src/Controller/PasswordController.php
 
 		-
-			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:json\(\) is unused\.$#'
-			identifier: method.unused
-			count: 1
-			path: src/Controller/PasswordController.php
-
-		-
 			message: '#^Method CtPassStore\\Controller\\PasswordController\:\:put\(\) has parameter \$args with no value type specified in iterable type array\.$#'
 			identifier: missingType.iterableValue
 			count: 1
 			path: src/Controller/PasswordController.php
-
-		-
-			message: '#^Expression on left side of \?\? is not nullable\.$#'
-			identifier: nullCoalesce.expr
-			count: 1
-			path: src/Middleware/AuthMiddleware.php
 
 		-
 			message: '#^Method CtPassStore\\Middleware\\CorsMiddleware\:\:__construct\(\) has parameter \$allowedOrigins with no value type specified in iterable type array\.$#'
