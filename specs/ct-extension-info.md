@@ -99,6 +99,11 @@ may change between versions, so verify anything critical against your own instan
 - **Never give anything that ends up in the bundle the `VITE_` prefix unless it may be public.** Vite inlines
   `import.meta.env.VITE_*` at build time. Keep instance URLs and tokens out of `dist/`, and consider a build check that
   fails if `*.church.tools` appears in the output.
+  - A common trap: `window.settings?.base_url ?? import.meta.env.VITE_BASE_URL` puts the **development instance URL
+    into the production bundle**, because the fallback is inlined even though it's never used there. Guard dev-only
+    values explicitly with `import.meta.env.DEV`, or keep them out of the frontend entirely with a dev proxy.
+  - Dev credentials (`VITE_USERNAME`/`VITE_PASSWORD`) only stay out of the bundle as long as the code that reads them
+    is removed as dead code. Don't rely on that; keep credentials in non-`VITE_` variables used by the dev proxy.
 - **Login tokens:**
   - A login token is effectively a **permanent password**. It stays valid until the user's password is changed, and
     there's **no admin endpoint to revoke** a token. Changing the password in the UI invalidates it immediately.
@@ -111,7 +116,65 @@ may change between versions, so verify anything critical against your own instan
 - **A browser holds only one ChurchTools session.** Different accounts need separate browsers or profiles.
 - **A failed or missing login can look like "no data".** Anonymous requests to some endpoints return empty results
   instead of `401`, so check `/whoami` explicitly.
+  - Sending the header **`X-OnlyAuthenticated: 1`** makes ChurchTools answer `401` instead of serving anonymous data.
+    The JS client sets it via `setNeedsAuthentication(true)` (automatically when it was given a login token), or per
+    request with the `needsAuthentication` option.
+- **Re-login with a token:** `GET /api/whoami?login_token=<token>&user_id=<id>&no_url_rewrite=true` creates a new
+  session (`with_session=true` forces one). The JS client does this automatically on a `401` when it was constructed
+  with a login token, and queues other requests until the login has finished.
+- **CSRF tokens:**
+  - The legacy AJAX API always needs a CSRF token, fetched from `GET /api/csrftoken` and sent as the `CSRF-Token`
+    header.
+  - Multipart uploads (`FormData`) to the REST API need one as well.
+  - For other REST write requests it's currently optional. The JS client sends it when `setLoadCSRFForAPI()` is
+    enabled (since client version 1.7.1). The instance configuration has a `csrf_enabled` flag. Be prepared for
+    ChurchTools to start requiring CSRF tokens for REST writes.
+  - Never send a CSRF token with `POST /login`.
 - Checking a user's password via `POST /api/login` creates a real session each time. Rate-limit that yourself.
+
+### OAuth: ChurchTools as authorization server
+
+ChurchTools can act as an OAuth 2 authorization server, so external apps and backends can log users in without ever
+seeing their password or login token. Observed behavior:
+
+- **Registering an application:**
+  - In the admin UI, or through the API: `GET/POST /api/oauthclients`, `PUT/DELETE /api/oauthclients/{identifier}`.
+    All of these need "administer settings".
+  - A client is either **confidential** (with a generated 64-character secret, returned **only once** in the creation
+    response) or **public** (no secret). This can't be changed later, and the secret can't be rotated; delete and
+    recreate the client instead.
+  - Each client has exactly **one** redirect URI. The `identifier` is the `client_id`.
+- **Users need a right per application:** `churchcore` → "Bei Drittsystem via ChurchTools-Benutzerkonto einloggen"
+  (`login to external system`, auth ID 18 on the measured instance), with the OAuth client as data permission. Without
+  it the user sees "Du bist nicht berechtigt dich bei … einzuloggen". Admins appear to have it for every client.
+- **Endpoints:**
+  - `GET /oauth/authorize`: authorization code flow, with PKCE (`S256`) supported.
+  - `POST /oauth/access_token`: grants `authorization_code` and `refresh_token`. Confidential clients send `client_id`
+    and `client_secret` in the form body.
+  - `/oauth/userinfo` exists but rejected bearer tokens in tests ("Not logged in").
+  - There's no OpenID Connect discovery (`/.well-known/openid-configuration` → `404`) and no JWKS endpoint.
+- **Scopes:** only **`api`** and **`DEFAULT`** were accepted. `openid`, `profile`, `email`, `groups` and others give
+  `invalid_scope`. Omitting the scope yields `DEFAULT`.
+- **Tokens:**
+  - The access token is an **RS256-signed JWT** with the claims `iss` (the **application's name**, not a URL), `aud`
+    (the client ID), `sub` (the **person ID** as a string), `scopes`, `jti`, `iat`, `nbf` and `exp`.
+  - It's valid for **1 hour**. A refresh token is issued; refreshing gives another hour.
+  - Since there's no published public key, the signature can't be verified locally. To trust a token, call the API
+    with it.
+- **Using the REST API with OAuth:** send `Authorization: Bearer <access token>`. This only works with the **`api`
+  scope**; otherwise the API answers `403` "The access token does not have the api scope". With `api`, `GET /api/whoami`
+  and `GET /api/permissions/global` work as the user.
+- **Consent screen:**
+  - On first use it lists the data passed on (profile picture, name, email, username, person ID, group memberships).
+  - With `api` it adds that the application "can use ChurchTools in your name and access all data and functions you're
+    permitted to". Keep that in mind when deciding whether you really need `api`.
+  - After consent, later authorizations redirect immediately without any visible step.
+- **No forced re-authentication:** `prompt=login` and `max_age=0` are ignored. An existing ChurchTools session is
+  enough, so OAuth can't be used to confirm a user's password.
+- **Error responses** contain a `hint` member, which suggests the PHP library `league/oauth2-server`. Its defaults
+  (e.g. about 10 minutes for authorization codes) probably apply.
+- **Redirect into an extension:** the registered redirect URI can be the extension's page (`/ccm/<key>/`). ChurchTools
+  serves the extension for any sub-path, and the query parameters (`code`, `state`) survive client-side routing.
 
 ## 5. The key-value store (custom data)
 
@@ -147,6 +210,9 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
     the domain root and silently drops `/api`.
   - Without the trailing slash on the base, the last segment (`api`) gets replaced instead.
   - Both mistakes produce wrong URLs and confusing errors rather than an obvious failure.
+  - **The JS client (`@churchtools/churchtools-client`) works the other way round.** It strips a trailing slash from
+    the base URL and builds `${baseUrl}/api${uri}`, so its paths **must start** with a slash (`/custommodules/…`) and
+    must not include `/api`.
 - A freshly installed module returns an **empty list** from `GET /custommodules` for users without module
   permissions, even admins.
 - **Data model** (current builds):
@@ -154,6 +220,10 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
     security level.
   - Values have only `id`, `dataCategoryId` and `value`. Older type snapshots also list `domainId`, `domainType`,
     `schema` and `securityLevelId`; those fields don't exist on current builds.
+  - **Don't name your own JSON fields like the API metadata** (`id`, `dataCategoryId`, and for categories
+    `customModuleId`, `name`, `shorty`, `description`). Helpers that merge the parsed `value` with the metadata (such as
+    the extension boilerplate's `kv-store.ts`) let the metadata win, so your field would silently disappear. Names are
+    case-sensitive (`ID` doesn't clash with `id`).
 - **Limits:** 10,000 characters per value, 2,000 characters for a category's `data`. Check sizes before saving.
   Binary data (images as data URIs) doesn't fit.
 - **No key, no version, no ETag, no transactions, no server-side filtering.** You always read a whole category and
@@ -222,11 +292,36 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
   - The limit is **per IP**. All devices behind one NAT, or all users of one backend server, share it. Count your
     requests per operation and cache aggressively.
   - Avoid synchronized bursts: add jitter to polling, and stagger starts after an outage.
-- `churchtools-client` has a built-in rate-limit interceptor (`setRateLimitInterceptor`) that retries after a fixed
-  30 seconds. Make sure that fits your own timeouts.
-- `churchtools-client` uses axios; arrays are encoded as `ids[]=1&ids[]=2`.
 - `GET /api/config` (also anonymously) includes `timezone`; `Intl` is sufficient for time zone maths.
-- `GET /api/info` returns basic church information.
+- `GET /api/info` returns basic church information, including the `build` number.
+- **Response envelope:** REST responses wrap their payload in `{ "data": … }`. Paginated endpoints add
+  `meta.pagination` (with `lastPage`) and accept `page` and `limit` parameters.
+- The legacy API returns `200` with `{ "message": "Session expired!" }` instead of `401` when the session is gone.
+
+### The JavaScript client (`@churchtools/churchtools-client`)
+
+The official client, also used inside extensions. Things worth knowing:
+
+- **Session handling:**
+  - In the browser it sends cookies (`withCredentials: true`), so inside ChurchTools it runs with the logged-in user's
+    session and needs no token.
+  - In Node.js it needs a cookie jar (`axios-cookiejar-support` + `tough-cookie`, via `setCookieJar`) and sends a
+    `User-Agent` header.
+- **Unwrapping:** `get`/`post`/`put`/`patch`/`deleteApi` return the content of the `data` envelope. Pass
+  `rawResponse: true` to get the full axios response, e.g. for `meta`.
+- **Pagination:** `getAllPages(uri, params, perPage)` follows `meta.pagination.lastPage` and returns all items.
+- **Legacy API:** `oldApi(module, func, params)` handles CSRF tokens itself.
+- **Timeouts:** each request is aborted after **15 seconds** by default (`setRequestTimeout`).
+- **Rate limit:** the opt-in interceptor (`setRateLimitInterceptor`) retries a `429` after a fixed **30 seconds**
+  inside the same request (`setRateLimitTimeout`). That's shorter than ChurchTools' advice of 60 s, and it can
+  collide with your own timeouts. Often it's better to handle `429` yourself.
+- **Re-login:** the `401` interceptor re-logs in with the login token (see section 4). Register `onUnauthenticated`
+  to react when that's impossible.
+- **Validating an instance URL:** `validChurchToolsUrl(url)` checks via `/api/info` that a URL points to a
+  sufficiently recent ChurchTools instance and resolves redirects. That's useful in setup forms.
+- **Several instances:** create separate `new ChurchToolsClient()` objects; the default export is a single shared
+  instance.
+- Arrays in query parameters are encoded by axios as `ids[]=1&ids[]=2`.
 
 ## 8. Files, images, wiki
 
