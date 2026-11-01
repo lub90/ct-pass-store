@@ -58,7 +58,15 @@ class AuthMiddleware implements MiddlewareInterface
             throw new ProblemException(ProblemType::InvalidToken, 'ChurchTools doesn\'t accept the token.');
         }
 
-        if (!$this->auth->hasAccessRights($token)) {
+        try {
+            $hasAccess = $this->auth->hasAccessRights($token);
+        } catch (NotAuthenticatedException) {
+            $this->logger->warning('Unauthorized access attempt: ChurchTools rejected the token when reading permissions.', ['ip' => $ip]);
+            throw new ProblemException(ProblemType::InvalidToken, 'ChurchTools doesn\'t accept the token.');
+        } catch (NotPermittedException) {
+            $hasAccess = false;
+        }
+        if (!$hasAccess) {
             $this->logger->warning("Forbidden access attempt: user {$user->id} has no access to the service.", ['ip' => $ip]);
             throw new ProblemException(ProblemType::NoServiceAccess, 'You don\'t have the right to use the CtPassStore extension.');
         }

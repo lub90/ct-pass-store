@@ -72,11 +72,10 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 - [x] **2.4 Input validation and password policy** (spec 4.1, 5.1)
   - `invalid-id` and `invalid-body`.
   - Maximum length 128, the `violations` member, a secure shuffle.
-- [ ] **2.5 Upstream errors** (spec 6.2)
+- [x] **2.5 Upstream errors** (spec 6.2)
   - `502 upstream-unavailable` / `upstream-invalid`, and `503 upstream-rate-limited` with `Retry-After`.
-  - *Done in 2.1:* the error middleware maps all ChurchTools exceptions; ChurchTools failures during authentication
-    and the primary password check are no longer a `401`/wrong password. *Left:* the remaining catalog cases (ER-06,
-    CC-16 at the API level) and the `Retry-After` minimum for `too-many-attempts`.
+  - Mostly done in 2.1; 2.5 added the mapping of rejected permission reads and tests for every step of a request.
+    `Retry-After` for `too-many-attempts` follows with the rate limit in 3.5.
 - [ ] **2.6 Banned functions via PHPStan** (spec 6.6)
   - Add a disallowed-calls rule set (e.g. `spaze/phpstan-disallowed-calls`): `eval`, `unserialize`, `exec` and other
     shell calls, `str_shuffle`, `rand`, `mt_rand`, and loose comparisons of secrets. This replaces source scans in

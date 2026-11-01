@@ -181,7 +181,7 @@ normal case names it ("→ PV-05").
 - [ ] **CC-03** (N · U) The `data` envelope is unwrapped — 5.6.8
 - [ ] **CC-13** (S · U) Counterpart of CC-03: a `200` without `data`, with `data: null`, with the wrong type (object
   instead of list) or with HTML instead of JSON → `upstream-invalid`, never treated as "empty" — 5.6.6, 5.6.8
-- [ ] **CC-04** (N · U) Error mapping per status (`401`/`403` user and service, `404`, `429` with and without
+- [x] **CC-04** (N · U) Error mapping per status (`401`/`403` user and service, `404`, `429` with and without
   `Retry-After`, `500`, `503`, timeout, connection error, non-JSON body) gives the right exception type — 5.6.6
 - [ ] **CC-05** (! · U) `401`/`403` on a **service** call maps to `misconfigured`, never to "user not authorized" —
   5.6.6
@@ -456,7 +456,7 @@ normal case names it ("→ PV-05").
 - [x] **ER-04** (! · A) An unexpected exception → `500 internal-error` with a generic `detail`; class names, stack
   traces, SQL or paths never reach the client — 4.9
 - [ ] **ER-05** (! · A) `misconfigured` names the setting or key, never its value — 4.9
-- [ ] **ER-06** (N · A) `upstream-rate-limited` and `too-many-attempts` carry a `Retry-After` header (at least 60 for
+- [x] **ER-06** (N · A) `upstream-rate-limited` and `too-many-attempts` carry a `Retry-After` header (at least 60 for
   `upstream-rate-limited`) and the same value as the `retryAfter` member — 4.9, 6.2
 - [ ] **ER-08** (! · A) PHP warnings, notices and deprecations never reach a response body (`display_errors` off); they
   go to the log — 4.1

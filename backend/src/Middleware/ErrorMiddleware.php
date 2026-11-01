@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace CtPassStore\Middleware;
 
 use CtPassStore\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\ChurchTools\Exception\NotFoundException;
+use CtPassStore\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\ChurchTools\Exception\UnavailableException;
@@ -70,6 +72,8 @@ final class ErrorMiddleware implements MiddlewareInterface
                 ProblemType::UpstreamUnavailable,
                 'ChurchTools is unreachable or answered with an error.',
             )),
+            // A user call rejected where the code doesn't expect it: ChurchTools behaves differently than assumed.
+            $e instanceof NotAuthenticatedException, $e instanceof NotPermittedException,
             $e instanceof InvalidResponseException => $this->logged($e, new ProblemException(
                 ProblemType::UpstreamInvalid,
                 'ChurchTools answered something the backend can\'t use.',
