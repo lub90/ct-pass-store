@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Controller;
+namespace CtPassStore\Http\Controller;
 
 use CtPassStore\Service\BaseService;
 use CtPassStore\Service\ServiceSettings;
@@ -11,7 +11,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-class TestController extends BaseService
+class SelfCheckController extends BaseService
 {
     private ServiceSettings $settings;
 

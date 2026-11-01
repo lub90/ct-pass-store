@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Support;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\ChurchTools\Exception\NotFoundException;
-use CtPassStore\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 
 /**
  * In-memory ChurchTools for unit and API tests (spec 6.6).

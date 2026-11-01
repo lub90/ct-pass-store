@@ -2,9 +2,9 @@
 
 namespace CtPassStore\Tests\Helpers;
 
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Service\ExtensionDataService;
 
 class Helpers

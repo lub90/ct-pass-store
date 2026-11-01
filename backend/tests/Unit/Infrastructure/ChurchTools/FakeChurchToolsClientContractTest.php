@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\Unit\ChurchTools;
+namespace CtPassStore\Tests\Unit\Infrastructure\ChurchTools;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\ChurchTools\Credential;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Tests\Support\ChurchToolsClientContractTestCase;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 

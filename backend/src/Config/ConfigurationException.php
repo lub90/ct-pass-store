@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Exception;
+namespace CtPassStore\Config;
 
 /**
  * Something an admin has to fix: configuration, settings, the public key, the extension's data structure in

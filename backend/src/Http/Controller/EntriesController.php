@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Controller;
+namespace CtPassStore\Http\Controller;
 
 use CtPassStore\Auth\AuthenticatedPerson;
 use CtPassStore\Config\AppConfig;
@@ -26,7 +26,7 @@ use Psr\Log\LoggerInterface;
  * Order of checks (spec 4.1): authentication (middleware) → path ID and body syntax → authorization (before any
  * entry is looked up) → primary password → password policy → storage.
  */
-class PasswordController extends BaseService
+class EntriesController extends BaseService
 {
     /** Bodies of PUT and DELETE (spec 4.6, 4.7). */
     private const PUT_FIELDS = [AppConfig::REQUEST_PRIMARY_PWD_FIELD => 'string', AppConfig::REQUEST_SECONDARY_PWD_FIELD => 'string'];

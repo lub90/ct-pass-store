@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use Psr\Log\LoggerInterface;
 
 /**

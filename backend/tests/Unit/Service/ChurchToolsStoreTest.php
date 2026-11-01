@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Service;
 
-use CtPassStore\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Service\ChurchToolsStore;
 use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;

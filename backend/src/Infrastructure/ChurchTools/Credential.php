@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools;
+namespace CtPassStore\Infrastructure\ChurchTools;
 
 /**
  * A credential for calling the ChurchTools API: either a login token (`Authorization: Login …`) or an OAuth

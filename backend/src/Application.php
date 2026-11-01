@@ -4,16 +4,16 @@ declare(strict_types=1);
 
 namespace CtPassStore;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
-use CtPassStore\Controller\PasswordController;
-use CtPassStore\Controller\TestController;
+use CtPassStore\Http\Controller\EntriesController;
+use CtPassStore\Http\Controller\SelfCheckController;
+use CtPassStore\Http\Middleware\AuthMiddleware;
+use CtPassStore\Http\Middleware\CorsMiddleware;
+use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Middleware\AuthMiddleware;
-use CtPassStore\Middleware\CorsMiddleware;
-use CtPassStore\Middleware\ErrorMiddleware;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Service\ChurchtoolsAuth;
 use CtPassStore\Service\ChurchToolsAuthVerifier;
 use CtPassStore\Service\ChurchToolsStore;
@@ -53,7 +53,7 @@ final class Application
         /** @var App<Container> $app */
         $app = AppFactory::createFromContainer($container);
 
-        $passwords = new PasswordController(
+        $passwords = new EntriesController(
             $settings,
             new ChurchToolsStore($extensionData, $logger),
             new EncryptionService($settings, $logger),
@@ -65,7 +65,7 @@ final class Application
         $app->put('/entries/{id}', [$passwords, 'put']);
         $app->delete('/entries/{id}', [$passwords, 'delete']);
 
-        $selfCheck = new TestController($settings, $logger, $config->credentialsPath);
+        $selfCheck = new SelfCheckController($settings, $logger, $config->credentialsPath);
         $app->get('/test', [$selfCheck, 'get']);
 
         // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):

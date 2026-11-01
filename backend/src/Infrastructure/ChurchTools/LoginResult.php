@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools;
+namespace CtPassStore\Infrastructure\ChurchTools;
 
 /**
  * Result of `POST /api/login` when ChurchTools accepted the username and password.

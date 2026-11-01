@@ -617,7 +617,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
   *Review note (not a test):* reviewers also confirm that no secret is compared with `==` or `===`. This is part of the
   pull request checklist in the plan (item 2.6).
-- [x] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
+- [ ] **TR-02** (S · A) Two concurrent `PUT`s for the same person may create a duplicate, but the next read gives one
   of the two passwords and the next write heals it (with ST-05/06) — 5.3.6
 - [ ] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
   locking) — 6.3, 4.4a.4

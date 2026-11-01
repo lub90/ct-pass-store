@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 
 /**
  * Duplicates and partial failures through the API. Catalog EG-04, EP-08, ED-03, EP-12, EP-13.

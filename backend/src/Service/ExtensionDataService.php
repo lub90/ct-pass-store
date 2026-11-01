@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\Exception\ConfigurationException;
+use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 
 /**
  * Access to the extension's categories and values in the ChurchTools KV store, as the service user.

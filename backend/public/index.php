@@ -8,11 +8,11 @@ ini_set('display_errors', '0');
 require __DIR__ . '/../vendor/autoload.php';
 
 use CtPassStore\Application;
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
-use CtPassStore\Exception\ConfigurationException;
+use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 

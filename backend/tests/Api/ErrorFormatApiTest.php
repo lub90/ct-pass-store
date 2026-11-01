@@ -4,14 +4,14 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
-use CtPassStore\ChurchTools\Exception\InvalidResponseException;
-use CtPassStore\ChurchTools\Exception\NotFoundException;
-use CtPassStore\ChurchTools\Exception\RateLimitedException;
-use CtPassStore\ChurchTools\Exception\ServiceCredentialRejectedException;
-use CtPassStore\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**

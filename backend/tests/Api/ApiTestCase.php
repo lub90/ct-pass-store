@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Application;
-use CtPassStore\ChurchTools\Credential;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;

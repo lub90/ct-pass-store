@@ -2,19 +2,19 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\Unit\ChurchTools;
+namespace CtPassStore\Tests\Unit\Infrastructure\ChurchTools;
 
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
-use CtPassStore\ChurchTools\Exception\InvalidResponseException;
-use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\ChurchTools\Exception\NotFoundException;
-use CtPassStore\ChurchTools\Exception\NotPermittedException;
-use CtPassStore\ChurchTools\Exception\RateLimitedException;
-use CtPassStore\ChurchTools\Exception\ServiceCredentialRejectedException;
-use CtPassStore\ChurchTools\Exception\UnavailableException;
-use CtPassStore\ChurchTools\GuzzleChurchToolsClient;
-use CtPassStore\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;

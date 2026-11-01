@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\EndToEnd;
 
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\GuzzleChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Tests\EndToEnd\Helpers\EndToEndPrerequisites;
 use CtPassStore\Tests\Support\ChurchToolsClientContractTestCase;
 

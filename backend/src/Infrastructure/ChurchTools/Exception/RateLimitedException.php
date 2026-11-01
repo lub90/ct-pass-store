@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools\Exception;
+namespace CtPassStore\Infrastructure\ChurchTools\Exception;
 
 /**
  * ChurchTools answered 429. `retryAfterSeconds` is at least 60 (spec 5.6, 6.2).

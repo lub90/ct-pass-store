@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace CtPassStore\Service;
 
 use CtPassStore\Auth\AuthenticatedPerson;
-use CtPassStore\ChurchTools\ChurchToolsClient;
-use CtPassStore\ChurchTools\Credential;
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
-use CtPassStore\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use Psr\Log\LoggerInterface;
 
 /**

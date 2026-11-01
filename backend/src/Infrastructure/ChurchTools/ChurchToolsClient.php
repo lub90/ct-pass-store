@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools;
+namespace CtPassStore\Infrastructure\ChurchTools;
 
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 
 /**
  * Every call the backend makes to ChurchTools (spec 5.6).

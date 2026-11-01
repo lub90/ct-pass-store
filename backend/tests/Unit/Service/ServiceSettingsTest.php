@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Unit\Service;
 
 use CtPassStore\Config\AppConfig;
-use CtPassStore\Exception\ConfigurationException;
+use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Service\ExtensionDataService;
 use CtPassStore\Service\ServiceSettings;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;

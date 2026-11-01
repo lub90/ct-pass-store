@@ -23,7 +23,7 @@ parameters:
           message: 'use JSON; unserialize() can instantiate arbitrary objects'
           allowIn:
               # proves that a Credential refuses to be serialized
-              - tests/Unit/ChurchTools/GuzzleChurchToolsClientTest.php
+              - tests/Unit/Infrastructure/ChurchTools/GuzzleChurchToolsClientTest.php
         # Randomness (spec 5.1): only random_int() / Random\Randomizer with the Secure engine
         - function: ['rand()', 'mt_rand()', 'mt_srand()', 'srand()', 'lcg_value()', 'uniqid()', 'str_shuffle()', 'shuffle()', 'array_rand()']
           message: 'not cryptographically secure; use Random\Randomizer with the Secure engine or random_int()'

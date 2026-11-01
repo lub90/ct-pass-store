@@ -2,15 +2,15 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools;
+namespace CtPassStore\Infrastructure\ChurchTools;
 
-use CtPassStore\ChurchTools\Exception\InvalidResponseException;
-use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\ChurchTools\Exception\NotFoundException;
-use CtPassStore\ChurchTools\Exception\NotPermittedException;
-use CtPassStore\ChurchTools\Exception\RateLimitedException;
-use CtPassStore\ChurchTools\Exception\ServiceCredentialRejectedException;
-use CtPassStore\ChurchTools\Exception\UnavailableException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use GuzzleHttp\Client;
 use GuzzleHttp\ClientInterface;
 use GuzzleHttp\Exception\GuzzleException;

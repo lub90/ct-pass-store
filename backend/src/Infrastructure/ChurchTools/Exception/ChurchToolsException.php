@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools\Exception;
+namespace CtPassStore\Infrastructure\ChurchTools\Exception;
 
 /**
  * Base class for everything that can go wrong when talking to ChurchTools.

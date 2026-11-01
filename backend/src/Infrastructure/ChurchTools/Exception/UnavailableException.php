@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\ChurchTools\Exception;
+namespace CtPassStore\Infrastructure\ChurchTools\Exception;
 
 /**
  * ChurchTools couldn't be reached, timed out, or answered with a server error (5xx).

@@ -1,18 +1,6 @@
 parameters:
 	ignoreErrors:
 		-
-			message: '#^Method CtPassStore\\Middleware\\CorsMiddleware\:\:__construct\(\) has parameter \$allowedOrigins with no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Middleware/CorsMiddleware.php
-
-		-
-			message: '#^Property CtPassStore\\Middleware\\CorsMiddleware\:\:\$allowedOrigins type has no value type specified in iterable type array\.$#'
-			identifier: missingType.iterableValue
-			count: 1
-			path: src/Middleware/CorsMiddleware.php
-
-		-
 			message: '#^Instanceof between Psr\\Log\\LoggerInterface and Psr\\Log\\LoggerInterface will always evaluate to true\.$#'
 			identifier: instanceof.alwaysTrue
 			count: 1

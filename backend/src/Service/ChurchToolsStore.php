@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Service;
 
-use CtPassStore\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Config\AppConfig;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 
 /**
  * The encrypted passwords in the KV category `passwordStore`, one value per person (spec 5.3).

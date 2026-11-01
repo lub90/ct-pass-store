@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Middleware;
+namespace CtPassStore\Http\Middleware;
 
-use CtPassStore\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Config\AppConfig;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Service\ChurchtoolsAuth;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;

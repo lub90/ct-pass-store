@@ -1,6 +1,8 @@
 <?php
 
-namespace CtPassStore\Middleware;
+declare(strict_types=1);
+
+namespace CtPassStore\Http\Middleware;
 
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
@@ -9,12 +11,10 @@ use Psr\Http\Server\RequestHandlerInterface as Handler;
 
 class CorsMiddleware implements MiddlewareInterface
 {
-    private array $allowedOrigins;
-
-    public function __construct(array $allowedOrigins)
-    {
-        $this->allowedOrigins = $allowedOrigins;
-    }
+    /**
+     * @param list<string> $allowedOrigins
+     */
+    public function __construct(private readonly array $allowedOrigins) {}
 
     public function process(Request $request, Handler $handler): Response
     {
