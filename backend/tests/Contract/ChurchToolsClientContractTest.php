@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\Contract;
 
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
-use CtPassStore\Tests\EndToEnd\Helpers\EndToEndPrerequisites;
+use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use CtPassStore\Tests\Support\ChurchToolsClientContractTestCase;
 
 /**
@@ -22,7 +22,7 @@ final class ChurchToolsClientContractTest extends ChurchToolsClientContractTestC
 
     public static function setUpBeforeClass(): void
     {
-        EndToEndPrerequisites::assertMet();
+        ContractPrerequisites::assertMet();
     }
 
     protected function client(): ChurchToolsClient

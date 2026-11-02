@@ -16,7 +16,7 @@ catalog and checked off when they exist and pass. A case found during implementa
 | --- | --- |
 | **U** | Unit test (`tests/Unit`), one class in isolation |
 | **A** | API test (`tests/Api`), the whole app in-process with a fake ChurchTools client |
-| **C** | Contract or smoke test (`tests/EndToEnd`, later `tests/Contract`), against a real ChurchTools test instance or the deployed backend |
+| **C** | Contract or smoke test (`tests/Contract`), against a real ChurchTools test instance or the deployed backend |
 
 Cases marked with ❓ depend on an open question of the spec and are adjusted when it's answered.
 
@@ -82,7 +82,7 @@ normal case names it ("→ PV-05").
 
 ## 2. Encryption (`RsaPasswordCipher`, spec 5.2)
 
-- [ ] **EN-01** (N · U) Encrypt, then decrypt with the test private key, gives the plaintext back — 5.2.1–2
+- [x] **EN-01** (N · U) Encrypt, then decrypt with the test private key, gives the plaintext back — 5.2.1–2
 - [ ] **EN-09** (! · U) Counterparts of EN-01: decrypting with another private key fails; a ciphertext with one flipped
   bit, a truncated or an extended ciphertext fails to decrypt (no wrong plaintext comes out) — 5.2.1
 - [ ] **EN-02** (N · U) The output is valid base64, and decoded it's exactly 512 bytes (RSA-4096) — 5.2.2
@@ -384,25 +384,25 @@ normal case names it ("→ PV-05").
   payload-too-large` — 4.1
 - [x] **IN-07** (N · A) Unknown route → `404 not-found`; wrong method on a known route → `405` with an `Allow` header —
   4.1
-- [ ] **IN-08** (! · A) No error response causes a write to ChurchTools — 4.1
+- [x] **IN-08** (! · A) No error response causes a write to ChurchTools — 4.1
 
 ### `GET /v1/entries/{id}` (4.5)
 
-- [ ] **EG-01** (N · A) Existing entry → `200` with `secondaryPwd` (ciphertext) — 4.5
-- [ ] **EG-02** (N · A) No entry → `404 entry-not-found` — 4.5
+- [x] **EG-01** (N · A) Existing entry → `200` with `secondaryPwd` (ciphertext) — 4.5
+- [x] **EG-02** (N · A) No entry → `404 entry-not-found` — 4.5
 - [ ] **EG-03** (! · A) The response never contains plaintext, only the stored ciphertext — 4.5
 - [x] **EG-04** (S · A) Duplicates → `200` with the newest — 4.5
 
 ### `PUT /v1/entries/{id}` (4.6)
 
-- [ ] **EP-01** (N · A) Without `secondaryPwd` → `200` with a generated password that passes the policy; exactly that
+- [x] **EP-01** (N · A) Without `secondaryPwd` → `200` with a generated password that passes the policy; exactly that
   password was stored (decrypted with the test key) — 4.6
-- [ ] **EP-02** (N · A) Valid custom password, custom passwords allowed → `204`, empty body, stored encrypted — 4.6
-- [ ] **EP-03** (N · A) Custom password while not allowed → `400 custom-password-not-allowed`, nothing stored — 4.6.3
+- [x] **EP-02** (N · A) Valid custom password, custom passwords allowed → `204`, empty body, stored encrypted — 4.6
+- [x] **EP-03** (N · A) Custom password while not allowed → `400 custom-password-not-allowed`, nothing stored — 4.6.3
 - [x] **EP-04** (S · A) `secondaryPwd: ""` counts as a custom password (→ `400`), not as "generate" — 4.6.3
 - [x] **EP-05** (N · A) Invalid custom password → `400 password-invalid` with `violations` — 4.6.3
 - [ ] **EP-06** (! · A) The generated password is returned with `Cache-Control: no-store` — 4.1
-- [ ] **EP-07** (N · A) Setting the same password again works — 4.6
+- [x] **EP-07** (N · A) Setting the same password again works — 4.6
 - [x] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
 - [x] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
   the custom password check — 4.6
@@ -586,7 +586,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 - [ ] **HP-01** (N · A) The scheme is case-insensitive: `Bearer`, `bearer` and `BEARER` with a valid token are accepted
   — 4.3.2
-- [ ] **HP-01a** (! · A) Rejected with `401 invalid-token`: an empty token (`Bearer`, `Bearer `), whitespace or a tab
+- [x] **HP-01a** (! · A) Rejected with `401 invalid-token`: an empty token (`Bearer`, `Bearer `), whitespace or a tab
   inside the token, two `Authorization` headers, a comma-joined value (`Bearer a, Bearer b`), a scheme with a typo
   (`Bearer:`, `Bearers`) — 4.3.2
 - [ ] **HP-02** (S · A) `HEAD` and unexpected methods (`PATCH`, `TRACE`) → `405`, never a write — 4.1
@@ -690,7 +690,9 @@ tester has; it's documented in `backend/docs/testing.md`.
 
 ## 16. Migration of the existing end-to-end tests
 
-Where the cases of today's `tests/EndToEnd` suite go, so nothing is lost silently (plan 3.6).
+Where the cases of the former `tests/EndToEnd` suite went, so nothing is lost silently. **Done in plan 3.6:** the old
+tests are removed; the suite is now `tests/Contract`. Still open from this table: TS-01 and TS-05 (self-check, plan
+4.2), SM-05 (deployed backend, plan 4), CT-03 (manual OAuth checklist in `backend/docs/testing.md`).
 
 | Today's test | What it checks | New cases | Note |
 | --- | --- | --- | --- |

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\Contract;
 
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\MachineClient;

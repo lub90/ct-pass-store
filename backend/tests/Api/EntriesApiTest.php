@@ -106,6 +106,7 @@ final class EntriesApiTest extends ApiTestCase
         $password = $this->json($response)['secondaryPwd'];
         self::assertIsString($password);
         self::assertSame(12, strlen($password));
+        self::assertSame([], (new \CtPassStore\Domain\PasswordPolicy())->violations($password, 12), 'EP-01: the generated password passes the policy.');
 
         $entries = $this->storedEntries();
         self::assertCount(1, $entries);
@@ -119,6 +120,20 @@ final class EntriesApiTest extends ApiTestCase
 
         self::assertSame(204, $response->getStatusCode());
         self::assertSame('', (string) $response->getBody());
+        $entries = $this->storedEntries();
+        self::assertCount(1, $entries);
+        self::assertSame('Custom-pass12!', $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));
+    }
+
+    /**
+     * EP-07.
+     */
+    public function testSettingTheSamePasswordAgainWorks(): void
+    {
+        for ($i = 0; $i < 2; $i++) {
+            self::assertSame(204, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!'])->getStatusCode());
+        }
+
         $entries = $this->storedEntries();
         self::assertCount(1, $entries);
         self::assertSame('Custom-pass12!', $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));

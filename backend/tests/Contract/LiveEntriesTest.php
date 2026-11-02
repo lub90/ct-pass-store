@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\EndToEnd;
+namespace CtPassStore\Tests\Contract;
 
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Config\ConfigurationException;
@@ -15,8 +15,8 @@ use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Time\SystemClock;
-use CtPassStore\Tests\EndToEnd\Helpers\BackendSandboxManager;
-use CtPassStore\Tests\EndToEnd\Helpers\EndToEndPrerequisites;
+use CtPassStore\Tests\Contract\Helpers\BackendSandboxManager;
+use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
 use phpseclib3\Crypt\PublicKeyLoader;
@@ -55,7 +55,7 @@ final class LiveEntriesTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        EndToEndPrerequisites::assertMet();
+        ContractPrerequisites::assertMet();
         try {
             self::$config = BackendConfig::fromArray(require __DIR__ . '/../../config/credentials.php', 'credentials.php', sys_get_temp_dir());
         } catch (ConfigurationException $e) {

@@ -1,6 +1,6 @@
 <?php
 
-namespace CtPassStore\Tests\EndToEnd\Helpers;
+namespace CtPassStore\Tests\Contract\Helpers;
 
 class BackendSandboxManager
 {

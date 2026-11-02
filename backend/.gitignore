@@ -5,8 +5,7 @@
 .env
 /config/credentials.php
 
-/tests/EndToEnd/fixtures/*
-!/tests/EndToEnd/fixtures/invalid_tokens.json
+/tests/Contract/fixtures/*
 
 # Logs
 /logs/

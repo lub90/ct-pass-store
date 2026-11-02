@@ -116,7 +116,7 @@ Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
 - [x] **3.5 Primary password check** (spec 5.5, 6.3)
   - Simple rate limiting per person.
   - Upstream errors no longer count as a wrong password.
-- [ ] **3.6 Shrink the end-to-end tests to contract tests**
+- [x] **3.6 Shrink the end-to-end tests to contract tests**
   - Rename the suite and folder to `Contract`. Remove cases that the API layer now covers (authorization matrix,
     status codes, problem types).
   - Keep only what needs real ChurchTools: KV read/write and `meta.count`, service-user permissions, primary password

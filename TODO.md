@@ -77,7 +77,7 @@ Open issues and planned improvements, roughly ordered by severity.
   - `backend/config/credentials.php`
   - `backend/phpunit.xml`
   - `extension/.env`
-  - the end-to-end fixtures with test users' passwords in `backend/tests/EndToEnd/fixtures/`
+  - the end-to-end fixtures with test users' passwords in `backend/tests/Contract/fixtures/`
 
   Set them to `600`, and mention that in the testing docs.
 

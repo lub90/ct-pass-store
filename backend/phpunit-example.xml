@@ -14,8 +14,8 @@
         <testsuite name="Api">
             <directory>tests/Api</directory>
         </testsuite>
-        <testsuite name="EndToEnd">
-            <directory>tests/EndToEnd</directory>
+        <testsuite name="Contract">
+            <directory>tests/Contract</directory>
         </testsuite>
     </testsuites>
 

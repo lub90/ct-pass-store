@@ -5,9 +5,9 @@
     Three test layers (see specs/backend-spec.md, section 6.6):
       - Unit:      single classes in isolation, no network
       - Api:       the complete app in-process with a fake ChurchTools client, no network
-      - EndToEnd:  against a real ChurchTools test instance (opt-in, needs a local phpunit.xml)
+      - Contract:  against a real ChurchTools test instance (opt-in, needs a local phpunit.xml)
 
-    `composer test` runs Unit and Api. `composer test:e2e` runs EndToEnd with your local phpunit.xml,
+    `composer test` runs Unit and Api. `composer test:contract` runs Contract with your local phpunit.xml,
     created from phpunit-example.xml.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -27,8 +27,8 @@
         <testsuite name="Api">
             <directory>tests/Api</directory>
         </testsuite>
-        <testsuite name="EndToEnd">
-            <directory>tests/EndToEnd</directory>
+        <testsuite name="Contract">
+            <directory>tests/Contract</directory>
         </testsuite>
     </testsuites>
 

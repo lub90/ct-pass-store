@@ -2,22 +2,17 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\EndToEnd\Helpers;
+namespace CtPassStore\Tests\Contract\Helpers;
 
 /**
- * Checks that everything the end-to-end tests need is in place. Without it, the tests abort with a clear message
- * instead of failing somewhere deep inside or being reported as passed.
+ * Checks that everything the contract tests need is in place. Without it, the tests abort with a clear message
+ * instead of failing somewhere deep inside or being reported as passed (spec 6.6).
  */
-final class EndToEndPrerequisites
+final class ContractPrerequisites
 {
     private const ENV_VARIABLES = ['CT_API_URL', 'CT_API_TOKEN'];
 
-    private const FIXTURES = [
-        'admin_users.json',
-        'normal_users.json',
-        'read_access_users.json',
-        'no_access_allowed_users.json',
-    ];
+    private const FIXTURES = ['normal_users.json'];
 
     public static function assertMet(): void
     {
@@ -36,13 +31,13 @@ final class EndToEndPrerequisites
 
         foreach (self::FIXTURES as $fixture) {
             if (!is_readable(__DIR__ . '/../fixtures/' . $fixture)) {
-                $missing[] = 'tests/EndToEnd/fixtures/' . $fixture;
+                $missing[] = 'tests/Contract/fixtures/' . $fixture;
             }
         }
 
         if ($missing !== []) {
             throw new \RuntimeException(
-                'The end-to-end tests need a ChurchTools test instance and local configuration. Missing: '
+                'The contract tests need a ChurchTools test instance and local configuration. Missing: '
                 . implode(', ', $missing) . '. See docs/testing.md.'
             );
         }

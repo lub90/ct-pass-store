@@ -127,6 +127,9 @@ final class AuthorizationApiTest extends ApiTestCase
         yield 'comma-joined' => ['Bearer TOKEN, Bearer TOKEN'];
         // A trailing space isn't listed: HTTP strips optional whitespace around field values (RFC 9110 5.5).
         yield 'not a JWT' => ['Bearer abc.def'];
+        yield 'scheme with colon' => ['Bearer: TOKEN'];
+        yield 'scheme typo' => ['Bearers TOKEN'];
+        yield 'scheme without space' => ['BearerTOKEN'];
     }
 
     #[DataProvider('invalidHeaders')]

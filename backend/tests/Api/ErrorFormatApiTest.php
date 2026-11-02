@@ -209,4 +209,69 @@ final class ErrorFormatApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::MissingToken, $response);
         self::assertFalse($response->hasHeader('Access-Control-Allow-Origin'));
     }
+
+    /**
+     * IN-08: no error response writes to ChurchTools, whatever the reason.
+     */
+    public function testNoErrorResponseWritesAnything(): void
+    {
+        $entry = '/v1/entries/' . self::USER;
+        $cases = [
+            'missing token' => fn() => $this->request('PUT', $entry, null, ['secondaryPwd' => 'Custom-pass12!']),
+            'invalid token' => fn() => $this->request('DELETE', $entry, headers: ['Authorization' => 'Bearer abc.def.ghi']),
+            'expired token' => function () use ($entry) {
+                $token = $this->tokenOf(self::USER);
+                $this->clock->advance(1000);
+                $response = $this->request('DELETE', $entry, headers: ['Authorization' => 'Bearer ' . $token]);
+                $this->clock->advance(-1000);
+
+                return $response;
+            },
+            'machine client writing' => fn() => $this->request('PUT', $entry, self::READER_CLIENT, []),
+            'invalid id' => fn() => $this->request('PUT', '/v1/entries/07', self::USER, []),
+            'invalid body' => fn() => $this->rawRequest('PUT', $entry, self::USER, '{"secondaryPwd": 1}'),
+            'unsupported media type' => fn() => $this->rawRequest('PUT', $entry, self::USER, 'x', ['Content-Type' => 'text/plain']),
+            'payload too large' => fn() => $this->rawRequest('PUT', $entry, self::USER, str_repeat(' ', 20_000)),
+            'forbidden' => fn() => $this->request('DELETE', '/v1/entries/' . self::OTHER, self::USER, []),
+            'password invalid' => fn() => $this->request('PUT', $entry, self::USER, ['secondaryPwd' => 'short']),
+            'unknown route' => fn() => $this->request('PUT', '/v1/nothing', self::USER, []),
+            'wrong method' => fn() => $this->request('PATCH', $entry, self::USER, []),
+            'custom password not allowed' => function () use ($entry) {
+                $this->setSettings([KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => false]);
+                $response = $this->request('PUT', $entry, self::USER, ['secondaryPwd' => 'Custom-pass12!']);
+                $this->setSettings([]);
+
+                return $response;
+            },
+            'primary password required, missing and wrong' => function () use ($entry) {
+                $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
+                $this->request('PUT', $entry, self::USER, []);
+                $response = $this->request('DELETE', $entry, self::USER, ['primaryPwd' => 'wrong']);
+                $this->setSettings([]);
+
+                return $response;
+            },
+            'broken settings' => function () use ($entry) {
+                $this->setSettings(['passwordLength' => 3]);
+                $response = $this->request('PUT', $entry, self::USER, []);
+                $this->setSettings([]);
+
+                return $response;
+            },
+            'ChurchTools down while reading' => function () use ($entry) {
+                $this->churchTools->failNext('getValues', new UnavailableException('down'));
+
+                return $this->request('PUT', $entry, self::USER, []);
+            },
+        ];
+
+        $this->seedEntry(self::USER);
+        $this->seedEntry(self::OTHER);
+        foreach ($cases as $name => $send) {
+            $response = $send();
+            self::assertGreaterThanOrEqual(400, $response->getStatusCode(), $name);
+            self::assertSame(0, $this->churchTools->writeCount(), "$name wrote to ChurchTools.");
+        }
+        self::assertCount(2, $this->storedEntries());
+    }
 }

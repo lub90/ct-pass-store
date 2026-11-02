@@ -770,7 +770,7 @@ ChurchTools communication goes through it.
   | --- | --- | --- | --- |
   | Unit | `Unit` / `tests/Unit` | Single classes in isolation (validator, encryption, store logic, token checks, error mapping) | CI, every push |
   | API | `Api` / `tests/Api` | The complete Slim app in-process: real HTTP requests and responses, ChurchTools replaced by a fake implementation of the client interface (5.6). The whole authorization matrix, every status code and every problem type are covered here. | CI, every push |
-  | Contract | `Contract` / `tests/Contract` (today `tests/EndToEnd`) | Only what a fake can't prove: that ChurchTools really behaves as assumed (KV read/write and `meta.count`, service-user permissions, primary password check, OAuth code exchange errors), plus a few smoke tests against the running backend. Needs a test instance. | By hand, before each release |
+  | Contract | `Contract` / `tests/Contract` | Only what a fake can't prove: that ChurchTools really behaves as assumed (KV read/write and `meta.count`, service-user permissions, primary password check, OAuth code exchange errors), plus a few smoke tests against the running backend. Needs a test instance. | By hand, before each release |
 
   Neither the unit nor the API layer needs network access. The API layer must exist at the latest in phase 2 of the
   plan.

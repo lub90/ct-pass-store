@@ -12,8 +12,8 @@ parameters:
         - function: ['exec()', 'passthru()', 'proc_open()', 'shell_exec()', 'system()', 'popen()', 'pcntl_exec()']
           message: 'runs shell commands; the backend never needs a shell (also bans the backtick operator)'
           allowIn:
-              - tests/EndToEnd/Helpers/BackendSandboxManager.php
-              - tests/EndToEnd/NodeSignedMachineTokenTest.php
+              - tests/Contract/Helpers/BackendSandboxManager.php
+              - tests/Contract/NodeSignedMachineTokenTest.php
               - tests/Unit/Security/BannedCallsTest.php
         - function: ['putenv()', 'apache_setenv()', 'extract()']
           message: 'changes the environment or creates variables from data'
@@ -43,5 +43,5 @@ parameters:
               # tests may dump to prove that nothing leaks; the banned-calls fixture must not be covered
               - tests/Unit/*
               - tests/Api/*
-              - tests/EndToEnd/*
+              - tests/Contract/*
               - tests/Support/*
