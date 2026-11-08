@@ -35,7 +35,7 @@ normal case names it ("→ PV-05").
   → counterparts PV-03, PV-05, PV-13, PV-14
 - [x] **PV-02** (N · U) A longer valid password is valid — 5.1.3 → counterpart PV-16
 - [x] **PV-03** (E · U) Exactly `passwordLength` characters is valid; one less is invalid — 5.1.3
-- [x] **PV-03a** (E · U) Too short by several amounts: `passwordLength` − 1, − 2, half of it, 3 (one of each class),
+- [ ] **PV-03a** (E · U) Too short by several amounts: `passwordLength` − 1, − 2, half of it, 3 (one of each class),
   1 — each invalid (`too-short`), while all classes are present — 5.1.3
 - [x] **PV-04** (E · U) The empty string is invalid — 5.1.3
 - [x] **PV-05** (N · U) Missing letter, missing digit, missing symbol: each is invalid on its own — 5.1.2
@@ -85,8 +85,8 @@ normal case names it ("→ PV-05").
 - [x] **EN-01** (N · U) Encrypt, then decrypt with the test private key, gives the plaintext back — 5.2.1–2
 - [x] **EN-09** (! · U) Counterparts of EN-01: decrypting with another private key fails; a ciphertext with one flipped
   bit, a truncated or an extended ciphertext fails to decrypt (no wrong plaintext comes out) — 5.2.1
-- [ ] **EN-02** (N · U) The output is valid base64, and decoded it's exactly 512 bytes (RSA-4096) — 5.2.2
-- [ ] **EN-03** (! · U) Encrypting the same plaintext twice gives different ciphertexts (OAEP is randomized) — 5.2.3
+- [x] **EN-02** (N · U) The output is valid base64, and decoded it's exactly 512 bytes (RSA-4096) — 5.2.2
+- [x] **EN-03** (! · U) Encrypting the same plaintext twice gives different ciphertexts (OAEP is randomized) — 5.2.3
 - [ ] **EN-04** (! · U) The padding is OAEP with SHA-256 and MGF1-SHA-256: decrypting with PKCS#1 v1.5 or OAEP-SHA1
   fails — 5.2.1
 - [x] **EN-05** (! · U) A 2048-bit public key is rejected as `misconfigured` — 5.2.4
@@ -108,7 +108,7 @@ normal case names it ("→ PV-05").
   "success"), and a failed `update` doesn't fall back to a `create` that would produce a duplicate — 5.3.4
 - [x] **ST-05** (S · U) Read with duplicates → the entry with the highest value ID, plus a warning log — 5.3.3
 - [x] **ST-06** (S · U) Write with duplicates → the highest is updated, all others deleted — 5.3.4
-- [x] **ST-20** (E · U) "Highest value ID" compares integers: value IDs `9` and `10` → `10` wins, also when the IDs
+- [ ] **ST-20** (E · U) "Highest value ID" compares integers: value IDs `9` and `10` → `10` wins, also when the IDs
   arrive as strings — 5.3.3
 - [x] **ST-07** (S · U) `personId` stored as a string (`"5"`) is matched like `5`, for read, write and delete — 5.3.1
 - [x] **ST-08** (! · U) `personId` `5` doesn't match `"05"`, `"5a"`, `5.5`, `"5 "` or `true`. Loose comparison must not
@@ -122,9 +122,9 @@ normal case names it ("→ PV-05").
   5.3.7
 - [x] **ST-10** (N · U) Delete removes all entries of the person, including duplicates — 5.3.5
 - [x] **ST-11** (E · U) Delete without an entry does nothing and doesn't fail — 5.3.5
-- [ ] **ST-12** (! · U) The number of returned values differs from `meta.count`, or `meta.count` is missing or not an
+- [x] **ST-12** (! · U) The number of returned values differs from `meta.count`, or `meta.count` is missing or not an
   integer → `upstream-invalid`; nothing is written, and the result is never "none" — 5.3.9
-- [ ] **ST-13** (E · U) An empty category (`count = 0`) → "none" — 5.3.9
+- [x] **ST-13** (E · U) An empty category (`count = 0`) → "none" — 5.3.9
 - [x] **ST-14** (! · U) Writing and deleting never touch other persons' entries (the fake records every call), also
   when they have duplicates or broken values — 5.3.4–5
 - [x] **ST-15** (E · U) A stored value longer than 10,000 characters is refused before writing — 5.3.8
@@ -143,7 +143,7 @@ normal case names it ("→ PV-05").
 ## 4. Settings and configuration (spec 3)
 
 - [x] **CF-01** (N · U) A complete, valid `credentials.php` is accepted — 3.1
-- [x] **CF-02** (! · A) Each required key missing or empty (`CT_API_URL`, `CT_API_TOKEN`, `CORS`, `OAUTH_CLIENT_ID`,
+- [ ] **CF-02** (! · A) Each required key missing or empty (`CT_API_URL`, `CT_API_TOKEN`, `CORS`, `OAUTH_CLIENT_ID`,
   `OAUTH_CLIENT_SECRET`, `JWT_SECRET`) → every request answers `500 misconfigured` naming the key, without its value
   — 3.1
 - [x] **CF-03** (! · U) `JWT_SECRET` shorter than 32 bytes → `misconfigured`; exactly 32 bytes is accepted — 3.1
@@ -159,47 +159,47 @@ normal case names it ("→ PV-05").
   configuration error, not a cast to `0` or `1` — 3.2
 - [x] **SE-04** (! · U) `passwordLength`: 12 and 64 are accepted; 11, 65, missing, `0`, negative, a string or a float →
   `misconfigured`, never a silent fallback — 3.2
-- [x] **SE-05** (S · U) Booleans given as `"false"`, `"true"`, `0`, `1` or `null`, or missing, are rejected, not
+- [ ] **SE-05** (S · U) Booleans given as `"false"`, `"true"`, `0`, `1` or `null`, or missing, are rejected, not
   interpreted as `true` or `false` — 3.2
-- [x] **SE-08** (! · U) `encryptionSettings` empty, with several values or without `publicKey` → `misconfigured` — 3.2
-- [ ] **SE-06** (N · U) `machineClients`: a valid entry is accepted; an invalid `id`, an invalid key or a duplicate `id`
+- [ ] **SE-08** (! · U) `encryptionSettings` empty, with several values or without `publicKey` → `misconfigured` — 3.2
+- [x] **SE-06** (N · U) `machineClients`: a valid entry is accepted; an invalid `id`, an invalid key or a duplicate `id`
   disables only that entry and is reported — 3.2
 - [ ] **SE-06a** (E · U) Client `id` length boundaries: 2 and 41 characters are rejected, 3 and 40 accepted — 3.2
 - [ ] **SE-06b** (! · U) An empty `publicKeys` list disables the client; `permissions` with unknown values
   (`entries:write`, `*`, `admin`) grant nothing and are reported — 3.2
-- [ ] **SE-09** (! · U) `backendUrl`: `https://host/path/` is normalized to `https://host/path`; `http://…`, an empty string,
+- [x] **SE-09** (! · U) `backendUrl`: `https://host/path/` is normalized to `https://host/path`; `http://…`, an empty string,
   a query, a fragment or credentials are invalid. A missing or invalid `backendUrl` makes machine authentication fail
   closed (see MC-20) — 3.2
 - [x] **SE-07** (S · U) The settings category is empty or holds several values → `misconfigured` — 3.2
 
 ## 5. ChurchTools client (`ChurchToolsClient`, spec 5.6)
 
-- [ ] **CC-01** (N · U) URLs: base `…/api` and `…/api/` both lead to `…/api/custommodules/…`; `/api` is never dropped —
+- [x] **CC-01** (N · U) URLs: base `…/api` and `…/api/` both lead to `…/api/custommodules/…`; `/api` is never dropped —
   5.6.4
-- [ ] **CC-02** (N · U) User calls send `Authorization: Bearer …`, service calls `Authorization: Login …`; both send
+- [x] **CC-02** (N · U) User calls send `Authorization: Bearer …`, service calls `Authorization: Login …`; both send
   `X-OnlyAuthenticated: 1` — 5.6.2
-- [ ] **CC-03** (N · U) The `data` envelope is unwrapped — 5.6.8
-- [ ] **CC-13** (S · U) Counterpart of CC-03: a `200` without `data`, with `data: null`, with the wrong type (object
+- [x] **CC-03** (N · U) The `data` envelope is unwrapped — 5.6.8
+- [x] **CC-13** (S · U) Counterpart of CC-03: a `200` without `data`, with `data: null`, with the wrong type (object
   instead of list) or with HTML instead of JSON → `upstream-invalid`, never treated as "empty" — 5.6.6, 5.6.8
 - [x] **CC-04** (N · U) Error mapping per status (`401`/`403` user and service, `404`, `429` with and without
   `Retry-After`, `500`, `503`, timeout, connection error, non-JSON body) gives the right exception type — 5.6.6
-- [ ] **CC-05** (! · U) `401`/`403` on a **service** call maps to `misconfigured`, never to "user not authorized" —
+- [x] **CC-05** (! · U) `401`/`403` on a **service** call maps to `misconfigured`, never to "user not authorized" —
   5.6.6
 - [ ] **CC-06** (! · U) No exception message and no log entry of the client contains a token, password, code or
   secret, including on errors — 5.6.2
-- [ ] **CC-07** (N · U) No cookies are stored or sent between calls — 5.6.3
-- [ ] **CC-12** (! · U) Credentials are never mixed up: a user's bearer token is never sent on KV calls, the service
+- [x] **CC-07** (N · U) No cookies are stored or sent between calls — 5.6.3
+- [x] **CC-12** (! · U) Credentials are never mixed up: a user's bearer token is never sent on KV calls, the service
   token never on user calls, and neither goes to a host other than the configured instance (e.g. after a redirect) —
   5.6.2
-- [ ] **CC-08** (E · U) The timeout from the configuration is applied (connect and total) — 5.6.5
-- [ ] **CC-09** (N · U) No automatic retry, including after `429` — 5.6.7
+- [x] **CC-08** (E · U) The timeout from the configuration is applied (connect and total) — 5.6.5
+- [x] **CC-09** (N · U) No automatic retry, including after `429` — 5.6.7
 - [x] **CC-10** (N · C) `GET /custommodules/{key}` returns the module; categories and values have the assumed shape —
   5.6
 - [ ] **CC-11** (! · C) An anonymous call with `X-OnlyAuthenticated: 1` gets `401`, not empty data — 5.6.2
 - [ ] **CC-15** (! · U) TLS verification is never disabled and redirects aren't followed: a `302` from ChurchTools isn't
   followed (no credentials go to the redirect target); a self-signed certificate is rejected (checked against a local
   HTTPS test server, or in the contract layer) — 5.6.6
-- [ ] **CC-16** (E · U) `Retry-After` parsing: seconds (`120`), an HTTP date, a missing header and garbage (`soon`) give
+- [x] **CC-16** (E · U) `Retry-After` parsing: seconds (`120`), an HTTP date, a missing header and garbage (`soon`) give
   120, the date's offset, 60 and 60 respectively, never less than 60 — 5.6.7
 - [ ] **CC-14** (N · C) Counterpart of CC-10: an invalid service token gets `401`, and a missing permission `403`, as the
   error mapping assumes — 5.6.6
@@ -225,11 +225,11 @@ normal case names it ("→ PV-05").
 - [x] **TK-12** (! · U) After `JWT_SECRET` changes, all old tokens are rejected — 6.3
 - [x] **TK-13** (! · U) Counterparts of TK-01/02: a token missing `exp`, `sub`, `aud`, `iss`, `jti` or `username`, or
   with an empty `sub`, is rejected — 4.4
-- [x] **TK-14** (! · A) `iss` is the constant `ctpassstore-backend`: a manipulated `Host` or `X-Forwarded-Host` header
+- [ ] **TK-14** (! · A) `iss` is the constant `ctpassstore-backend`: a manipulated `Host` or `X-Forwarded-Host` header
   changes neither the `iss` of issued tokens nor what validation accepts — 4.4
 - [x] **TK-15** (! · U) Order of validation: a token with a bad signature **and** an expired `exp` gives `invalid-token`,
   not `token-expired` (no information without a valid signature) — 4.3.3
-- [x] **TK-16** (! · U) Header parameters `jwk`, `jku`, `x5u`, `x5c` are ignored; a token with `crit` is rejected — 4.3.3
+- [ ] **TK-16** (! · U) Header parameters `jwk`, `jku`, `x5u`, `x5c` are ignored; a token with `crit` is rejected — 4.3.3
 
 ### Login (`POST /v1/auth/token`, spec 4.4)
 
@@ -246,7 +246,7 @@ normal case names it ("→ PV-05").
 - [x] **AX-07** (! · A) `whoami` returns a different person than the token's `sub` → `502 upstream-invalid`, no token
   issued — 4.4.4
 - [x] **AX-08** (! · A) No `view` permission → `403 no-service-access`, no token issued — 4.4.4
-- [x] **AX-09** (! · A) The ChurchTools access and refresh tokens appear in neither the response nor the log — 4.4.5
+- [ ] **AX-09** (! · A) The ChurchTools access and refresh tokens appear in neither the response nor the log — 4.4.5
 - [x] **AX-10** (S · A) Missing fields, empty strings or wrong types → `400 invalid-body` — 4.4
 - [x] **AX-10a** (E · A) Field length boundary: `code`, `codeVerifier` and `redirectUri` with 2,048 characters are
   accepted; with 2,049 → `400 invalid-body` — 4.4
@@ -262,7 +262,7 @@ normal case names it ("→ PV-05").
 - [x] **AX-17** (N · A) The issued token's `username` claim equals the `cmsUserId` from `whoami` — 4.4.4
 - [x] **AX-18** (! · A) `scopes` as a string (`"api"`, `"apix"`), or as an array without the exact element `api`
   (`["apix"]`, `["API"]`) → no token issued — 4.4.3
-- [x] **AX-13** (! · A) Counterparts of AX-01: a wrong or missing `codeVerifier` (PKCE), a code for another client, or
+- [ ] **AX-13** (! · A) Counterparts of AX-01: a wrong or missing `codeVerifier` (PKCE), a code for another client, or
   the same code twice → no token issued (`400 oauth-code-invalid`) — 4.4.2
 
 ### Machine client tokens (spec 4.4a)
@@ -380,15 +380,15 @@ normal case names it ("→ PV-05").
 
 ### General
 
-- [x] **IN-01** (N · A) `{id}` = `1` and a large valid integer are accepted — 4.1
-- [x] **IN-02** (! · A) `{id}` = `0`, `-1`, `+1`, `01`, `1.5`, `1e3`, `abc`, `" 1"`, `0x1`, a number above `PHP_INT_MAX`,
+- [ ] **IN-01** (N · A) `{id}` = `1` and a large valid integer are accepted — 4.1
+- [ ] **IN-02** (! · A) `{id}` = `0`, `-1`, `+1`, `01`, `1.5`, `1e3`, `abc`, `" 1"`, `0x1`, a number above `PHP_INT_MAX`,
   empty → `400 invalid-id`, without calling ChurchTools — 4.1
 - [x] **IN-03** (N · A) An empty body or `{}` is accepted where all fields are optional — 4.1
-- [x] **IN-04** (S · A) Body `[]`, `"text"`, `42`, `null`, invalid JSON → `400 invalid-body` — 4.1
-- [x] **IN-05** (S · A) Fields with the wrong type (`secondaryPwd: 123`, `primaryPwd: []`) → `400 invalid-body`, not a
+- [ ] **IN-04** (S · A) Body `[]`, `"text"`, `42`, `null`, invalid JSON → `400 invalid-body` — 4.1
+- [ ] **IN-05** (S · A) Fields with the wrong type (`secondaryPwd: 123`, `primaryPwd: []`) → `400 invalid-body`, not a
   PHP type error — 4.1
-- [ ] **IN-09** (N · A) The old paths without `/v1/` (`/entries/1`, `/auth/token`, `/test`) answer `404 not-found` — 4.1
-- [x] **IN-06** (E · A) Body size limit: exactly 16 KB is accepted (if otherwise valid); 16 KB + 1 byte → `413
+- [x] **IN-09** (N · A) The old paths without `/v1/` (`/entries/1`, `/auth/token`, `/test`) answer `404 not-found` — 4.1
+- [ ] **IN-06** (E · A) Body size limit: exactly 16 KB is accepted (if otherwise valid); 16 KB + 1 byte → `413
   payload-too-large` — 4.1
 - [x] **IN-07** (N · A) Unknown route → `404 not-found`; wrong method on a known route → `405` with an `Allow` header —
   4.1
@@ -398,7 +398,7 @@ normal case names it ("→ PV-05").
 
 - [x] **EG-01** (N · A) Existing entry → `200` with `secondaryPwd` (ciphertext) — 4.5
 - [x] **EG-02** (N · A) No entry → `404 entry-not-found` — 4.5
-- [ ] **EG-03** (! · A) The response never contains plaintext, only the stored ciphertext — 4.5
+- [x] **EG-03** (! · A) The response never contains plaintext, only the stored ciphertext — 4.5
 - [x] **EG-04** (S · A) Duplicates → `200` with the newest — 4.5
 
 ### `PUT /v1/entries/{id}` (4.6)
@@ -416,21 +416,21 @@ normal case names it ("→ PV-05").
   the custom password check — 4.6
 - [x] **EP-10** (! · A) Two generated passwords for the same person differ, and the old one is no longer stored after
   the second `PUT` — 4.6
-- [x] **EP-12** (! · A) Partial failure: encryption or the write fails → error response, the previous entry is unchanged,
+- [ ] **EP-12** (! · A) Partial failure: encryption or the write fails → error response, the previous entry is unchanged,
   and the generated plaintext isn't returned — 4.6.5
 - [x] **EP-13** (S · A) Healing partial failure: the update succeeds but deleting a duplicate fails → success, the new
   password is the one read afterwards, and a `warning` is logged — 4.6.5
-- [x] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
+- [ ] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
   `400 password-invalid` with the matching `violations`, and nothing is stored — 4.6.3
 
 ### `DELETE /v1/entries/{id}` (4.7)
 
-- [ ] **ED-01** (N · A) Existing entry → `204`, entry gone — 4.7
-- [ ] **ED-02** (E · A) No entry → `204` (idempotent) — 4.7
+- [x] **ED-01** (N · A) Existing entry → `204`, entry gone — 4.7
+- [x] **ED-02** (E · A) No entry → `204` (idempotent) — 4.7
 - [x] **ED-03** (S · A) Duplicates → all deleted — 4.7
 - [x] **ED-04** (N · A) With `requirePasswordForPasswordChange`: correct primary password → `204`; missing or empty →
   `400 primary-password-required`; wrong → `403 invalid-primary-password`; nothing deleted in the error cases — 4.7
-- [ ] **ED-05** (! · A) Counterpart of ED-01: deleting person 7 leaves every other entry untouched — 4.7
+- [x] **ED-05** (! · A) Counterpart of ED-01: deleting person 7 leaves every other entry untouched — 4.7
 
 ### `GET /v1/test` (4.8)
 
@@ -455,7 +455,7 @@ normal case names it ("→ PV-05").
 
 ## 9. Error format (spec 4.9)
 
-- [ ] **ER-01** (N · A) Every error response has `Content-Type: application/problem+json` and `type`, `title`,
+- [x] **ER-01** (N · A) Every error response has `Content-Type: application/problem+json` and `type`, `title`,
   `status` (equal to the HTTP status) and `detail` — 4.9
 - [x] **ER-02** (N · A) Every problem type in the table of 4.9 is produced by at least one API test with the right
   status (this test fails when a type is added without a test) — 4.9
@@ -468,14 +468,14 @@ normal case names it ("→ PV-05").
   `upstream-rate-limited`) and the same value as the `retryAfter` member — 4.9, 6.2
 - [ ] **ER-08** (! · A) PHP warnings, notices and deprecations never reach a response body (`display_errors` off); they
   go to the log — 4.1
-- [ ] **ER-09** (N · A) The new problem types `payload-too-large` (413) and `unsupported-media-type` (415) are produced
+- [x] **ER-09** (N · A) The new problem types `payload-too-large` (413) and `unsupported-media-type` (415) are produced
   as specified — 4.9
 - [x] **ER-07** (N · A) Counterpart of ER-01: successful responses (`200`, `204`) are plain JSON or empty, never
   `application/problem+json` — 4.1
 
 ## 10. HTTP behavior (spec 4.1, 4.2)
 
-- [ ] **HT-01** (N · A) Allowed origin → `Access-Control-Allow-Origin` with exactly that origin — 4.2
+- [x] **HT-01** (N · A) Allowed origin → `Access-Control-Allow-Origin` with exactly that origin — 4.2
 - [ ] **HT-02** (! · A) A foreign origin, `null` or a lookalike (`https://instance.church.tools.evil.com`) → no CORS
   headers — 4.2
 - [ ] **HT-03** (N · A) Preflight `OPTIONS` from an allowed origin works without a token: status `204`,
@@ -488,7 +488,7 @@ normal case names it ("→ PV-05").
 - [ ] **HT-08** (N · A) For allowed origins: `Access-Control-Allow-Headers` contains `Authorization` and `Content-Type`;
   `Access-Control-Allow-Credentials` is **not** set; `Access-Control-Allow-Origin` is never `*` — 4.2
 - [ ] **HT-09** (N · A) `Vary: Origin` is present on every response — 4.2
-- [x] **HT-10** (! · A) Error responses (`400`, `401`, `403`, `404`, `500`) to an allowed origin carry the same CORS
+- [ ] **HT-10** (! · A) Error responses (`400`, `401`, `403`, `404`, `500`) to an allowed origin carry the same CORS
   headers as successful ones, so the extension can read the problem details — 4.2
 - [ ] **HT-07** (! · A) Counterparts of HT-03: a preflight from a foreign origin gets no `Access-Control-Allow-*`
   headers, and a preflight never runs the endpoint's logic — 4.2
@@ -513,7 +513,7 @@ normal case names it ("→ PV-05").
 - [ ] **CA-04** (! · U) Cache files contain no secrets, and the cache folder isn't inside `public/` — 6.1
 - [ ] **CA-05** (S · U) A corrupt or unwritable **settings or ID** cache leads to loading from ChurchTools, not to an
   error response — 6.1
-- [ ] **CA-07** (! · U) The security-relevant stores fail closed: an unwritable `jti` cache rejects machine requests
+- [x] **CA-07** (! · U) The security-relevant stores fail closed: an unwritable `jti` cache rejects machine requests
   (MC-19); unwritable rate-limit counters reject primary-password checks (`500 misconfigured`), never skip the limit —
   6.1
 - [ ] **CA-08** (! · U) Tampering with the settings cache: an entry with the current key identifier but a missing or
@@ -526,7 +526,7 @@ normal case names it ("→ PV-05").
   ID cache is reloaded from ChurchTools; the security stores are cleared and start over (no `500`) — 6.1
 - [ ] **CA-09** (! · U) The cache format is JSON: a cache file containing a serialized PHP object is never
   unserialized — 6.1
-- [ ] **CA-06** (! · U) The `jti` replay cache survives across requests (file-based) and forgets entries after their
+- [x] **CA-06** (! · U) The `jti` replay cache survives across requests (file-based) and forgets entries after their
   `exp` — 4.4a.4
 
 ## 13. Attack scenarios and robustness
@@ -536,9 +536,9 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 ### Encoding
 
-- [x] **EC-01** (! · A) A body that isn't valid UTF-8 (lone continuation bytes, overlong encodings such as `C0 AF`,
+- [ ] **EC-01** (! · A) A body that isn't valid UTF-8 (lone continuation bytes, overlong encodings such as `C0 AF`,
   surrogate halves) → `400 invalid-body`, no PHP warning — 4.1
-- [x] **EC-02** (S · A) A body with a UTF-8 BOM or in UTF-16 → `400 invalid-body`;
+- [ ] **EC-02** (S · A) A body with a UTF-8 BOM or in UTF-16 → `400 invalid-body`;
   `Content-Type: application/json; charset=latin1` → `415`; `application/json; charset=utf-8` is accepted — 4.1
 - [x] **EC-03** (! · U) A custom password in decomposed Unicode (`e` + combining accent) or with invisible characters
   (zero-width space, soft hyphen, BOM, right-to-left mark) is rejected — 5.1.1
@@ -552,15 +552,15 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 - [x] **TY-01** (! · A) Duplicate JSON keys (`{"secondaryPwd": "a", "secondaryPwd": "b"}`) → `400 invalid-body`, so the
   value that's validated can never differ from the one that's stored — 4.1
-- [x] **TY-02** (! · A) Mass assignment: extra fields in the body (`personId`, `id`, `dataCategoryId`, `role`, `isAdmin`,
+- [ ] **TY-02** (! · A) Mass assignment: extra fields in the body (`personId`, `id`, `dataCategoryId`, `role`, `isAdmin`,
   `username`) → `400 invalid-body`. The stored value contains exactly `personId` (from the path) and `secondaryPwd` — 4.1,
   5.3
-- [x] **TY-03** (S · A) JSON numbers where strings are expected, and vice versa (`"primaryPwd": 123456`,
+- [ ] **TY-03** (S · A) JSON numbers where strings are expected, and vice versa (`"primaryPwd": 123456`,
   `"secondaryPwd": true`, `"code": ["x"]`) → `400 invalid-body`, never cast silently — 4.1
 - [ ] **TY-04** (! · U) Claim types in backend and machine tokens: `exp`/`iat`/`nbf` as strings, floats, negative or huge
   numbers; `sub` as a number; `aud` as an array; `kid` as a number, an array or empty → rejected or handled exactly as
   specified, never cast in a way that extends validity or changes the identity — 4.4, 4.4a
-- [ ] **TY-05** (! · U) ChurchTools token claim types during login: `scopes` as a string instead of an array (`"apix"`
+- [x] **TY-05** (! · U) ChurchTools token claim types during login: `scopes` as a string instead of an array (`"apix"`
   must not count as containing `api`), `sub` as a number, `aud` as an array → no token issued unless they exactly match
   — 4.4.3
 - [ ] **TY-06** (! · U) Machine client `id`s and `kid`s with lookalike characters (`ct-rаdius` with a Cyrillic `а`),
@@ -574,7 +574,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   parameters to the token request — 5.6
 - [ ] **IJ-02** (! · U) Path traversal in cache file names: `kid`, `jti` and other cache keys with `../`, `/`, `\`, `%00`
   or very long values can't escape the cache folder (keys are hashed before they're used as file names) — 6.1, 4.4a.4
-- [x] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
+- [ ] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
   containing newlines or control characters can't forge additional log lines — 6.4
 - [x] **IJ-04** (! · A) No reflected content: input echoed in a problem `detail` (e.g. the unknown path
   `/v1/entries/<script>`) is JSON-encoded. Even with `Accept: text/html` the answer is `application/problem+json`, never
@@ -587,24 +587,24 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   makes PHPStan fail) — 6.6
 - [x] **IJ-07** (! · A) `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are not trusted: the logged IP address is always
   `REMOTE_ADDR` — 6.3, 6.4
-- [x] **IJ-08** (! · A) `X-HTTP-Method-Override` and `_method` are ignored: a `POST`/`GET` can't be turned into a
+- [ ] **IJ-08** (! · A) `X-HTTP-Method-Override` and `_method` are ignored: a `POST`/`GET` can't be turned into a
   `PUT` or `DELETE` — 4.1
 
 ### Header and protocol edge cases
 
-- [ ] **HP-01** (N · A) The scheme is case-insensitive: `Bearer`, `bearer` and `BEARER` with a valid token are accepted
+- [x] **HP-01** (N · A) The scheme is case-insensitive: `Bearer`, `bearer` and `BEARER` with a valid token are accepted
   — 4.3.2
 - [x] **HP-01a** (! · A) Rejected with `401 invalid-token`: an empty token (`Bearer`, `Bearer `), whitespace or a tab
   inside the token, two `Authorization` headers, a comma-joined value (`Bearer a, Bearer b`), a scheme with a typo
   (`Bearer:`, `Bearers`) — 4.3.2
 - [ ] **HP-02** (S · A) `HEAD` and unexpected methods (`PATCH`, `TRACE`) → `405`, never a write — 4.1
-- [x] **HP-03** (S · A) A non-empty body with a missing or wrong `Content-Type` (`text/plain`,
+- [ ] **HP-03** (S · A) A non-empty body with a missing or wrong `Content-Type` (`text/plain`,
   `multipart/form-data`, `application/x-www-form-urlencoded`) → `415 unsupported-media-type`, never parsed as form
   data. An empty body needs no `Content-Type` — 4.1
 
 ### Resource exhaustion and overflows
 
-- [x] **RX-01** (! · A) Nesting depth: 32 levels are accepted by the parser (then rejected only for unknown fields), 33
+- [ ] **RX-01** (! · A) Nesting depth: 32 levels are accepted by the parser (then rejected only for unknown fields), 33
   → `400 invalid-body`; 10,000 levels → `400 invalid-body` without exhausting memory or the stack — 4.1
 - [x] **RX-02** (! · A) Huge passwords cost nothing: a body over 16 KB is `413` before parsing; within a body, a password
   over 128 characters is reported only as `too-long`, before any other rule runs or encryption starts — 4.1, 5.1.4
@@ -622,7 +622,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 
 ### Timing and races
 
-- [x] **TR-01** (! · U) Secrets are compared in constant time: signatures through the JWT library, the cache HMAC with
+- [ ] **TR-01** (! · U) Secrets are compared in constant time: signatures through the JWT library, the cache HMAC with
   `hash_equals` (unit test on the cache's comparison helper). `strcmp` and similar on secrets are banned by the PHPStan
   rule set — 6.3, 6.6
 
