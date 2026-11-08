@@ -13,7 +13,8 @@ final class Settings
      * @param list<int> $adminUsers person IDs that may read and change every entry
      * @param string|null $backendUrl without a trailing slash; null if the setting is missing
      * @param array<string, MachineClient> $machineClients the enabled clients by ID
-     * @param list<string> $machineClientProblems why entries were disabled or permissions ignored, for `/test`
+     * @param list<string> $problems settings that were ignored or disabled instead of failing (invalid backendUrl, machine
+     *                             client entries, unknown permissions), for the log and `/test`
      */
     public function __construct(
         public readonly bool $requirePrimaryPassword,
@@ -22,7 +23,7 @@ final class Settings
         public readonly array $adminUsers,
         public readonly ?string $backendUrl,
         public readonly array $machineClients = [],
-        public readonly array $machineClientProblems = [],
+        public readonly array $problems = [],
     ) {
         if ($passwordLength < PasswordPolicy::MIN_CONFIGURABLE_LENGTH || $passwordLength > PasswordPolicy::MAX_CONFIGURABLE_LENGTH) {
             throw new \InvalidArgumentException("A password length of $passwordLength is outside the configurable range.");

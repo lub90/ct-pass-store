@@ -38,6 +38,13 @@ final class KvSettingsRepository implements SettingsRepository
         $raw = $this->singleValue(KvSchema::SETTINGS_CATEGORY, 'The extension settings', 'Save the settings in the extension.');
 
         [$clients, $problems] = self::machineClients($raw[KvSchema::SETTING_MACHINE_CLIENTS] ?? []);
+        // Only machine clients need backendUrl (for aud). An invalid one disables them, as a missing one does
+        // (spec 4.4a.3), instead of breaking every request that needs the settings.
+        $backendUrl = self::backendUrl($raw);
+        if ($backendUrl === false) {
+            $backendUrl = null;
+            $problems[] = 'The setting backendUrl must be an https:// URL without credentials, query or fragment; machine clients can\'t authenticate until it\'s fixed.';
+        }
         // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why.
         foreach ($problems as $problem) {
             $this->logger->warning($problem);
@@ -48,9 +55,9 @@ final class KvSettingsRepository implements SettingsRepository
             allowCustomPasswords: self::boolean($raw, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD),
             passwordLength: self::passwordLength($raw),
             adminUsers: self::personIds($raw, KvSchema::SETTING_ADMIN_USERS),
-            backendUrl: self::backendUrl($raw),
+            backendUrl: $backendUrl,
             machineClients: $clients,
-            machineClientProblems: $problems,
+            problems: $problems,
         );
     }
 
@@ -238,9 +245,11 @@ final class KvSettingsRepository implements SettingsRepository
     }
 
     /**
+     * The normalized backendUrl, null if it's missing, false if it's invalid.
+     *
      * @param array<string, mixed> $raw
      */
-    private static function backendUrl(array $raw): ?string
+    private static function backendUrl(array $raw): string|false|null
     {
         $value = $raw[KvSchema::SETTING_BACKEND_URL] ?? null;
         if ($value === null) {
@@ -253,7 +262,7 @@ final class KvSettingsRepository implements SettingsRepository
             || ($parts['host'] ?? '') === ''
             || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])
         ) {
-            throw new ConfigurationException('The setting backendUrl must be an https:// URL without credentials, query or fragment. Save the settings in the extension.');
+            return false;
         }
 
         return rtrim((string) $value, '/');

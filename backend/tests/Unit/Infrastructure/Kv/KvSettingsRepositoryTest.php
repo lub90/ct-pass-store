@@ -156,12 +156,6 @@ final class KvSettingsRepositoryTest extends TestCase
         yield 'requirePassword missing' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, null];
         yield 'allowCustom as "true"' => [KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD, 'true'];
         yield 'allowCustom missing' => [KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD, null];
-        yield 'backendUrl http' => ['backendUrl', 'http://backend.example.org'];
-        yield 'backendUrl empty' => ['backendUrl', ''];
-        yield 'backendUrl with query' => ['backendUrl', 'https://backend.example.org/?x=1'];
-        yield 'backendUrl with fragment' => ['backendUrl', 'https://backend.example.org/#x'];
-        yield 'backendUrl with credentials' => ['backendUrl', 'https://u:p@backend.example.org'];
-        yield 'backendUrl not a string' => ['backendUrl', 42];
     }
 
     #[DataProvider('invalidValues')]
@@ -287,6 +281,34 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings->publicKey();
     }
 
+    /**
+     * An invalid backendUrl only disables machine clients, like a missing one (spec 4.4a.3); users keep working.
+     */
+    #[DataProvider('invalidBackendUrls')]
+    public function testAnInvalidBackendUrlIsTreatedAsMissingAndReported(mixed $url): void
+    {
+        $settings = $this->settings(['backendUrl' => $url] + self::validSettings())->settings();
+
+        self::assertNull($settings->backendUrl);
+        self::assertSame(16, $settings->passwordLength, 'The other settings stay usable.');
+        self::assertCount(1, $settings->problems);
+        self::assertStringContainsString('backendUrl', $settings->problems[0]);
+        self::assertTrue($this->log->hasWarningThatContains('The setting backendUrl must be an https:// URL'));
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function invalidBackendUrls(): iterable
+    {
+        yield 'http' => ['http://backend.example.org'];
+        yield 'empty' => [''];
+        yield 'with query' => ['https://backend.example.org/?x=1'];
+        yield 'with fragment' => ['https://backend.example.org/#x'];
+        yield 'with credentials' => ['https://u:p@backend.example.org'];
+        yield 'not a string' => [42];
+    }
+
     // ---------------------------------------------------------------- machineClients (spec 3.2, D5)
 
     /**
@@ -317,7 +339,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->settings(self::validSettings())->settings();
 
         self::assertSame([], $settings->machineClients);
-        self::assertSame([], $settings->machineClientProblems);
+        self::assertSame([], $settings->problems);
         self::assertFalse($this->log->hasWarningRecords());
     }
 
@@ -331,7 +353,7 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertSame([str_repeat('k', 32)], $client->publicKeys);
         self::assertSame(['entries:read'], $client->permissions);
         self::assertSame([str_repeat('o', 32)], $settings->machineClients['other-client']->publicKeys, 'base64url without padding is accepted.');
-        self::assertSame([], $settings->machineClientProblems);
+        self::assertSame([], $settings->problems);
     }
 
     /**
@@ -343,8 +365,8 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(['id' => 'good-client']), $entry]);
 
         self::assertSame(['good-client'], array_keys($settings->machineClients));
-        self::assertCount(1, $settings->machineClientProblems);
-        self::assertStringContainsString($problem, $settings->machineClientProblems[0]);
+        self::assertCount(1, $settings->problems);
+        self::assertStringContainsString($problem, $settings->problems[0]);
         self::assertTrue($this->log->hasWarningThatContains($problem), 'The admin finds the reason in the log.');
     }
 
@@ -374,7 +396,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(), self::client(['name' => 'Impostor']), self::client(['id' => 'good-client'])]);
 
         self::assertSame(['good-client'], array_keys($settings->machineClients));
-        self::assertCount(2, $settings->machineClientProblems);
+        self::assertCount(2, $settings->problems);
     }
 
     public function testUnknownPermissionsGrantNothingAndAreReported(): void
@@ -382,8 +404,8 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 42]])]);
 
         self::assertSame(['entries:read'], $settings->machineClients['ct-radius']->permissions);
-        self::assertCount(3, $settings->machineClientProblems);
-        self::assertStringContainsString('entries:write', $settings->machineClientProblems[0]);
+        self::assertCount(3, $settings->problems);
+        self::assertStringContainsString('entries:write', $settings->problems[0]);
     }
 
     public function testAClientWithoutPermissionsIsEnabledWithoutRights(): void
@@ -398,7 +420,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings(['ct-radius' => self::client()]);
 
         self::assertSame([], $settings->machineClients);
-        self::assertStringContainsString('isn\'t a list', $settings->machineClientProblems[0]);
+        self::assertStringContainsString('isn\'t a list', $settings->problems[0]);
         self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
     }
 }

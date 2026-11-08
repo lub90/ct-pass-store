@@ -209,6 +209,16 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, self::USER)->getStatusCode());
     }
 
+    public function testAnInvalidBackendUrlRefusesMachinesButNotUsers(): void
+    {
+        $this->setSettings(['backendUrl' => 'http://backend.example.org/ctpassstore', 'adminUsers' => [self::ADMIN]]);
+        $this->seedEntry(self::OTHER);
+
+        $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT));
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, self::ADMIN)->getStatusCode(), 'Admins still work.');
+        self::assertSame(204, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!'])->getStatusCode(), 'Users still change their entry.');
+    }
+
     public function testADisabledClientGets401AndTheLogSaysWhy(): void
     {
         $token = $this->machineTokenOf(self::READER_CLIENT);

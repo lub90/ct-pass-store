@@ -295,7 +295,8 @@ normal case names it ("→ PV-05").
   and `https://host/path/` match; `http://host/path`, `https://host/Path`, `https://host:8443/path`,
   `https://host/path/x` and `https://host` don't — 4.4a.3
 - [x] **MC-20** (! · U) `settings.backendUrl` missing or invalid → machine requests get `500 misconfigured`; a token with
-  `aud: ""` never matches — 4.4a.3
+  `aud: ""` never matches. Users and admins keep working in both cases (an invalid URL like `http://…` must not break
+  the settings for everyone) — 4.4a.3, 3.2
 - [x] **MC-10** (S · U) Two different `jti`s within the same second → both accepted — 4.4a.4
 - [x] **MC-11** (! · U) A client removed from the settings is rejected once the settings cache has expired — 4.4a
 - [x] **MC-12** (! · U) A token with `alg` `HS256` and a client `kid`, signed with the client's public key as HMAC

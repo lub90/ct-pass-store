@@ -93,7 +93,9 @@ Data lives in three KV categories of the `ctpassstore` module:
   - `requirePasswordForPasswordChange` and `allowCustomPassword` are JSON booleans and present. Strings (`"true"`),
     numbers (`0`, `1`) and `null` are rejected.
   - `backendUrl` is an `https://` URL. It's normalized by removing a trailing slash; a query, fragment or credentials
-    make it invalid. It's needed for machine tokens (4.4a).
+    make it invalid. It's needed only for machine tokens (4.4a), so an invalid value is treated like a missing one:
+    machine clients are refused (4.4a.3), users aren't affected, and the problem is logged as `warning` and reported by
+    `/test`.
   - `publicKey` (in `encryptionSettings`, exactly one value) is a PEM-encoded **RSA** public key of at least 4096 bits.
     EC or Ed25519 keys, certificates and private keys are rejected. PEM with CRLF line endings is accepted.
   - `machineClients` is a list of registered machine clients (D5):
@@ -341,7 +343,8 @@ key and send it as `Authorization: Bearer <jwt>`. The backend only knows the pub
    `settings.backendUrl`, otherwise exactly (scheme, host, port and path, case-sensitive in the path); `iat` isn't more than 30 seconds in the
    future; `exp` is greater than `iat`; the lifetime is at most 300 seconds. All claims are required.
    - If `settings.backendUrl` is missing or invalid, machine authentication **fails closed**: every machine request
-     gets `500 misconfigured`, and an empty `aud` never matches.
+     gets `500 misconfigured`, and an empty `aud` never matches. Requests of users don't depend on `backendUrl` and
+     keep working.
 4. `exp` isn't more than 30 seconds in the past; otherwise `401 token-expired`.
 5. **Replay protection:** the pair (`kid`, `jti`) hasn't been seen before. It's recorded only **after** steps 1–4
    succeeded, so unauthenticated requests can neither fill the cache nor block another client's `jti`s in advance.
