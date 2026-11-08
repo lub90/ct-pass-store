@@ -613,8 +613,13 @@ This covers the lookup and write logic in `KvPasswordRepository`.
    - The check passes only if ChurchTools answers `200` **and** the person ID in the response equals the token's
      `sub`. A different person (e.g. a username that was reassigned meanwhile) counts as a wrong password and is
      logged as `warning`.
-   - **(change)** Network errors and unexpected status codes count as `upstream-unavailable`, not as a wrong password,
-     and they don't count against the rate limit.
+   - **(change)** Network errors, timeouts and `5xx` count as `upstream-unavailable`, not as a wrong password, and
+     they don't count against the rate limit: ChurchTools couldn't be asked. A `429` (`upstream-rate-limited`) or an
+     answer the backend doesn't understand (`upstream-invalid`) isn't a wrong password either, but **it counts** against
+     the rate limit, because the attempt reached ChurchTools. Otherwise a lockout that ChurchTools answers with `429`
+     would let every attempt through.
+   - Only the statuses `success`, `totp` and `twoFactorSetup` mean "password correct". Any other status in a `200` is
+     `upstream-invalid`, never a pass.
    - **(change)** Rate-limited (6.3).
    - The response creates a ChurchTools session; its cookie is discarded. No CSRF token is sent with `/login`.
    - **Two-factor authentication (Q13):** for users with two-factor authentication, ChurchTools answers `200` with
@@ -717,7 +722,8 @@ ChurchTools communication goes through it.
 ### 6.3 Security
 
 - **(change)** Primary-password attempts are limited per **caller** (the authenticated person, not the target entry):
-  - Only wrong passwords count; ChurchTools errors don't.
+  - Wrong passwords count, and so do attempts that ChurchTools answered with `429` or something unexpected (5.5.3).
+    Only outages (network error, timeout, `5xx`) don't count.
   - The limit applies to `PUT` and `DELETE` alike.
   - After the 5th wrong password within a sliding window of 15 minutes, every further attempt gets
     `429 too-many-attempts` without calling ChurchTools, until 15 minutes after that 5th failure. Four failures don't

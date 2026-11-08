@@ -7,6 +7,7 @@ namespace CtPassStore\Infrastructure\ChurchTools;
 use CtPassStore\Application\Port\PrimaryPasswordVerifier;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -28,15 +29,22 @@ final class ChurchToolsPasswordVerifier implements PrimaryPasswordVerifier
         $result = $this->client->verifyLogin($username, $password);
 
         if ($result === null) {
-            $this->logger->info("ChurchTools password check failed for user {$username}");
+            // Person IDs, not usernames, go into the log (spec 6.4).
+            $this->logger->info("ChurchTools password check failed for person {$person}.");
 
             return false;
         }
 
         // The username may have been given to someone else since the login: only the token's own person counts
         // (spec 5.5.3).
+        // Only the known statuses mean "password correct"; anything else is an answer the backend doesn't understand,
+        // never a pass.
+        if (!in_array($result->status, LoginResult::PASSWORD_ACCEPTED, true)) {
+            throw new InvalidResponseException('POST login: ChurchTools answered 200 with an unknown login status.');
+        }
+
         if ($result->personId !== $person->value) {
-            $this->logger->warning("ChurchTools password check for user {$username} returned person {$result->personId} instead of {$person}; counted as wrong.");
+            $this->logger->warning("ChurchTools password check for person {$person} returned person {$result->personId}; counted as wrong.");
 
             return false;
         }

@@ -16,6 +16,9 @@ final class LoginResult
     public const STATUS_TOTP = 'totp';
     public const STATUS_TWO_FACTOR_SETUP = 'twoFactorSetup';
 
+    /** The statuses that mean "username and password are correct" (spec 5.5.3, Q13). */
+    public const PASSWORD_ACCEPTED = [self::STATUS_SUCCESS, self::STATUS_TOTP, self::STATUS_TWO_FACTOR_SETUP];
+
     public function __construct(
         public readonly int $personId,
         public readonly string $status,

@@ -161,6 +161,55 @@ final class PrimaryPasswordApiTest extends ApiTestCase
 
     // ---------------------------------------------------------------- PP-15
 
+    /**
+     * Only outages withdraw an attempt. A 429 or an answer the backend doesn't understand means ChurchTools got the
+     * attempt, so it counts: otherwise a lockout answered with 429 would let every attempt through (PP-15a).
+     *
+     * @return iterable<string, array{\Throwable, ProblemType}>
+     */
+    public static function answersThatCount(): iterable
+    {
+        yield 'rate limited (429)' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException('POST login: 429.', 60), ProblemType::UpstreamRateLimited];
+        yield 'unexpected answer' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException('POST login: odd.'), ProblemType::UpstreamInvalid];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('answersThatCount')]
+    public function testAttemptsAnsweredWithAnErrorStillCount(\Throwable $answer, ProblemType $problem): void
+    {
+        for ($i = 0; $i < 5; $i++) {
+            $this->churchTools->failNext('verifyLogin', $answer);
+            $this->assertProblem($problem, $this->change(self::USER, 'wrong-password'));
+        }
+        $calls = $this->loginCalls();
+
+        $this->assertProblem(ProblemType::TooManyAttempts, $this->change(self::USER, $this->correct(self::USER)));
+        self::assertSame($calls, $this->loginCalls());
+    }
+
+    /**
+     * Q13 and spec 5.5.3: only the known statuses mean "correct". An unknown one is never a pass.
+     */
+    public function testAnUnknownLoginStatusIsNeverAPass(): void
+    {
+        $this->churchTools->addLogin('user', $this->correct(self::USER), self::USER, 'somethingNew');
+
+        $this->assertProblem(ProblemType::UpstreamInvalid, $this->change(self::USER, $this->correct(self::USER)));
+        self::assertSame(0, $this->churchTools->writeCount());
+    }
+
+    public function testUsernamesDontGoIntoTheLog(): void
+    {
+        $this->change(self::USER, 'wrong-password');
+        $this->churchTools->addLogin('user', $this->correct(self::USER), 999);
+        $this->change(self::USER, $this->correct(self::USER));
+
+        foreach ($this->log->getRecords() as $record) {
+            self::assertStringNotContainsString("user 'user'", (string) $record['message']);
+            self::assertDoesNotMatchRegularExpression('/\\buser user\\b/', (string) $record['message']);
+        }
+        self::assertTrue($this->log->hasInfoThatContains('failed for person 10'));
+    }
+
     public function testChurchToolsErrorsDontCountAsFailures(): void
     {
         $this->failTimes(self::USER, 4);
@@ -190,7 +239,7 @@ final class PrimaryPasswordApiTest extends ApiTestCase
         $this->churchTools->addLogin('user', $this->correct(self::USER), 999);
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $this->change(self::USER, $this->correct(self::USER)));
-        self::assertTrue($this->log->hasWarningThatContains('returned person 999 instead of 10'));
+        self::assertTrue($this->log->hasWarningThatContains('check for person 10 returned person 999'));
         self::assertSame(0, $this->churchTools->writeCount());
     }
 

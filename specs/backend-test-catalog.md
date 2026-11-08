@@ -325,7 +325,12 @@ normal case names it ("→ PV-05").
   with a controllable clock) — 6.3, 4.9
 - [x] **PP-14** (! · A) Failures count against the **caller**: an admin's wrong attempts on other people's entries block
   the admin, not the target person — 4.6.2, 6.3
-- [x] **PP-15** (! · A) ChurchTools errors (timeout, `5xx`) during the check don't count as failures — 5.5.3, 6.3
+- [x] **PP-15** (! · A) ChurchTools outages (timeout, `5xx`) during the check don't count as failures — 5.5.3, 6.3
+- [x] **PP-15a** (! · A) Counterpart: attempts that ChurchTools answers with `429` or an unexpected answer **do** count;
+  after 5 of them the next attempt gets `429 too-many-attempts` without calling ChurchTools — 5.5.3, 6.3
+- [x] **PP-21** (! · A) A `200` from `/api/login` with an unknown `status` is `502 upstream-invalid`, never a correct
+  password; nothing is written — 5.5.3
+- [x] **PP-22** (N · A) Log entries of the check name the person ID, never the username — 6.4
 - [x] **PP-16** (N · A) The limit also applies to `DELETE`, sharing the counter with `PUT` — 4.7, 6.3
 - [x] **PP-07** (E · A) The limit is per person: person B isn't blocked by person A's failures — 6.3
 - [x] **PP-08** (! · A) The primary password appears in no response, problem detail or log entry — 6.3

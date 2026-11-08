@@ -11,6 +11,7 @@ use CtPassStore\Application\Exception\TooManyAttemptsException;
 use CtPassStore\Application\Port\AttemptLimiter;
 use CtPassStore\Application\Port\PrimaryPasswordVerifier;
 use CtPassStore\Application\Port\SettingsRepository;
+use CtPassStore\Application\Port\UpstreamOutage;
 use CtPassStore\Domain\AccessPolicy;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
@@ -77,8 +78,10 @@ final class EntryGuard
         // The username comes from the authenticated person, never from the request (spec 4.6).
         try {
             $correct = $this->verifier->verify($principal->username, $primaryPassword, $principal->id);
-        } catch (\Throwable $e) {
-            // Not a wrong password: an attempt that couldn't be checked doesn't count (spec 5.5.3).
+        } catch (UpstreamOutage $e) {
+            // ChurchTools couldn't be asked at all: the attempt doesn't count (spec 5.5.3, 6.3). Every other error
+            // (429, an unexpected answer) means the attempt arrived, so it stays counted; otherwise answers like a
+            // lockout from ChurchTools would let unlimited attempts through.
             $this->attempts->withdraw($principal->id, $attempt);
             throw $e;
         }
