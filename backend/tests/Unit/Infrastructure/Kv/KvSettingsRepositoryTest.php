@@ -399,6 +399,30 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertCount(2, $settings->problems);
     }
 
+    public function testClientsSharingAPublicKeyAreAllDisabled(): void
+    {
+        $shared = base64_encode(str_repeat('s', 32));
+        $settings = $this->machineSettings([
+            self::client(['id' => 'ct-radius', 'publicKeys' => [base64_encode(str_repeat('k', 32)), $shared]]),
+            self::client(['id' => 'impostor', 'publicKeys' => [$shared]]),
+            self::client(['id' => 'good-client', 'publicKeys' => [base64_encode(str_repeat('g', 32))]]),
+        ]);
+
+        self::assertSame(['good-client'], array_keys($settings->machineClients));
+        self::assertCount(2, $settings->problems);
+        self::assertStringContainsString('ct-radius is disabled: it shares a public key with impostor', $settings->problems[0]);
+        self::assertTrue($this->log->hasWarningThatContains('impostor is disabled: it shares a public key with ct-radius'));
+    }
+
+    public function testTheSameKeyTwiceWithinOneClientIsFine(): void
+    {
+        $key = base64_encode(str_repeat('k', 32));
+        $settings = $this->machineSettings([self::client(['publicKeys' => [$key, $key]])]);
+
+        self::assertSame(['ct-radius'], array_keys($settings->machineClients));
+        self::assertSame([], $settings->problems);
+    }
+
     public function testUnknownPermissionsGrantNothingAndAreReported(): void
     {
         $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 42]])]);

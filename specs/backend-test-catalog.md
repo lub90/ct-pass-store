@@ -291,6 +291,8 @@ normal case names it ("→ PV-05").
   never accepted — 4.4a.5
 - [x] **MC-21** (! · U) A token of a **disabled** client (its settings entry is invalid, e.g. an empty `publicKeys` list)
   is rejected at runtime like an unknown client, even when signed with a key that was valid before — 4.4a.1
+- [x] **MC-23** (! · U) Two clients with the same public key are both disabled and logged; the same key listed twice
+  within one client is fine — 3.2
 - [x] **MC-22** (E · U) `aud` normalization: with `backendUrl` `https://host/path`, a token `aud` of `https://host/path`
   and `https://host/path/` match; `http://host/path`, `https://host/Path`, `https://host:8443/path`,
   `https://host/path/x` and `https://host` don't — 4.4a.3

@@ -114,6 +114,8 @@ Data lives in three KV categories of the `ctpassstore` module:
     - A missing `machineClients` setting means an empty list.
     - A client with an invalid entry (bad `id`, duplicate `id`, empty or invalid `publicKeys`) is disabled and reported
       by `/test`; it doesn't break the others. With a duplicate `id`, all entries with that `id` are disabled.
+    - Every client has its own key pair. Clients that share a public key are all disabled: whoever holds the private
+      key chooses `kid`, `iss` and `sub`, and could act as any of them.
     - If `machineClients` itself isn't a list, all machine clients are disabled and `/test` reports it. Users aren't
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled

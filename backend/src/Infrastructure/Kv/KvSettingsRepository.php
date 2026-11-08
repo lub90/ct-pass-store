@@ -194,6 +194,37 @@ final class KvSettingsRepository implements SettingsRepository
             );
         }
 
+        return self::withoutSharedKeys($clients, $problems);
+    }
+
+    /**
+     * Disables every client that shares a public key with another one. A token's `kid`, `iss` and `sub` are chosen
+     * by whoever holds the private key, so a shared key would let one client act as the other.
+     *
+     * @param array<string, MachineClient> $clients
+     * @param list<string> $problems
+     * @return array{array<string, MachineClient>, list<string>}
+     */
+    private static function withoutSharedKeys(array $clients, array $problems): array
+    {
+        $owners = [];
+        foreach ($clients as $client) {
+            foreach (array_unique($client->publicKeys) as $key) {
+                $owners[$key][] = $client->id;
+            }
+        }
+        foreach ($owners as $ids) {
+            if (count($ids) < 2) {
+                continue;
+            }
+            foreach ($ids as $id) {
+                if (isset($clients[$id])) {
+                    unset($clients[$id]);
+                    $problems[] = sprintf('Machine client %s is disabled: it shares a public key with %s. Give every client its own key pair.', $id, implode(', ', array_diff($ids, [$id])));
+                }
+            }
+        }
+
         return [$clients, $problems];
     }
 
