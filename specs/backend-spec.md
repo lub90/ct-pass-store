@@ -720,6 +720,9 @@ ChurchTools communication goes through it.
   - Attempts during a block are neither checked nor counted, so they don't extend it. `Retry-After` gives the
     remaining seconds of the block.
   - A correct password resets the counter.
+  - **(change)** An attempt counts from the moment it starts, in the same atomic step that checks the block, and is
+    withdrawn again if ChurchTools can't be asked. So parallel requests can't run more than 5 checks; while 5 attempts
+    are still in flight, further ones get `429` as well.
 
   This protects accounts, and it prevents the backend's IP from being locked out by ChurchTools.
 - The client IP address is always `REMOTE_ADDR`. `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are ignored, because

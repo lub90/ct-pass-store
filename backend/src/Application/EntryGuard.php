@@ -65,22 +65,29 @@ final class EntryGuard
             throw new PrimaryPasswordRequiredException('This change needs your ChurchTools password in primaryPwd.');
         }
 
-        // Blocked callers aren't checked at all: ChurchTools isn't asked, and the attempt doesn't count (spec 6.3).
-        $blockedFor = $this->attempts->blockedFor($principal->id);
-        if ($blockedFor > 0) {
-            $this->logger->warning(ucfirst($principal->describe()) . " tried the primary password while blocked for {$blockedFor} s.");
-            throw new TooManyAttemptsException("Too many wrong passwords. Try again in {$blockedFor} seconds.", $blockedFor);
+        // The attempt is counted before ChurchTools is asked, so parallel requests can't run more checks than
+        // allowed (spec 6.3, catalog TR-05). Blocked callers aren't checked at all, and that attempt doesn't count.
+        try {
+            $attempt = $this->attempts->begin($principal->id);
+        } catch (TooManyAttemptsException $e) {
+            $this->logger->warning(ucfirst($principal->describe()) . " tried the primary password while blocked for {$e->retryAfterSeconds} s.");
+            throw $e;
         }
 
-        // The username comes from the authenticated person, never from the request (spec 4.6). ChurchTools errors
-        // propagate before anything is counted.
-        if (!$this->verifier->verify($principal->username, $primaryPassword, $principal->id)) {
-            // Failures count against the caller, not the target entry (spec 6.3).
-            $this->attempts->recordFailure($principal->id);
+        // The username comes from the authenticated person, never from the request (spec 4.6).
+        try {
+            $correct = $this->verifier->verify($principal->username, $primaryPassword, $principal->id);
+        } catch (\Throwable $e) {
+            // Not a wrong password: an attempt that couldn't be checked doesn't count (spec 5.5.3).
+            $this->attempts->withdraw($principal->id, $attempt);
+            throw $e;
+        }
+        if (!$correct) {
+            // Stays counted, against the caller, not the target entry (spec 6.3).
             $this->logger->warning(ucfirst($principal->describe()) . ' entered a wrong primary password.');
             throw new InvalidPrimaryPasswordException('The ChurchTools password is wrong.');
         }
-        $this->attempts->reset($principal->id);
+        $this->attempts->succeed($principal->id);
     }
 
     private function deny(Principal $principal, PersonId $target): never

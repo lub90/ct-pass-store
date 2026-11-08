@@ -627,6 +627,9 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   gives the newest entry, the next write leaves exactly one (LS-02) — 5.3.6
 - [ ] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
   locking) — 6.3, 4.4a.4
+- [x] **TR-05** (! · U) Parallel primary-password attempts can't run more checks than the limit: with 50 attempts in
+  flight at once, at most 5 reach ChurchTools and the rest get `429`. An attempt that hits a ChurchTools error is
+  withdrawn, including a block it caused; a correct one resets the counter — 6.3
 - [ ] **TR-04** (! · U) The same machine token sent twice in parallel is accepted at most once — 4.4a.4
 
 ## 14. Contract and smoke tests
