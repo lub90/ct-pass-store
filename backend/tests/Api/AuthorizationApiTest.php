@@ -177,6 +177,23 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame(self::CLIENT_IP, array_values($records)[0]['context']['ip']);
     }
 
+    /**
+     * IJ-07: forwarding headers are never trusted; the logged IP is always REMOTE_ADDR (spec 6.3).
+     */
+    public function testForwardingHeadersDontChangeTheLoggedIp(): void
+    {
+        $this->request('GET', '/v1/entries/' . self::USER, headers: [
+            'Authorization' => 'Bearer abc.def.ghi',
+            'X-Forwarded-For' => '198.51.100.1',
+            'X-Real-IP' => '198.51.100.2',
+            'Forwarded' => 'for=198.51.100.3',
+        ]);
+
+        $ips = array_map(static fn(array $r): mixed => $r['context']['ip'] ?? null, $this->log->getRecords());
+        self::assertContains(self::CLIENT_IP, $ips);
+        self::assertSame([], array_filter($ips, static fn(mixed $ip): bool => is_string($ip) && str_starts_with($ip, '198.51.100.')));
+    }
+
     // ---------------------------------------------------------------- AZ-09, TK-15 at the API
 
     public function testAnExpiredUserTokenIsTokenExpired(): void

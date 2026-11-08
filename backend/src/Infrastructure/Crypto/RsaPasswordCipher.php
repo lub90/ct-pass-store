@@ -24,6 +24,12 @@ final class RsaPasswordCipher implements PasswordCipher
             ->withHash('sha256')
             ->withMGFHash('sha256');
 
-        return base64_encode($key->encrypt($password));
+        try {
+            return base64_encode($key->encrypt($password));
+        } catch (\Throwable $e) {
+            // phpseclib's frames carry the plaintext as an argument when the host records arguments in traces. The
+            // original exception is therefore not attached; only its class says what went wrong (spec 5.2, EN-07).
+            throw new \RuntimeException('Encrypting the password failed (' . $e::class . ').');
+        }
     }
 }

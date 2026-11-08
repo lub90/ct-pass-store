@@ -83,7 +83,7 @@ normal case names it ("→ PV-05").
 ## 2. Encryption (`RsaPasswordCipher`, spec 5.2)
 
 - [x] **EN-01** (N · U) Encrypt, then decrypt with the test private key, gives the plaintext back — 5.2.1–2
-- [ ] **EN-09** (! · U) Counterparts of EN-01: decrypting with another private key fails; a ciphertext with one flipped
+- [x] **EN-09** (! · U) Counterparts of EN-01: decrypting with another private key fails; a ciphertext with one flipped
   bit, a truncated or an extended ciphertext fails to decrypt (no wrong plaintext comes out) — 5.2.1
 - [ ] **EN-02** (N · U) The output is valid base64, and decoded it's exactly 512 bytes (RSA-4096) — 5.2.2
 - [ ] **EN-03** (! · U) Encrypting the same plaintext twice gives different ciphertexts (OAEP is randomized) — 5.2.3
@@ -94,7 +94,7 @@ normal case names it ("→ PV-05").
   `misconfigured` — 5.2.4
 - [x] **EN-10** (! · U) Key types and formats: an EC key, an Ed25519 key and an X.509 certificate are rejected
   (`misconfigured`); an RSA key with 8192 bits and a PEM with CRLF line endings are accepted — 3.2, 5.2.4
-- [ ] **EN-07** (! · U) Neither the exception message nor the log of a failed encryption contains the plaintext — 5.2.5
+- [x] **EN-07** (! · U) Neither the exception message nor the log of a failed encryption contains the plaintext — 5.2.5
 - [ ] **EN-08** (N · C) A password encrypted by the backend is decrypted correctly by ct-radius' algorithm (Node.js
   `privateDecrypt`, OAEP, SHA-256). Checked once with a recorded sample. — 5.2.1
 
@@ -414,7 +414,7 @@ normal case names it ("→ PV-05").
 - [x] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
 - [x] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
   the custom password check — 4.6
-- [ ] **EP-10** (! · A) Two generated passwords for the same person differ, and the old one is no longer stored after
+- [x] **EP-10** (! · A) Two generated passwords for the same person differ, and the old one is no longer stored after
   the second `PUT` — 4.6
 - [x] **EP-12** (! · A) Partial failure: encryption or the write fails → error response, the previous entry is unchanged,
   and the generated plaintext isn't returned — 4.6.5
@@ -428,7 +428,7 @@ normal case names it ("→ PV-05").
 - [ ] **ED-01** (N · A) Existing entry → `204`, entry gone — 4.7
 - [ ] **ED-02** (E · A) No entry → `204` (idempotent) — 4.7
 - [x] **ED-03** (S · A) Duplicates → all deleted — 4.7
-- [ ] **ED-04** (N · A) With `requirePasswordForPasswordChange`: correct primary password → `204`; missing or empty →
+- [x] **ED-04** (N · A) With `requirePasswordForPasswordChange`: correct primary password → `204`; missing or empty →
   `400 primary-password-required`; wrong → `403 invalid-primary-password`; nothing deleted in the error cases — 4.7
 - [ ] **ED-05** (! · A) Counterpart of ED-01: deleting person 7 leaves every other entry untouched — 4.7
 
@@ -457,7 +457,7 @@ normal case names it ("→ PV-05").
 
 - [ ] **ER-01** (N · A) Every error response has `Content-Type: application/problem+json` and `type`, `title`,
   `status` (equal to the HTTP status) and `detail` — 4.9
-- [ ] **ER-02** (N · A) Every problem type in the table of 4.9 is produced by at least one API test with the right
+- [x] **ER-02** (N · A) Every problem type in the table of 4.9 is produced by at least one API test with the right
   status (this test fails when a type is added without a test) — 4.9
 - [x] **ER-03** (N · U) Every `type` URI has a section in `backend/docs/problems.md`, and the `title` the code produces
   for each type is fixed and equals the title documented there (the test parses the file) — 4.9
@@ -542,10 +542,10 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   `Content-Type: application/json; charset=latin1` → `415`; `application/json; charset=utf-8` is accepted — 4.1
 - [x] **EC-03** (! · U) A custom password in decomposed Unicode (`e` + combining accent) or with invisible characters
   (zero-width space, soft hyphen, BOM, right-to-left mark) is rejected — 5.1.1
-- [ ] **EC-04** (! · A) Path encoding: `/v1/entries/%37` (= 7), `/v1/entries/7%00`, `/v1/entries/%2537` (double
+- [x] **EC-04** (! · A) Path encoding: `/v1/entries/%37` (= 7), `/v1/entries/7%00`, `/v1/entries/%2537` (double
   encoded), `/v1/entries/7%2F..%2Ftest`, `/v1/entries/7/`, `/v1/Entries/7`, `/v1/entries//7` either address exactly person
   7 or give `400`/`404`. None of them reaches another person or another endpoint — 4.1
-- [ ] **EC-05** (! · A) Path traversal: `/v1/entries/../test`, `/v1/entries/..%2Ftest`, `/../config/credentials.php` never
+- [x] **EC-05** (! · A) Path traversal: `/v1/entries/../test`, `/v1/entries/..%2Ftest`, `/../config/credentials.php` never
   reach anything but a defined route (and never a file) — 6.3
 
 ### Types and type juggling
@@ -574,18 +574,18 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   parameters to the token request — 5.6
 - [ ] **IJ-02** (! · U) Path traversal in cache file names: `kid`, `jti` and other cache keys with `../`, `/`, `\`, `%00`
   or very long values can't escape the cache folder (keys are hashed before they're used as file names) — 6.1, 4.4a.4
-- [ ] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
+- [x] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
   containing newlines or control characters can't forge additional log lines — 6.4
 - [x] **IJ-04** (! · A) No reflected content: input echoed in a problem `detail` (e.g. the unknown path
   `/v1/entries/<script>`) is JSON-encoded. Even with `Accept: text/html` the answer is `application/problem+json`, never
   an HTML error page (Slim's HTML error renderer had an XSS vulnerability) — 4.9
-- [ ] **IJ-05** (! · A) Header injection: an `Origin` or other header containing CR/LF is never reflected into a
+- [x] **IJ-05** (! · A) Header injection: an `Origin` or other header containing CR/LF is never reflected into a
   response header. A non-numeric `Retry-After` from ChurchTools is replaced by 60 — 4.2, 6.2
 - [x] **IJ-06** (! · U) No dangerous functions in `src/`: `eval`, `unserialize`, `extract`, `assert` with strings,
   backticks, `exec`/`shell_exec`/`system`/`passthru`/`proc_open`, `include`/`require` with variable paths. Enforced by
   the PHPStan disallowed-calls rule set; a unit test checks that the rule set is active (a fixture file using `eval`
   makes PHPStan fail) — 6.6
-- [ ] **IJ-07** (! · A) `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are not trusted: the logged IP address is always
+- [x] **IJ-07** (! · A) `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are not trusted: the logged IP address is always
   `REMOTE_ADDR` — 6.3, 6.4
 - [x] **IJ-08** (! · A) `X-HTTP-Method-Override` and `_method` are ignored: a `POST`/`GET` can't be turned into a
   `PUT` or `DELETE` — 4.1
@@ -612,7 +612,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   generator allocates anything — 3.2
 - [ ] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap
   around or turn into `0`/negative values that pass a check — 4.1, 4.4
-- [ ] **RX-05** (S · U) The `jti` replay cache and the rate-limit counters stay bounded: expired entries are removed,
+- [x] **RX-05** (S · U) The `jti` replay cache and the rate-limit counters stay bounded: expired entries are removed,
   and many distinct values can't fill the disk — 4.4a.4, 6.3
 - [ ] **RX-06** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`414` without a PHP error
   — 4.1
@@ -638,7 +638,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 - [x] **TR-05** (! · U) Parallel primary-password attempts can't run more checks than the limit: with 50 attempts in
   flight at once, at most 5 reach ChurchTools and the rest get `429`. An attempt that hits a ChurchTools error is
   withdrawn, including a block it caused; a correct one resets the counter — 6.3
-- [ ] **TR-04** (! · U) The same machine token sent twice in parallel is accepted at most once — 4.4a.4
+- [x] **TR-04** (! · U) The same machine token sent twice in parallel is accepted at most once — 4.4a.4
 
 ## 14. Contract and smoke tests
 

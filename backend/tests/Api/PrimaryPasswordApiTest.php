@@ -288,4 +288,32 @@ final class PrimaryPasswordApiTest extends ApiTestCase
             unlink($this->cacheDir);
         }
     }
+
+    /**
+     * RX-05: requests that aren't authenticated never create a counter file.
+     */
+    public function testUnauthenticatedRequestsCreateNoCounterFiles(): void
+    {
+        foreach (['Bearer abc.def.ghi', 'Basic eDp5', ''] as $header) {
+            $this->request('PUT', '/v1/entries/' . self::USER, null, ['primaryPwd' => 'x'], $header === '' ? [] : ['Authorization' => $header]);
+        }
+
+        self::assertSame([], glob($this->cacheDir . '/*') ?: []);
+    }
+
+    // ---------------------------------------------------------------- ED-04
+
+    public function testDeleteNeedsTheCorrectPrimaryPasswordAndDeletesNothingOtherwise(): void
+    {
+        $this->seedEntry(self::USER);
+
+        $this->assertProblem(ProblemType::PrimaryPasswordRequired, $this->request('DELETE', '/v1/entries/' . self::USER, self::USER, []));
+        $this->assertProblem(ProblemType::PrimaryPasswordRequired, $this->request('DELETE', '/v1/entries/' . self::USER, self::USER, ['primaryPwd' => '']));
+        $this->assertProblem(ProblemType::InvalidPrimaryPassword, $this->change(self::USER, 'wrong-password', method: 'DELETE'));
+        self::assertCount(1, $this->storedEntries(), 'Nothing deleted in the error cases.');
+        self::assertSame(0, $this->churchTools->writeCount());
+
+        self::assertSame(204, $this->change(self::USER, $this->correct(self::USER), method: 'DELETE')->getStatusCode());
+        self::assertSame([], $this->storedEntries());
+    }
 }

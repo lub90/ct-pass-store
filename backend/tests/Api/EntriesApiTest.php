@@ -114,6 +114,22 @@ final class EntriesApiTest extends ApiTestCase
         self::assertSame($password, $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));
     }
 
+    /**
+     * EP-10.
+     */
+    public function testTwoGeneratedPasswordsDifferAndOnlyTheSecondIsStored(): void
+    {
+        $first = $this->json($this->request('PUT', '/v1/entries/' . self::USER, self::USER))['secondaryPwd'];
+        $second = $this->json($this->request('PUT', '/v1/entries/' . self::USER, self::USER))['secondaryPwd'];
+
+        self::assertIsString($first);
+        self::assertIsString($second);
+        self::assertNotSame($first, $second);
+        $entries = $this->storedEntries();
+        self::assertCount(1, $entries);
+        self::assertSame($second, $this->decrypt($entries[0][KvSchema::ENTRY_CIPHERTEXT]));
+    }
+
     public function testCustomPasswordIsStoredEncrypted(): void
     {
         $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']);

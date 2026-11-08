@@ -131,10 +131,32 @@ final class Application
             return self::misconfigured($e->getMessage());
         }
 
-        $logger = new Logger('ct-pass-store');
-        $logger->pushHandler(new StreamHandler($logFile, Logger::toMonologLevel($config->logLevel)));
+        return self::create($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), self::logger($logFile, $config->logLevel));
+    }
 
-        return self::create($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), $logger);
+    /**
+     * The production logger. Control characters (newlines included) in messages and context values are escaped as
+     * `\xNN`, so input that reaches the log can't forge additional log lines (spec 6.4).
+     */
+    public static function logger(string $logFile, string $level): Logger
+    {
+        $logger = new Logger('ct-pass-store');
+        $logger->pushHandler(new StreamHandler($logFile, Logger::toMonologLevel($level)));
+        $logger->pushProcessor(static function (array $record): array {
+            $escape = static function (mixed $value) use (&$escape): mixed {
+                if (is_string($value)) {
+                    return (string) preg_replace_callback('/[\x00-\x1F\x7F]/', static fn(array $m): string => sprintf('\\x%02X', ord($m[0])), $value);
+                }
+
+                return is_array($value) ? array_map($escape, $value) : $value;
+            };
+            $record['message'] = $escape($record['message']);
+            $record['context'] = $escape($record['context']);
+
+            return $record;
+        });
+
+        return $logger;
     }
 
     /**

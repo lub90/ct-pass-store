@@ -64,4 +64,75 @@ final class RsaPasswordCipherTest extends TestCase
         $this->expectException(\Throwable::class);
         self::decrypt($ciphertext, 'sha1');
     }
+
+    // ---------------------------------------------------------------- EN-09
+
+    /**
+     * @return string|false the plaintext, or false if decryption failed
+     */
+    private static function tryDecrypt(string $raw, ?string $privatePem = null): string|false
+    {
+        $key = PublicKeyLoader::loadPrivateKey($privatePem ?? (string) file_get_contents(self::KEYS . 'privateKey1.pem'));
+        self::assertInstanceOf(RSA\PrivateKey::class, $key);
+        try {
+            return $key->withPadding(RSA::ENCRYPTION_OAEP)->withHash('sha256')->withMGFHash('sha256')->decrypt($raw);
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    public function testAnotherPrivateKeyCantDecrypt(): void
+    {
+        $other = openssl_pkey_new(['private_key_bits' => 4096, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        self::assertNotFalse($other);
+        self::assertTrue(openssl_pkey_export($other, $pem));
+
+        $raw = (string) base64_decode($this->cipher()->encrypt('Aa1!aaaaaaaa'), true);
+
+        self::assertFalse(self::tryDecrypt($raw, (string) $pem));
+    }
+
+    public function testManipulatedCiphertextsNeverDecryptToAWrongPlaintext(): void
+    {
+        $raw = (string) base64_decode($this->cipher()->encrypt('Aa1!aaaaaaaa'), true);
+        self::assertSame('Aa1!aaaaaaaa', self::tryDecrypt($raw));
+
+        foreach ([0, 1, 100, 255, 511] as $byte) {
+            foreach ([0x01, 0x80] as $bit) {
+                $flipped = $raw;
+                $flipped[$byte] = chr(ord($flipped[$byte]) ^ $bit);
+                self::assertFalse(self::tryDecrypt($flipped), "Flipped bit $bit in byte $byte.");
+            }
+        }
+        self::assertFalse(self::tryDecrypt(substr($raw, 0, 511)), 'Truncated.');
+        self::assertFalse(self::tryDecrypt(substr($raw, 1)), 'Truncated at the front.');
+        self::assertFalse(self::tryDecrypt($raw . "\x00"), 'Extended.');
+        self::assertFalse(self::tryDecrypt("\x00" . $raw), 'Extended at the front.');
+    }
+
+    // ---------------------------------------------------------------- EN-07
+
+    public function testAFailedEncryptionDoesntRevealThePlaintext(): void
+    {
+        // Longer than RSA-4096 with OAEP-SHA256 can encrypt (446 bytes); passwords never get there (max. 128).
+        $plaintext = 'SECRET-' . str_repeat('p', 600);
+        // Hosts with a development php.ini record arguments in traces; check that case too.
+        $previous = ini_set('zend.exception_ignore_args', '0');
+
+        try {
+            $this->cipher()->encrypt($plaintext);
+            self::fail('Expected the encryption to fail.');
+        } catch (\Throwable $e) {
+            for ($current = $e; $current !== null; $current = $current->getPrevious()) {
+                self::assertStringNotContainsString('SECRET-', $current->getMessage());
+                foreach ($current->getTrace() as $frame) {
+                    foreach ($frame['args'] ?? [] as $arg) {
+                        self::assertNotSame($plaintext, $arg, 'The plaintext is in the trace arguments.');
+                    }
+                }
+            }
+        } finally {
+            ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+    }
 }

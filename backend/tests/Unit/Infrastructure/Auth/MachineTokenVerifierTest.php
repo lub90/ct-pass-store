@@ -341,6 +341,98 @@ final class MachineTokenVerifierTest extends TestCase
         $this->assertInvalid($this->sign($this->claims(['jti' => $jti, 'exp' => $this->clock->timestamp() + 61]), 'radius-2'));
     }
 
+    /**
+     * TR-04: the same token sent in parallel is accepted at most once. Real processes, started together at a barrier,
+     * share one replay cache, as PHP workers do.
+     */
+    public function testTheSameTokenInParallelIsAcceptedOnlyOnce(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('pcntl and posix are needed for real parallel processes.');
+        }
+        $token = $this->sign($this->claims());
+        $results = sys_get_temp_dir() . '/ctps-tr04-' . bin2hex(random_bytes(6));
+        mkdir($results);
+        $go = $results . '/go';
+        $children = [];
+
+        for ($i = 0; $i < 8; $i++) {
+            $pid = pcntl_fork();
+            self::assertNotSame(-1, $pid);
+            if ($pid === 0) {
+                while (!file_exists($go)) {
+                    usleep(1000);
+                }
+                try {
+                    $this->verifier()->verify($token);
+                    $outcome = 'accepted';
+                } catch (InvalidTokenException) {
+                    $outcome = 'replay';
+                } catch (\Throwable $e) {
+                    $outcome = 'error: ' . $e::class;
+                }
+                file_put_contents("$results/$i", $outcome);
+                // Ends the child without running PHPUnit's shutdown code.
+                posix_kill(getmypid(), SIGKILL);
+            }
+            $children[] = $pid;
+        }
+        touch($go);
+        foreach ($children as $pid) {
+            pcntl_waitpid($pid, $status);
+        }
+
+        $outcomes = [];
+        for ($i = 0; $i < 8; $i++) {
+            $outcomes[] = (string) @file_get_contents("$results/$i");
+            @unlink("$results/$i");
+        }
+        @unlink($go);
+        @rmdir($results);
+
+        sort($outcomes);
+        self::assertSame(array_merge(['accepted'], array_fill(0, 7, 'replay')), $outcomes);
+    }
+
+    // ---------------------------------------------------------------- RX-05
+
+    public function testExpiredJtisAreRemovedFromTheReplayCache(): void
+    {
+        for ($i = 0; $i < 50; $i++) {
+            $this->verifier()->verify($this->sign($this->claims()));
+        }
+        self::assertSame(50, $this->storedJtis());
+
+        $this->clock->advance(60 + 31);
+        $this->verifier()->verify($this->sign($this->claims()));
+
+        self::assertSame(1, $this->storedJtis(), 'Only the token that can still be valid is kept.');
+    }
+
+    public function testInvalidTokensCreateNoCacheFiles(): void
+    {
+        foreach (['unknown-1', 'unknown-2', 'ct-radius'] as $kid) {
+            try {
+                $this->verifier()->verify($this->sign($this->claims(['iss' => $kid, 'sub' => $kid]), 'attacker', $kid));
+            } catch (InvalidTokenException) {
+            }
+        }
+
+        self::assertSame([], glob($this->cacheDir . '/*.json') ?: [], 'Unauthenticated requests can\'t fill the disk.');
+    }
+
+    private function storedJtis(): int
+    {
+        $files = glob($this->cacheDir . '/*.json') ?: [];
+        self::assertCount(1, $files);
+        $file = json_decode((string) file_get_contents($files[0]), true);
+        self::assertIsArray($file);
+        $data = json_decode((string) $file['data'], true);
+        self::assertIsArray($data);
+
+        return count($data);
+    }
+
     public function testTwoJtisInTheSameSecondAreBothAccepted(): void
     {
         $first = $this->verifier()->verify($this->sign($this->claims()));

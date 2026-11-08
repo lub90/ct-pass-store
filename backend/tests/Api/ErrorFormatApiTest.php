@@ -202,6 +202,48 @@ final class ErrorFormatApiTest extends ApiTestCase
         self::assertSame(self::ORIGIN, $response->getHeaderLine('Access-Control-Allow-Origin'));
     }
 
+    /**
+     * IJ-05: an Origin that isn't exactly an allowed one is never reflected, whatever it contains. CR/LF can't even
+     * get into a header: the PSR-7 layer rejects it (the non-numeric Retry-After half of IJ-05 is CC-16).
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function manipulatedOrigins(): iterable
+    {
+        yield 'tab and more' => ["https://example.church.tools\tX-Evil: 1"];
+        yield 'NUL' => ["https://example.church.tools\x00"];
+        yield 'suffix' => ['https://example.church.tools.evil.com'];
+        yield 'two origins' => ['https://example.church.tools, https://evil.example'];
+        yield 'uppercase' => ['HTTPS://EXAMPLE.CHURCH.TOOLS'];
+    }
+
+    #[DataProvider('manipulatedOrigins')]
+    public function testManipulatedOriginsAreNeverReflected(string $origin): void
+    {
+        try {
+            $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => $origin]);
+        } catch (\InvalidArgumentException) {
+            // Rejected by the PSR-7 layer before it could reach the app: nothing to reflect.
+            $this->addToAssertionCount(1);
+
+            return;
+        }
+
+        foreach ($response->getHeaders() as $name => $values) {
+            foreach ($values as $value) {
+                self::assertStringNotContainsString('evil', strtolower($value), "$name reflects the origin.");
+                self::assertNotSame($origin, $value, "$name reflects the origin.");
+            }
+        }
+        self::assertFalse($response->hasHeader('X-Evil'));
+    }
+
+    public function testCrLfCantGetIntoAHeader(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => "https://example.church.tools\r\nX-Evil: 1"]);
+    }
+
     public function testErrorResponsesCarryNoCorsHeadersForForeignOrigins(): void
     {
         $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => 'https://evil.example']);
