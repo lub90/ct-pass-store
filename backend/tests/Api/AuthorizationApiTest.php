@@ -72,11 +72,17 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame(0, $this->churchTools->writeCount());
     }
 
-    public function testAPersonWhoseIdLooksLikeAClientGetsNoMachineRights(): void
+    public function testAPersonWhoseIdEqualsAClientIdGetsNoneOfItsRights(): void
     {
-        // Person 11 isn't client "ct-radius", and no person ID can ever equal a client ID's string form here; the
-        // principal kinds are simply never compared. A normal user still can't read others.
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::USER, self::OTHER));
+        // Client "123" may read every entry. Person 123 is an ordinary user; the two are never compared (spec 4.3).
+        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
+            ['id' => '123', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
+        ]]);
+        $this->seedEntry(self::OTHER);
+
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, headers: ['Authorization' => 'Bearer ' . $this->machineTokenOf('123', keyOf: self::READER_CLIENT)])->getStatusCode(), 'The client itself may read.');
+        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, 123));
+        self::assertSame(204, $this->request('PUT', '/v1/entries/123', 123, ['secondaryPwd' => 'Custom-pass12!'])->getStatusCode(), 'Person 123 still owns entry 123.');
     }
 
     // ---------------------------------------------------------------- AZ-04, AZ-05

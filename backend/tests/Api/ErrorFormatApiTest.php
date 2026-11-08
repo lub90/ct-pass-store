@@ -259,7 +259,7 @@ final class ErrorFormatApiTest extends ApiTestCase
                 return $response;
             },
             'ChurchTools down while reading' => function () use ($entry) {
-                $this->churchTools->failNext('getValues', new UnavailableException('down'));
+                $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('down'));
 
                 return $this->request('PUT', $entry, self::USER, []);
             },

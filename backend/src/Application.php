@@ -11,6 +11,7 @@ use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\SetPassword;
 use CtPassStore\Config\BackendConfig;
+use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Http\Controller\AuthController;
 use CtPassStore\Http\Controller\EntriesController;
@@ -28,12 +29,16 @@ use CtPassStore\Infrastructure\Auth\TokenService;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsIdentityProvider;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPasswordVerifier;
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
+use Monolog\Handler\StreamHandler;
+use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -104,6 +109,32 @@ final class Application
         $app->add(new CorsMiddleware($config->corsOrigins));
 
         return $app;
+    }
+
+    /**
+     * The app as `public/index.php` runs it: configuration from `credentials.php`, the real ChurchTools client and the
+     * log file. A missing or broken `credentials.php` gives the misconfigured app instead (spec 3.1).
+     *
+     * @return App<null>
+     */
+    public static function bootstrap(string $credentialsPath, string $cacheDir, string $logFile): App
+    {
+        try {
+            if (!is_readable($credentialsPath)) {
+                throw new ConfigurationException('config/credentials.php is missing or not readable by PHP.');
+            }
+            $config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath, $cacheDir);
+        } catch (ConfigurationException $e) {
+            // Without a valid configuration there's no trustworthy logger either; PHP's error log is the fallback.
+            error_log('ctpassstore: misconfigured: ' . $e->getMessage());
+
+            return self::misconfigured($e->getMessage());
+        }
+
+        $logger = new Logger('ct-pass-store');
+        $logger->pushHandler(new StreamHandler($logFile, Logger::toMonologLevel($config->logLevel)));
+
+        return self::create($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), $logger);
     }
 
     /**

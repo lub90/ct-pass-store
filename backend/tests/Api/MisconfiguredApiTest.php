@@ -34,7 +34,16 @@ final class MisconfiguredApiTest extends TestCase
             ->withHeader('Origin', 'https://example.church.tools')
             ->withHeader('Access-Control-Request-Method', 'PUT');
 
-        $response = Application::misconfigured('CORS in credentials.php must be a non-empty list of origins.')->handle($request);
+        // A real credentials.php whose CORS key is broken, loaded the way public/index.php loads it.
+        $credentials = (string) tempnam(sys_get_temp_dir(), 'ctps-broken-');
+        file_put_contents($credentials, "<?php return ['CT_API_URL' => 'https://example.church.tools/api', 'CT_API_TOKEN' => 'x', 'CORS' => '*'];");
+        $previous = ini_set('error_log', '/dev/null');
+        try {
+            $response = Application::bootstrap($credentials, sys_get_temp_dir(), '/dev/null')->handle($request);
+        } finally {
+            ini_set('error_log', (string) $previous);
+            unlink($credentials);
+        }
 
         self::assertSame(500, $response->getStatusCode());
         self::assertSame('application/problem+json', $response->getHeaderLine('Content-Type'));
@@ -43,5 +52,21 @@ final class MisconfiguredApiTest extends TestCase
         self::assertSame(ProblemType::Misconfigured->uri(), $body['type']);
         self::assertStringContainsString('CORS', (string) $body['detail']);
         self::assertFalse($response->hasHeader('Access-Control-Allow-Origin'));
+    }
+
+    public function testAMissingCredentialsFileIsMisconfigured(): void
+    {
+        $previous = ini_set('error_log', '/dev/null');
+        try {
+            $response = Application::bootstrap(sys_get_temp_dir() . '/no-such-credentials.php', sys_get_temp_dir(), '/dev/null')
+                ->handle((new ServerRequestFactory())->createServerRequest('GET', 'https://backend.example.org/v1/entries/1'));
+        } finally {
+            ini_set('error_log', (string) $previous);
+        }
+
+        self::assertSame(500, $response->getStatusCode());
+        $body = json_decode((string) $response->getBody(), true);
+        self::assertIsArray($body);
+        self::assertStringContainsString('credentials.php is missing', (string) $body['detail']);
     }
 }

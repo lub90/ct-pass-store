@@ -266,10 +266,13 @@ final class SignedFileStoreTest extends TestCase
         self::assertFileDoesNotExist($stale);
     }
 
-    public function testUpdatesFromSeparateWorkersAreAllKept(): void
+    /**
+     * Updates in a row through separate instances (like separate PHP workers) build on each other. This runs them
+     * one after another; that a second worker really has to wait is shown by testTheLockIsHeldForTheWholeUpdate.
+     */
+    public function testUpdatesInARowFromSeparateInstancesAreAllKept(): void
     {
         for ($i = 0; $i < 25; $i++) {
-            // A new store instance per update, like a new PHP worker per request.
             $this->store()->update('counter', static fn(array $data): array => ['n' => (is_int($data['n'] ?? null) ? $data['n'] : 0) + 1]);
         }
 

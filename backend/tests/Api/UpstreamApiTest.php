@@ -27,8 +27,7 @@ final class UpstreamApiTest extends ApiTestCase
         yield 'module lookup rate limited' => ['getModuleByKey', new RateLimitedException('429', 60), ProblemType::UpstreamRateLimited];
         yield 'categories unreachable' => ['getCategories', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
         yield 'module lookup unusable' => ['getModuleByKey', new InvalidResponseException('no JSON'), ProblemType::UpstreamInvalid];
-        yield 'values incomplete (meta.count)' => ['getValues', new InvalidResponseException('meta.count'), ProblemType::UpstreamInvalid];
-        yield 'values unreachable' => ['getValues', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
+        yield 'settings unreachable' => ['getValues', new UnavailableException('down'), ProblemType::UpstreamUnavailable];
     }
 
     #[DataProvider('failuresPerStep')]
@@ -40,6 +39,33 @@ final class UpstreamApiTest extends ApiTestCase
 
         $this->assertProblem($expected, $response);
         self::assertSame(0, $this->churchTools->writeCount());
+    }
+
+    /**
+     * Failures while reading the password store itself, after settings and authorization (spec 5.3.9, 6.2).
+     *
+     * @return iterable<string, array{ChurchToolsException, ProblemType}>
+     */
+    public static function passwordStoreFailures(): iterable
+    {
+        yield 'incomplete (meta.count)' => [new InvalidResponseException('meta.count'), ProblemType::UpstreamInvalid];
+        yield 'unreachable' => [new UnavailableException('down'), ProblemType::UpstreamUnavailable];
+        yield 'rate limited' => [new RateLimitedException('429', 60), ProblemType::UpstreamRateLimited];
+    }
+
+    #[DataProvider('passwordStoreFailures')]
+    public function testFailuresWhileReadingThePasswordStore(ChurchToolsException $failure, ProblemType $expected): void
+    {
+        $this->seedEntry(self::USER);
+
+        foreach (['GET', 'PUT', 'DELETE'] as $method) {
+            $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], $failure);
+            $response = $this->request($method, '/v1/entries/' . self::USER, self::USER, $method === 'GET' ? null : []);
+
+            $this->assertProblem($expected, $response);
+            self::assertSame(0, $this->churchTools->writeCount(), "$method wrote although it couldn't read the store.");
+        }
+        self::assertCount(1, $this->storedEntries(), 'Neither "no entry" nor a duplicate: the entry is untouched.');
     }
 
     public function testRateLimitDuringThePrimaryPasswordCheckIsNotAWrongPassword(): void

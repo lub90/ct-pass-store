@@ -46,6 +46,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<string, list<\Throwable>> */
     private array $failures = [];
 
+    /** @var array<int, list<\Throwable>> failures of getValues() per category */
+    private array $readFailures = [];
+
     /** @var array{id: string, secret: string}|null */
     private ?array $oauthClient = null;
 
@@ -165,6 +168,15 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
+     * Lets the next getValues() **of this category** throw. Unlike failNext('getValues'), this can't hit another
+     * read first, e.g. the settings that a PUT loads before the password store.
+     */
+    public function failNextRead(int $categoryId, \Throwable $exception): void
+    {
+        $this->readFailures[$categoryId][] = $exception;
+    }
+
+    /**
      * Runs `$hook` once, right before the next call of `$method` takes effect. Used to interleave a second request
      * with a first one, e.g. between its read and its write (catalog TR-02).
      *
@@ -274,6 +286,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     {
         $this->record(__FUNCTION__, [$moduleId, $categoryId]);
         $this->assertCategory($moduleId, $categoryId);
+        if (($this->readFailures[$categoryId] ?? []) !== []) {
+            throw array_shift($this->readFailures[$categoryId]);
+        }
 
         return array_values($this->values[$categoryId]);
     }
