@@ -71,8 +71,10 @@ final class Jwt
                 } catch (ExpiredException $e) {
                     // Thrown only after the signature was verified.
                     return ['claims' => self::toArray($e->getPayload()), 'expired' => true];
-                } catch (\Throwable) {
-                    // Wrong key, bad signature, malformed token or claims: try the next key.
+                } catch (\UnexpectedValueException|\DomainException|\InvalidArgumentException|\JsonException) {
+                    // What firebase/php-jwt throws for a wrong key, bad signature or malformed token (its
+                    // SignatureInvalidException and BeforeValidException included), and JSON too deep to be a real
+                    // token: try the next key. Anything else is a bug and reaches the error middleware as a 500.
                 }
             }
         } finally {

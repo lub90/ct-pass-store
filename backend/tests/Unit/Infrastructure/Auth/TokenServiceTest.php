@@ -295,6 +295,11 @@ final class TokenServiceTest extends TestCase
         yield 'claims not JSON' => [self::b64('{"alg":"HS256","typ":"JWT"}') . '.' . self::b64('nope') . '.sig'];
     }
 
+    public function testDeeplyNestedClaimsAreInvalidNotAnError(): void
+    {
+        $this->assertInvalid(self::sign($this->claims(['deep' => json_decode(str_repeat('[', 40) . str_repeat(']', 40))])));
+    }
+
     public function testATokenWithCritIsRejected(): void
     {
         $this->assertInvalid(self::sign($this->claims(), head: ['crit' => ['exp']]));
