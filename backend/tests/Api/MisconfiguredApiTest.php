@@ -69,4 +69,57 @@ final class MisconfiguredApiTest extends TestCase
         self::assertIsArray($body);
         self::assertStringContainsString('credentials.php is missing', (string) $body['detail']);
     }
+
+    /**
+     * CF-02: each required key missing or empty → every request is 500 misconfigured naming the key, never its value.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function brokenKeys(): iterable
+    {
+        foreach (['CT_API_URL', 'CT_API_TOKEN', 'CORS', 'OAUTH_CLIENT_ID', 'OAUTH_CLIENT_SECRET', 'JWT_SECRET'] as $key) {
+            yield "$key missing" => [$key, 'missing'];
+            yield "$key empty" => [$key, 'empty'];
+        }
+    }
+
+    #[DataProvider('brokenKeys')]
+    public function testEachBrokenRequiredKeyIsNamed(string $key, string $how): void
+    {
+        $values = [
+            'CT_API_URL' => 'https://example.church.tools/api',
+            'CT_API_TOKEN' => 'service-TOKEN-value-1',
+            'CORS' => ['https://example.church.tools'],
+            'OAUTH_CLIENT_ID' => 'client-ID-value-2',
+            'OAUTH_CLIENT_SECRET' => 'client-SECRET-value-3',
+            'JWT_SECRET' => 'jwt-SECRET-value-with-at-least-32-bytes-4',
+        ];
+        if ($how === 'missing') {
+            unset($values[$key]);
+        } else {
+            $values[$key] = $key === 'CORS' ? [] : '';
+        }
+        $credentials = (string) tempnam(sys_get_temp_dir(), 'ctps-broken-');
+        file_put_contents($credentials, '<?php return ' . var_export($values, true) . ';');
+        $previous = ini_set('error_log', '/dev/null');
+
+        try {
+            $app = Application::bootstrap($credentials, sys_get_temp_dir(), '/dev/null');
+            foreach ([['GET', '/v1/entries/1'], ['POST', '/v1/auth/token'], ['GET', '/nothing']] as [$method, $path]) {
+                $response = $app->handle((new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path));
+                $body = (string) $response->getBody();
+
+                self::assertSame(500, $response->getStatusCode(), "$method $path");
+                self::assertStringContainsString($key, $body);
+                foreach ($values as $value) {
+                    if (is_string($value) && str_contains($value, '-value-')) {
+                        self::assertStringNotContainsString($value, $body, 'No configured value in the response.');
+                    }
+                }
+            }
+        } finally {
+            ini_set('error_log', (string) $previous);
+            unlink($credentials);
+        }
+    }
 }

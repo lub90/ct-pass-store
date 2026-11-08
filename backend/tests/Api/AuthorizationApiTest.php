@@ -194,6 +194,44 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame([], array_filter($ips, static fn(mixed $ip): bool => is_string($ip) && str_starts_with($ip, '198.51.100.')));
     }
 
+    /**
+     * TK-14, validation half: what a token is checked against never comes from the request's Host headers.
+     */
+    public function testHostHeadersDontChangeWhatValidationAccepts(): void
+    {
+        $this->seedEntry(self::USER);
+        $now = $this->clock->timestamp();
+        $foreignIssuer = \Firebase\JWT\JWT::encode([
+            'iss' => 'evil.example', 'aud' => 'ctpassstore-api', 'sub' => (string) self::USER, 'username' => 'user',
+            'iat' => $now, 'nbf' => $now, 'exp' => $now + 900, 'jti' => 'x',
+        ], self::JWT_SECRET, 'HS256');
+        $evilHost = ['Host' => 'evil.example', 'X-Forwarded-Host' => 'evil.example'];
+
+        $this->assertProblem(ProblemType::InvalidToken, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $foreignIssuer] + $evilHost));
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $this->tokenOf(self::USER)] + $evilHost)->getStatusCode());
+    }
+
+    /**
+     * IJ-03 through the app: a client address with control characters can't forge log lines. REMOTE_ADDR comes from
+     * the server, but values that reach the log are escaped whatever their source.
+     */
+    public function testValuesWithControlCharactersCantForgeLogLines(): void
+    {
+        $request = (new \Slim\Psr7\Factory\ServerRequestFactory())
+            ->createServerRequest('GET', 'https://backend.example.org/v1/entries/' . self::USER, ['REMOTE_ADDR' => "203.0.113.7\r\n[forged] ct-pass-store.ERROR: x"])
+            ->withHeader('Authorization', 'Bearer abc.def.ghi');
+
+        $this->send($request);
+
+        foreach ($this->log->getRecords() as $record) {
+            $line = $record['message'] . json_encode($record['context'], JSON_THROW_ON_ERROR);
+            self::assertDoesNotMatchRegularExpression('/[\x00-\x1F\x7F]/', (string) $record['message']);
+            self::assertDoesNotMatchRegularExpression('/[\x00-\x1F\x7F]/', implode('', array_filter($record['context'], 'is_string')));
+            self::assertStringNotContainsString("\n[forged]", $line);
+        }
+        self::assertTrue($this->log->hasWarningThatContains('Unauthorized access attempt'));
+    }
+
     // ---------------------------------------------------------------- AZ-09, TK-15 at the API
 
     public function testAnExpiredUserTokenIsTokenExpired(): void

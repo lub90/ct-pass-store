@@ -35,6 +35,7 @@ use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use Monolog\Handler\StreamHandler;
@@ -142,19 +143,7 @@ final class Application
     {
         $logger = new Logger('ct-pass-store');
         $logger->pushHandler(new StreamHandler($logFile, Logger::toMonologLevel($level)));
-        $logger->pushProcessor(static function (array $record): array {
-            $escape = static function (mixed $value) use (&$escape): mixed {
-                if (is_string($value)) {
-                    return (string) preg_replace_callback('/[\x00-\x1F\x7F]/', static fn(array $m): string => sprintf('\\x%02X', ord($m[0])), $value);
-                }
-
-                return is_array($value) ? array_map($escape, $value) : $value;
-            };
-            $record['message'] = $escape($record['message']);
-            $record['context'] = $escape($record['context']);
-
-            return $record;
-        });
+        $logger->pushProcessor(new EscapeControlCharacters());
 
         return $logger;
     }

@@ -320,6 +320,8 @@ abstract class ApiTestCase extends TestCase
     {
         $logger = new Logger('test');
         $logger->pushHandler($this->log);
+        // The production processor, so log assertions see what logs/app.log would contain.
+        $logger->pushProcessor(new \CtPassStore\Infrastructure\Logging\EscapeControlCharacters());
 
         return Application::create(
             new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),

@@ -244,6 +244,41 @@ final class ErrorFormatApiTest extends ApiTestCase
         $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => "https://example.church.tools\r\nX-Evil: 1"]);
     }
 
+    /**
+     * HT-10: error responses to an allowed origin carry exactly the CORS headers of a successful one, so the extension
+     * can read the problem details.
+     */
+    public function testErrorResponsesCarryTheSameCorsHeadersAsSuccessfulOnes(): void
+    {
+        $origin = ['Origin' => self::ORIGIN];
+        $cors = static fn(\Psr\Http\Message\ResponseInterface $r): array => array_filter(
+            $r->getHeaders(),
+            static fn(string $name): bool => str_starts_with(strtolower($name), 'access-control-') || strtolower($name) === 'vary',
+            ARRAY_FILTER_USE_KEY,
+        );
+        $this->seedEntry(self::USER);
+        $success = $this->request('GET', '/v1/entries/' . self::USER, self::USER, headers: $origin);
+        self::assertSame(200, $success->getStatusCode());
+        self::assertNotSame([], $cors($success));
+
+        $errors = [
+            400 => fn() => $this->request('GET', '/v1/entries/abc', self::USER, headers: $origin),
+            401 => fn() => $this->request('GET', '/v1/entries/' . self::USER, headers: $origin),
+            403 => fn() => $this->request('GET', '/v1/entries/' . self::OTHER, self::USER, headers: $origin),
+            404 => fn() => $this->request('GET', '/v1/nothing', self::USER, headers: $origin),
+            500 => function () use ($origin) {
+                $this->setSettings(['passwordLength' => 3]);
+
+                return $this->request('PUT', '/v1/entries/' . self::USER, self::USER, [], $origin);
+            },
+        ];
+        foreach ($errors as $status => $send) {
+            $response = $send();
+            self::assertSame($status, $response->getStatusCode());
+            self::assertSame($cors($success), $cors($response), "CORS headers of the $status response differ.");
+        }
+    }
+
     public function testErrorResponsesCarryNoCorsHeadersForForeignOrigins(): void
     {
         $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Origin' => 'https://evil.example']);
