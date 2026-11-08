@@ -327,7 +327,7 @@ key and send it as `Authorization: Bearer <jwt>`. The backend only knows the pub
 | `iss` and `sub` | the client `id` |
 | `aud` | the backend URL as stored in `settings.backendUrl`, normalized without a trailing slash |
 | `iat`, `exp` | `exp - iat` greater than 0 and at most **300 seconds**; clients should use 60 |
-| `jti` | random, unique per request (at least 128 bits) |
+| `jti` | a string of 16 to 128 characters, **unique per request** (required: a repeated `jti` is rejected). Clients should use at least 128 random bits, e.g. `crypto.randomBytes(16).toString('hex')`; the backend can't check randomness and doesn't need to, because the token is signed (see below). |
 
 **Validation by the backend:**
 
@@ -343,6 +343,8 @@ key and send it as `Authorization: Bearer <jwt>`. The backend only knows the pub
 4. `exp` isn't more than 30 seconds in the past; otherwise `401 token-expired`.
 5. **Replay protection:** the pair (`kid`, `jti`) hasn't been seen before. It's recorded only **after** steps 1–4
    succeeded, so unauthenticated requests can neither fill the cache nor block another client's `jti`s in advance.
+   A client that repeats a `jti` only locks out its own requests. A predictable `jti` gives an attacker nothing:
+   without the client's private key no valid token can be made, and the cache is kept per client.
    Seen pairs are kept until their `exp` has passed. A reused token → `401 invalid-token`.
    - If the replay cache can't be read or written, machine requests are **rejected** (`500 misconfigured`), never
      accepted without replay protection.
