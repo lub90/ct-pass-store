@@ -133,6 +133,15 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
 - [ ] **4.1 Cache** (spec 6.1)
   - A file cache outside the web root for settings, the public key, the module and category IDs, and the `jti` replay
     cache. No APCu (Q3, kept lean).
+- [ ] **4.1a ChurchTools call budget for unauthenticated requests** (spec 6.2, review finding 2026-11-08)
+  - Today a forged machine token costs 3 ChurchTools calls (settings before `kid` can be checked) and any
+    `POST /v1/auth/token` costs 1. A few requests per second from anyone can exhaust the shared 600/min per IP, so
+    every user and every WiFi login gets `503`.
+  - With the settings cache (4.1), a forged machine token costs 0 calls.
+  - A cheap per-IP limit (`REMOTE_ADDR`) for `POST /v1/auth/token` and for rejected tokens, in the `SignedFileStore`,
+    answering `429 too-many-attempts`. It must fail closed for the login and must not lock out a whole NAT'd parish by
+    one person's mistakes: generous limits, short windows.
+  - Test (catalog RX-06): a call budget per kind of unauthenticated request, counted on the fake.
 - [ ] **4.2 Extend `/test`** (spec 4.8)
   - File permissions, the OAuth and JWT configuration, the service user's rights (warn on admin rights), valid machine
     clients, the version.

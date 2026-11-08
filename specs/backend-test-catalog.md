@@ -612,6 +612,9 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   generator allocates anything — 3.2
 - [ ] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap
   around or turn into `0`/negative values that pass a check — 4.1, 4.4
+- [ ] **RX-06** (! · A) ChurchTools call budget for requests that aren't authenticated (plan 4.1a): a missing or forged
+  token, a forged machine token with any `kid`, and `POST /v1/auth/token` beyond the per-IP limit cost no ChurchTools
+  call (counted on the fake). Below the limit a login costs at most its 3 calls — 6.2
 - [x] **RX-05** (S · U) The `jti` replay cache and the rate-limit counters stay bounded: expired entries are removed,
   and many distinct values can't fill the disk — 4.4a.4, 6.3
 - [ ] **RX-06** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`414` without a PHP error
