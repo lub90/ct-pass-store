@@ -115,6 +115,34 @@ final class JsonBodyTest extends TestCase
         $this->assertProblem(ProblemType::PayloadTooLarge, $exactly . ' ');
     }
 
+    /**
+     * Streams may return fewer bytes than asked for and may not know their size (e.g. a chunked request).
+     */
+    public function testBodiesAreReadCompletelyFromChunkedStreams(): void
+    {
+        $chunked = static function (string $body): \Psr\Http\Message\StreamInterface {
+            $inner = (new StreamFactory())->createStream($body);
+
+            return \GuzzleHttp\Psr7\FnStream::decorate($inner, [
+                'read' => static fn(int $length): string => $inner->read(min($length, 3)),
+                'getSize' => static fn(): ?int => null,
+                'isSeekable' => static fn(): bool => false,
+            ]);
+        };
+        $request = static fn(string $body) => (new ServerRequestFactory())->createServerRequest('PUT', 'https://x/entries/1')
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody($chunked($body));
+
+        self::assertSame(['primaryPwd' => 'abc', 'secondaryPwd' => 'def'], JsonBody::parse($request('{"primaryPwd": "abc", "secondaryPwd": "def"}'), self::FIELDS));
+
+        try {
+            JsonBody::parse($request('{"primaryPwd": "' . str_repeat('a', 20_000) . '"}'), self::FIELDS);
+            self::fail('Expected 413.');
+        } catch (\CtPassStore\Http\Problem\ProblemException $e) {
+            self::assertSame(ProblemType::PayloadTooLarge, $e->type);
+        }
+    }
+
     public function testTooLargeIsCheckedBeforeTheContentType(): void
     {
         $this->assertProblem(ProblemType::PayloadTooLarge, str_repeat('x', JsonBody::MAX_BYTES + 1), 'text/plain');
@@ -142,7 +170,9 @@ final class JsonBodyTest extends TestCase
         yield 'UTF-8 BOM' => ["\xEF\xBB\xBF{\"primaryPwd\": \"a\"}"];
         yield 'UTF-16' => [mb_convert_encoding('{"primaryPwd": "a"}', 'UTF-16LE', 'UTF-8')];
         yield 'duplicate key' => ['{"secondaryPwd": "a", "secondaryPwd": "b"}'];
-        yield 'duplicate key, escaped' => ['{"secondaryPwd": "a", "secondaryPwd": "b"}'];
+        yield 'duplicate key, escaped' => ['{"secondaryPwd": "a", "secondary\u0050wd": "b"}'];
+        yield 'duplicate key, escaped first' => ['{"secondary\u0050wd": "a", "secondaryPwd": "b"}'];
+        yield 'unknown field, escaped' => ['{"user\u006eame": "admin"}'];
         yield 'unknown field' => ['{"personId": 5}'];
         yield 'mass assignment' => ['{"secondaryPwd": "a", "isAdmin": true}'];
         yield 'username smuggling' => ['{"primaryPwd": "a", "username": "admin"}'];

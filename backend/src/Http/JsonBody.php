@@ -72,7 +72,15 @@ final class JsonBody
         if ($body->isSeekable()) {
             $body->rewind();
         }
-        $raw = $body->read(self::MAX_BYTES + 1);
+        // Streams may return less than asked for, so read until the end, but never more than one byte past the limit.
+        $raw = '';
+        while (!$body->eof() && strlen($raw) <= self::MAX_BYTES) {
+            $chunk = $body->read(self::MAX_BYTES + 1 - strlen($raw));
+            if ($chunk === '') {
+                break;
+            }
+            $raw .= $chunk;
+        }
         if (strlen($raw) > self::MAX_BYTES) {
             throw self::tooLarge();
         }
