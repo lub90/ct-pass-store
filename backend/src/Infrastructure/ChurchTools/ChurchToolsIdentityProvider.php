@@ -96,8 +96,9 @@ final class ChurchToolsIdentityProvider implements IdentityProvider
         if (is_int($sub) && $sub > 0) {
             return $sub;
         }
-        if (is_string($sub) && preg_match('/^[1-9][0-9]{0,17}\z/', $sub) === 1) {
-            return (int) $sub;
+        $fromString = is_string($sub) ? PersonId::decimal($sub) : null;
+        if ($fromString !== null && $fromString > 0) {
+            return $fromString;
         }
         throw new InvalidResponseException('POST oauth/access_token: the access token has no valid person ID (sub).');
     }

@@ -67,6 +67,7 @@ final class PasswordPolicyTest extends TestCase
         yield 'two too short' => [10];
         yield 'half' => [6];
         yield 'one of each class' => [3];
+        yield 'one character' => [1];
     }
 
     #[DataProvider('tooShortLengths')]
@@ -75,6 +76,12 @@ final class PasswordPolicyTest extends TestCase
         $password = substr('Aa1!' . str_repeat('b', 20), 0, $length);
         if ($length === 3) {
             $password = 'a1!';
+        }
+        if ($length < 3) {
+            // Too short to contain every class: too-short is among the violations.
+            self::assertContains(PasswordPolicy::TOO_SHORT, $this->policy->violations($password, 12));
+
+            return;
         }
 
         self::assertSame([PasswordPolicy::TOO_SHORT], $this->policy->violations($password, 12));

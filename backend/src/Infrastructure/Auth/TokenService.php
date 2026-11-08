@@ -74,7 +74,7 @@ final class TokenService implements AccessTokenIssuer
         $username = $claims['username'] ?? null;
         $valid = ($claims['iss'] ?? null) === self::ISSUER
             && ($claims['aud'] ?? null) === self::AUDIENCE
-            && is_string($sub) && preg_match('/^[1-9][0-9]{0,17}\z/', $sub) === 1
+            && is_string($sub) && (PersonId::decimal($sub) ?? 0) > 0
             && is_string($username) && $username !== ''
             && is_string($claims['jti'] ?? null) && $claims['jti'] !== ''
             && is_int($claims['iat'] ?? null) && is_int($claims['nbf'] ?? null) && is_int($claims['exp'] ?? null);
@@ -85,6 +85,6 @@ final class TokenService implements AccessTokenIssuer
             throw new TokenExpiredException('The access token has expired. Log in again.');
         }
 
-        return new PersonPrincipal(new PersonId((int) $sub), $username);
+        return new PersonPrincipal(new PersonId((int) PersonId::decimal($sub)), $username);
     }
 }

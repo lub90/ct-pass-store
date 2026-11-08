@@ -107,7 +107,15 @@ final class KvPasswordRepositoryTest extends TestCase
         $ten = $this->seed(5, 'dGVu');
         self::assertSame([9, 10], [$nine, $ten]);
 
-        self::assertSame('dGVu', $this->store->find(new PersonId(5)));
+        $withIntegers = $this->store->find(new PersonId(5));
+
+        // ST-20: the same when ChurchTools sends the IDs as strings, where "10" < "9".
+        $this->fake->returnValueIdsAsStrings();
+        $withStrings = $this->store->find(new PersonId(5));
+
+        self::assertSame(['dGVu', 'dGVu'], [$withIntegers, $withStrings]);
+        $this->store->save(new PersonId(5), 'bmV3');
+        self::assertSame([$ten], array_column($this->fake->storedValues($this->category), 'id'), 'The newest one was updated, the other healed.');
     }
 
     // ---------------------------------------------------------------- ST-07, ST-08 person ID normalization

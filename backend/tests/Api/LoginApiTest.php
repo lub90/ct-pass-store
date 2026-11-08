@@ -190,6 +190,22 @@ final class LoginApiTest extends ApiTestCase
         $this->assertNoTokenIssued($response);
     }
 
+    /**
+     * AX-13: a code that ChurchTools issued to another OAuth client. A missing codeVerifier never gets that far: it's
+     * 400 invalid-body before ChurchTools is called (AX-10).
+     */
+    public function testACodeForAnotherClientIsOauthCodeInvalid(): void
+    {
+        $token = self::churchToolsToken();
+        $this->churchTools->addAuthorizationCode(self::CODE, self::VERIFIER, self::REDIRECT_URI, $token, 'another-client');
+        $this->churchTools->addUser(Credential::bearerToken($token), self::PERSON, 'alice', [KvSchema::EXTENSION_KEY => ['view' => true]]);
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::OauthCodeInvalid, $response);
+        $this->assertNoTokenIssued($response);
+    }
+
     public function testACodeCanBeUsedOnlyOnce(): void
     {
         $this->grant();

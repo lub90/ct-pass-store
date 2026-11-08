@@ -42,4 +42,17 @@ final class PersonIdTest extends TestCase
         self::assertTrue((new PersonId(7))->equals(new PersonId(7)));
         self::assertFalse((new PersonId(7))->equals(new PersonId(8)));
     }
+
+    /**
+     * The one rule for decimal IDs from paths, tokens and stored values.
+     */
+    public function testDecimal(): void
+    {
+        self::assertSame(0, PersonId::decimal('0'));
+        self::assertSame(7, PersonId::decimal('7'));
+        self::assertSame(PHP_INT_MAX, PersonId::decimal((string) PHP_INT_MAX), 'All 19 digits.');
+        foreach (['', '07', '+7', '-7', ' 7', '7 ', '7.0', '1e3', '0x1', 'abc', '9223372036854775808', '99999999999999999999', "7\n"] as $invalid) {
+            self::assertNull(PersonId::decimal($invalid), var_export($invalid, true));
+        }
+    }
 }

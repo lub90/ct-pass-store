@@ -308,7 +308,7 @@ final class TokenServiceTest extends TestCase
     public function testEmbeddedKeysInTheHeaderAreIgnored(): void
     {
         // Signed with the right secret, so the extra header parameters must simply not matter.
-        $token = self::sign($this->claims(), head: ['jwk' => ['kty' => 'oct', 'k' => 'YXR0YWNrZXI'], 'jku' => 'https://evil.example/keys', 'x5u' => 'https://evil.example/cert']);
+        $token = self::sign($this->claims(), head: ['jwk' => ['kty' => 'oct', 'k' => 'YXR0YWNrZXI'], 'jku' => 'https://evil.example/keys', 'x5u' => 'https://evil.example/cert', 'x5c' => ['MIIBszCCAVmgAwIBAgIUQ']]);
         self::assertSame(5, $this->tokens->verify($token)->id->value);
 
         // Signed with the attacker's key named in jwk: rejected.

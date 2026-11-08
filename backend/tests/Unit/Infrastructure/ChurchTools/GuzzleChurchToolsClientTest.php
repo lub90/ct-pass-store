@@ -452,6 +452,20 @@ final class GuzzleChurchToolsClientTest extends TestCase
     }
 
     /**
+     * AX-09 at the client: only the access token leaves the client; the refresh token is dropped right here.
+     */
+    public function testTheRefreshTokenNeverLeavesTheClient(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['token_type' => 'Bearer', 'expires_in' => 3600, 'access_token' => 'ct-access-token', 'refresh_token' => 'ct-REFRESH-token-secret']);
+
+        $result = $this->exchange($client);
+
+        self::assertSame('ct-access-token', $result);
+        self::assertStringNotContainsString('REFRESH', $result);
+    }
+
+    /**
      * @param array<string, mixed>|string $body
      * @param class-string<\Throwable> $exception
      */

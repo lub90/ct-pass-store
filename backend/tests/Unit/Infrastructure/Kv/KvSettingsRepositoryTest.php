@@ -231,6 +231,43 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings->publicKey();
     }
 
+    /**
+     * SE-08: exactly one value; with two, it's unclear which key is the right one.
+     */
+    public function testSeveralEncryptionSettingsAreAConfigurationError(): void
+    {
+        $pem = (string) file_get_contents(self::KEYS . 'publicKey1.pem');
+        $this->fake->seedValue($this->categories[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => $pem], JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($this->categories[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => $pem], JSON_THROW_ON_ERROR));
+        $settings = $this->settings(self::validSettings());
+
+        try {
+            $settings->publicKey();
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('exactly one value', $e->getMessage());
+        }
+    }
+
+    /**
+     * SE-05: an explicit JSON null is neither true nor false.
+     */
+    public function testNullBooleansAreRejected(): void
+    {
+        foreach ([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD] as $key) {
+            $raw = self::validSettings();
+            $raw[$key] = null;
+            $settings = $this->settings(json_encode($raw, JSON_THROW_ON_ERROR));
+            try {
+                $settings->settings();
+                self::fail("Expected a ConfigurationException for $key = null.");
+            } catch (ConfigurationException $e) {
+                self::assertStringContainsString($key, $e->getMessage());
+            }
+            $this->setUp();
+        }
+    }
+
     public function testEncryptionSettingsWithoutPublicKeyAreAConfigurationError(): void
     {
         $this->fake->seedValue($this->categories[KvSchema::ENCRYPTION_CATEGORY], '{"other": 1}');

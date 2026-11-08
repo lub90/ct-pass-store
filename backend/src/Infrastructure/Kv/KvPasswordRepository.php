@@ -127,7 +127,9 @@ final class KvPasswordRepository implements PasswordRepository
     {
         $entries = [];
         foreach ($this->extension->values(KvSchema::PASSWORD_CATEGORY) as $raw) {
-            $id = $raw['id'] ?? null;
+            // Value IDs are compared as integers, also if they ever arrive as strings ("10" > "9", spec 5.3.3).
+            $id = self::normalizePersonId($raw['id'] ?? null);
+            $id = $id === 0 ? null : $id;
             $json = $raw['value'] ?? null;
             $decoded = is_string($json) ? json_decode($json, true) : null;
             $owner = is_array($decoded) ? self::normalizePersonId($decoded[KvSchema::ENTRY_PERSON_ID] ?? null) : null;
@@ -163,10 +165,6 @@ final class KvPasswordRepository implements PasswordRepository
         if (is_int($value)) {
             return $value >= 0 ? $value : null;
         }
-        if (is_string($value) && preg_match('/^(0|[1-9][0-9]{0,17})\z/', $value) === 1) {
-            return (int) $value;
-        }
-
-        return null;
+        return is_string($value) ? PersonId::decimal($value) : null;
     }
 }

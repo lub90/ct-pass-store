@@ -20,17 +20,11 @@ final class PathId
      */
     public static function parse(mixed $raw): PersonId
     {
-        if (!is_string($raw) || preg_match('/^[1-9][0-9]*\z/', $raw) !== 1 || !self::fitsInt($raw)) {
+        $id = is_string($raw) ? PersonId::decimal($raw) : null;
+        if ($id === null || $id < 1) {
             throw new ProblemException(ProblemType::InvalidId, 'The person ID must be a positive whole number in decimal notation.');
         }
 
-        return new PersonId((int) $raw);
-    }
-
-    private static function fitsInt(string $digits): bool
-    {
-        $max = (string) PHP_INT_MAX;
-
-        return strlen($digits) < strlen($max) || (strlen($digits) === strlen($max) && strcmp($digits, $max) <= 0);
+        return new PersonId($id);
     }
 }

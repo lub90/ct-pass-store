@@ -46,13 +46,15 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<string, list<\Throwable>> */
     private array $failures = [];
 
+    private bool $idsAsStrings = false;
+
     /** @var array<int, list<\Throwable>> failures of getValues() per category */
     private array $readFailures = [];
 
     /** @var array{id: string, secret: string}|null */
     private ?array $oauthClient = null;
 
-    /** @var array<string, array{verifier: string, redirectUri: string, token: string}> */
+    /** @var array<string, array{verifier: string, redirectUri: string, token: string, client: string|null}> */
     private array $codes = [];
 
     /** @var array<string, list<\Closure(): void>> */
@@ -81,11 +83,12 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
-     * An authorization code that can be exchanged once for `$accessToken`, with this verifier and redirect URI.
+     * An authorization code that can be exchanged once for `$accessToken`, with this verifier and redirect URI, by the
+     * client it was issued to (by default the configured OAuth client).
      */
-    public function addAuthorizationCode(string $code, string $codeVerifier, string $redirectUri, string $accessToken): void
+    public function addAuthorizationCode(string $code, string $codeVerifier, string $redirectUri, string $accessToken, ?string $issuedTo = null): void
     {
-        $this->codes[$code] = ['verifier' => $codeVerifier, 'redirectUri' => $redirectUri, 'token' => $accessToken];
+        $this->codes[$code] = ['verifier' => $codeVerifier, 'redirectUri' => $redirectUri, 'token' => $accessToken, 'client' => $issuedTo];
     }
 
     /**
@@ -168,6 +171,14 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
+     * Lets getValues() return value IDs as strings, to check that they're still compared as integers.
+     */
+    public function returnValueIdsAsStrings(): void
+    {
+        $this->idsAsStrings = true;
+    }
+
+    /**
      * Lets the next getValues() **of this category** throw. Unlike failNext('getValues'), this can't hit another
      * read first, e.g. the settings that a PUT loads before the password store.
      */
@@ -228,7 +239,8 @@ final class FakeChurchToolsClient implements ChurchToolsClient
         $grant = $this->codes[$code] ?? null;
         // A code is used up by the first attempt, even a failed one, as with ChurchTools' OAuth server.
         unset($this->codes[$code]);
-        if ($grant === null || $grant['redirectUri'] !== $redirectUri || !hash_equals($grant['verifier'], $codeVerifier)) {
+        if ($grant === null || $grant['redirectUri'] !== $redirectUri || !hash_equals($grant['verifier'], $codeVerifier)
+            || ($grant['client'] !== null && $grant['client'] !== $clientId)) {
             throw new OAuthCodeRejectedException('POST oauth/access_token: ChurchTools answered 400 (invalid_grant).');
         }
 
@@ -290,7 +302,11 @@ final class FakeChurchToolsClient implements ChurchToolsClient
             throw array_shift($this->readFailures[$categoryId]);
         }
 
-        return array_values($this->values[$categoryId]);
+        $values = array_values($this->values[$categoryId]);
+
+        return $this->idsAsStrings
+            ? array_map(static fn(array $v): array => ['id' => (string) $v['id']] + $v, $values)
+            : $values;
     }
 
     public function createValue(int $moduleId, int $categoryId, string $value): int
