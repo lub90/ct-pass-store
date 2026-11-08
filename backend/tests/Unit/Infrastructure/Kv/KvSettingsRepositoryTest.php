@@ -17,6 +17,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class KvSettingsRepositoryTest extends TestCase
 {
+    private \Monolog\Handler\TestHandler $log;
+
     private const KEYS = __DIR__ . '/../../../keys/';
 
     private FakeChurchToolsClient $fake;
@@ -27,6 +29,7 @@ final class KvSettingsRepositoryTest extends TestCase
     protected function setUp(): void
     {
         $this->fake = new FakeChurchToolsClient();
+        $this->log = new \Monolog\Handler\TestHandler();
         $this->categories = $this->fake->addModule(KvSchema::EXTENSION_KEY, [
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
@@ -56,7 +59,7 @@ final class KvSettingsRepositoryTest extends TestCase
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], is_string($settings) ? $settings : json_encode($settings, JSON_THROW_ON_ERROR));
 
-        return new KvSettingsRepository(new ExtensionData($this->fake));
+        return new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
     }
 
     private function withPublicKey(string $pem): KvSettingsRepository
@@ -192,7 +195,7 @@ final class KvSettingsRepositoryTest extends TestCase
 
     public function testNoSettingsValueIsAConfigurationError(): void
     {
-        $settings = new KvSettingsRepository(new ExtensionData($this->fake));
+        $settings = new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
 
         $this->expectException(ConfigurationException::class);
         $settings->settings();
@@ -315,6 +318,7 @@ final class KvSettingsRepositoryTest extends TestCase
 
         self::assertSame([], $settings->machineClients);
         self::assertSame([], $settings->machineClientProblems);
+        self::assertFalse($this->log->hasWarningRecords());
     }
 
     public function testAValidClientIsEnabled(): void
@@ -341,6 +345,7 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertSame(['good-client'], array_keys($settings->machineClients));
         self::assertCount(1, $settings->machineClientProblems);
         self::assertStringContainsString($problem, $settings->machineClientProblems[0]);
+        self::assertTrue($this->log->hasWarningThatContains($problem), 'The admin finds the reason in the log.');
     }
 
     /**

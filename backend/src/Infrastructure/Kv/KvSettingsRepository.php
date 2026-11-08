@@ -10,6 +10,7 @@ use CtPassStore\Domain\MachineClient;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Domain\Settings;
 use CtPassStore\Infrastructure\Crypto\RsaPublicKey;
+use Psr\Log\LoggerInterface;
 
 /**
  * The extension's settings and public key from the KV store, validated when loaded and then kept for the request
@@ -23,7 +24,10 @@ final class KvSettingsRepository implements SettingsRepository
 
     private ?RsaPublicKey $publicKey = null;
 
-    public function __construct(private readonly ExtensionData $extension) {}
+    public function __construct(
+        private readonly ExtensionData $extension,
+        private readonly LoggerInterface $logger,
+    ) {}
 
     public function settings(): Settings
     {
@@ -34,6 +38,10 @@ final class KvSettingsRepository implements SettingsRepository
         $raw = $this->singleValue(KvSchema::SETTINGS_CATEGORY, 'The extension settings', 'Save the settings in the extension.');
 
         [$clients, $problems] = self::machineClients($raw[KvSchema::SETTING_MACHINE_CLIENTS] ?? []);
+        // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why.
+        foreach ($problems as $problem) {
+            $this->logger->warning($problem);
+        }
 
         return $this->settings = new Settings(
             requirePrimaryPassword: self::boolean($raw, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD),

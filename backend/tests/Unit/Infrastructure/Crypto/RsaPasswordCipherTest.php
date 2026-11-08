@@ -26,7 +26,7 @@ final class RsaPasswordCipherTest extends TestCase
         $ids = $fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
         $fake->seedValue($ids[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => file_get_contents(self::KEYS . 'publicKey1.pem')], JSON_THROW_ON_ERROR));
 
-        return new RsaPasswordCipher(new KvSettingsRepository(new ExtensionData($fake)));
+        return new RsaPasswordCipher(new KvSettingsRepository(new ExtensionData($fake), new \Psr\Log\NullLogger()));
     }
 
     private static function decrypt(string $ciphertext, string $hash = 'sha256'): string

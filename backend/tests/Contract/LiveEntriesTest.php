@@ -89,7 +89,7 @@ final class LiveEntriesTest extends TestCase
             self::markTestSkipped("Fixture user {$this->personId} already has an entry on the test instance; it's left alone.");
         }
 
-        $settings = (new KvSettingsRepository($this->kv))->settings();
+        $settings = (new KvSettingsRepository($this->kv, new \Psr\Log\NullLogger()))->settings();
         if ($settings->requirePrimaryPassword || !$settings->allowCustomPasswords) {
             self::markTestSkipped('The test instance must allow custom passwords without a primary password for this test.');
         }

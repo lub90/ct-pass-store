@@ -209,6 +209,17 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, self::USER)->getStatusCode());
     }
 
+    public function testADisabledClientGets401AndTheLogSaysWhy(): void
+    {
+        $token = $this->machineTokenOf(self::READER_CLIENT);
+        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
+            ['id' => self::READER_CLIENT, 'publicKeys' => [], 'permissions' => ['entries:read']],
+        ]]);
+
+        $this->assertProblem(ProblemType::InvalidToken, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $token]));
+        self::assertTrue($this->log->hasWarningThatContains('Machine client ct-radius is disabled: publicKeys must be a non-empty list.'));
+    }
+
     public function testAnUnusableReplayCacheRefusesMachines(): void
     {
         file_put_contents($this->cacheDir, 'a file where the folder should be');

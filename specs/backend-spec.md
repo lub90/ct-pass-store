@@ -114,6 +114,8 @@ Data lives in three KV categories of the `ctpassstore` module:
       by `/test`; it doesn't break the others. With a duplicate `id`, all entries with that `id` are disabled.
     - If `machineClients` itself isn't a list, all machine clients are disabled and `/test` reports it. Users aren't
       affected, because disabling machine clients never weakens security.
+    - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
+      client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
 - **(change)** Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 

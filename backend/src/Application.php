@@ -59,7 +59,7 @@ final class Application
         $clock ??= new SystemClock();
         $tokens = new TokenService($config->jwtSecret, $clock);
         $extensionData = new ExtensionData($churchTools);
-        $settings = new KvSettingsRepository($extensionData);
+        $settings = new KvSettingsRepository($extensionData, $logger);
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
