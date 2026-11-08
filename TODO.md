@@ -41,6 +41,13 @@ Open issues and planned improvements, roughly ordered by severity.
     timeout). Check from the production web host; the log now names the cURL error number.
   - Relevant for bursts (e.g. ct-radius) and another reason for the cache in plan 4.1.
 
+- [ ] **Security store on shared hosting: check `flock` and keep an eye on the replay file**
+  The `jti` replay cache and the primary-password counters (`backend/src/Infrastructure/Store/SignedFileStore.php`)
+  rely on `flock`, which is reliable between PHP workers on one server but may not be on web space mounted over NFS.
+  Check this on the production host. Also, every machine request rewrites its client's whole `jti` list under an
+  exclusive lock; the list holds about requests per second × 330 s entries. That's fine for a parish, but at many
+  RADIUS logins per second the file becomes a bottleneck; then split it by a `jti` prefix.
+
 - [ ] **Harden the primary-password check**
   [`ChurchToolsPasswordVerifier.php`](backend/src/Infrastructure/ChurchTools/ChurchToolsPasswordVerifier.php) (formerly `ChurchtoolsAuthVerifier.php`) checks the primary password by calling the real `POST /api/login`.
   - Every check opens a new ChurchTools session.

@@ -10,13 +10,21 @@ use Psr\Log\LoggerInterface;
 /**
  * Small security records (the `jti` replay cache, rate-limit counters) as signed JSON files (spec 6.1).
  *
- * - One file per record name; the name is hashed for the file name. Files are `600`, the folder `700`.
+ * - One data file per record name; the name is hashed for the file name. Files are `600`, the folder `700`.
  * - JSON only, never `unserialize`. Each file carries an HMAC over its record name and data, with a key derived from
  *   `JWT_SECRET`, plus an identifier of that key (a hash, not the key).
- * - Every update holds an exclusive lock from reading to writing, so concurrent requests don't lose updates.
+ * - Every update holds an exclusive lock on the record's **lock file** from reading to writing, so concurrent requests
+ *   don't lose updates. The lock file is never replaced or deleted: locking the data file itself would break, because
+ *   the data file is replaced on every write and a waiting worker would then hold the lock of a file that is gone.
+ * - Writes are atomic: the new content goes to a temporary file in the same folder, which then replaces the data file
+ *   with `rename`. A request killed mid-write leaves the old content intact, never an empty file.
  * - Fail closed: if the folder can't be used, or a file signed with the current key is broken or tampered with, the
  *   update throws a ConfigurationException (`500 misconfigured`). A file signed with an older key (`JWT_SECRET` was
  *   rotated) is cleared and started over.
+ *
+ * What the HMAC can't do: someone who can write the folder can always **reset** a record, by deleting the file or by
+ * writing one with another key identifier (indistinguishable from a rotation). The HMAC only stops them from
+ * planting chosen content, such as a fake `jti` list or counters. Against resets only the file permissions help.
  */
 final class SignedFileStore
 {
@@ -45,12 +53,19 @@ final class SignedFileStore
      */
     public function update(string $name, \Closure $change): array
     {
-        $handle = $this->open($name);
+        $base = $this->directory . '/sec-' . hash('sha256', $name);
+        $lock = $this->openLock($base . '.lock');
         try {
-            if (!flock($handle, LOCK_EX)) {
+            if (!flock($lock, LOCK_EX)) {
                 throw self::unusable();
             }
-            $raw = stream_get_contents($handle);
+            // Leftovers of writes that were killed before their rename; nobody else writes this record now.
+            foreach (glob($base . '.*.tmp') ?: [] as $stale) {
+                @unlink($stale);
+            }
+
+            $path = $base . '.json';
+            $raw = is_file($path) ? @file_get_contents($path) : '';
             if ($raw === false) {
                 throw self::unusable();
             }
@@ -58,34 +73,30 @@ final class SignedFileStore
             $data = $change($this->verified($name, $raw));
 
             $encoded = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-            $file = json_encode([
+            $this->replace($path, $base . '.' . bin2hex(random_bytes(8)) . '.tmp', json_encode([
                 'format' => self::FORMAT,
                 'keyId' => $this->keyId,
                 'data' => $encoded,
                 'mac' => $this->mac($name, $encoded),
-            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-            if (!ftruncate($handle, 0) || !rewind($handle) || fwrite($handle, $file) !== strlen($file) || !fflush($handle)) {
-                throw self::unusable();
-            }
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
 
             return $data;
         } finally {
-            flock($handle, LOCK_UN);
-            fclose($handle);
+            flock($lock, LOCK_UN);
+            fclose($lock);
         }
     }
 
     /**
      * @return resource
      */
-    private function open(string $name)
+    private function openLock(string $path)
     {
         if (!is_dir($this->directory) && !@mkdir($this->directory, 0o700, true) && !is_dir($this->directory)) {
             throw self::unusable();
         }
-        $path = $this->directory . '/sec-' . hash('sha256', $name) . '.json';
         $isNew = !file_exists($path);
-        $handle = @fopen($path, 'c+');
+        $handle = @fopen($path, 'c');
         if ($handle === false) {
             throw self::unusable();
         }
@@ -94,6 +105,27 @@ final class SignedFileStore
         }
 
         return $handle;
+    }
+
+    /**
+     * Writes the content to a new temporary file (`600` before any content is in it), flushes it to disk and moves it
+     * over the data file in one step.
+     */
+    private function replace(string $path, string $temporary, string $content): void
+    {
+        $handle = @fopen($temporary, 'x');
+        if ($handle === false) {
+            throw self::unusable();
+        }
+        $written = @chmod($temporary, 0o600)
+            && fwrite($handle, $content) === strlen($content)
+            && fflush($handle)
+            && fsync($handle);
+        fclose($handle);
+        if (!$written || !@rename($temporary, $path)) {
+            @unlink($temporary);
+            throw self::unusable();
+        }
     }
 
     /**

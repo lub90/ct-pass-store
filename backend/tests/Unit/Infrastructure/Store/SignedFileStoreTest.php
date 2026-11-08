@@ -57,12 +57,20 @@ final class SignedFileStoreTest extends TestCase
         return ($store ?? $this->store())->update($name, static fn(array $data): array => $data);
     }
 
+    /**
+     * The only data file (lock files and temporary files aside).
+     */
     private function onlyFile(): string
     {
-        $files = glob($this->dir . '/*') ?: [];
+        $files = glob($this->dir . '/*.json') ?: [];
         self::assertCount(1, $files);
 
         return $files[0];
+    }
+
+    private function lockFileOf(string $name): string
+    {
+        return $this->dir . '/sec-' . hash('sha256', $name) . '.lock';
     }
 
     public function testANewRecordIsEmptyAndUpdatesPersist(): void
@@ -89,6 +97,7 @@ final class SignedFileStoreTest extends TestCase
 
         self::assertSame(0o700, fileperms($this->dir) & 0o777);
         self::assertSame(0o600, fileperms($this->onlyFile()) & 0o777);
+        self::assertSame(0o600, fileperms($this->lockFileOf('jti:ct-radius')) & 0o777);
     }
 
     public function testFileNamesDontRevealTheRecordName(): void
@@ -184,15 +193,86 @@ final class SignedFileStoreTest extends TestCase
         }
     }
 
-    public function testAReadOnlyFileFailsClosed(): void
+    public function testAReadOnlyFolderFailsClosed(): void
     {
         if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
             self::markTestSkipped('root ignores file permissions');
         }
         $this->put('r', ['x' => 1]);
-        chmod($this->onlyFile(), 0o400);
+        chmod($this->dir, 0o500);
 
-        $this->expectException(ConfigurationException::class);
+        try {
+            $this->expectException(ConfigurationException::class);
+            $this->put('r', ['x' => 2]);
+        } finally {
+            chmod($this->dir, 0o700);
+            self::assertSame(['x' => 1], $this->get('r'), 'The old content is intact.');
+        }
+    }
+
+    // ---------------------------------------------------------------- atomic writes and locking
+
+    public function testTheLockIsHeldForTheWholeUpdate(): void
+    {
+        $this->put('r', ['x' => 1]);
+        $lockedByOther = null;
+
+        $this->store()->update('r', function (array $data) use (&$lockedByOther): array {
+            $other = fopen($this->lockFileOf('r'), 'c');
+            self::assertNotFalse($other);
+            $lockedByOther = flock($other, LOCK_EX | LOCK_NB);
+            fclose($other);
+
+            return $data;
+        });
+
+        self::assertFalse($lockedByOther, 'A second worker must wait while the record is being updated.');
+    }
+
+    public function testTheLockFileIsNeverReplacedButTheDataFileIs(): void
+    {
+        $this->put('r', ['x' => 1]);
+        $lockInode = fileinode($this->lockFileOf('r'));
+        $dataInode = fileinode($this->onlyFile());
+
         $this->put('r', ['x' => 2]);
+
+        clearstatcache();
+        self::assertSame($lockInode, fileinode($this->lockFileOf('r')));
+        self::assertNotSame($dataInode, fileinode($this->onlyFile()), 'The data file is swapped in one step.');
+    }
+
+    public function testAFailedChangeLeavesTheOldContent(): void
+    {
+        $this->put('r', ['x' => 1]);
+
+        try {
+            $this->store()->update('r', static fn(array $data): array => throw new \RuntimeException('killed'));
+        } catch (\RuntimeException) {
+        }
+
+        self::assertSame(['x' => 1], $this->get('r'));
+        self::assertSame([], glob($this->dir . '/*.tmp') ?: []);
+    }
+
+    public function testLeftoversOfAKilledWriteAreIgnoredAndRemoved(): void
+    {
+        $this->put('r', ['x' => 1]);
+        // A write killed after creating its temporary file but before the rename.
+        $stale = $this->dir . '/sec-' . hash('sha256', 'r') . '.deadbeef.tmp';
+        file_put_contents($stale, '{"half":');
+
+        self::assertSame(['x' => 1], $this->get('r'));
+        self::assertFileDoesNotExist($stale);
+    }
+
+    public function testUpdatesFromSeparateWorkersAreAllKept(): void
+    {
+        for ($i = 0; $i < 25; $i++) {
+            // A new store instance per update, like a new PHP worker per request.
+            $this->store()->update('counter', static fn(array $data): array => ['n' => (is_int($data['n'] ?? null) ? $data['n'] : 0) + 1]);
+        }
+
+        self::assertSame(['n' => 25], $this->get('counter'));
     }
 }
