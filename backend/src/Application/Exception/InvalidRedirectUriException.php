@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class InvalidRedirectUriException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class InvalidRedirectUriException extends ApplicationException
+{
+    protected const REASON = Reason::InvalidRequest;
+}

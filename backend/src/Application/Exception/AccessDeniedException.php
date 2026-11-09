@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class AccessDeniedException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class AccessDeniedException extends ApplicationException
+{
+    protected const REASON = Reason::AccessDenied;
+}

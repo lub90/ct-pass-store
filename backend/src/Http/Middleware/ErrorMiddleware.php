@@ -4,30 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Middleware;
 
-use CtPassStore\Application\Exception\AccessDeniedException;
-use CtPassStore\Application\Exception\ApplicationException;
-use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
-use CtPassStore\Application\Exception\EntryNotFoundException;
-use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
-use CtPassStore\Application\Exception\InvalidRedirectUriException;
-use CtPassStore\Application\Exception\InvalidTokenException;
-use CtPassStore\Application\Exception\NoServiceAccessException;
-use CtPassStore\Application\Exception\OAuthCodeInvalidException;
-use CtPassStore\Application\Exception\PasswordRejectedException;
-use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
-use CtPassStore\Application\Exception\TokenExpiredException;
-use CtPassStore\Application\Exception\TooManyAttemptsException;
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Failure\Failure;
 use CtPassStore\Http\Problem\ProblemException;
+use CtPassStore\Http\Problem\ProblemMapping;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
-use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
@@ -57,7 +38,7 @@ final class ErrorMiddleware implements MiddlewareInterface
     {
         return match (true) {
             $e instanceof ProblemException => $e,
-            $e instanceof ApplicationException => self::fromApplication($e),
+            $e instanceof Failure => $this->fromFailure($e),
             $e instanceof HttpNotFoundException => new ProblemException(
                 ProblemType::NotFound,
                 'There is no endpoint ' . $request->getUri()->getPath() . '.',
@@ -67,31 +48,6 @@ final class ErrorMiddleware implements MiddlewareInterface
                 'The endpoint doesn\'t support ' . $request->getMethod() . '.',
                 headers: ['Allow' => implode(', ', $e->getAllowedMethods())],
             ),
-            $e instanceof ConfigurationException => $this->logged($e, new ProblemException(ProblemType::Misconfigured, $e->getMessage())),
-            $e instanceof ServiceCredentialRejectedException => $this->logged($e, new ProblemException(
-                ProblemType::Misconfigured,
-                'ChurchTools rejected the service user\'s token or permissions. Check CT_API_TOKEN in credentials.php and the service user\'s rights.',
-            )),
-            $e instanceof NotFoundException => $this->logged($e, new ProblemException(
-                ProblemType::Misconfigured,
-                'ChurchTools doesn\'t know the extension module or one of its categories. Check that the extension is installed and its setup completed.',
-            )),
-            $e instanceof RateLimitedException => $this->logged($e, new ProblemException(
-                ProblemType::UpstreamRateLimited,
-                'ChurchTools limits the number of requests. Try again later.',
-                ['retryAfter' => $e->retryAfterSeconds],
-                ['Retry-After' => (string) $e->retryAfterSeconds],
-            )),
-            $e instanceof UnavailableException => $this->logged($e, new ProblemException(
-                ProblemType::UpstreamUnavailable,
-                'ChurchTools is unreachable or answered with an error.',
-            )),
-            // A user call rejected where the code doesn't expect it: ChurchTools behaves differently than assumed.
-            $e instanceof NotAuthenticatedException, $e instanceof NotPermittedException,
-            $e instanceof InvalidResponseException => $this->logged($e, new ProblemException(
-                ProblemType::UpstreamInvalid,
-                'ChurchTools answered something the backend can\'t use.',
-            )),
             default => $this->logged($e, new ProblemException(
                 ProblemType::InternalError,
                 'An unexpected error occurred. Details are in the backend log.',
@@ -100,41 +56,29 @@ final class ErrorMiddleware implements MiddlewareInterface
     }
 
     /**
-     * Refused requests: the client gets the use case's message; the use cases log what's worth logging.
+     * Refusals (4xx) are answered with the failure's own text and logged where they happen; failures of the backend or
+     * of ChurchTools (5xx) are logged here, with their reason.
      */
-    private static function fromApplication(ApplicationException $e): ProblemException
+    private function fromFailure(Failure $e): ProblemException
     {
-        $type = match (true) {
-            $e instanceof AccessDeniedException => ProblemType::Forbidden,
-            $e instanceof EntryNotFoundException => ProblemType::EntryNotFound,
-            $e instanceof PrimaryPasswordRequiredException => ProblemType::PrimaryPasswordRequired,
-            $e instanceof InvalidPrimaryPasswordException => ProblemType::InvalidPrimaryPassword,
-            $e instanceof CustomPasswordNotAllowedException => ProblemType::CustomPasswordNotAllowed,
-            $e instanceof PasswordRejectedException => ProblemType::PasswordInvalid,
-            $e instanceof InvalidTokenException => ProblemType::InvalidToken,
-            $e instanceof TokenExpiredException => ProblemType::TokenExpired,
-            $e instanceof OAuthCodeInvalidException => ProblemType::OauthCodeInvalid,
-            $e instanceof NoServiceAccessException => ProblemType::NoServiceAccess,
-            $e instanceof InvalidRedirectUriException => ProblemType::InvalidBody,
-            $e instanceof TooManyAttemptsException => ProblemType::TooManyAttempts,
-            default => throw new \LogicException('No problem type for ' . $e::class . '.', 0, $e),
-        };
+        $reason = $e->reason();
+        $type = ProblemMapping::type($reason);
+        $extensions = $e->extensions();
+        $headers = [];
+        $retryAfter = $e->retryAfterSeconds();
+        if ($retryAfter !== null) {
+            $extensions['retryAfter'] = $retryAfter;
+            $headers['Retry-After'] = (string) $retryAfter;
+        }
+        $problem = new ProblemException($type, $e->publicDetail() ?? ProblemMapping::fixedDetail($reason), $extensions, $headers);
 
-        return match (true) {
-            $e instanceof PasswordRejectedException => new ProblemException($type, $e->getMessage(), ['violations' => $e->violations]),
-            $e instanceof TooManyAttemptsException => new ProblemException(
-                $type,
-                $e->getMessage(),
-                ['retryAfter' => $e->retryAfterSeconds],
-                ['Retry-After' => (string) $e->retryAfterSeconds],
-            ),
-            default => new ProblemException($type, $e->getMessage()),
-        };
+        return $type->status() >= 500 ? $this->logged($e, $problem, $reason->value) : $problem;
     }
 
-    private function logged(\Throwable $cause, ProblemException $problem): ProblemException
+    private function logged(\Throwable $cause, ProblemException $problem, ?string $reason = null): ProblemException
     {
         $this->logger->error($problem->type->value . ': ' . $cause->getMessage(), [
+            'reason' => $reason,
             'exception' => $cause::class,
             'file' => $cause->getFile() . ':' . $cause->getLine(),
             'trace' => self::traceWithoutArguments($cause),

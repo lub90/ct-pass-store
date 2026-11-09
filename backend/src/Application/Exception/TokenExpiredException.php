@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class TokenExpiredException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class TokenExpiredException extends ApplicationException
+{
+    protected const REASON = Reason::TokenExpired;
+}

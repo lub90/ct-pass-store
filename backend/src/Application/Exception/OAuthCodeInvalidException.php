@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class OAuthCodeInvalidException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class OAuthCodeInvalidException extends ApplicationException
+{
+    protected const REASON = Reason::OAuthCodeInvalid;
+}

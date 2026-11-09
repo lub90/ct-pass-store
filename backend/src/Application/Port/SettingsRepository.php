@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Port;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Domain\Settings;
 
 interface SettingsRepository

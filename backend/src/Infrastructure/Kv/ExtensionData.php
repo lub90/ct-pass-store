@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Kv;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
+use CtPassStore\Application\Failure\Reason;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 
 /**
@@ -63,7 +64,7 @@ final class ExtensionData
 
         $id = $this->client->getModuleByKey($this->extensionKey)['id'] ?? null;
         if (!is_int($id)) {
-            throw new ConfigurationException("ChurchTools returned no valid ID for the extension module '{$this->extensionKey}'.");
+            throw new ConfigurationException("ChurchTools returned no valid ID for the extension module '{$this->extensionKey}'.", Reason::ExtensionNotInstalled);
         }
 
         return $this->moduleId = $id;
@@ -76,12 +77,12 @@ final class ExtensionData
             if (($category['name'] ?? null) === $name) {
                 $id = $category['id'] ?? null;
                 if (!is_int($id)) {
-                    throw new ConfigurationException("The extension's data category '$name' has no valid ID.");
+                    throw new ConfigurationException("The extension's data category '$name' has no valid ID.", Reason::ExtensionNotInstalled);
                 }
 
                 return $id;
             }
         }
-        throw new ConfigurationException("The extension's data category '$name' doesn't exist. Complete the extension's setup.");
+        throw new ConfigurationException("The extension's data category '$name' doesn't exist. Complete the extension's setup.", Reason::ExtensionNotInstalled);
     }
 }

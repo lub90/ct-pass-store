@@ -6,12 +6,12 @@ namespace CtPassStore;
 
 use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\GetPassword;
 use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\SetPassword;
 use CtPassStore\Config\BackendConfig;
-use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Http\Controller\AuthController;
 use CtPassStore\Http\Controller\EntriesController;

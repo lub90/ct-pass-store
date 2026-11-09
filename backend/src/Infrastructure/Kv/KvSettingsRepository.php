@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Kv;
 
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Port\SettingsRepository;
-use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Domain\MachineClient;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Domain\Settings;

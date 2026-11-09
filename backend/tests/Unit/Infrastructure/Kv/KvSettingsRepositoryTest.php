@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Infrastructure\Kv;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;

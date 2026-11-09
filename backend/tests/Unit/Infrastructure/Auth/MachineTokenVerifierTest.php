@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Infrastructure\Auth;
 
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Application\Port\SettingsRepository;
-use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Domain\MachineClient;
 use CtPassStore\Domain\Settings;
 use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;

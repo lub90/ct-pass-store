@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Config;
 
+use CtPassStore\Application\Exception\ConfigurationException;
+
 /**
  * The local configuration from `config/credentials.php`, validated (spec 3.1).
  *

@@ -8,10 +8,10 @@ use CtPassStore\Application\Exception\AccessDeniedException;
 use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
 use CtPassStore\Application\Exception\PrimaryPasswordRequiredException;
 use CtPassStore\Application\Exception\TooManyAttemptsException;
+use CtPassStore\Application\Failure\Failure;
 use CtPassStore\Application\Port\AttemptLimiter;
 use CtPassStore\Application\Port\PrimaryPasswordVerifier;
 use CtPassStore\Application\Port\SettingsRepository;
-use CtPassStore\Application\Port\UpstreamOutage;
 use CtPassStore\Domain\AccessPolicy;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
@@ -78,11 +78,13 @@ final class EntryGuard
         // The username comes from the authenticated person, never from the request (spec 4.6).
         try {
             $correct = $this->verifier->verify($principal->username, $primaryPassword, $principal->id);
-        } catch (UpstreamOutage $e) {
-            // ChurchTools couldn't be asked at all: the attempt doesn't count (spec 5.5.3, 6.3). Every other error
-            // (429, an unexpected answer) means the attempt arrived, so it stays counted; otherwise answers like a
-            // lockout from ChurchTools would let unlimited attempts through.
-            $this->attempts->withdraw($principal->id, $attempt);
+        } catch (Failure $e) {
+            // Only an outage means ChurchTools couldn't be asked at all: then the attempt doesn't count (spec 5.5.3,
+            // 6.3). Every other error (429, an unexpected answer) means the attempt arrived, so it stays counted;
+            // otherwise answers like a lockout from ChurchTools would let unlimited attempts through.
+            if ($e->reason()->isOutage()) {
+                $this->attempts->withdraw($principal->id, $attempt);
+            }
             throw $e;
         }
         if (!$correct) {

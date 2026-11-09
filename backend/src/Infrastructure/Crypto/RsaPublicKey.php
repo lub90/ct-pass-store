@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Crypto;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
 use phpseclib3\Crypt\PublicKeyLoader;
 use phpseclib3\Crypt\RSA;
 

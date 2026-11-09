@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Store;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
+use CtPassStore\Application\Failure\Reason;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -168,11 +169,11 @@ final class SignedFileStore
     {
         $this->logger->error("Security store record $name failed its integrity check; requests that need it are refused.");
 
-        return new ConfigurationException('A security record in the backend\'s cache folder failed its integrity check. Check the server for unauthorized access, then empty the folder cache/.');
+        return new ConfigurationException('A security record in the backend\'s cache folder failed its integrity check. Check the server for unauthorized access, then empty the folder cache/.', Reason::StoreTampered);
     }
 
     private static function unusable(): ConfigurationException
     {
-        return new ConfigurationException('The backend\'s cache folder can\'t be used. PHP must be able to create and write the folder cache/ next to config/.');
+        return new ConfigurationException('The backend\'s cache folder can\'t be used. PHP must be able to create and write the folder cache/ next to config/.', Reason::StoreUnusable);
     }
 }

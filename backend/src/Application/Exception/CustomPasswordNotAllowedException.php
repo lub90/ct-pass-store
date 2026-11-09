@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class CustomPasswordNotAllowedException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class CustomPasswordNotAllowedException extends ApplicationException
+{
+    protected const REASON = Reason::CustomPasswordNotAllowed;
+}

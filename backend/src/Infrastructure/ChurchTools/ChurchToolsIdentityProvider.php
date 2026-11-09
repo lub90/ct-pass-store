@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\ChurchTools;
 
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Exception\NoServiceAccessException;
 use CtPassStore\Application\Exception\OAuthCodeInvalidException;
+use CtPassStore\Application\Failure\Reason;
 use CtPassStore\Application\Port\IdentityProvider;
-use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
@@ -45,7 +46,7 @@ final class ChurchToolsIdentityProvider implements IdentityProvider
             $this->logger->warning('Login failed: ' . $e->getMessage());
             throw new OAuthCodeInvalidException('ChurchTools didn\'t accept the authorization code. Start the login again.');
         } catch (OAuthClientRejectedException) {
-            throw new ConfigurationException('ChurchTools rejected OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET in credentials.php. Check them against the OAuth application in ChurchTools.');
+            throw new ConfigurationException('ChurchTools rejected OAUTH_CLIENT_ID or OAUTH_CLIENT_SECRET in credentials.php. Check them against the OAuth application in ChurchTools.', Reason::OAuthClientRejected);
         }
 
         $personId = $this->personIdFromToken($accessToken);

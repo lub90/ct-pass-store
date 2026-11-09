@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class PrimaryPasswordRequiredException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class PrimaryPasswordRequiredException extends ApplicationException
+{
+    protected const REASON = Reason::PrimaryPasswordRequired;
+}

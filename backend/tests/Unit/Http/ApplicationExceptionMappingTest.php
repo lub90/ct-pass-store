@@ -75,21 +75,56 @@ final class ApplicationExceptionMappingTest extends TestCase
         yield 'too many attempts' => [new TooManyAttemptsException('wait', 120), 429, 'too-many-attempts'];
     }
 
-    public function testEveryApplicationExceptionIsCovered(): void
+    /**
+     * The mapping is a match without default, so PHPStan catches a missing reason; this checks that every reason also
+     * gets a usable text.
+     */
+    public function testEveryReasonHasAProblemTypeAndAText(): void
     {
-        $covered = array_map(static fn(array $case): string => $case[0]::class, iterator_to_array(self::exceptions()));
-        $declared = [];
-        foreach (glob(__DIR__ . '/../../../src/Application/Exception/*Exception.php') ?: [] as $file) {
-            $class = 'CtPassStore\\Application\\Exception\\' . basename($file, '.php');
-            if ($class !== ApplicationException::class) {
-                $declared[] = $class;
-            }
+        foreach (\CtPassStore\Application\Failure\Reason::cases() as $reason) {
+            $type = \CtPassStore\Http\Problem\ProblemMapping::type($reason);
+            self::assertNotSame('', \CtPassStore\Http\Problem\ProblemMapping::fixedDetail($reason), $reason->value);
+            self::assertNotSame(\CtPassStore\Http\Problem\ProblemType::InternalError, $type, $reason->value);
         }
-        sort($declared);
-        $covered = array_values(array_unique($covered));
-        sort($covered);
+    }
 
-        self::assertSame($declared, $covered, 'A new ApplicationException needs a problem type in ErrorMiddleware and a case here.');
+    /**
+     * Infrastructure failures: a fixed text for the client (their messages name API paths), the reason in the log.
+     *
+     * @return iterable<string, array{\Throwable, int, string, string}>
+     */
+    public static function infrastructureFailures(): iterable
+    {
+        $ns = 'CtPassStore\\Infrastructure\\ChurchTools\\Exception\\';
+        yield 'unavailable' => [new ($ns . 'UnavailableException')('GET x: down'), 502, 'upstream-unavailable', 'upstream-unavailable'];
+        yield 'invalid' => [new ($ns . 'InvalidResponseException')('GET x: no JSON'), 502, 'upstream-invalid', 'upstream-invalid'];
+        yield 'user call rejected unexpectedly' => [new ($ns . 'NotAuthenticatedException')('GET x: 401'), 502, 'upstream-invalid', 'upstream-invalid'];
+        yield 'not found' => [new ($ns . 'NotFoundException')('GET x: 404'), 500, 'misconfigured', 'extension-not-installed'];
+        yield 'service user rejected' => [new ($ns . 'ServiceCredentialRejectedException')('GET x: 403'), 500, 'misconfigured', 'service-user-rejected'];
+        yield 'store tampered' => [new \CtPassStore\Application\Exception\ConfigurationException('tampered', \CtPassStore\Application\Failure\Reason::StoreTampered), 500, 'misconfigured', 'store-tampered'];
+    }
+
+    #[DataProvider('infrastructureFailures')]
+    public function testInfrastructureFailuresAreLoggedWithTheirReason(\Throwable $failure, int $status, string $type, string $reason): void
+    {
+        $log = new TestHandler();
+        $handler = new class ($failure) implements RequestHandlerInterface {
+            public function __construct(private readonly \Throwable $e) {}
+
+            public function handle(ServerRequestInterface $request): ResponseInterface
+            {
+                throw $this->e;
+            }
+        };
+
+        $response = (new ErrorMiddleware(new Logger('test', [$log])))->process((new ServerRequestFactory())->createServerRequest('GET', '/x'), $handler);
+        $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame($status, $response->getStatusCode());
+        self::assertIsArray($body);
+        self::assertStringEndsWith('#' . $type, (string) $body['type']);
+        self::assertStringNotContainsString('GET x', (string) $body['detail'], 'Log-only messages never reach the client.');
+        self::assertSame($reason, $log->getRecords()[0]['context']['reason'] ?? null);
     }
 
     public function testPasswordViolationsAreAnExtensionMember(): void

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Infrastructure\Store;
 
-use CtPassStore\Config\ConfigurationException;
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use Monolog\Handler\TestHandler;
 use Monolog\Logger;

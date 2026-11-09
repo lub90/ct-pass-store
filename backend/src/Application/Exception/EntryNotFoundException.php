@@ -4,4 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Exception;
 
-final class EntryNotFoundException extends ApplicationException {}
+use CtPassStore\Application\Failure\Reason;
+
+final class EntryNotFoundException extends ApplicationException
+{
+    protected const REASON = Reason::EntryNotFound;
+}

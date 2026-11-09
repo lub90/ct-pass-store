@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Auth;
 
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Exception\InvalidTokenException;
-use CtPassStore\Config\ConfigurationException;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 
 /**

@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Config;
 
+use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Config\BackendConfig;
-use CtPassStore\Config\ConfigurationException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
