@@ -19,6 +19,9 @@ final class KvSettingsRepositoryTest extends TestCase
 {
     private \Monolog\Handler\TestHandler $log;
 
+    /** The repository last created by settings(), whose findings the tests check. */
+    private KvSettingsRepository $repository;
+
     private const KEYS = __DIR__ . '/../../../keys/';
 
     private FakeChurchToolsClient $fake;
@@ -59,7 +62,7 @@ final class KvSettingsRepositoryTest extends TestCase
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], is_string($settings) ? $settings : json_encode($settings, JSON_THROW_ON_ERROR));
 
-        return new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
+        return $this->repository = new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
     }
 
     private function withPublicKey(string $pem): KvSettingsRepository
@@ -328,8 +331,8 @@ final class KvSettingsRepositoryTest extends TestCase
 
         self::assertNull($settings->backendUrl);
         self::assertSame(16, $settings->passwordLength, 'The other settings stay usable.');
-        self::assertCount(1, $settings->problems);
-        self::assertStringContainsString('backendUrl', $settings->problems[0]);
+        self::assertCount(1, $this->repository->findings());
+        self::assertStringContainsString('backendUrl', $this->repository->findings()[0]);
         self::assertTrue($this->log->hasWarningThatContains('The setting backendUrl must be an https:// URL'));
     }
 
@@ -376,7 +379,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->settings(self::validSettings())->settings();
 
         self::assertSame([], $settings->machineClients);
-        self::assertSame([], $settings->problems);
+        self::assertSame([], $this->repository->findings());
         self::assertFalse($this->log->hasWarningRecords());
     }
 
@@ -390,7 +393,7 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertSame([str_repeat('k', 32)], $client->publicKeys);
         self::assertSame(['entries:read'], $client->permissions);
         self::assertSame([str_repeat('o', 32)], $settings->machineClients['other-client']->publicKeys, 'base64url without padding is accepted.');
-        self::assertSame([], $settings->problems);
+        self::assertSame([], $this->repository->findings());
     }
 
     /**
@@ -402,8 +405,8 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(['id' => 'good-client']), $entry]);
 
         self::assertSame(['good-client'], array_keys($settings->machineClients));
-        self::assertCount(1, $settings->problems);
-        self::assertStringContainsString($problem, $settings->problems[0]);
+        self::assertCount(1, $this->repository->findings());
+        self::assertStringContainsString($problem, $this->repository->findings()[0]);
         self::assertTrue($this->log->hasWarningThatContains($problem), 'The admin finds the reason in the log.');
     }
 
@@ -433,7 +436,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(), self::client(['name' => 'Impostor']), self::client(['id' => 'good-client'])]);
 
         self::assertSame(['good-client'], array_keys($settings->machineClients));
-        self::assertCount(2, $settings->problems);
+        self::assertCount(2, $this->repository->findings());
     }
 
     public function testClientsSharingAPublicKeyAreAllDisabled(): void
@@ -446,8 +449,8 @@ final class KvSettingsRepositoryTest extends TestCase
         ]);
 
         self::assertSame(['good-client'], array_keys($settings->machineClients));
-        self::assertCount(2, $settings->problems);
-        self::assertStringContainsString('ct-radius is disabled: it shares a public key with impostor', $settings->problems[0]);
+        self::assertCount(2, $this->repository->findings());
+        self::assertStringContainsString('ct-radius is disabled: it shares a public key with impostor', $this->repository->findings()[0]);
         self::assertTrue($this->log->hasWarningThatContains('impostor is disabled: it shares a public key with ct-radius'));
     }
 
@@ -457,7 +460,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(['publicKeys' => [$key, $key]])]);
 
         self::assertSame(['ct-radius'], array_keys($settings->machineClients));
-        self::assertSame([], $settings->problems);
+        self::assertSame([], $this->repository->findings());
     }
 
     public function testUnknownPermissionsGrantNothingAndAreReported(): void
@@ -465,8 +468,8 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 42]])]);
 
         self::assertSame(['entries:read'], $settings->machineClients['ct-radius']->permissions);
-        self::assertCount(3, $settings->problems);
-        self::assertStringContainsString('entries:write', $settings->problems[0]);
+        self::assertCount(3, $this->repository->findings());
+        self::assertStringContainsString('entries:write', $this->repository->findings()[0]);
     }
 
     public function testAClientWithoutPermissionsIsEnabledWithoutRights(): void
@@ -481,7 +484,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings = $this->machineSettings(['ct-radius' => self::client()]);
 
         self::assertSame([], $settings->machineClients);
-        self::assertStringContainsString('isn\'t a list', $settings->problems[0]);
+        self::assertStringContainsString('isn\'t a list', $this->repository->findings()[0]);
         self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
     }
 }
