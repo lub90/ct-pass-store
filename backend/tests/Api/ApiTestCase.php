@@ -5,11 +5,12 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Application;
+use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Infrastructure\Auth\TokenService;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use CtPassStore\Tests\Support\FrozenClock;
@@ -146,7 +147,7 @@ abstract class ApiTestCase extends TestCase
      */
     protected function tokenOf(int $personId): string
     {
-        return (new TokenService(self::JWT_SECRET, $this->clock))->issue(new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId"))->token;
+        return (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->issue(new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId"))->token;
     }
 
     /**

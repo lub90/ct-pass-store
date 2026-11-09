@@ -2,16 +2,17 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\Unit\Infrastructure\Auth;
+namespace CtPassStore\Tests\Unit\Application\Auth;
 
+use CtPassStore\Application\Auth\MachineTokens;
 use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\MachineClient;
 use CtPassStore\Domain\Settings;
-use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;
-use CtPassStore\Infrastructure\Auth\ReplayGuard;
+use CtPassStore\Infrastructure\Auth\FileReplayCache;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Tests\Support\FrozenClock;
 use Firebase\JWT\JWT;
@@ -22,7 +23,7 @@ use Psr\Log\NullLogger;
 /**
  * Catalog MC-01 to MC-22 (spec 4.4a).
  */
-final class MachineTokenVerifierTest extends TestCase
+final class MachineTokensTest extends TestCase
 {
     private const BACKEND_URL = 'https://backend.example.org/ctpassstore';
 
@@ -75,10 +76,10 @@ final class MachineTokenVerifierTest extends TestCase
         $this->settings = new Settings(true, true, 16, [], $backendUrl, $byId);
     }
 
-    private function verifier(?string $cacheDir = null): MachineTokenVerifier
+    private function verifier(?string $cacheDir = null): MachineTokens
     {
         $settings = new class ($this) implements SettingsRepository {
-            public function __construct(private readonly MachineTokenVerifierTest $test) {}
+            public function __construct(private readonly MachineTokensTest $test) {}
 
             public function settings(): Settings
             {
@@ -86,7 +87,7 @@ final class MachineTokenVerifierTest extends TestCase
             }
         };
 
-        return new MachineTokenVerifier($settings, new ReplayGuard(new SignedFileStore($cacheDir ?? $this->cacheDir, str_repeat('s', 40), new NullLogger())), $this->clock);
+        return new MachineTokens($settings, new FileReplayCache(new SignedFileStore($cacheDir ?? $this->cacheDir, str_repeat('s', 40), new NullLogger())), $this->clock, new FirebaseTokenCodec());
     }
 
     public function currentSettings(): Settings

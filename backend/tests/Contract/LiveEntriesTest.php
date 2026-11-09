@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Contract;
 
+use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
-use CtPassStore\Infrastructure\Auth\TokenService;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
@@ -82,7 +83,7 @@ final class LiveEntriesTest extends TestCase
         $this->personId = (int) $user['id'];
         // A backend token minted with the local JWT_SECRET, as POST /v1/auth/token would issue it (catalog section 14).
         // The real OAuth login needs a browser and is checked by hand.
-        $this->accessToken = (new TokenService(self::$config->jwtSecret, new SystemClock()))
+        $this->accessToken = (new UserTokens(self::$config->jwtSecret, new SystemClock(), new FirebaseTokenCodec()))
             ->issue(new PersonPrincipal(new PersonId($this->personId), (string) $user['username']))->token;
 
         if ($this->storedCiphertexts() !== []) {

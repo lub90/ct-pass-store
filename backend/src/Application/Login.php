@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application;
 
+use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Application\Exception\InvalidRedirectUriException;
-use CtPassStore\Application\Port\AccessTokenIssuer;
 use CtPassStore\Application\Port\IdentityProvider;
 use Psr\Log\LoggerInterface;
 
@@ -20,7 +20,7 @@ final class Login
     public function __construct(
         private readonly string $instanceOrigin,
         private readonly IdentityProvider $identities,
-        private readonly AccessTokenIssuer $tokens,
+        private readonly UserTokens $tokens,
         private readonly LoggerInterface $logger,
     ) {}
 

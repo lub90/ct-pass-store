@@ -4,73 +4,58 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Auth;
 
-use CtPassStore\Application\Exception\InvalidTokenException;
+use CtPassStore\Application\Auth\TokenHeader;
+use CtPassStore\Application\Auth\TokenRules;
+use CtPassStore\Application\Auth\VerifiedToken;
+use CtPassStore\Application\Port\TokenCodec;
 use Firebase\JWT\ExpiredException;
 use Firebase\JWT\JWT as FirebaseJwt;
 use Firebase\JWT\Key;
 
 /**
- * The parts of JWT handling shared by user and machine tokens (spec 4.3.3), around firebase/php-jwt.
+ * TokenCodec on top of firebase/php-jwt.
  *
- * - The header is read here first, so the caller can pick the kind of token and its key. Only `alg`, `typ` and `kid`
- *   are read; a token with `crit` is rejected, and keys embedded in the header are never used.
- * - The signature is always checked before any claim. An expired token is reported as expired only when its
- *   signature is valid.
+ * - The header is read here first, so callers can pick the kind of token and its keys. Only `alg` and `kid` are read;
+ *   a token with `crit` is rejected, and keys embedded in the header are never used.
+ * - The algorithm is pinned per call: a key is only ever used with the algorithm the caller names.
  */
-final class Jwt
+final class FirebaseTokenCodec implements TokenCodec
 {
-    /** Clock skew allowed for `nbf`, `iat` and `exp` (spec 4.4). */
-    public const LEEWAY_SECONDS = 30;
-
     /** Far more than any valid token; protects the decoder from huge inputs. */
     private const MAX_LENGTH = 8192;
 
-    /**
-     * @return array{alg: string, kid: string|null}
-     *
-     * @throws InvalidTokenException
-     */
-    public static function header(string $token): array
+    public function header(string $token): TokenHeader
     {
         $parts = explode('.', $token);
         if (strlen($token) > self::MAX_LENGTH || count($parts) !== 3 || preg_match('/^[A-Za-z0-9_-]+\z/', $parts[0]) !== 1) {
-            throw self::invalid();
+            throw TokenRules::invalid();
         }
         $header = json_decode((string) base64_decode(strtr($parts[0], '-_', '+/'), true), true);
         if (!is_array($header) || array_is_list($header) || array_key_exists('crit', $header)) {
-            throw self::invalid();
+            throw TokenRules::invalid();
         }
         $alg = $header['alg'] ?? null;
         $kid = $header['kid'] ?? null;
         if (!is_string($alg) || ($kid !== null && !is_string($kid))) {
-            throw self::invalid();
+            throw TokenRules::invalid();
         }
 
-        return ['alg' => $alg, 'kid' => $kid];
+        return new TokenHeader($alg, $kid);
     }
 
-    /**
-     * Verifies the signature with one of the keys and returns the claims. `expired` is true if the signature is
-     * valid but `exp` has passed (beyond the leeway); the caller checks its other claims before reporting that.
-     *
-     * @param non-empty-list<Key> $keys tried in order; all must use the algorithm expected by the caller
-     * @return array{claims: array<string, mixed>, expired: bool}
-     *
-     * @throws InvalidTokenException
-     */
-    public static function verify(string $token, array $keys, \DateTimeImmutable $now): array
+    public function verify(string $token, string $algorithm, array $keys, int $now, int $leeway): VerifiedToken
     {
         // firebase/php-jwt keeps its clock and leeway in static properties; they're set for this call only.
         $previous = [FirebaseJwt::$timestamp, FirebaseJwt::$leeway];
-        FirebaseJwt::$timestamp = $now->getTimestamp();
-        FirebaseJwt::$leeway = self::LEEWAY_SECONDS;
+        FirebaseJwt::$timestamp = $now;
+        FirebaseJwt::$leeway = $leeway;
         try {
-            foreach ($keys as $key) {
+            foreach ($keys as $raw) {
                 try {
-                    return ['claims' => self::toArray(FirebaseJwt::decode($token, $key)), 'expired' => false];
+                    return new VerifiedToken(self::toArray(FirebaseJwt::decode($token, self::key($raw, $algorithm))), false);
                 } catch (ExpiredException $e) {
                     // Thrown only after the signature was verified.
-                    return ['claims' => self::toArray($e->getPayload()), 'expired' => true];
+                    return new VerifiedToken(self::toArray($e->getPayload()), true);
                 } catch (\UnexpectedValueException|\DomainException|\InvalidArgumentException|\JsonException) {
                     // What firebase/php-jwt throws for a wrong key, bad signature or malformed token (its
                     // SignatureInvalidException and BeforeValidException included), and JSON too deep to be a real
@@ -81,12 +66,20 @@ final class Jwt
             [FirebaseJwt::$timestamp, FirebaseJwt::$leeway] = $previous;
         }
 
-        throw self::invalid();
+        throw TokenRules::invalid();
     }
 
-    public static function invalid(): InvalidTokenException
+    public function sign(array $claims, string $algorithm, #[\SensitiveParameter] string $key): string
     {
-        return new InvalidTokenException('The access token is invalid.');
+        return FirebaseJwt::encode($claims, $key, $algorithm);
+    }
+
+    /**
+     * firebase/php-jwt expects EdDSA keys base64-encoded, HMAC secrets as they are.
+     */
+    private static function key(#[\SensitiveParameter] string $raw, string $algorithm): Key
+    {
+        return new Key($algorithm === 'EdDSA' ? base64_encode($raw) : $raw, $algorithm);
     }
 
     /**
@@ -96,7 +89,7 @@ final class Jwt
     {
         $claims = json_decode(json_encode($payload, JSON_THROW_ON_ERROR), true, 32, JSON_THROW_ON_ERROR);
         if (!is_array($claims) || array_is_list($claims) && $claims !== []) {
-            throw self::invalid();
+            throw TokenRules::invalid();
         }
 
         return $claims;

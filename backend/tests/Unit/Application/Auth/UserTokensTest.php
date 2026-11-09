@@ -2,13 +2,14 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Tests\Unit\Infrastructure\Auth;
+namespace CtPassStore\Tests\Unit\Application\Auth;
 
+use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
-use CtPassStore\Infrastructure\Auth\TokenService;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Tests\Support\FrozenClock;
 use Firebase\JWT\JWT;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -17,17 +18,17 @@ use PHPUnit\Framework\TestCase;
 /**
  * Catalog TK-01 to TK-16 (spec 4.3.3, 4.4).
  */
-final class TokenServiceTest extends TestCase
+final class UserTokensTest extends TestCase
 {
     private const SECRET = 'test-secret-with-at-least-32-bytes-0123456789';
 
     private FrozenClock $clock;
-    private TokenService $tokens;
+    private UserTokens $tokens;
 
     protected function setUp(): void
     {
         $this->clock = new FrozenClock();
-        $this->tokens = new TokenService(self::SECRET, $this->clock);
+        $this->tokens = new UserTokens(self::SECRET, $this->clock, new FirebaseTokenCodec());
     }
 
     private static function person(): PersonPrincipal
@@ -45,8 +46,8 @@ final class TokenServiceTest extends TestCase
     {
         $now = $this->clock->timestamp();
         $claims = array_merge([
-            'iss' => TokenService::ISSUER,
-            'aud' => TokenService::AUDIENCE,
+            'iss' => UserTokens::ISSUER,
+            'aud' => UserTokens::AUDIENCE,
             'sub' => '5',
             'username' => 'jdoe',
             'iat' => $now,
@@ -149,7 +150,7 @@ final class TokenServiceTest extends TestCase
         $token = $this->tokens->issue(self::person())->token;
 
         $this->expectException(InvalidTokenException::class);
-        (new TokenService('a-rotated-secret-with-at-least-32-bytes-0123', $this->clock))->verify($token);
+        (new UserTokens('a-rotated-secret-with-at-least-32-bytes-0123', $this->clock, new FirebaseTokenCodec()))->verify($token);
     }
 
     public function testChangingAClaimWithoutResigningIsRejected(): void

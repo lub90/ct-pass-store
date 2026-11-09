@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace CtPassStore;
 
+use CtPassStore\Application\Auth\Authenticator;
+use CtPassStore\Application\Auth\MachineTokens;
+use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
 use CtPassStore\Application\Exception\ConfigurationException;
@@ -21,11 +24,9 @@ use CtPassStore\Http\Middleware\CorsMiddleware;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Infrastructure\Auth\BearerAuthenticator;
 use CtPassStore\Infrastructure\Auth\FileAttemptLimiter;
-use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;
-use CtPassStore\Infrastructure\Auth\ReplayGuard;
-use CtPassStore\Infrastructure\Auth\TokenService;
+use CtPassStore\Infrastructure\Auth\FileReplayCache;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsIdentityProvider;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPasswordVerifier;
@@ -63,7 +64,8 @@ final class Application
     public static function create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): App
     {
         $clock ??= new SystemClock();
-        $tokens = new TokenService($config->jwtSecret, $clock);
+        $codec = new FirebaseTokenCodec();
+        $tokens = new UserTokens($config->jwtSecret, $clock, $codec);
         $extensionData = new ExtensionData($churchTools);
         $settings = new KvSettingsRepository($extensionData, $logger);
         $passwords = new KvPasswordRepository($extensionData, $logger);
@@ -86,10 +88,7 @@ final class Application
             $logger,
         ));
 
-        $authenticator = new BearerAuthenticator(
-            $tokens,
-            new MachineTokenVerifier($settings, new ReplayGuard($securityStore), $clock),
-        );
+        $authenticator = new Authenticator($codec, $tokens, new MachineTokens($settings, new FileReplayCache($securityStore), $clock, $codec));
 
         // Every path lives under /v1 (Q20); the old paths without prefix are unknown routes (404).
         // The only route without an access token (spec 4.1):

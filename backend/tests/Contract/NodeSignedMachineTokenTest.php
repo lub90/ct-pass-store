@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Contract;
 
+use CtPassStore\Application\Auth\MachineTokens;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\MachineClient;
 use CtPassStore\Domain\Settings;
-use CtPassStore\Infrastructure\Auth\MachineTokenVerifier;
-use CtPassStore\Infrastructure\Auth\ReplayGuard;
+use CtPassStore\Infrastructure\Auth\FileReplayCache;
+use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use PHPUnit\Framework\TestCase;
@@ -62,7 +63,7 @@ final class NodeSignedMachineTokenTest extends TestCase
             }
         };
         $cacheDir = sys_get_temp_dir() . '/ctps-node-' . bin2hex(random_bytes(6));
-        $verifier = new MachineTokenVerifier($repository, new ReplayGuard(new SignedFileStore($cacheDir, str_repeat('s', 40), new NullLogger())), new SystemClock());
+        $verifier = new MachineTokens($repository, new FileReplayCache(new SignedFileStore($cacheDir, str_repeat('s', 40), new NullLogger())), new SystemClock(), new FirebaseTokenCodec());
 
         try {
             self::assertSame('ct-radius', $verifier->verify((string) $signed['token'])->clientId);

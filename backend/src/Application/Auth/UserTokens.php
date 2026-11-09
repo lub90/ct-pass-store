@@ -2,23 +2,21 @@
 
 declare(strict_types=1);
 
-namespace CtPassStore\Infrastructure\Auth;
+namespace CtPassStore\Application\Auth;
 
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Application\IssuedToken;
-use CtPassStore\Application\Port\AccessTokenIssuer;
 use CtPassStore\Application\Port\Clock;
+use CtPassStore\Application\Port\TokenCodec;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
-use Firebase\JWT\JWT as FirebaseJwt;
-use Firebase\JWT\Key;
 
 /**
- * Issues and validates the backend's own access tokens for users (spec 4.4, Q21): HS256 with `JWT_SECRET`, 15
- * minutes. The algorithm is pinned; `iss` and `aud` are constants and never come from the request.
+ * The backend's own access tokens for users (spec 4.4, Q21): HS256 with `JWT_SECRET`, 15 minutes. The algorithm is
+ * pinned; `iss` and `aud` are constants and never come from the request. All claims are required.
  */
-final class TokenService implements AccessTokenIssuer
+final class UserTokens
 {
     public const ALGORITHM = 'HS256';
     public const ISSUER = 'ctpassstore-backend';
@@ -29,12 +27,13 @@ final class TokenService implements AccessTokenIssuer
         #[\SensitiveParameter]
         private readonly string $secret,
         private readonly Clock $clock,
+        private readonly TokenCodec $codec,
     ) {}
 
     public function issue(PersonPrincipal $person): IssuedToken
     {
         $now = $this->clock->now()->getTimestamp();
-        $token = FirebaseJwt::encode([
+        $token = $this->codec->sign([
             'iss' => self::ISSUER,
             'aud' => self::AUDIENCE,
             'sub' => (string) $person->id->value,
@@ -43,17 +42,17 @@ final class TokenService implements AccessTokenIssuer
             'nbf' => $now,
             'exp' => $now + self::LIFETIME_SECONDS,
             'jti' => bin2hex(random_bytes(16)),
-        ], $this->secret, self::ALGORITHM);
+        ], self::ALGORITHM, $this->secret);
 
         return new IssuedToken($token, self::LIFETIME_SECONDS);
     }
 
     /**
-     * Whether the token looks like one of ours (HS256 without `kid`), judged by its header alone.
+     * Whether a token with this header is meant to be one of ours (HS256 without `kid`).
      */
-    public static function claimsHeader(string $alg, ?string $kid): bool
+    public static function claims(TokenHeader $header): bool
     {
-        return $alg === self::ALGORITHM && $kid === null;
+        return $header->alg === self::ALGORITHM && $header->kid === null;
     }
 
     /**
@@ -62,29 +61,30 @@ final class TokenService implements AccessTokenIssuer
      */
     public function verify(#[\SensitiveParameter] string $token): PersonPrincipal
     {
-        $header = Jwt::header($token);
-        if (!self::claimsHeader($header['alg'], $header['kid'])) {
-            throw Jwt::invalid();
+        if (!self::claims($this->codec->header($token))) {
+            throw TokenRules::invalid();
         }
 
-        $result = Jwt::verify($token, [new Key($this->secret, self::ALGORITHM)], $this->clock->now());
-        $claims = $result['claims'];
+        // Signature first, then claims, then expiry (spec 4.3.3).
+        $verified = $this->codec->verify($token, self::ALGORITHM, [$this->secret], $this->clock->now()->getTimestamp(), TokenRules::LEEWAY_SECONDS);
+        $claims = $verified->claims;
 
         $sub = $claims['sub'] ?? null;
+        $personId = is_string($sub) ? PersonId::decimal($sub) : null;
         $username = $claims['username'] ?? null;
         $valid = ($claims['iss'] ?? null) === self::ISSUER
             && ($claims['aud'] ?? null) === self::AUDIENCE
-            && is_string($sub) && (PersonId::decimal($sub) ?? 0) > 0
+            && $personId !== null && $personId > 0
             && is_string($username) && $username !== ''
             && is_string($claims['jti'] ?? null) && $claims['jti'] !== ''
             && is_int($claims['iat'] ?? null) && is_int($claims['nbf'] ?? null) && is_int($claims['exp'] ?? null);
         if (!$valid) {
-            throw Jwt::invalid();
+            throw TokenRules::invalid();
         }
-        if ($result['expired']) {
+        if ($verified->expired) {
             throw new TokenExpiredException('The access token has expired. Log in again.');
         }
 
-        return new PersonPrincipal(new PersonId((int) PersonId::decimal($sub)), $username);
+        return new PersonPrincipal(new PersonId($personId), $username);
     }
 }

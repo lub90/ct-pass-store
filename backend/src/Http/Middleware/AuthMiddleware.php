@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Middleware;
 
+use CtPassStore\Application\Auth\Authenticator;
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Infrastructure\Auth\BearerAuthenticator;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\MiddlewareInterface;
@@ -25,7 +25,7 @@ final class AuthMiddleware implements MiddlewareInterface
     public const PRINCIPAL = 'principal';
 
     public function __construct(
-        private readonly BearerAuthenticator $authenticator,
+        private readonly Authenticator $authenticator,
         private readonly LoggerInterface $logger,
     ) {}
 
