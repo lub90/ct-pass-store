@@ -170,7 +170,7 @@ final class GuzzleChurchToolsClientTest extends TestCase
     public function testUserCallsUseTheUserCredentialAndNeverTheServiceCredential(): void
     {
         $client = $this->client();
-        $this->respond(200, ['data' => ['id' => 5]]);
+        $this->respond(200, ['data' => ['id' => 5, 'cmsUserId' => 'jdoe']]);
         $this->respond(200, ['data' => ['ctpassstore' => ['view' => true]]]);
 
         $client->whoami(Credential::bearerToken(self::USER_TOKEN));
@@ -202,7 +202,9 @@ final class GuzzleChurchToolsClientTest extends TestCase
         $client = $this->client();
         $this->respond(200, ['data' => ['id' => 5, 'cmsUserId' => 'jdoe'], 'meta' => ['simulatingUserId' => null]]);
 
-        self::assertSame(['id' => 5, 'cmsUserId' => 'jdoe'], $client->whoami(Credential::bearerToken(self::USER_TOKEN)));
+        $person = $client->whoami(Credential::bearerToken(self::USER_TOKEN));
+
+        self::assertSame([5, 'jdoe'], [$person->id, $person->username]);
     }
 
     /**

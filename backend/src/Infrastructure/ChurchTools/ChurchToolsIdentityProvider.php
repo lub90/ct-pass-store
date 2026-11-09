@@ -53,18 +53,15 @@ final class ChurchToolsIdentityProvider implements IdentityProvider
         $credential = Credential::bearerToken($accessToken);
 
         $person = $this->client->whoami($credential);
-        $id = $person['id'] ?? null;
-        $username = $person['cmsUserId'] ?? null;
-        if (!is_int($id) || $id !== $personId) {
+        if ($person->id !== $personId) {
             throw new InvalidResponseException('GET whoami: the person doesn\'t match the token\'s sub.');
         }
-        if (!is_string($username) || $username === '') {
+        if ($person->username === '') {
             throw new InvalidResponseException('GET whoami: the person has no username (cmsUserId).');
         }
+        $username = $person->username;
 
-        $permissions = $this->client->globalPermissions($credential);
-        $extension = $permissions[KvSchema::EXTENSION_KEY] ?? null;
-        if (!is_array($extension) || ($extension['view'] ?? null) !== true) {
+        if (!$this->client->globalPermissions($credential)->mayView(KvSchema::EXTENSION_KEY)) {
             $this->logger->warning("Login refused: user $personId has no access to the service.");
             throw new NoServiceAccessException('You don\'t have the right to use the CtPassStore extension.');
         }

@@ -120,19 +120,19 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
         return $token;
     }
 
-    public function whoami(Credential $user): array
+    public function whoami(Credential $user): WhoAmI
     {
-        return $this->expectObject($this->data($this->send('GET', 'whoami', $user, false)), 'GET whoami');
+        return WhoAmI::fromData($this->expectObject($this->data($this->send('GET', 'whoami', $user, false)), 'GET whoami'));
     }
 
-    public function globalPermissions(Credential $user): array
+    public function globalPermissions(Credential $user): Permissions
     {
-        return $this->expectObject($this->data($this->send('GET', 'permissions/global', $user, false)), 'GET permissions/global');
+        return new Permissions($this->expectObject($this->data($this->send('GET', 'permissions/global', $user, false)), 'GET permissions/global'));
     }
 
-    public function serviceUserGlobalPermissions(): array
+    public function serviceUserGlobalPermissions(): Permissions
     {
-        return $this->expectObject($this->data($this->send('GET', 'permissions/global', $this->serviceUser, true)), 'GET permissions/global');
+        return new Permissions($this->expectObject($this->data($this->send('GET', 'permissions/global', $this->serviceUser, true)), 'GET permissions/global'));
     }
 
     public function verifyLogin(string $username, #[\SensitiveParameter] string $password): ?LoginResult

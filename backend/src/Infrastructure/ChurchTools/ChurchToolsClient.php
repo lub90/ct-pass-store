@@ -38,24 +38,18 @@ interface ChurchToolsClient
 
     /**
      * `GET /whoami` as the given user.
-     *
-     * @return array<string, mixed> the `data` member (the person)
      */
-    public function whoami(Credential $user): array;
+    public function whoami(Credential $user): WhoAmI;
 
     /**
      * `GET /permissions/global` as the given user.
-     *
-     * @return array<string, mixed> the `data` member
      */
-    public function globalPermissions(Credential $user): array;
+    public function globalPermissions(Credential $user): Permissions;
 
     /**
      * `GET /permissions/global` as the service user (for the self-check).
-     *
-     * @return array<string, mixed> the `data` member
      */
-    public function serviceUserGlobalPermissions(): array;
+    public function serviceUserGlobalPermissions(): Permissions;
 
     /**
      * `POST /login` with username and password.

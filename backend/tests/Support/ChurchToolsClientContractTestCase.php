@@ -229,19 +229,19 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
 
     public function testWhoamiHasIdAndUsername(): void
     {
+        // WhoAmI can only be built from an integer id and a string cmsUserId.
         $person = $this->client()->whoami($this->validUserCredential());
 
-        self::assertIsInt($person['id'] ?? null);
-        self::assertGreaterThan(0, $person['id']);
-        self::assertIsString($person['cmsUserId'] ?? null);
+        self::assertGreaterThan(0, $person->id);
+        self::assertNotSame('', $person->username);
     }
 
     public function testGlobalPermissionsHaveTheExtensionsViewFlag(): void
     {
-        $permissions = $this->client()->globalPermissions($this->validUserCredential());
+        $permissions = $this->client()->globalPermissions($this->validUserCredential())->of(KvSchema::EXTENSION_KEY);
 
-        self::assertIsArray($permissions[KvSchema::EXTENSION_KEY] ?? null);
-        self::assertIsBool($permissions[KvSchema::EXTENSION_KEY]['view'] ?? null);
+        self::assertIsArray($permissions);
+        self::assertIsBool($permissions['view'] ?? null);
     }
 
     public function testUnknownTokenIsNotAuthenticated(): void

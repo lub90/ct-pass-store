@@ -11,6 +11,8 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\ChurchTools\Permissions;
+use CtPassStore\Infrastructure\ChurchTools\WhoAmI;
 
 /**
  * In-memory ChurchTools for unit and API tests (spec 6.6).
@@ -247,25 +249,26 @@ final class FakeChurchToolsClient implements ChurchToolsClient
         return $grant['token'];
     }
 
-    public function whoami(Credential $user): array
+    public function whoami(Credential $user): WhoAmI
     {
         $this->record(__FUNCTION__, [$user->scheme()]);
 
-        return $this->people[$user->authorizationHeader()] ?? throw new NotAuthenticatedException('GET whoami: ChurchTools answered 401.');
+        // The same shape check as the real client, so malformed data fails the same way.
+        return WhoAmI::fromData($this->people[$user->authorizationHeader()] ?? throw new NotAuthenticatedException('GET whoami: ChurchTools answered 401.'));
     }
 
-    public function globalPermissions(Credential $user): array
+    public function globalPermissions(Credential $user): Permissions
     {
         $this->record(__FUNCTION__, [$user->scheme()]);
 
-        return $this->permissions[$user->authorizationHeader()] ?? throw new NotAuthenticatedException('GET permissions/global: ChurchTools answered 401.');
+        return new Permissions($this->permissions[$user->authorizationHeader()] ?? throw new NotAuthenticatedException('GET permissions/global: ChurchTools answered 401.'));
     }
 
-    public function serviceUserGlobalPermissions(): array
+    public function serviceUserGlobalPermissions(): Permissions
     {
         $this->record(__FUNCTION__, []);
 
-        return $this->servicePermissions;
+        return new Permissions($this->servicePermissions);
     }
 
     public function verifyLogin(string $username, #[\SensitiveParameter] string $password): ?LoginResult
