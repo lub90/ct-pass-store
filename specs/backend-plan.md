@@ -126,15 +126,16 @@ Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
     `backend/docs/testing.md`.
   - The real OAuth flow (it needs a browser) is checked by hand before each release, with a short checklist.
 
-- [ ] **3.7 Architecture follow-up** (behavior-neutral, before phase 4)
+- [x] **3.7 Architecture follow-up** (behavior-neutral, before phase 4)
   - Errors carry a category (enum); the HTTP layer maps each category to exactly one problem type with an exhaustive
     `match`. The HTTP layer no longer knows ChurchTools exception classes. `ConfigurationException` is split by cause.
   - The token rules (required claims, lifetimes, leeway, order of checks) move out of `Infrastructure`; only signing
     and verifying with firebase/php-jwt stays there (`TokenCodec`).
   - `SettingsParser` (pure: decoded JSON → `Settings` plus findings) is split from loading; the findings leave the
-    domain object `Settings`.
+    domain object `Settings`. It stays in `Infrastructure/Kv`, because it knows the stored format.
   - Typed ChurchTools answers (`WhoAmI`, `Permissions`) instead of loose arrays.
   - An architecture test: `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
+    `SelfCheckController` still uses `KvSettingsRepository` directly; 4.2 rebuilds it on ports.
   - Deliberately not done: folders per feature area (over-engineering for a backend this size, see the decision of
     2026-11-09).
 
