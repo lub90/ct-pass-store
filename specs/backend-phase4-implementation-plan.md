@@ -18,7 +18,7 @@ A case added during implementation goes into the catalog first (plan "How we wor
 
 ## Global Constraints
 
-- Branch: `feature/<name>` off `develop` per item (git flow); one pull request per plan item 4.1 … 4.5.
+- Branch: all of phase 4 is built on `feature/backend-cleanup` (decided 2026-11-10); one commit per task.
 - Every commit passes `composer check` (code style, PHPStan, unit and API tests) in `backend/`.
 - Cite spec sections as "spec 6.1" / "spec 5.3.10" in comments and test docblocks, like the existing code.
 - No new runtime dependency. Monolog's `RotatingFileHandler` is already available.
@@ -32,8 +32,8 @@ A case added during implementation goes into the catalog first (plan "How we wor
   `/64`; the block lasts until the 60-second window has passed.
 - `/v1/test` fails above **10,000** files in the cache folder.
 - Logs rotate daily, **14** files kept (spec 6.4).
-- Version string `x.y.z`, `x.y.z+<sha>`, `x.y.z+<sha>-dirty` (spec 6.5). First release: **`1.0.0`** (decision to
-  confirm in review, see Task 14).
+- Version string `x.y.z`, `x.y.z+<sha>`, `x.y.z+<sha>-dirty` (spec 6.5). Version after 4.5:
+  **`0.1.0`** (decided 2026-11-10).
 - After any spec change (new problem type, new rule), update `backend/docs/problems.md` and the spec in the same commit.
 
 ## Review Focus
@@ -255,7 +255,7 @@ Behavior-neutral refactoring so the cache (Task 2) can reuse the exact format.
 Needed by `/v1/test` and the logs; built now, released in Task 14.
 
 **Files:**
-- Create: `backend/VERSION` (content `1.0.0`), `backend/src/Infrastructure/Version.php`, `backend/bin/version.php`
+- Create: `backend/VERSION` (content `0.1.0`), `backend/src/Infrastructure/Version.php`, `backend/bin/version.php`
 - Test: `backend/tests/Unit/Infrastructure/VersionTest.php`
 
 **Interfaces:**
@@ -269,8 +269,8 @@ Needed by `/v1/test` and the logs; built now, released in Task 14.
     set forbids it, add a single, commented exception for this file.
   - `bin/version.php` prints `Version::current(dirname(__DIR__))`.
 
-- [ ] **Step 1: Write the failing tests** for `format()`: tagged clean → `1.0.0`; tagged dirty → `1.0.0+abc1234-dirty`;
-  untagged → `1.0.0+abc1234`; other tag (`v0.9.0`) → `1.0.0+abc1234`; and `current()` reads `version.txt` when present
+- [ ] **Step 1: Write the failing tests** for `format()`: tagged clean → `0.1.0`; tagged dirty → `0.1.0+abc1234-dirty`;
+  untagged → `0.1.0+abc1234`; other tag (`v0.0.9`) → `0.1.0+abc1234`; and `current()` reads `version.txt` when present
   (DP-02).
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement.** **Step 4: Run** `composer check` — PASS.
 - [ ] **Step 5: Tick DP-02; commit** `Backend: version string (4.2, spec 6.5)`
@@ -293,7 +293,7 @@ Needed by `/v1/test` and the logs; built now, released in Task 14.
     A `Throwable` from a check becomes `fail`; its message is used only for `ApplicationException`, otherwise
     `"The check failed unexpectedly; see the log."` and the exception is logged as `error`.
   - `Kernel::create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null, ?string $version = null)`
-    — `$version` defaults to `Version::current(dirname(__DIR__))`; the API tests pass `'1.0.0+test'`.
+    — `$version` defaults to `Version::current(dirname(__DIR__))`; the API tests pass `'0.1.0+test'`.
   - `SelfCheckController::__construct(SettingsRepository $settings, SelfCheck $selfCheck, string $version)`; only a
     `PersonPrincipal` for whom `settings()->isAdmin($principal->id)` holds; others `403 forbidden` (machine clients too).
     Body `{"version", "summary", "tests"}`; `200` all ok, else `207`. Optional query `write=1` is passed on (Task 10).
@@ -403,8 +403,9 @@ Needed by `/v1/test` and the logs; built now, released in Task 14.
   `Allow-Headers: Authorization, Content-Type`, `Max-Age: 600`; **no** `Allow-Credentials`; `Vary: Origin` on every
   response; preflight answers `204` (status currently `200`).
 - `HttpsOnlyMiddleware`: rejects with `400` exactly when `.htaccess` would redirect: server param `HTTPS` missing,
-  empty or `off` (case-insensitive). New problem type **`https-required`** (400, title "HTTPS required") — a spec
-  change: add it to the 4.9 table and `problems.md` in this task. (Decision to confirm in review.)
+  empty or `off` (case-insensitive). It runs on every request, so it also protects hosts that ignore `.htaccess`
+  (decided 2026-11-10). New problem type **`https-required`** (400, title "HTTPS required"; accepted 2026-11-10) —
+  add it to the 4.9 table of the spec and to `problems.md` in this task.
 - `HEAD`, `PATCH`, `TRACE` on known routes → `405` with `Allow`, never the `GET` handler.
 
 - [ ] **Step 1: Write the failing tests:** HT-02 (foreign, `null`, lookalike origin → no CORS headers), HT-03
@@ -483,7 +484,7 @@ Needed by `/v1/test` and the logs; built now, released in Task 14.
 - Test: `backend/tests/Unit/Deploy/ReleaseCheckTest.php`
 
 **Interfaces:**
-- `CHANGELOG.md` in "Keep a Changelog" form; section `## [1.0.0] - YYYY-MM-DD` summarizing spec section 10.
+- `CHANGELOG.md` in "Keep a Changelog" form; section `## [0.1.0] - YYYY-MM-DD` summarizing spec section 10.
 - `bin/release-check.php <tag>` exits `1` unless tag = `v` + `VERSION`, and `CHANGELOG.md` has a section
   `## [<VERSION>] - <YYYY-MM-DD>` with a valid date; prints that section on success.
 - Workflow on tags `v*.*.*`: checkout, PHP 8.3, `composer install`, `composer check`, `php bin/release-check.php
@@ -495,10 +496,10 @@ Needed by `/v1/test` and the logs; built now, released in Task 14.
 - [ ] **Step 1: Write the failing tests** (DP-03): matching tag/version/section passes; wrong tag, missing section,
   undated section each fail.
 - [ ] **Step 2: Run** — FAIL. **Step 3: Implement script, CHANGELOG, workflow, README.**
-- [ ] **Step 4: Run** `composer check` — PASS; `php bin/release-check.php v1.0.0` prints the section (the date may be
+- [ ] **Step 4: Run** `composer check` — PASS; `php bin/release-check.php v0.1.0` prints the section (the date may be
   a placeholder until release day — then expect FAIL and say so).
 - [ ] **Step 5: Update spec (remove ⏳ 4.5), plan (tick 4.1–4.5); tick DP-03; commit**
   `Backend: CHANGELOG, release check and release workflow (4.5)`
 
-The release itself (tag `v1.0.0`) waits for phase 5 (extension and ct-radius), as the plan says the new API is only
+The release itself (tag `v0.1.0`) waits for phase 5 (extension and ct-radius), as the plan says the new API is only
 usable once they're done.
