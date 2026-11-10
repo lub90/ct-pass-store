@@ -620,7 +620,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   call (counted on the fake). Below the limit a login costs at most its 3 calls — 6.2
 - [x] **RX-05** (S · U) The `jti` replay cache and the rate-limit counters stay bounded: expired entries are removed,
   and many distinct values can't fill the disk — 4.4a.4, 6.3
-- [ ] **RX-06** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`414` without a PHP error
+- [ ] **RX-07** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`414` without a PHP error
   — 4.1
 
 ### Timing and races

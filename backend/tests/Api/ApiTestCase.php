@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Application;
 use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PersonId;
@@ -12,6 +11,7 @@ use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Kv\KvSchema;
+use CtPassStore\Kernel;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
 use CtPassStore\Tests\Support\FrozenClock;
 use Firebase\JWT\JWT;
@@ -324,7 +324,7 @@ abstract class ApiTestCase extends TestCase
         // The production processor, so log assertions see what logs/app.log would contain.
         $logger->pushProcessor(new \CtPassStore\Infrastructure\Logging\EscapeControlCharacters());
 
-        return Application::create(
+        return Kernel::create(
             new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
             $this->churchTools,
             $logger,

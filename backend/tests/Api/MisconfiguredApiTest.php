@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
-use CtPassStore\Application;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Kernel;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Slim\Psr7\Factory\ServerRequestFactory;
@@ -39,7 +39,7 @@ final class MisconfiguredApiTest extends TestCase
         file_put_contents($credentials, "<?php return ['CT_API_URL' => 'https://example.church.tools/api', 'CT_API_TOKEN' => 'x', 'CORS' => '*'];");
         $previous = ini_set('error_log', '/dev/null');
         try {
-            $response = Application::bootstrap($credentials, sys_get_temp_dir(), '/dev/null')->handle($request);
+            $response = Kernel::bootstrap($credentials, sys_get_temp_dir(), '/dev/null')->handle($request);
         } finally {
             ini_set('error_log', (string) $previous);
             unlink($credentials);
@@ -58,7 +58,7 @@ final class MisconfiguredApiTest extends TestCase
     {
         $previous = ini_set('error_log', '/dev/null');
         try {
-            $response = Application::bootstrap(sys_get_temp_dir() . '/no-such-credentials.php', sys_get_temp_dir(), '/dev/null')
+            $response = Kernel::bootstrap(sys_get_temp_dir() . '/no-such-credentials.php', sys_get_temp_dir(), '/dev/null')
                 ->handle((new ServerRequestFactory())->createServerRequest('GET', 'https://backend.example.org/v1/entries/1'));
         } finally {
             ini_set('error_log', (string) $previous);
@@ -104,7 +104,7 @@ final class MisconfiguredApiTest extends TestCase
         $previous = ini_set('error_log', '/dev/null');
 
         try {
-            $app = Application::bootstrap($credentials, sys_get_temp_dir(), '/dev/null');
+            $app = Kernel::bootstrap($credentials, sys_get_temp_dir(), '/dev/null');
             foreach ([['GET', '/v1/entries/1'], ['POST', '/v1/auth/token'], ['GET', '/nothing']] as [$method, $path]) {
                 $response = $app->handle((new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path));
                 $body = (string) $response->getBody();

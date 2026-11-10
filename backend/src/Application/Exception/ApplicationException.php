@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Application\Exception;
 
 use CtPassStore\Application\Failure\Failure;
+use CtPassStore\Application\Failure\FailureDefaults;
 use CtPassStore\Application\Failure\Reason;
 
 /**
@@ -12,25 +13,12 @@ use CtPassStore\Application\Failure\Reason;
  */
 abstract class ApplicationException extends \RuntimeException implements Failure
 {
+    use FailureDefaults;
+
     protected const REASON = Reason::InvalidRequest;
-
-    public function reason(): Reason
-    {
-        return static::REASON;
-    }
-
-    public function retryAfterSeconds(): ?int
-    {
-        return null;
-    }
 
     public function publicDetail(): ?string
     {
         return $this->getMessage();
-    }
-
-    public function extensions(): array
-    {
-        return [];
     }
 }

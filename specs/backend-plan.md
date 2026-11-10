@@ -85,7 +85,7 @@ Decided: Q6, Q7, Q8, Q9, Q10 (spec section 7).
 
 - [x] **2.7 Architecture refactoring** (behavior-neutral, before phase 3)
   - Layers: `Domain` (value objects, policies), `Application` (use cases), `Infrastructure` (ChurchTools, KV
-    repositories, crypto, clock), `Http` (controllers, middleware, problems, request parsing). `Application.php` is the
+    repositories, crypto, clock), `Http` (controllers, middleware, problems, request parsing). `Kernel.php` is the
     only place where everything is wired.
   - Value objects `PersonId`, `Settings`, `PublicKey`; `PasswordPolicy`; typed `Principal`; `AccessPolicy` as a pure
     class; use cases `GetPassword`, `SetPassword`, `DeletePassword` with their own exceptions, mapped to problem types

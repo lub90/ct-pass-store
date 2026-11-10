@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit;
 
-use CtPassStore\Application;
+use CtPassStore\Kernel;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -27,7 +27,7 @@ final class LoggerTest extends TestCase
     public function testControlCharactersInMessagesAndContextAreEscaped(): void
     {
         $forged = "x\n[2026-11-01T00:00:00+00:00] ct-pass-store.ERROR: forged line";
-        $logger = Application::logger($this->file, 'debug');
+        $logger = Kernel::logger($this->file, 'debug');
 
         $logger->warning('Unauthorized access attempt for ' . $forged, [
             'ip' => "203.0.113.7\r\nfake",
@@ -48,7 +48,7 @@ final class LoggerTest extends TestCase
 
     public function testTheLevelIsRespected(): void
     {
-        $logger = Application::logger($this->file, 'warning');
+        $logger = Kernel::logger($this->file, 'warning');
 
         $logger->info('not written');
         $logger->warning('written');

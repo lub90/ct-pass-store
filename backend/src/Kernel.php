@@ -56,7 +56,7 @@ use Slim\Interfaces\RouteCollectorProxyInterface;
  * Configuration, the ChurchTools client and the logger are passed in, so `public/index.php` can use the real ones
  * and the API tests a fake ChurchTools (spec 6.6, plan item 2.0).
  */
-final class Application
+final class Kernel
 {
     /**
      * @return App<null>

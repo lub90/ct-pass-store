@@ -7,7 +7,7 @@ ini_set('display_errors', '0');
 
 require __DIR__ . '/../vendor/autoload.php';
 
-CtPassStore\Application::bootstrap(
+CtPassStore\Kernel::bootstrap(
     __DIR__ . '/../config/credentials.php',
     __DIR__ . '/../cache',
     __DIR__ . '/../logs/app.log',

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Infrastructure\ChurchTools\Exception;
 
 use CtPassStore\Application\Failure\Failure;
+use CtPassStore\Application\Failure\FailureDefaults;
 use CtPassStore\Application\Failure\Reason;
 
 /**
@@ -18,17 +19,9 @@ use CtPassStore\Application\Failure\Reason;
  */
 abstract class ChurchToolsException extends \RuntimeException implements Failure
 {
+    use FailureDefaults;
+
     protected const REASON = Reason::UpstreamInvalid;
-
-    public function reason(): Reason
-    {
-        return static::REASON;
-    }
-
-    public function retryAfterSeconds(): ?int
-    {
-        return null;
-    }
 
     /**
      * Messages name API paths and statuses: for the log, not the client.
@@ -36,10 +29,5 @@ abstract class ChurchToolsException extends \RuntimeException implements Failure
     public function publicDetail(): ?string
     {
         return null;
-    }
-
-    public function extensions(): array
-    {
-        return [];
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Application\Exception;
 
 use CtPassStore\Application\Failure\Failure;
+use CtPassStore\Application\Failure\FailureDefaults;
 use CtPassStore\Application\Failure\Reason;
 
 /**
@@ -14,6 +15,8 @@ use CtPassStore\Application\Failure\Reason;
  */
 final class ConfigurationException extends \RuntimeException implements Failure
 {
+    use FailureDefaults;
+
     public function __construct(string $message, private readonly Reason $reason = Reason::SettingsInvalid)
     {
         parent::__construct($message);
@@ -24,18 +27,8 @@ final class ConfigurationException extends \RuntimeException implements Failure
         return $this->reason;
     }
 
-    public function retryAfterSeconds(): ?int
-    {
-        return null;
-    }
-
     public function publicDetail(): string
     {
         return $this->getMessage();
-    }
-
-    public function extensions(): array
-    {
-        return [];
     }
 }
