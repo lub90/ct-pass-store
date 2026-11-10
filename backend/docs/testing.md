@@ -82,7 +82,7 @@ Notes on `LiveEntriesTest`:
 ### Tokens without a browser
 
 The real login needs a browser (OAuth). The contract tests therefore mint backend access tokens directly with
-`TokenService` and the `JWT_SECRET` from `config/credentials.php`, with the same claims `POST /v1/auth/token` issues.
+`UserTokens` and the `JWT_SECRET` from `config/credentials.php`, with the same claims `POST /v1/auth/token` issues.
 Machine tokens are signed with a test key. This only works for test systems whose secrets you have.
 
 ## Manual OAuth check before each release

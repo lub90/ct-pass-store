@@ -1,19 +1,24 @@
 # CtPassStore Backend – Specification
 
-> **Status: DRAFT.** This document describes how the PHP backend *should* behave. It is the reference for unit tests,
-> end-to-end tests and the cleanup work. It was derived from the current code, [`backend/README.md`](../backend/README.md),
-> the existing end-to-end tests, the consumers of the API (the extension and ct-radius) and measurements on a
-> ChurchTools test instance.
+> **Status: DRAFT.** This document describes how the PHP backend behaves. It is the reference for the unit, API and
+> contract tests ([`backend-test-catalog.md`](backend-test-catalog.md)) and for the plan
+> ([`backend-plan.md`](backend-plan.md)). It was derived from the old code, [`backend/README.md`](../backend/README.md),
+> the old end-to-end tests, the consumers of the API (the extension and ct-radius) and measurements on a ChurchTools
+> test instance.
 >
-> **This is a breaking redesign.** The API, its error format and its authentication change. The extension and
-> ct-radius are adapted to it (see the ct-radius section in [`TODO.md`](../TODO.md)).
+> **This is a breaking redesign.** The API, its error format and its authentication changed. The extension and
+> ct-radius are adapted to it (plan phase 5, and the ct-radius section in [`TODO.md`](../TODO.md)).
+> [Section 10](#10-changes-from-the-old-backend) lists what changed compared with the old backend.
+>
+> **Section numbers are stable.** Code, tests and the test catalog cite them (e.g. "spec 5.3.11" = section 5.3, rule
+> 11). Add new rules at the end of a section; never renumber.
 
 **Legend**
 
 | Marker | Meaning |
 | --- | --- |
-| *(current)* | The code already behaves like this. Keep it. |
-| **(change)** | The code behaves differently today. This is the target behavior. |
+| *(no marker)* | Target behavior, implemented (plan phases 0–3). |
+| **⏳ n.n** | Target behavior, **not implemented yet**. `n.n` is the item in [`backend-plan.md`](backend-plan.md) that implements it. |
 | **❓ Qn** | Open question, collected in [section 7](#7-open-questions). Each has a proposal. |
 | **Dn** | Decision, documented in [section 8](#8-decisions). |
 
@@ -49,7 +54,7 @@ Data lives in three KV categories of the `ctpassstore` module:
 | Category | Content | Written by |
 | --- | --- | --- |
 | `passwordStore` | One value per person: `{"personId": <int>, "secondaryPwd": "<base64 ciphertext>"}` | Backend (service user) only |
-| `settings` | One value: `requirePasswordForPasswordChange`, `allowCustomPassword`, `passwordLength`, `adminUsers`, `backendUrl`, **(change)** `machineClients`. **(change)** `readAccessUsers` is removed (Q23); machine clients replace it. | Extension admins |
+| `settings` | One value: `requirePasswordForPasswordChange`, `allowCustomPassword`, `passwordLength`, `adminUsers`, `backendUrl`, `machineClients`. There's no `readAccessUsers` any more (Q23); machine clients replace it. | Extension admins |
 | `encryptionSettings` | One value: `publicKey` (PEM) | Extension setup |
 
 - `backendUrl` in `settings` is read by the extension and currently also by ct-radius. Renaming or removing it is a
@@ -66,28 +71,29 @@ Data lives in three KV categories of the `ctpassstore` module:
 | `CT_API_URL` | yes | ChurchTools API base URL, e.g. `https://example.church.tools/api` |
 | `CT_API_TOKEN` | yes | Login token of the service user |
 | `CORS` | yes | List of allowed origins. Must include the ChurchTools instance. |
-| `OAUTH_CLIENT_ID` | yes | **(change)** Client ID of the backend's OAuth application in ChurchTools (see 3.3) |
-| `OAUTH_CLIENT_SECRET` | yes | **(change)** Its client secret |
-| `JWT_SECRET` | yes | **(change)** Random secret (at least 32 bytes) for signing the backend's own access tokens (see 4.4) |
-| `LOG_LEVEL` | no | **(change)** Minimum log level (`debug`, `info`, `notice`, `warning`, `error`), default `info` (today it's hard-coded to `debug`). Any other value is `misconfigured` (Q18). |
+| `OAUTH_CLIENT_ID` | yes | Client ID of the backend's OAuth application in ChurchTools (see 3.3) |
+| `OAUTH_CLIENT_SECRET` | yes | Its client secret |
+| `JWT_SECRET` | yes | Random secret (at least 32 bytes) for signing the backend's own access tokens (see 4.4) |
+| `LOG_LEVEL` | no | Minimum log level (`debug`, `info`, `notice`, `warning`, `error`), default `info`. Any other value is `misconfigured` (Q18). |
 
-- **(change)** The file must be readable by PHP but not by other users. The exact mode depends on the hosting:
+- The file must be readable by PHP but not by other users. The exact mode depends on the hosting:
   - PHP runs as the hosting user (PHP-FPM, suPHP; most shared hosts): `600`.
   - PHP runs as the web server user (e.g. `mod_php`): e.g. `640` with the web server's group.
 
-  Today the `/test` endpoint requires `0600` or stricter, which can never pass on hosts of the second kind.
-- **(change)** Formats: `CT_API_URL` is an `https://` URL without credentials, query or fragment. `CORS` is a non-empty
+  **⏳ 4.2** `/v1/test` checks exactly this. It still requires `0600` or stricter, which can never pass on hosts of the
+  second kind.
+- Formats: `CT_API_URL` is an `https://` URL without credentials, query or fragment. `CORS` is a non-empty
   list of origins (`https://host[:port]`, no path, no `*`). `JWT_SECRET` has at least 32 bytes.
-- **(change)** Missing or invalid keys don't cause a PHP error further down the line. The backend answers every request
+- Missing or invalid keys don't cause a PHP error further down the line. The backend answers every request
   with `500 misconfigured` (see 4.9), naming the missing or invalid key (never its value) in `detail`, and logs an `error`. If the `CORS` key itself is
   broken, the answer (also to `OPTIONS`) has no CORS headers, so browsers show a CORS error; the admin finds the cause
   by calling the backend directly or in the log.
 
 ### 3.2 Settings from ChurchTools
 
-- Settings and the public key are read from ChurchTools *(current)*.
-- **(change)** They're cached (see [6.1](#61-performance-and-caching)).
-- **(change)** Settings are validated when loaded:
+- Settings and the public key are read from ChurchTools.
+- **⏳ 4.1** They're cached (see [6.1](#61-performance-and-caching)).
+- Settings are validated when loaded:
   - `passwordLength` is an integer from **12 to 64** (Q7).
   - `adminUsers` is a list of positive integers; missing means empty.
   - `requirePasswordForPasswordChange` and `allowCustomPassword` are JSON booleans and present. Strings (`"true"`),
@@ -120,12 +126,12 @@ Data lives in three KV categories of the `ctpassstore` module:
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
       client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
-- **(change)** Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
+- Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 
 ### 3.3 OAuth setup in ChurchTools
 
-**(change)** Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance needs:
+Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance needs:
 
 1. **An OAuth application** for the backend:
    - confidential (with client secret)
@@ -140,36 +146,33 @@ Data lives in three KV categories of the `ctpassstore` module:
 
 ### 4.1 General rules
 
-- **Transport:** HTTPS only *(current, enforced by `.htaccess`)*.
+- **Transport:** HTTPS only (enforced by `.htaccess`).
 - **Format:** Requests and responses are JSON (`Content-Type: application/json`), except `204` responses, which have no
   body. Errors use `application/problem+json` (4.9).
 - **Paths (Q20):** every endpoint lives under `/v1/`: `POST /v1/auth/token`, `GET|PUT|DELETE /v1/entries/{id}`,
   `GET /v1/test`. The old paths without prefix answer `404 not-found`.
 - **Authentication:** Every endpoint except `POST /v1/auth/token` and `OPTIONS` requires a bearer token (4.3).
 - **Errors** follow RFC 9457 "Problem Details" (D2, see 4.9). This includes `404`, `405` and `500`.
-- **Unknown routes** return `404` with type `not-found`. **(change)** Today there's no error middleware, so this
-  crashes.
+- **Unknown routes** return `404` with type `not-found`.
 - **Wrong HTTP methods** on known routes return `405` with type `method-not-allowed` and an `Allow` header.
-  **(change)**
-- **No side effects** on any error response: nothing is written to ChurchTools *(current, asserted by the E2E tests)*.
+- **No side effects** on any error response: nothing is written to ChurchTools (asserted by the API tests). Clients
+  may therefore resend a request that failed with `401` without risk.
 - **Path parameter `{id}`** must be a positive integer in decimal notation without sign, leading zeros or whitespace,
-  and at most `PHP_INT_MAX`. Anything else returns `400 invalid-id` (Q10). **(change)** Today `(int) "abc"` becomes `0`,
-  and admins can create an entry for person `0`.
+  and at most `PHP_INT_MAX`. Anything else returns `400 invalid-id` (Q10).
 - **Request bodies** must be empty or a JSON **object** in UTF-8. Invalid JSON, invalid UTF-8, a non-object, more
-  than 32 levels of nesting, unknown or duplicate keys, or fields of the wrong type return `400 invalid-body`
-  *(partly current: invalid JSON is rejected; JSON arrays or scalars aren't)*. **(change)**
+  than 32 levels of nesting, unknown or duplicate keys, or fields of the wrong type return `400 invalid-body`.
   - A non-empty body needs `Content-Type: application/json` (optionally with `charset=utf-8`); anything else is
     `415 unsupported-media-type`.
   - Bodies larger than **16 KB** are rejected with `413 payload-too-large` before they're parsed.
   - Fields that the endpoint doesn't define are rejected, so a client can't smuggle in `personId`, `username` or
     similar.
 - **Secrets never appear** in problem details, logs or response headers.
-- **Security headers** on all responses: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`. **(change)**
+- **⏳ 4.3 Security headers** on all responses: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
 - **No PHP output:** `display_errors` is off; PHP warnings, notices and deprecations go to the log, never into a
-  response body. **(change)**
+  response body.
 - **Methods:** `X-HTTP-Method-Override`, `_method` and similar are ignored. `HEAD`, `PATCH`, `TRACE` and other
   undefined methods give `405`.
-- **Plain HTTP** is rejected with `400` when it's detectable at the PHP level, in addition to the redirect in
+- **⏳ 4.3 Plain HTTP** is rejected with `400` when it's detectable at the PHP level, in addition to the redirect in
   `.htaccess` (Q17).
 - **Order of checks** (when several problems apply, the first one wins):
   1. Route and method: `404 not-found`, `405 method-not-allowed`
@@ -184,23 +187,24 @@ Data lives in three KV categories of the `ctpassstore` module:
 
 ### 4.2 CORS
 
-- Only origins listed in `CORS` get `Access-Control-Allow-*` headers *(current)*. **(change)** The `Origin` header is
+- Only origins listed in `CORS` get `Access-Control-Allow-*` headers. The `Origin` header is
   compared **exactly** with the configured origins (scheme, host and port); a trailing slash, a path, another port or
   a subdomain doesn't match. The allowed origin is echoed back; `*` is never sent.
-- Preflight (`OPTIONS`) is answered by the CORS middleware without authentication *(current)*, with `204`, and never
+- Preflight (`OPTIONS`) is answered by the CORS middleware without authentication, with `204`, and never
   runs an endpoint's logic. A preflight from a foreign origin gets no `Access-Control-Allow-*` headers.
-- **(change)** Headers for allowed origins:
+- Headers for allowed origins:
   - `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`
   - `Access-Control-Allow-Headers: Authorization, Content-Type`
-  - `Access-Control-Max-Age: 600`
-  - **no** `Access-Control-Allow-Credentials` (the backend uses bearer tokens, not cookies)
-- **(change)** `Vary: Origin` on every response.
-- **(change)** Error responses (`4xx`, `5xx`) carry the same CORS headers as successful ones. Otherwise the extension
+  - **⏳ 4.3** `Access-Control-Max-Age: 600`
+  - **⏳ 4.3** **no** `Access-Control-Allow-Credentials` (the backend uses bearer tokens, not cookies). The code still
+    sends `true`.
+- **⏳ 4.3** `Vary: Origin` on every response.
+- Error responses (`4xx`, `5xx`) carry the same CORS headers as successful ones. Otherwise the extension
   couldn't read the problem details.
 
 ### 4.3 Authentication and authorization pipeline
 
-**(change)** The backend no longer accepts ChurchTools login tokens from users. Every request (except `OPTIONS` and
+The backend accepts no ChurchTools login tokens from users. Every request (except `OPTIONS` and
 `POST /v1/auth/token`) goes through these steps:
 
 1. No `Authorization` header → `401 missing-token`.
@@ -226,22 +230,22 @@ Data lives in three KV categories of the `ctpassstore` module:
 | Machine client with `entries:read` | ✅ (any ID) | ✅ | ❌ | ❌ |
 | Machine client without permissions | ❌ | ❌ | ❌ | ❌ |
 
-*(current)* The matrix for persons matches today's behavior, minus the removed read-access users (Q23).
+The matrix for persons is the old backend's, minus the removed read-access users (Q23).
 
 - **Principals are typed.** A request is authenticated either as a **person** (from a user token, identified by its
   person ID) or as a **machine client** (identified by its client `id`). They're never compared with each other: a
   machine client with the `id` `123` isn't person 123 and has no "own" entry, and a user whose person ID equals a client
   `id` gets nothing of that client's permissions.
 
-- The admin role is taken from the **current settings** (cached, 6.1), not from the token. Changes to
+- The admin role is taken from the **current settings** (cached, 6.1, **⏳ 4.1**), not from the token. Changes to
   the admin lists therefore apply within the settings cache TTL.
 - **The extension's `view` permission is checked once, at login** (4.4), not on every request. Revoking it takes effect
   when the backend token expires.
-- These steps need **no call to ChurchTools**. Today every request costs two (`whoami`, `/permissions/global`).
+- These steps need **no call to ChurchTools**, apart from loading the settings (cached from **⏳ 4.1** on).
 
 ### 4.4 `POST /v1/auth/token` (login)
 
-**(change, new endpoint)** Exchanges an OAuth authorization code from ChurchTools for a backend access token.
+Exchanges an OAuth authorization code from ChurchTools for a backend access token.
 
 **Flow** (D4):
 
@@ -315,7 +319,7 @@ All three fields are required, non-empty strings of at most 2,048 characters.
 
 ### 4.4a Machine client tokens
 
-**(change, D5)** Machine clients don't log in. They sign a short-lived JWT for **every request** with their own private
+**D5.** Machine clients don't log in. They sign a short-lived JWT for **every request** with their own private
 key and send it as `Authorization: Bearer <jwt>`. The backend only knows the public key.
 
 **Registration:**
@@ -366,15 +370,15 @@ Returns the encrypted secondary password of person `{id}`.
 
 | Case | Response |
 | --- | --- |
-| Entry exists | `200` `{"secondaryPwd": "<base64 ciphertext>"}` *(current)* |
-| No entry | `404` with type `entry-not-found` *(current status; new body)* |
-| Several entries for `{id}` (corrupt state) | **(change)** `200` with the entry that has the **highest value ID** (the newest), plus a `warning` log entry. Today it returns `404`. (Q9) |
+| Entry exists | `200` `{"secondaryPwd": "<base64 ciphertext>"}` |
+| No entry | `404` with type `entry-not-found` |
+| Several entries for `{id}` (corrupt state) | `200` with the entry that has the **highest value ID** (the newest), plus a `warning` log entry (Q9) |
 
 - `entry-not-found` is only ever produced by the store's answer "this person has no entry". A `404` from ChurchTools for
   the module or a category (e.g. after a reinstall) never becomes `entry-not-found` (5.3).
 - Clients must distinguish "no entry" from other `404`s by the problem `type`. A `404` with any other type (for example
   a wrong backend URL) is an error, not "no password".
-- No primary password is needed *(current)*.
+- No primary password is needed.
 - The response contains only ciphertext. Nobody can obtain a plaintext password through `GET`.
 
 ### 4.6 `PUT /v1/entries/{id}`
@@ -391,19 +395,18 @@ Sets or replaces the secondary password of person `{id}`.
 
 1. Authorization according to 4.3.
 2. If `requirePasswordForPasswordChange` is `true`:
-   - `primaryPwd` is missing or empty → `400 primary-password-required` *(current)*.
-   - `primaryPwd` is wrong → **(change)** `403 invalid-primary-password` (Q6). Today it's `401`, which the extension
-     can't tell apart from an invalid token.
+   - `primaryPwd` is missing or empty → `400 primary-password-required`.
+   - `primaryPwd` is wrong → `403 invalid-primary-password` (Q6). Not `401`, so the extension can tell it apart from
+     an invalid token.
    - The primary password checked is the **caller's** own, also when an admin changes someone else's entry
-     *(current, Q4)*. The username comes from the caller's token, never from the request.
+     (Q4). The username comes from the caller's token, never from the request.
    - Failed attempts count against the **caller**, not against the target person (6.3).
 3. If `secondaryPwd` is present (including an empty string):
-   - `allowCustomPassword` is `false` → `400 custom-password-not-allowed` *(current)*.
-   - The password fails validation ([5.1](#51-password-policy-passwordvalidator)) → `400 password-invalid`, with the
-     violated rules in the extension member `violations` *(current: message only)*.
-4. If `secondaryPwd` is absent, a random password is generated ([5.1](#51-password-policy-passwordvalidator))
-   *(current)*.
-5. The password is encrypted ([5.2](#52-encryption-encryptionservice)) and stored ([5.3](#53-password-store)).
+   - `allowCustomPassword` is `false` → `400 custom-password-not-allowed`.
+   - The password fails validation ([5.1](#51-password-policy-passwordpolicy)) → `400 password-invalid`, with the
+     violated rules in the extension member `violations`.
+4. If `secondaryPwd` is absent, a random password is generated ([5.1](#51-password-policy-passwordpolicy)).
+5. The password is encrypted ([5.2](#52-encryption-rsapasswordcipher)) and stored ([5.3](#53-password-store)).
    **Only after the write has succeeded** is a generated password returned. If encryption or the write fails, the
    response is an error, the generated plaintext is discarded, and the previous entry stays as it was.
    - If the new value was written but deleting a duplicate fails (healing, 5.3), the request still succeeds: the
@@ -414,8 +417,8 @@ Sets or replaces the secondary password of person `{id}`.
 
 | Case | Response |
 | --- | --- |
-| Custom password stored | `204`, empty body *(current)* |
-| Generated password stored | `200` `{"secondaryPwd": "<plaintext generated password>"}` *(current)*. This is the only time plaintext leaves the backend, and only to the caller. |
+| Custom password stored | `204`, empty body |
+| Generated password stored | `200` `{"secondaryPwd": "<plaintext generated password>"}`. This is the only time plaintext leaves the backend, and only to the caller. |
 
 - Afterwards, exactly **one** entry exists for `{id}` (see 5.3).
 - Setting the same password again is allowed.
@@ -424,39 +427,47 @@ Sets or replaces the secondary password of person `{id}`.
 
 Deletes the entry of person `{id}`.
 
-- Authorization as for `PUT` *(current)*.
-- If `requirePasswordForPasswordChange` is `true`, `primaryPwd` is required in the body *(current, Q5)*: missing or
+- Authorization as for `PUT`.
+- If `requirePasswordForPasswordChange` is `true`, `primaryPwd` is required in the body (Q5): missing or
   empty → `400 primary-password-required`, wrong → `403 invalid-primary-password`. The rate limit (6.3) applies as for
   `PUT`. The body has no other fields.
-- **All** entries for `{id}` are deleted, including duplicates *(current)*.
-- Response `204`, also when no entry existed *(current: idempotent)*.
+- **All** entries for `{id}` are deleted, including duplicates.
+- Response `204`, also when no entry existed (idempotent).
 
 ### 4.8 `GET /v1/test` (self-check)
 
-- **(change)** Only admin users may call it (Q11); others get `403 forbidden`, machine clients too.
-- It runs these checks and reports each one as `{name, status: "ok"|"fail", message}` *(current)*:
-  - **(change)** `credentials.php` is readable by PHP but not by other users (instead of requiring `0600`), and
+Today `/v1/test` refuses machine clients, checks `credentials.php` for `0600` or stricter, and loads (and thereby
+validates) the settings and the public key. Everything else in this section is **⏳ 4.2**.
+
+- Only admin users may call it (Q11); others get `403 forbidden`, machine clients too.
+- It runs these checks and reports each one as `{name, status: "ok"|"fail", message}`:
+  - `credentials.php` is readable by PHP but not by other users (3.1, instead of requiring `0600`), and
     `logs/` is writable
-  - all settings can be read *(current)*
-  - **(change)** the settings pass validation (3.2), including each machine client (disabled clients, unknown
+  - all settings can be read
+  - the settings pass validation (3.2), including each machine client (disabled clients, unknown
     permissions and empty key lists are reported by name)
-  - **(change)** the cache folder is writable by PHP and not by other users
-  - **(change)** `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET` are present, and `JWT_SECRET` is long enough
-  - **(change)** the public key loads and a test encryption succeeds
-  - **(change)** the service user can read `passwordStore`
-  - **(change)** the service user has **no more rights than needed**. The check fails if the service user has
+  - the cache folder is writable by PHP and not by other users
+  - the cache folder supports the locking the security stores need (6.1): an exclusive lock on a test file can be
+    taken, and a second, non-blocking attempt from the same request is refused
+  - the security stores stay bounded (6.1): the number of files in the cache folder is reported, and the check fails
+    above the limit of 6.1
+  - `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET` are present, and `JWT_SECRET` is long enough
+  - the public key loads and a test encryption succeeds
+  - the service user can read `passwordStore`
+  - the service user has **no more rights than needed**. The check fails if the service user has
     administrative rights such as `administer settings`, `administer persons` or `administer custom modules`, or
     write access to extension categories other than `passwordStore`.
-  - **(change)** only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
+  - only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
     (Q11). The test value uses the **reserved `personId` `0`** (5.3.11), which can never belong to a real person (4.1).
     Before writing, the self-test removes test values left over from an earlier run (e.g. after a timeout); after
     writing, it deletes its value again even if a step in between fails.
-- Response: `200` if all checks pass, otherwise `207` *(current)*. Body: `{"version": "...", "summary": "...", "tests": [...]}`.
+- Response: `200` if all checks pass, otherwise `207`. Body: `{"version": "...", "summary": "...", "tests": [...]}`
+  (`version` from **⏳ 4.5**, 6.5).
 - The checks must not reveal secrets, file paths outside the project, or other users' data.
 
 ### 4.9 Error format (RFC 9457)
 
-**(change, D2)** Every error response has `Content-Type: application/problem+json` and this shape:
+**D2.** Every error response has `Content-Type: application/problem+json` and this shape:
 
 ```json
 {
@@ -496,7 +507,7 @@ Deletes the entry of person `{id}`.
 | 405 | `method-not-allowed` | Known route, wrong method |
 | 413 | `payload-too-large` | Body larger than 16 KB |
 | 415 | `unsupported-media-type` | Non-empty body without `Content-Type: application/json` |
-| 429 | `too-many-attempts` | Too many primary-password attempts (see 6.3); with `Retry-After` |
+| 429 | `too-many-attempts` | Too many primary-password attempts, or (**⏳ 4.1a**) too many logins or rejected tokens from one address (see 6.3); with `Retry-After` |
 | 500 | `misconfigured` | Configuration, settings, OAuth setup or service-user rights are missing or wrong. `detail` says exactly what. |
 | 500 | `internal-error` | Anything unexpected. Generic `detail`; details only go to the log. |
 | 502 | `upstream-unavailable` | ChurchTools unreachable, timed out or answered `5xx` |
@@ -518,41 +529,40 @@ These sections describe behavior per unit. Each numbered rule should map to at l
 
 ### 5.1 Password policy (`PasswordPolicy`)
 
-**Validation** *(current, unless marked)*:
+**Validation:**
 
 1. The allowed characters are `a–z`, `A–Z`, `0–9` and the symbols `! @ $ % & * - _ + = ? .`. Any other character (for
    example a space, `#`, umlauts or emoji) is invalid. **This set is a contract with ct-radius**, which rejects any
    other character; changing it requires changing both (Q8).
 2. The password contains at least one letter, one digit and one symbol.
 3. Its length is at least `passwordLength`.
-4. **(change)** Its length is at most **128** characters. RSA-4096 with OAEP/SHA-256 can encrypt at most 446 bytes, and
-   today a longer custom password crashes the encryption with a `500` (Q8). The length is checked **first**, before
-   any other rule runs, so huge inputs cost nothing.
+4. Its length is at most **128** characters. RSA-4096 with OAEP/SHA-256 can encrypt at most 446 bytes, so a longer
+   password would make the encryption fail (Q8). The length is checked **first**, before any other rule runs, so huge
+   inputs cost nothing.
 5. Validation works on bytes, and the allowed set is ASCII-only, so byte length equals character length.
-6. **(change)** Each violated rule is reported (`too-short`, `too-long`, `missing-letter`, `missing-digit`,
+6. Each violated rule is reported (`too-short`, `too-long`, `missing-letter`, `missing-digit`,
    `missing-symbol`, `invalid-character`) for the `violations` member.
 
 **Generation:**
 
 1. It produces exactly `passwordLength` characters.
 2. The result always passes validation (rules 1–4).
-3. Every character comes from a cryptographically secure random source *(current, `random_int`)*.
-   **(change)** The final shuffle uses a secure shuffle too, instead of `str_shuffle` (which uses a non-cryptographic
-   generator).
+3. Every character comes from a cryptographically secure random source, and so does the final shuffle (never
+   `str_shuffle`, which uses a non-cryptographic generator).
 4. `passwordLength` outside 12–64 is a configuration error (`misconfigured`, 3.2) and never reaches the generator. The
    generator additionally rejects lengths below 3 as a programming error (`InvalidArgumentException`).
-5. **(change)** The generator takes a `Random\Randomizer` with a cryptographically secure engine as a dependency, for
+5. The generator takes a `Random\Randomizer` with a cryptographically secure engine as a dependency, for
    choosing characters and for shuffling. Tests pass a randomizer with a fixed seed to check positions
    deterministically.
 
 ### 5.2 Encryption (`RsaPasswordCipher`)
 
-1. The algorithm is RSA with OAEP padding, SHA-256 as hash and SHA-256 for MGF1 *(current)*. ct-radius decrypts with
+1. The algorithm is RSA with OAEP padding, SHA-256 as hash and SHA-256 for MGF1. ct-radius decrypts with
    exactly these parameters.
-2. The output is the base64-encoded ciphertext *(current)*.
+2. The output is the base64-encoded ciphertext.
 3. The same plaintext encrypted twice gives different ciphertexts (OAEP is randomized). Tests must not compare
    ciphertexts, only decrypt them with the test key.
-4. **(change)** An invalid, non-RSA or too-small public key (under 4096 bits) is reported as `misconfigured`, not as a
+4. An invalid, non-RSA or too-small public key (under 4096 bits) is reported as `misconfigured`, not as a
    generic encryption failure. Larger RSA keys (e.g. 8192 bits) are accepted.
 5. The plaintext never appears in exceptions or logs.
 
@@ -561,20 +571,18 @@ These sections describe behavior per unit. Each numbered rule should map to at l
 This covers the lookup and write logic in `KvPasswordRepository`.
 
 1. Entries are matched by `personId` using **one consistent comparison**: both sides are normalized to `int`.
-   **(change)** Today `getPwd` uses `==` while `putPwd`/`deletePwd` use `===`.
-2. New entries store `personId` as an integer *(current)*.
+2. New entries store `personId` as an integer.
 3. **Read:** returns the ciphertext for `personId`, or "none". With duplicates it returns the entry with the highest
-   value ID (see 4.5). Value IDs are compared as **integers** (`10` > `9`). **(change)**
-4. **Write:** if no entry exists, one is created. If one exists, it's updated. **(change)** If several exist, the entry
-   with the highest value ID is updated and all others are deleted, so the state heals itself. Today the write throws
-   on every attempt.
-5. **Delete:** removes all entries for `personId`. Doing nothing is fine if none exist *(current)*.
+   value ID (see 4.5). Value IDs are compared as **integers** (`10` > `9`).
+4. **Write:** if no entry exists, one is created. If one exists, it's updated. If several exist, the entry
+   with the highest value ID is updated and all others are deleted, so the state heals itself.
+5. **Delete:** removes all entries for `personId`. Doing nothing is fine if none exist.
 6. The KV store has no transactions and no conflict detection. Two concurrent writes for the same person can still
    create a duplicate, but rules 3–5 guarantee it never blocks anyone and disappears on the next write.
-   **(change)** A value that disappears between reading and writing (a concurrent delete or heal) isn't an error: if
+   A value that disappears between reading and writing (a concurrent delete or heal) isn't an error: if
    the update of the newest entry gets `404`, the write creates a new entry; a delete that gets `404` counts as done.
    Only a `404` for the module or a category stays `500 misconfigured` (rule 10); creating fails in that case too.
-7. **(change)** Broken values must not crash reading or writing for other people:
+7. Broken values must not crash reading or writing for other people:
    - A value without a valid `personId` (broken JSON, missing, wrong type) is skipped with a `warning` log entry.
      `personId` `0` is not "invalid" but reserved (rule 11).
    - A value with a valid `personId` but a missing or invalid `secondaryPwd` counts as that person's **corrupt entry**:
@@ -582,45 +590,47 @@ This covers the lookup and write logic in `KvPasswordRepository`.
      deleting removes it.
 8. A value must stay under the KV store limit of 10,000 characters. A 4096-bit ciphertext in base64 is 684 characters,
    so this is only a sanity check.
-9. **(change) Completeness check:** the KV endpoint returns all values with `meta.count` and doesn't paginate (measured:
+9. **Completeness check:** the KV endpoint returns all values with `meta.count` and doesn't paginate (measured:
    no `meta.pagination`, and `page`/`limit` are ignored). Every read checks that the number of returned values equals
    `meta.count`. If not, or if `meta.count` is missing or not an integer, it fails with `502 upstream-invalid` instead
    of answering "no entry" or creating a duplicate.
-10. **(change) Module and categories:** if the module `ctpassstore` or one of its categories doesn't exist, the answer is
-    `500 misconfigured`. If ChurchTools answers `404` for a **cached** module or category ID (e.g. after a reinstall),
-    the cached IDs are discarded and resolved once more within the same request; if that fails too, `500
-    misconfigured`. A `404` for the module or a category never becomes `entry-not-found`.
-11. **(change) Reserved `personId` `0`:** values with `personId` `0` belong to the self-test (4.8). The normal operations
+10. **Module and categories:** if the module `ctpassstore` or one of its categories doesn't exist, the answer is
+    `500 misconfigured`. **⏳ 4.1** If ChurchTools answers `404` for a **cached** module or category ID (e.g. after a
+    reinstall), the cached IDs are discarded and resolved once more within the same request; if that fails too, `500
+    misconfigured`. (Until 4.1 the IDs are resolved once per request, so they can't be stale.) A `404` for the module or a category never becomes `entry-not-found`.
+11. **Reserved `personId` `0`:** values with `personId` `0` belong to the self-test (4.8). The normal operations
     for persons ignore them **silently** (no warning): they're never returned, overwritten or deleted on behalf of a
     person, and they don't count as duplicates. Only the self-test reads, writes and deletes them. A leftover test value
     therefore disturbs nothing.
 
 ### 5.4 Settings (`KvSettingsRepository`)
 
-1. Settings and the public key are loaded lazily and at most once per request *(current)*.
-2. **(change)** They're cached across requests (6.1).
-3. **(change)** They're validated according to 3.2.
-4. Missing optional lists (`adminUsers`, `machineClients`) mean "empty" *(current)*.
+1. Settings and the public key are loaded lazily and at most once per request.
+2. **⏳ 4.1** They're cached across requests (6.1).
+3. They're validated according to 3.2 (`SettingsParser`).
+4. Missing optional lists (`adminUsers`, `machineClients`) mean "empty".
 
-### 5.5 Authentication (`TokenService`, `PrimaryPasswordVerifier`)
+### 5.5 Authentication (`Login`, `UserTokens`, `MachineTokens`, `TokenRules`, `PrimaryPasswordVerifier`)
 
-1. **(change) Token exchange:** implements 4.4. It's the only place where a user's ChurchTools token exists, and only
+1. **Token exchange** (`Login`): implements 4.4. It's the only place where a user's ChurchTools token exists, and only
    for the duration of the request.
-2. **(change) Issuing and validating backend tokens:** implements the token format of 4.4 with a small, well-known JWT
-   library. Validation pins the algorithm and checks `iss`, `aud`, `exp` and `nbf`.
+2. **Issuing and validating backend tokens:** implements the token format of 4.4 (and 4.4a for machine tokens). The
+   rules (required claims, lifetimes, leeway, order of checks) live in the application layer (`TokenRules`,
+   `UserTokens`, `MachineTokens`); only signing and verifying is delegated to a small, well-known JWT library
+   (`TokenCodec`, firebase/php-jwt). Validation pins the algorithm and checks `iss`, `aud`, `exp` and `nbf`.
 3. **Primary password check:** `POST /api/login` with the caller's username and password. The username comes from
    the `username` claim of the caller's backend token (4.4), never from the request.
    - The check passes only if ChurchTools answers `200` **and** the person ID in the response equals the token's
      `sub`. A different person (e.g. a username that was reassigned meanwhile) counts as a wrong password and is
      logged as `warning`.
-   - **(change)** Network errors, timeouts and `5xx` count as `upstream-unavailable`, not as a wrong password, and
+   - Network errors, timeouts and `5xx` count as `upstream-unavailable`, not as a wrong password, and
      they don't count against the rate limit: ChurchTools couldn't be asked. A `429` (`upstream-rate-limited`) or an
      answer the backend doesn't understand (`upstream-invalid`) isn't a wrong password either, but **it counts** against
      the rate limit, because the attempt reached ChurchTools. Otherwise a lockout that ChurchTools answers with `429`
      would let every attempt through.
    - Only the statuses `success`, `totp` and `twoFactorSetup` mean "password correct". Any other status in a `200` is
      `upstream-invalid`, never a pass.
-   - **(change)** Rate-limited (6.3).
+   - Rate-limited (6.3).
    - The response creates a ChurchTools session; its cookie is discarded. No CSRF token is sent with `/login`.
    - **Two-factor authentication (Q13):** for users with two-factor authentication, ChurchTools answers `200` with
      `status: "totp"` (or `"twoFactorSetup"`) when the password is correct but the second factor is still missing. This
@@ -630,7 +640,7 @@ This covers the lookup and write logic in `KvPasswordRepository`.
 
 ### 5.6 ChurchTools client (`ChurchToolsClient`)
 
-**(change)** A small client of our own, built on Guzzle. It replaces the `churchtools/php-client` library (D1). All
+A small client of our own, built on Guzzle, instead of the `churchtools/php-client` library (D1). All
 ChurchTools communication goes through it.
 
 1. **Interface:** one PHP interface covering exactly the calls the backend needs:
@@ -667,13 +677,13 @@ ChurchTools communication goes through it.
    IDs (5.3.10).
 9. **Responses:** JSON is decoded into plain arrays and unwrapped from ChurchTools' `data` envelope. Only the fields
    the backend uses are read.
-10. **CSRF:** REST write requests with a login token currently work without a CSRF token. The client is built so that
+10. **CSRF:** REST write requests with a login token work without a CSRF token (measured 2026-11). The client is built so that
    fetching one from `GET /api/csrftoken` can be added in one place if ChurchTools starts requiring it.
 
 ### 5.7 Middleware
 
 1. **Order:** CORS → error handling → routing → authentication → request syntax → authorization → endpoint, matching
-   the order of checks in 4.1. **(change)** There's no error middleware today.
+   the order of checks in 4.1.
 2. **Error middleware:** turns every exception into a problem details response (4.9). It logs internal errors with a
    stack trace and returns only a generic `detail` for `internal-error`.
 3. **Auth middleware:** implements 4.3 and attaches the authenticated principal (person or machine client, typed) to
@@ -683,8 +693,12 @@ ChurchTools communication goes through it.
 
 ### 6.1 Performance and caching
 
-- **Goal:** a typical request makes as few ChurchTools calls as possible. Today it makes about 5–7; with backend
-  tokens (4.3) authentication costs none.
+The settings and ID cache is **⏳ 4.1**. The security stores (`jti` replay cache, rate-limit counters;
+`SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**/**⏳ 4.1a**, with their check in
+`/v1/test` **⏳ 4.2**.
+
+- **Goal:** a typical request makes as few ChurchTools calls as possible. With backend tokens (4.3) authentication
+  costs none; with the cache, a typical request only costs the calls to the `passwordStore` values.
 - **Cached, with TTLs:**
 
   | Data | Proposed TTL | Effect |
@@ -708,20 +722,48 @@ ChurchTools communication goes through it.
 
 - **Failure behavior:** if the settings or ID cache can't be read or written, the backend loads from ChurchTools (slower,
   but correct). The security stores **fail closed**: if they can't be read or written, the affected requests are
-  rejected (`500 misconfigured`).
+  rejected (`500 misconfigured`). The backend is publicly reachable, so the security stores are never weakened to
+  "best effort".
+- **Locking (security stores):** every read-modify-write of a record holds an exclusive `flock` on the record's lock
+  file, from reading to writing; the data file is replaced atomically with `rename`. This needs a cache folder on a
+  file system where `flock` works between PHP processes (a local disk, not a network share without lock support). If
+  the lock can't be taken, the request fails closed. `/v1/test` checks that locking works (4.8).
+- **Bounded size (security stores):** the backend has no cron, so nothing may grow without limit, and nothing may be
+  created per request by an unauthenticated caller without a fixed upper bound:
+  - **Inside a record:** expired items (`jti` pairs past their `exp`, attempts outside the window) are removed on every
+    write of that record.
+  - **Number of records:**
+
+    | Store | Records | Bound |
+    | --- | --- | --- |
+    | `jti` replay cache | one per registered machine client | number of clients |
+    | Primary-password attempts | one per **authenticated** person who entered a primary password | number of persons |
+    | Per-address limit (6.3, **⏳ 4.1a**) | a **fixed** number of buckets (e.g. 256); the address is hashed into one | fixed |
+
+    Per-address records are never one file per address: IPv6 gives an attacker practically unlimited addresses, and
+    lock files are never deleted (deleting one under a waiting process breaks the lock). Two addresses sharing a bucket
+    share its counter, which the generous limits allow for.
+  - **Size of a record:** a `jti` record holds at most one entry per request of that client in the last 330 seconds
+    (300 s lifetime plus 30 s leeway), and each update rewrites it. Only a holder of the client's private key can make
+    it grow, and only the client itself is slowed down by it.
+  - `/v1/test` reports the number of files in the cache folder and fails above **10,000** (4.8).
 - Consumers matter too: ct-radius starts a new process per RADIUS request and has no cache of its own, so every login
   reaches the backend.
 
 ### 6.2 ChurchTools rate limit and availability
 
 - ChurchTools allows about 600 requests per minute **per IP**, and all backend traffic shares one IP.
-- **(change)** When ChurchTools answers `429`, the backend doesn't retry within the request. It answers
+- When ChurchTools answers `429`, the backend doesn't retry within the request. It answers
   `503 upstream-rate-limited` with `Retry-After: 60` (or ChurchTools' value, if larger) (Q14).
-- **(change)** Timeouts or connection errors → `502 upstream-unavailable`.
+- Timeouts or connection errors → `502 upstream-unavailable`.
+- **⏳ 4.1a Call budget for unauthenticated requests.** Because the 600/min are shared, an unauthenticated caller must
+  not be able to spend them. With the settings cache, a forged or unknown token costs **0** ChurchTools calls; only
+  `POST /v1/auth/token` costs calls (the code exchange and the two user calls of 4.4), and it's limited per address
+  (6.3).
 
 ### 6.3 Security
 
-- **(change)** Primary-password attempts are limited per **caller** (the authenticated person, not the target entry):
+- Primary-password attempts are limited per **caller** (the authenticated person, not the target entry):
   - Wrong passwords count, and so do attempts that ChurchTools answered with `429` or something unexpected (5.5.3).
     Only outages (network error, timeout, `5xx`) don't count.
   - The limit applies to `PUT` and `DELETE` alike.
@@ -731,30 +773,38 @@ ChurchTools communication goes through it.
   - Attempts during a block are neither checked nor counted, so they don't extend it. `Retry-After` gives the
     remaining seconds of the block.
   - A correct password resets the counter.
-  - **(change)** An attempt counts from the moment it starts, in the same atomic step that checks the block, and is
+  - An attempt counts from the moment it starts, in the same atomic step that checks the block, and is
     withdrawn again if ChurchTools can't be asked. So parallel requests can't run more than 5 checks; while 5 attempts
     are still in flight, further ones get `429` as well.
 
   This protects accounts, and it prevents the backend's IP from being locked out by ChurchTools.
+- **⏳ 4.1a Per-address limit** for requests that come before or without authentication:
+  - It applies to `POST /v1/auth/token` (every request counts) and to requests rejected with `401 invalid-token`.
+    Exceeding it gives `429 too-many-attempts` with `Retry-After`, **without** calling ChurchTools.
+  - The address is `REMOTE_ADDR`; IPv6 addresses count per `/64` prefix, because one host usually has a whole `/64`.
+  - Limits are generous and windows short, so a parish behind one NAT address isn't locked out by one person's
+    mistakes (Q26): at most **30** `POST /v1/auth/token` requests and **60** rejected tokens per address and
+    minute, kept in **256** buckets. A block lasts until the window has passed.
+  - It's kept in a fixed number of buckets (6.1), and it fails closed for the login like the other security stores.
 - The client IP address is always `REMOTE_ADDR`. `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are ignored, because
   shared hosting has no trusted proxy configuration.
-- Nothing outside `public/` is reachable over HTTP. Directory listings are off *(current, `.htaccess`)*.
+- Nothing outside `public/` is reachable over HTTP. Directory listings are off (`.htaccess`).
 - Logs never contain passwords (primary, secondary or generated), tokens, codes or ciphertexts.
-- **(change)** The backend never receives a user's permanent ChurchTools login token any more (4.3, 4.4).
+- The backend never receives a user's permanent ChurchTools login token (4.3, 4.4).
 - **Long-lived secrets and how to rotate them:**
 
   | Secret | Where | Rotation |
   | --- | --- | --- |
-  | Service user's login token | `credentials.php` | Change the service user's password in ChurchTools (invalidates the token), create a new token, update `credentials.php` |
+  | Service user's login token | `credentials.php` | Change the service user's password in ChurchTools (this invalidates the token at once; measured 2026-11-10), fetch the new token (`GET /persons/{id}/logintoken` returns a new one), update `credentials.php` |
   | OAuth client secret | `credentials.php` | ChurchTools can't rotate it: delete and recreate the OAuth application, update `credentials.php` and the users' login right |
   | `JWT_SECRET` | `credentials.php` | Replace it; all backend tokens become invalid and users log in again silently |
   | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one |
 
 ### 6.4 Logging
 
-- PSR-3 logger (Monolog) writing to `logs/app.log` *(current)*.
-- **(change)** Configurable level (default `info`) and log rotation (e.g. Monolog's `RotatingFileHandler`, keeping 14
-  days).
+- PSR-3 logger (Monolog) writing to `logs/app.log`.
+- Configurable level (`LOG_LEVEL`, default `info`, 3.1). **⏳ 4.3** Log rotation (e.g. Monolog's
+  `RotatingFileHandler`, keeping 14 days).
 - **What gets logged:**
 
   | Level | Events |
@@ -764,7 +814,7 @@ ChurchTools communication goes through it.
   | `error` | Upstream errors, configuration problems |
 
 - Values written to the log are escaped, so control characters or newlines in input can't forge log lines.
-- The backend version is part of the context of every `error` entry (PHP has no single startup moment).
+- **⏳ 4.5** The backend version is part of the context of every `error` entry (PHP has no single startup moment).
 - IP addresses and person IDs are personal data. They're logged only to detect abuse, and deleted with the rotated log
   files after 14 days. Document this for admins.
 
@@ -773,9 +823,10 @@ ChurchTools communication goes through it.
 - **PHP:** `^8.3`; tested with 8.3, 8.4 and 8.5 (D3).
 - Runs on ordinary shared hosting with Apache and `.htaccess`. No daemon, no database, no shell access needed at
   runtime.
-- The `setup/setup.sh` script produces an upload-ready folder *(current)*. **(change)** It sets sensible permissions
+- The `setup/setup.sh` script produces an upload-ready folder. **⏳ 4.4** It sets sensible permissions
   there, and the setup docs list the target permissions for both hosting cases (3.1), because uploads don't keep them.
-- **(change)** The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
+- **⏳ 4.6** Later, a PHP-based setup wizard takes over the manual steps (see the plan).
+- **⏳ 4.5** The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
   release, `x.y.z+<sha>` for other commits, `x.y.z+<sha>-dirty` for uncommitted changes.
 
 ### 6.6 Quality gates
@@ -790,8 +841,7 @@ ChurchTools communication goes through it.
   | API | `Api` / `tests/Api` | The complete Slim app in-process: real HTTP requests and responses, ChurchTools replaced by a fake implementation of the client interface (5.6). The whole authorization matrix, every status code and every problem type are covered here. | CI, every push |
   | Contract | `Contract` / `tests/Contract` | Only what a fake can't prove: that ChurchTools really behaves as assumed (KV read/write and `meta.count`, service-user permissions, primary password check, OAuth code exchange errors), plus a few smoke tests against the running backend. Needs a test instance. | By hand, before each release |
 
-  Neither the unit nor the API layer needs network access. The API layer must exist at the latest in phase 2 of the
-  plan.
+  Neither the unit nor the API layer needs network access.
 - **Keeping the fake honest:** the contract cases for the ChurchTools client are written once and run against both the
   real client (contract layer) and the fake (unit layer). The API layer is only as good as the fake, so the fake must
   pass the same cases as the real ChurchTools.
@@ -803,10 +853,11 @@ ChurchTools communication goes through it.
   - `composer audit`
   - code style
   - PHPStan
-  - unit tests
-- **A post-build check of the deploy folder:** no real `credentials.php`, no instance URL or token, no dev files
+  - unit and API tests
+- **An architecture test:** `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
+- **⏳ 4.4 A post-build check of the deploy folder:** no real `credentials.php`, no instance URL or token, no dev files
   (tests, `phpunit.xml`, fixtures), and the expected layout.
-- **A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
+- **⏳ 4.5 A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
 - The contract suite isn't part of the default test run or the CI. Run without its configuration (`phpunit.xml`,
   fixtures), it aborts with a clear message naming what's missing. It's never reported as passed.
@@ -817,6 +868,9 @@ ChurchTools communication goes through it.
 | --- | --- | --- |
 | Q16 | Cleanup job for entries of deleted persons: how is it triggered? | A CLI script for cron, plus an admin-only endpoint for hosts without cron |
 | Q22 | Should admin and read access be granted via ChurchTools groups instead of person-ID lists in the settings? | Later. The consent includes group memberships, and the `api` scope can read them, so it's possible. |
+
+**Answered 2026-11-10 by accepting the proposal:** Q26 (per-address limit: 30 logins and 60 rejected tokens per
+address and minute, 256 buckets, see 6.3).
 
 **Answered 2026-11-01 by accepting the proposals:** Q4 (an admin's own primary password is checked), Q5 (`DELETE`
 needs the primary password), Q6 (wrong primary password → `403`), Q7 (`passwordLength` 12–64), Q8 (character set
@@ -835,8 +889,8 @@ from generated passwords; security comes first, the full character set stays).
 
 ### D1. Own ChurchTools client instead of `churchtools/php-client`
 
-**Decided 2026-09-30.** The backend drops the `churchtools/php-client` library (currently taken from the fork
-`lub90/ct-php-client`, branch `dev-version/3.126.2`). It uses its own thin client instead, as described in
+**Decided 2026-09-30, done in plan phase 1.** The backend dropped the `churchtools/php-client` library (it was taken
+from the fork `lub90/ct-php-client`, branch `dev-version/3.126.2`). It uses its own thin client instead, as described in
 [5.6](#56-churchtools-client-churchtoolsclient).
 
 **Why:**
@@ -867,7 +921,7 @@ interface right away.
 
 **Why:** it's a standard that clients, libraries and logging tools understand, so we don't invent and document our own
 format. The `type` URI distinguishes problems that share a status code; most importantly, "no entry" from "wrong URL"
-(both `404`), which ct-radius currently can't tell apart. `detail` lets configuration errors (`500 misconfigured`)
+(both `404`), which ct-radius can't tell apart with the old API. `detail` lets configuration errors (`500 misconfigured`)
 explain exactly what to fix.
 
 **Consequence:** a breaking change for all clients. They switch on `type`, not on free-text messages.
@@ -955,3 +1009,44 @@ the backend verifies it with the registered public key (4.4a).
 - Cleanup of entries belonging to deleted ChurchTools persons (❓ Q16).
 - Roles via ChurchTools groups (❓ Q22).
 - Backup and restore of extension data (an extension feature, not a backend feature).
+
+## 10. Changes from the old backend
+
+For consumers migrating from the old API (the extension and ct-radius, plan phase 5), and as a record of the bugs the
+redesign fixed. The rules above are authoritative; this section only says what was different before.
+
+**Breaking changes in the API:**
+
+| Area | Old backend | Now |
+| --- | --- | --- |
+| Paths | `/entries/{id}`, `/test` without prefix | Under `/v1/`; the old paths answer `404 not-found` (Q20) |
+| User authentication | The user's permanent ChurchTools login token (`Login` scheme), checked with `whoami` and `/permissions/global` on every request (two ChurchTools calls) | OAuth login once (`POST /v1/auth/token`), then a 15-minute backend token; no ChurchTools call per request (4.3, 4.4, D4) |
+| Machine clients (ct-radius) | Login token of a dedicated account listed in `readAccessUsers` | Self-signed Ed25519 JWTs per request, registered in `machineClients` (4.4a, D5); `readAccessUsers` removed (Q23) |
+| Errors | Ad-hoc bodies with a message; no error middleware, so unknown routes crashed | RFC 9457 problem details; clients switch on `type` (4.9, D2) |
+| Wrong primary password | `401`, indistinguishable from an invalid token | `403 invalid-primary-password` (Q6) |
+| `404` on `GET` | Same answer for "no entry" and "wrong URL" | `entry-not-found` versus `not-found` (4.5) |
+| Invalid custom password | `400` with a message only | `400 password-invalid` with `violations` (5.1.6) |
+| `/test` | Anyone with a valid token | Admins only (Q11); machine clients refused (⏳ 4.2 for the admin restriction) |
+| Configuration | `credentials.php` with `CT_API_URL`, `CT_API_TOKEN`, `CORS` | Also `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `JWT_SECRET` (required) and `LOG_LEVEL` (3.1) |
+
+**Bugs and weaknesses the redesign fixed:**
+
+- Wrong HTTP methods on known routes weren't answered with `405`.
+- `{id}` was cast with `(int)`, so `"abc"` became `0`, and admins could create an entry for person `0` (now
+  `400 invalid-id`, Q10).
+- Request bodies that were JSON arrays or scalars weren't rejected; only invalid JSON was.
+- The log level was hard-coded to `debug`.
+- Missing or invalid configuration keys caused PHP errors further down the line instead of `500 misconfigured`.
+- Settings weren't validated, so values like a password length of `0` could weaken security silently.
+- Custom passwords had no maximum length; a long one crashed the encryption with a `500` (Q8).
+- The generated password was shuffled with `str_shuffle` (non-cryptographic).
+- An invalid public key was reported as a generic encryption failure, not as `misconfigured`.
+- The store compared person IDs inconsistently (`getPwd` with `==`, `putPwd`/`deletePwd` with `===`).
+- With duplicate entries for a person, `GET` answered `404` and every write threw; now the newest wins and writes heal
+  the state (Q9, 5.3.3–4).
+- Broken values in `passwordStore` could crash reading and writing for everyone (5.3.7).
+- An incomplete KV answer could be taken as "no entry" (5.3.9).
+- Network errors, timeouts and `5xx` during the primary password check counted as a wrong password (5.5.3).
+- There was no rate limit on primary-password attempts (6.3).
+- A typical request cost about 5–7 ChurchTools calls.
+- The ChurchTools client library weighed 59 MB and about 3,800 files and came from a fork branch (D1).

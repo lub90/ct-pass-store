@@ -207,7 +207,7 @@ normal case names it ("→ PV-05").
 
 ## 6. Authentication
 
-### Backend access tokens (`TokenService`, spec 4.4, 5.5)
+### Backend access tokens (`UserTokens`, `TokenRules`, spec 4.4, 5.5)
 
 - [x] **TK-01** (N · U) An issued token validates and yields the person ID — 4.4
 - [x] **TK-02** (N · U) Claims: `iss`, `aud` = `ctpassstore-api`, `sub` (string), `iat`, `nbf`, `exp` = `iat` + 900,
