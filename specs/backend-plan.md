@@ -144,20 +144,29 @@ Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
 Decided: Q11, Q14, Q17, Q18 (spec section 7).
 
 - [ ] **4.1 Cache** (spec 6.1)
-  - A file cache outside the web root for settings, the public key, the module and category IDs, and the `jti` replay
-    cache. No APCu (Q3, kept lean).
+  - A file cache outside the web root for settings, the public key, the module and category IDs. No APCu (Q3, kept
+    lean). The `jti` replay cache and the attempt counters already live in the `SignedFileStore`.
+  - Re-resolve stale cached module/category IDs once per request (spec 5.3.10, catalog ST-18).
+  - Shared hosting (spec 6.1, "Locking" and "Bounded size"): document that the cache folder must be on a file system
+    where `flock` works; confirm that every security record prunes expired items on write; test that the number of
+    files stays bounded under many distinct callers.
 - [ ] **4.1a ChurchTools call budget for unauthenticated requests** (spec 6.2, review finding 2026-11-08)
   - Today a forged machine token costs 3 ChurchTools calls (settings before `kid` can be checked) and any
     `POST /v1/auth/token` costs 1. A few requests per second from anyone can exhaust the shared 600/min per IP, so
     every user and every WiFi login gets `503`.
   - With the settings cache (4.1), a forged machine token costs 0 calls.
   - A cheap per-IP limit (`REMOTE_ADDR`) for `POST /v1/auth/token` and for rejected tokens, in the `SignedFileStore`,
-    answering `429 too-many-attempts`. It must fail closed for the login and must not lock out a whole NAT'd parish by
-    one person's mistakes: generous limits, short windows.
+    answering `429 too-many-attempts` (spec 6.3). It must fail closed for the login and must not lock out a whole
+    NAT'd parish by one person's mistakes: generous limits, short windows (Q26, accepted: 30 logins and 60 rejected
+    tokens per address and minute, 256 buckets).
+  - IPv6 addresses count per `/64`. The counters live in a **fixed number of buckets** (the address hashed into one),
+    never one file per address: the interface is public, and lock files are never deleted (spec 6.1).
   - Test (catalog RX-06): a call budget per kind of unauthenticated request, counted on the fake.
 - [ ] **4.2 Extend `/test`** (spec 4.8)
   - File permissions, the OAuth and JWT configuration, the service user's rights (warn on admin rights), valid machine
     clients, the version.
+  - The cache folder: `flock` works there, and the number of files is reported and stays below the limit (spec 4.8,
+    6.1).
 - [ ] **4.3 Hardening**
   - Security headers, the CORS method list, the HTTPS check (Q17).
   - Configurable log level and rotation, no secrets in logs (spec 6.4).
@@ -169,6 +178,65 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
   - The version string `x.y.z[+sha[-dirty]]` (spec 6.5).
   - A `CHANGELOG.md` and a release workflow on tags with a release check.
   - Updated API docs in `backend/README.md`. First release of the new API.
+- [ ] **4.6 PHP setup wizard** (after the first release; spec 6.5)
+  - **Why:** the new authentication makes the backend's setup harder: an OAuth application whose secret is shown only
+    once, `JWT_SECRET`, the service user's token, the per-user login right, file permissions that uploads don't keep,
+    and Ed25519 keys for machine clients. The setup is accepted as it is for the first release and documented in
+    `backend/docs/setup.md` (4.4); the wizard removes the manual steps later. User friendliness for church members
+    belongs to the extension (phase 5), not to the backend.
+  - **Split of the work** (decided 2026-11-10):
+    - The **extension's setup wizard** (5.1) does everything on the ChurchTools side, as a ChurchTools admin in the
+      browser: service user, groups and rights, OAuth application, login right. At the end it shows a **setup bundle**
+      once: one copyable string (e.g. `ctps-setup:<base64 JSON>`) with `CT_API_URL`, `CT_API_TOKEN`,
+      `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and the CORS origin.
+    - The **PHP wizard** does everything on the server side. The admin enters the setup code and pastes the bundle.
+      The wizard:
+      - checks the bundle against ChurchTools **before** writing anything: the service token works, the service user
+        has no more rights than needed (spec 4.8), the URL belongs to the instance;
+      - generates `JWT_SECRET` itself, so that secret never leaves the server;
+      - writes `credentials.php` with the right permissions for the hosting case (spec 3.1);
+      - creates `cache/` and `logs/` with the right permissions and checks that `flock` works (spec 6.1);
+      - finishes with the checks of `/v1/test` (spec 4.8).
+    - No public endpoint receives configuration from the extension, and the backend never handles admin credentials.
+  - **Lock** (decided 2026-11-10): the backend is publicly reachable, and whoever finishes the wizard first decides
+    which ChurchTools instance the backend trusts.
+    - `setup.sh` generates a random setup code, prints it once and stores only its hash in a file outside `public/`.
+    - The wizard exists only while that file exists. On success it deletes the file and switches itself off.
+    - A wrong code counts against the per-address limit (spec 6.3), so the code can't be found by trying.
+    - Secrets are never shown again after the step that creates them.
+  - **Replacing secrets later** (decided 2026-11-10): a small command (`setup.sh --rearm` or a PHP CLI script) creates a
+    new setup code. The extension wizard can produce a bundle with only the changed values (e.g. a new service token or
+    OAuth secret); the PHP wizard replaces just those. `JWT_SECRET` is replaced only if the admin ticks "rotate".
+  - **Open, to check before 4.6 and the setup part of 5.1 start:**
+    - ~~OAuth client check without a browser~~: **measured 2026-11-10, possible.** `POST /oauth/access_token` with a
+      made-up code answers `400 {"error":"invalid_grant"}` when client ID and secret are right, `401
+      {"error":"invalid_client"}` when the secret is wrong, and `404 error.notfound` (a ChurchTools error, not OAuth)
+      for an unknown client ID. So the PHP wizard and `/v1/test` can check the client by exchanging a made-up code.
+      The skipped contract cases `testAnUnknownAuthorizationCodeIsRejected` and
+      `testAWrongClientSecretIsRejectedAsClient` still need `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` in the test
+      instance's `config/credentials.php` to run.
+    - **API details for the wizard** (measured 2026-11-10): `POST /api/oauthclients` expects `redirectUri` as a
+      **string** (it answers with a list) and returns `clientSecret` only in that response; `DELETE` (and the other
+      single-client calls) address the client by its `identifier`, not by its numeric `id`.
+    - ~~Service token rotation~~: **measured 2026-11-10.** Changing a person's password invalidates their login token
+      at once (`401 No valid token`), and `GET /persons/{id}/logintoken` afterwards returns a **new**, working token.
+      So the re-arm bundle gets a new token by setting a new password and fetching the token again.
+      `DELETE /persons/{id}/logintoken` also exists (not measured yet).
+    - ~~Module lookup right~~: **measured 2026-11-10.** `GET /api/custommodules/{key}` (and by ID) needs `view` on the
+      extension; without it ChurchTools answers `403`. `GET …/customdatacategories` answers `200` but lists only the
+      categories the person may see. So the service user needs `view` on the extension, `view custom category` and
+      `view custom data` for its categories, and create/edit/delete custom data for `passwordStore` only.
+    - **Setting the service user's password (open, blocking for 5.1):** `PUT /api/persons/{id}/password` changes the
+      password of the **logged-in** person, whatever `{id}` says, and needs that person's current password as
+      `oldPassword` (measured 2026-11-10: called as admin with another person's ID, it changed the admin's password).
+      So the wizard can't set the new person's password this way. To find out: the right way for an admin to set or
+      reset another person's password through the API (e.g. an invitation, an admin-only endpoint, or the legacy AJAX
+      API). Until then, the person's first password is set by hand.
+    - **Creating a person** (measured 2026-11-10): `POST /api/persons` needs `departmentIds`, `campusId`, `statusId`
+      and, on instances that require it, `privacyPolicyAgreementTypeId`, `privacyPolicyAgreementWhoId` and
+      `privacyPolicyAgreementDate`. The wizard reads the valid values from `GET /api/person/masterdata`.
+    - ~~Licensing and data protection of the service user~~: checked 2026-11-10, an additional person has no
+      licensing or data-protection side effects.
 
 ## Phase 5 – Consumers (after the backend API is stable)
 
@@ -176,8 +244,54 @@ These live outside the backend, but the new API is only usable once they're done
 
 - [ ] **5.1 Extension**
   - The OAuth login flow (`state`/PKCE in `sessionStorage`, `POST /auth/token`, a silent re-login on `token-expired`).
+  - **Re-login without losing input.** The backend token stays at 15 minutes (spec 4.4, Q21); the extension makes its
+    expiry invisible. No backend change is needed.
+    - **Page load:** a normal full-page redirect to `/oauth/authorize`. Nothing can be lost yet.
+    - **During a session:** re-login in a popup, so the page and any form stay untouched. After the first consent,
+      ChurchTools redirects without a visible step (it ignores `prompt=login`), so the window only flashes briefly.
+    - **Callback:** the extension page itself is the redirect URI, so no second URI is registered and the backend's
+      `redirectUri` check (spec 4.4) stays as it is. Loaded with `code` and `state` in a window with `window.opener`,
+      it passes both to the opener with `postMessage` (target origin = its own origin) and closes itself.
+    - **`state` and PKCE verifier** of a popup login live in the opener's memory, because `sessionStorage` isn't shared
+      between the opener and the popup. The opener checks `event.origin` against its own origin and `state` against the
+      expected value, then sends the code to `POST /v1/auth/token` itself.
+    - **Proactive renewal:** the extension knows the expiry from `expiresIn`. Before opening a form and right before
+      sending it, it renews the token if fewer than ~2 minutes are left, but only inside a click handler ("Edit",
+      "Save"), so popup blockers allow it.
+    - **Retry once on `401 token-expired`:** re-login via popup, then resend the same request once with the values
+      still in memory. This is safe: an authentication error comes before any side effect and before the
+      primary-password check (spec 4.1), so the retry neither counts against the rate limit nor generates a second
+      password.
+    - **Popup blocked or closed:** show a "renew session" button and keep everything typed in the form.
+    - **No hidden iframe:** ChurchTools very likely forbids being framed; not worth relying on.
+    - Popup logins count against the per-address limit of `POST /v1/auth/token` (spec 6.3, Q26); its values must leave
+      room for them.
   - Handling of Problem Details.
-  - Setup wizard: create the OAuth application, show the secret once, and grant users the login right.
+  - **Setup wizard** (ChurchTools side of the setup; the server side is the PHP wizard, 4.6):
+    - **Groups per access level:** create one group per access level and assign its rights through the API (auth IDs
+      looked up per instance, never hard-coded; see `ct-extension-info.md`), then re-check them and warn about groups
+      with more rights than intended:
+      - **Users:** the extension's `view` permission (the backend checks `ctpassstore.view === true` at login, spec
+        4.4), read access to `settings` (password length, `allowCustomPassword`, `backendUrl`), and the login right
+        for the OAuth application ("Bei Drittsystem via ChurchTools-Benutzerkonto einloggen", churchcore, per client;
+        authId 18 on the test instance; spec 3.3, measured 2026-11-01). **No** access to `encryptionSettings` (only
+        the backend encrypts; ct-radius decrypts with the private key) and **no** access to `passwordStore` (all
+        entries go through the backend).
+      - **Extension admins:** in addition, write access to `settings` and `encryptionSettings`. The wizard states the
+        consequence clearly: whoever can write `settings` can put themselves into `adminUsers` and register machine
+        clients, so this group effectively has full access to every entry and must be kept very small.
+      - **Service user:** read access to the extension's categories and write access to `passwordStore` only, no
+        admin rights (spec 4.8; the self-check of 4.2 fails if it has more).
+
+      The backend's admin role still comes from the `adminUsers` list in the settings until Q22 (roles via groups) is
+      decided; the wizard says so and doesn't silently mix the two.
+    - **Service user:** create the person, set a random password, add it to the service-user group, log in as that
+      person with `POST /api/login` and fetch its token with `GET /api/persons/{id}/logintoken` (the mechanism the
+      contract test helpers use; it works on the test instance). The password isn't shown or stored. **Never** call
+      `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the open points in 4.6).
+    - **OAuth application:** create it (`POST /api/oauthclients`) and grant the users' group the login right.
+    - **Setup bundle:** show the bundle for the PHP wizard once (4.6). For a later re-arm, produce a bundle with only
+      the changed values.
   - An admin UI for machine clients.
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)
