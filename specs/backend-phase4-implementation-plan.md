@@ -231,8 +231,11 @@ Behavior-neutral refactoring so the cache (Task 2) can reuse the exact format.
   `AuthMiddleware::__construct(Authenticator $authenticator, AddressLimiter $limiter, LoggerInterface $logger)`.
 - Behavior:
   - `AuthController::token()` calls `hit(Login, REMOTE_ADDR)` **first**, before parsing the body.
-  - `AuthMiddleware` calls `assertOpen(RejectedToken, …)` after the header checks and before `authenticate()`; on
-    `InvalidTokenException` it calls `hit(RejectedToken, …)` and rethrows. `missing-token` and `token-expired` don't count.
+  - `AuthMiddleware` verifies first. Only on `InvalidTokenException` it calls `hit(RejectedToken, …)`: a blocked
+    bucket turns the answer into `429 too-many-attempts`, otherwise the `401 invalid-token` is rethrown. A **valid**
+    token never touches the limiter (ruling 2026-11-10: otherwise one address's garbage tokens lock out everyone sharing
+    its bucket, machine clients included). `missing-token` and `token-expired` don't count. If nothing else uses
+    `AddressLimiter::assertOpen()` afterwards, remove it from the port and the implementation (YAGNI).
   - A refusal is logged as `warning` with the IP.
 
 - [ ] **Step 1: Write the failing API tests:**
@@ -241,8 +244,11 @@ Behavior-neutral refactoring so the cache (Task 2) can reuse the exact format.
   - `testABlockedLoginCostsNoChurchToolsCall` (fake call count unchanged by the 31st request; RX-06)
   - `testForgedTokensCostNoChurchToolsCallWithWarmCache` (one valid request warms the cache, then a missing token, an
     HS256 token with a wrong signature and an EdDSA token with any `kid` → no new fake calls; RX-06)
-  - `testSixtyRejectedTokensThenEvenAValidTokenIsRefused` (the 61st request from that address with a **valid** token
-    gets `429`, from another address `200`)
+  - `testTheSixtyFirstRejectedTokenGets429` (61st invalid token from one address → `429` with `Retry-After`)
+  - `testAValidTokenIsNeverRefusedByTheAddressLimit` (after 60 invalid tokens from one address, a valid token from the
+    same address still gets `200`)
+  - `testTheGlobalLoginCapRefusesTheHundredFirstLogin` (101 logins spread over many addresses within a minute → the
+    101st gets `429`, no ChurchTools call for it)
   - `testOtherAddressesAreUnaffected`
 - [ ] **Step 2: Run** — expect FAIL. **Step 3: Implement and wire.** **Step 4: Run** `composer check` — expect PASS.
 - [ ] **Step 5: Update spec (remove ⏳ 4.1a in 4.9, 6.2, 6.3, 6.1); tick RX-06; commit**
