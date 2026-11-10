@@ -332,4 +332,53 @@ final class SignedFileStoreTest extends TestCase
 
         self::assertSame(['n' => 150], $this->get('counter'));
     }
+
+    /**
+     * Spec 6.1, "Locking": the self-check needs to know that flock really excludes a second handle.
+     */
+    public function testProbeLockingSucceedsOnLocalDisk(): void
+    {
+        self::assertTrue($this->store()->probeLocking());
+        self::assertSame(0o600, fileperms($this->dir . '/probe.lock') & 0o777);
+        // Both handles were released: a repeat works.
+        self::assertTrue($this->store()->probeLocking());
+    }
+
+    public function testProbeLockingIsFalseWhenTheFolderCantBeUsed(): void
+    {
+        $blocker = sys_get_temp_dir() . '/ctps-blocker-' . bin2hex(random_bytes(6));
+        touch($blocker);
+        try {
+            $store = new SignedFileStore($blocker . '/sub', self::SECRET, new Logger('test', [$this->log]));
+            self::assertFalse($store->probeLocking());
+        } finally {
+            unlink($blocker);
+        }
+    }
+
+    /**
+     * Spec 6.1, "Bounded size": the count covers the whole folder.
+     */
+    public function testFileCountCountsLockFiles(): void
+    {
+        self::assertSame(0, $this->store()->fileCount());
+
+        $this->put('a', ['x' => 1]);
+        self::assertSame(2, $this->store()->fileCount()); // data + lock
+        $this->put('b', ['x' => 1]);
+        self::assertSame(4, $this->store()->fileCount());
+    }
+
+    /**
+     * Spec 6.1, "Bounded size" (RX-05): one record per person, not one per attempt.
+     */
+    public function testManyPersonsKeepOneRecordEach(): void
+    {
+        $store = $this->store();
+        for ($id = 1; $id <= 100; $id++) {
+            $store->update("attempts:$id", static fn(array $d): array => ['n' => 1]);
+        }
+
+        self::assertLessThanOrEqual(200, $store->fileCount());
+    }
 }

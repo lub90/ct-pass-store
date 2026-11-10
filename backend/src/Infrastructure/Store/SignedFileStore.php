@@ -85,6 +85,49 @@ final class SignedFileStore
     }
 
     /**
+     * Checks that `flock` really excludes a second handle on this file system (spec 6.1, "Locking"): takes an
+     * exclusive lock on `probe.lock`, then lets a second handle ask for the same lock without waiting.
+     * `true` only if the second attempt is refused. Never throws; a folder that can't be used gives `false`.
+     */
+    public function probeLocking(): bool
+    {
+        $first = null;
+        $second = null;
+        try {
+            $first = $this->openLock($this->directory . '/probe.lock');
+            if (!flock($first, LOCK_EX)) {
+                return false;
+            }
+            $second = @fopen($this->directory . '/probe.lock', 'c');
+            if ($second === false) {
+                return false;
+            }
+
+            return !flock($second, LOCK_EX | LOCK_NB);
+        } catch (ConfigurationException) {
+            return false;
+        } finally {
+            foreach ([$second, $first] as $handle) {
+                if (is_resource($handle)) {
+                    flock($handle, LOCK_UN);
+                    fclose($handle);
+                }
+            }
+        }
+    }
+
+    /**
+     * Number of entries in the folder, whatever their prefix (data, lock, cache and temporary files); `0` if the
+     * folder doesn't exist. The limit of spec 6.1 ("Bounded size") is for the whole folder.
+     */
+    public function fileCount(): int
+    {
+        $entries = @scandir($this->directory);
+
+        return $entries === false ? 0 : count($entries) - 2;
+    }
+
+    /**
      * @return resource
      */
     private function openLock(string $path)
