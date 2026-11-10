@@ -499,6 +499,8 @@ final class GuzzleChurchToolsClientTest extends TestCase
         yield 'invalid_client 401' => [401, ['error' => 'invalid_client'], OAuthClientRejectedException::class];
         yield 'invalid_client 400' => [400, ['error' => 'invalid_client'], OAuthClientRejectedException::class];
         yield '401 without JSON' => [401, '', OAuthClientRejectedException::class];
+        // Measured 2026-11-10: an unknown client ID gives ChurchTools' own 404, not an OAuth error.
+        yield 'unknown client ID (404)' => [404, ['message' => 'OAuthClientEntity [x] not found.', 'messageKey' => 'error.notfound', 'args' => ['model' => 'OAuthClientEntity', 'id' => 'x']], OAuthClientRejectedException::class];
         yield 'error code with odd characters' => [400, ['error' => "x\n" . self::CODE], OAuthCodeRejectedException::class];
         yield '429' => [429, [], RateLimitedException::class];
         yield '500' => [500, [], UnavailableException::class];

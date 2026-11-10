@@ -110,6 +110,11 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
             }
             throw new OAuthCodeRejectedException(sprintf('%s: ChurchTools answered %d (%s).', $what, $status, $error));
         }
+        if ($status === 404) {
+            // An unknown client ID gets ChurchTools' own 404 (`error.notfound`), not an OAuth error (measured
+            // 2026-11-10). A missing OAuth endpoint is just as much the admin's to fix: both are misconfigured.
+            throw new OAuthClientRejectedException(sprintf('%s: ChurchTools answered 404 (unknown client ID?).', $what));
+        }
         $this->throwForStatus($response, $what, null);
 
         $token = $this->decode($response, $what)['access_token'] ?? null;

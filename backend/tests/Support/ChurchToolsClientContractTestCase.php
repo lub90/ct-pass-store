@@ -212,6 +212,18 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         $this->client()->exchangeAuthorizationCode($oauth['id'], 'wrong-secret-' . bin2hex(random_bytes(8)), 'not-a-real-code', $oauth['redirectUri'], str_repeat('v', 43));
     }
 
+    /**
+     * An unknown client ID is a misconfiguration (500), never "code invalid" or "not found" (spec 4.4.2). ChurchTools
+     * answers it with its own 404 (`error.notfound`), not with an OAuth error (measured 2026-11-10). Needs no OAuth
+     * credentials, so it always runs.
+     */
+    public function testAnUnknownClientIdIsRejectedAsClient(): void
+    {
+        $this->expectException(OAuthClientRejectedException::class);
+        $redirectUri = $this->oauthClient()['redirectUri'] ?? 'https://example.church.tools/ccm/ctpassstore/';
+        $this->client()->exchangeAuthorizationCode('unknown-client-' . bin2hex(random_bytes(8)), 'any-secret', 'not-a-real-code', $redirectUri, str_repeat('v', 43));
+    }
+
     private function valueById(int $id): ?string
     {
         foreach ($this->client()->getValues($this->moduleId(), $this->passwordStoreId()) as $value) {

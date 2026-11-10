@@ -253,6 +253,9 @@ normal case names it ("→ PV-05").
   accepted; with 2,049 → `400 invalid-body` — 4.4
 - [x] **AX-11** (N · A) ChurchTools unreachable during the exchange → `502 upstream-unavailable` — 4.4
 - [ ] **AX-12** (N · C) Contract: an invalid or used code gives the error response the backend expects — 4.4.2
+- [x] **AX-20** (! · U, C) An unknown client ID: ChurchTools answers its own `404 error.notfound`, not an OAuth error
+  (measured 2026-11-10); the client maps it to "client rejected", so the login gives `500 misconfigured`, never
+  `not-found` or `oauth-code-invalid`. The contract case runs against the fake and the real instance — 4.4.2
 - [x] **AX-14** (! · A) `whoami` returns the anonymous person (`-1` or `0`) or a non-integer ID → `502 upstream-invalid`,
   no token issued — 4.4.4
 - [x] **AX-19** (! · A) `whoami` without `cmsUserId`, or with an empty one → `502 upstream-invalid`, no token issued (the
