@@ -66,18 +66,37 @@ final class FileAddressLimiter implements AddressLimiter
     {
         $now = $this->clock->now()->getTimestamp();
         $max = $limit->max();
+        $globalMax = $limit->globalMax();
+        $globalName = 'addr:' . $limit->value . ':all';
+        $store = $this->store;
         $blockedFor = 0;
 
-        $this->store->update(
+        // The address bucket is locked first, then the global record (always in this order). A request is counted in
+        // both or in neither.
+        $store->update(
             $this->name($limit, $remoteAddr),
-            static function (array $state) use ($now, $max, $count, &$blockedFor): array {
+            static function (array $state) use ($now, $max, $count, $globalMax, $globalName, $store, &$blockedFor): array {
                 $times = self::recent($state['hits'] ?? null, $now);
-                if (count($times) >= $max) {
-                    $blockedFor = max(1, $times[0] + AddressLimit::WINDOW_SECONDS - $now);
-
-                    return ['hits' => $times];
+                $bucketFull = count($times) >= $max;
+                if ($bucketFull) {
+                    $blockedFor = self::retryAfter($times, $now);
                 }
-                if ($count) {
+                if ($globalMax !== null) {
+                    $store->update(
+                        $globalName,
+                        static function (array $global) use ($now, $globalMax, $count, $bucketFull, &$blockedFor): array {
+                            $all = self::recent($global['hits'] ?? null, $now);
+                            if (count($all) >= $globalMax) {
+                                $blockedFor = max($blockedFor, self::retryAfter($all, $now));
+                            } elseif ($count && !$bucketFull) {
+                                $all[] = $now;
+                            }
+
+                            return ['hits' => $all];
+                        },
+                    );
+                }
+                if ($count && $blockedFor === 0) {
                     $times[] = $now;
                 }
 
@@ -88,6 +107,14 @@ final class FileAddressLimiter implements AddressLimiter
         if ($blockedFor > 0) {
             throw new TooManyAttemptsException("Too many requests from this address. Try again in {$blockedFor} seconds.", $blockedFor);
         }
+    }
+
+    /**
+     * @param list<int> $times oldest first
+     */
+    private static function retryAfter(array $times, int $now): int
+    {
+        return max(1, $times[0] + AddressLimit::WINDOW_SECONDS - $now);
     }
 
     /**

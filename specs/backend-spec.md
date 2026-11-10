@@ -740,7 +740,7 @@ The security stores (`jti` replay cache, rate-limit counters;
     | --- | --- | --- |
     | `jti` replay cache | one per registered machine client | number of clients |
     | Primary-password attempts | one per **authenticated** person who entered a primary password | number of persons |
-    | Per-address limit (6.3, **⏳ 4.1a**) | a **fixed** number of buckets (e.g. 256); the address is hashed into one | fixed |
+    | Per-address limit (6.3, **⏳ 4.1a**) | a **fixed** number of buckets (e.g. 256); the address is hashed into one, plus one global login record | fixed |
 
     Per-address records are never one file per address: IPv6 gives an attacker practically unlimited addresses, and
     lock files are never deleted (deleting one under a waiting process breaks the lock). Two addresses sharing a bucket
@@ -787,6 +787,9 @@ The security stores (`jti` replay cache, rate-limit counters;
   - Limits are generous and windows short, so a parish behind one NAT address isn't locked out by one person's
     mistakes (Q26): at most **30** `POST /v1/auth/token` requests and **60** rejected tokens per address and
     minute, kept in **256** buckets. A block lasts until the window has passed.
+  - A global cap of **100** logins per minute across all addresses keeps logins below half of ChurchTools' budget,
+    however many addresses an attacker has (ruling 2026-11-10). A refused login counts in neither the address bucket
+    nor the global record.
   - It's kept in a fixed number of buckets (6.1), and it fails closed for the login like the other security stores.
 - The client IP address is always `REMOTE_ADDR`. `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are ignored, because
   shared hosting has no trusted proxy configuration.

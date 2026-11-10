@@ -21,4 +21,16 @@ enum AddressLimit: string
             self::RejectedToken => 60,
         };
     }
+
+    /**
+     * Requests per window across all addresses together, or null for none. Logins cost up to 3 ChurchTools calls
+     * each, so this keeps them below half of its budget however many addresses an attacker has (spec 6.3).
+     */
+    public function globalMax(): ?int
+    {
+        return match ($this) {
+            self::Login => 100,
+            self::RejectedToken => null,
+        };
+    }
 }

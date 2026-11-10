@@ -71,11 +71,63 @@ final class FileAddressLimiterTest extends TestCase
     public function testRefusedAttemptsAreNotCounted(): void
     {
         $this->hits(AddressLimit::Login, '192.0.2.1', 30);
+        $this->clock->advance(30);
         $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '192.0.2.1'));
         $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '192.0.2.1'));
-        $this->clock->advance(60);
+        self::assertLessThanOrEqual(30, $this->largestRecord());
+
+        // The 30 first hits have expired; the refused ones would still count if they had been stored.
+        $this->clock->advance(30);
         $this->limiter->hit(AddressLimit::Login, '192.0.2.1');
+        $this->hits(AddressLimit::Login, '192.0.2.1', 29);
+        $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '192.0.2.1'));
+    }
+
+    public function testTheHundredFirstLoginFromManyAddressesIsRefused(): void
+    {
+        for ($i = 1; $i <= 100; $i++) {
+            $this->limiter->hit(AddressLimit::Login, '198.51.100.' . $i);
+        }
+        $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '203.0.113.9'));
+        $this->clock->advance(60);
+        $this->limiter->hit(AddressLimit::Login, '203.0.113.9');
+    }
+
+    public function testARefusedLoginCountsNowhere(): void
+    {
+        // One address fills its own bucket: 30 of the 100.
+        $this->hits(AddressLimit::Login, '192.0.2.1', 30);
+        for ($i = 0; $i < 20; $i++) {
+            $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '192.0.2.1'));
+        }
+        // 70 more from other addresses fit exactly; had the 20 refused ones counted globally, fewer would.
+        for ($i = 1; $i <= 70; $i++) {
+            $this->limiter->hit(AddressLimit::Login, '198.51.100.' . $i);
+        }
+        $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '203.0.113.9'));
+        // A globally refused login isn't counted in its address bucket either.
+        $this->clock->advance(60);
+        $this->hits(AddressLimit::Login, '203.0.113.9', 30);
+    }
+
+    public function testRejectedTokensHaveNoGlobalCap(): void
+    {
+        for ($i = 1; $i <= 200; $i++) {
+            $this->limiter->hit(AddressLimit::RejectedToken, '198.51.100.' . $i);
+        }
         $this->addToAssertionCount(1);
+    }
+
+    private function largestRecord(): int
+    {
+        $largest = 0;
+        foreach (glob($this->dir . '/*.json') ?: [] as $path) {
+            $file = json_decode((string) file_get_contents($path), true);
+            $data = is_array($file) ? json_decode((string) ($file['data'] ?? ''), true) : null;
+            $largest = max($largest, is_array($data) && is_array($data['hits'] ?? null) ? count($data['hits']) : 0);
+        }
+
+        return $largest;
     }
 
     public function testRetryAfterIsTheRemainingWindow(): void
@@ -133,7 +185,7 @@ final class FileAddressLimiterTest extends TestCase
     public function testBucketCountIsBounded(): void
     {
         for ($i = 0; $i < 1000; $i++) {
-            $this->limiter->hit(AddressLimit::Login, implode('.', [random_int(1, 223), random_int(0, 255), random_int(0, 255), random_int(1, 254)]));
+            $this->limiter->hit(AddressLimit::RejectedToken, implode('.', [random_int(1, 223), random_int(0, 255), random_int(0, 255), random_int(1, 254)]));
         }
         self::assertLessThanOrEqual(2 * FileAddressLimiter::BUCKETS, count(glob($this->dir . '/*') ?: []));
     }
@@ -151,9 +203,9 @@ final class FileAddressLimiterTest extends TestCase
 
     public function testTheRecordStaysBounded(): void
     {
-        $this->hits(AddressLimit::Login, '192.0.2.1', 30);
+        $this->hits(AddressLimit::RejectedToken, '192.0.2.1', 30);
         $this->clock->advance(61);
-        $this->limiter->hit(AddressLimit::Login, '192.0.2.1');
+        $this->limiter->hit(AddressLimit::RejectedToken, '192.0.2.1');
         $stored = '';
         foreach (glob($this->dir . '/*.json') ?: [] as $file) {
             $stored .= (string) file_get_contents($file);
@@ -167,7 +219,7 @@ final class FileAddressLimiterTest extends TestCase
         file_put_contents($file, 'x');
         try {
             $this->expectException(ConfigurationException::class);
-            $this->limiter($file . '/sub')->hit(AddressLimit::Login, '192.0.2.1');
+            $this->limiter($file . '/sub')->hit(AddressLimit::RejectedToken, '192.0.2.1');
         } finally {
             @unlink($file);
         }
