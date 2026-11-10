@@ -113,3 +113,16 @@ Once everything is set up, test your backend by calling the `/test` endpoint wit
 ```
 
 You can now continue with the remaining setup steps for your CtPassStore extension in Churchtools!
+## Troubleshooting
+
+### Every request answers `502 upstream-unavailable`, and the log says "cURL error 60"
+
+The backend couldn't verify the TLS certificate of your ChurchTools instance. Instances on `church.tools` have valid
+certificates; this happens with a self-hosted ChurchTools that uses a self-signed certificate or one from an
+internal certificate authority.
+
+The backend never turns certificate verification off: it sends the service user's token and the OAuth secret to
+ChurchTools, and without verification anyone on the network path could pose as ChurchTools and capture them. Instead,
+add your certificate authority to the trusted certificates of the server the backend runs on (for example with
+`update-ca-certificates` on Debian or Ubuntu, or through your hosting provider), or give ChurchTools a certificate
+from a public authority such as Let's Encrypt.

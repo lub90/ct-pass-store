@@ -351,4 +351,39 @@ final class ErrorFormatApiTest extends ApiTestCase
         }
         self::assertCount(2, $this->storedEntries());
     }
+
+    /**
+     * ER-05: misconfigured names the setting, never its value (settings can hold IDs or URLs the client mustn't see).
+     *
+     * @return iterable<string, array{string, mixed}>
+     */
+    public static function brokenSettings(): iterable
+    {
+        yield 'passwordLength' => ['passwordLength', 'VALUE-SECRET-1'];
+        yield 'adminUsers' => ['adminUsers', ['VALUE-SECRET-2']];
+        yield 'requirePasswordForPasswordChange' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 'VALUE-SECRET-3'];
+        yield 'allowCustomPassword' => [KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD, 'VALUE-SECRET-4'];
+    }
+
+    #[DataProvider('brokenSettings')]
+    public function testMisconfiguredNamesTheSettingNotItsValue(string $key, mixed $value): void
+    {
+        $this->setSettings([$key => $value]);
+
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, []));
+
+        self::assertStringContainsString($key, (string) $body['detail']);
+        self::assertStringNotContainsString('VALUE-SECRET', json_encode($body, JSON_THROW_ON_ERROR));
+    }
+
+    public function testABrokenPublicKeyIsNamedNotShown(): void
+    {
+        $this->churchTools->clearValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY]);
+        $this->churchTools->seedValue($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => "-----BEGIN PUBLIC KEY-----\nVALUE-SECRET-KEY\n-----END PUBLIC KEY-----"], JSON_THROW_ON_ERROR));
+
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, []));
+
+        self::assertStringContainsString('publicKey', (string) $body['detail']);
+        self::assertStringNotContainsString('VALUE-SECRET', json_encode($body, JSON_THROW_ON_ERROR));
+    }
 }

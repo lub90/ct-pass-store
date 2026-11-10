@@ -190,7 +190,15 @@ final class UserTokensTest extends TestCase
         yield 'negative sub' => [['sub' => '-5']];
         yield 'empty username' => [['username' => '']];
         yield 'empty jti' => [['jti' => '']];
+        // TY-04, RX-04: claim types are never cast. A float or a numeric string would pass firebase/php-jwt's own checks.
         yield 'exp as string' => [['exp' => '9999999999']];
+        yield 'exp as float' => [['exp' => 1.0e30]];
+        yield 'iat as string' => [['iat' => '1']];
+        yield 'nbf as float' => [['nbf' => 1.5]];
+        yield 'sub above PHP_INT_MAX' => [['sub' => '9223372036854775808']];
+        yield 'sub with whitespace' => [['sub' => ' 5']];
+        yield 'username as number' => [['username' => 5]];
+        yield 'jti as number' => [['jti' => 5]];
     }
 
     // ---------------------------------------------------------------- TK-07, TK-08, TK-15
@@ -299,6 +307,36 @@ final class UserTokensTest extends TestCase
     public function testDeeplyNestedClaimsAreInvalidNotAnError(): void
     {
         $this->assertInvalid(self::sign($this->claims(['deep' => json_decode(str_repeat('[', 40) . str_repeat(']', 40))])));
+    }
+
+    /**
+     * TY-04: a negative exp is simply long expired, never wrapped around into the future.
+     */
+    public function testANegativeExpIsExpired(): void
+    {
+        $this->expectException(TokenExpiredException::class);
+        $this->tokens->verify(self::sign($this->claims(['iat' => -1000, 'nbf' => -1000, 'exp' => -100])));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function badKids(): iterable
+    {
+        yield 'kid as number' => [['kid' => 5]];
+        yield 'kid as list' => [['kid' => ['a']]];
+        yield 'kid empty' => [['kid' => '']];
+    }
+
+    /**
+     * TY-04: any kid at all makes it no backend token, whatever its type.
+     *
+     * @param array<string, mixed> $head
+     */
+    #[DataProvider('badKids')]
+    public function testTokensWithAnyKidAreRejected(array $head): void
+    {
+        $this->assertInvalid(self::sign($this->claims(), head: $head));
     }
 
     public function testATokenWithCritIsRejected(): void

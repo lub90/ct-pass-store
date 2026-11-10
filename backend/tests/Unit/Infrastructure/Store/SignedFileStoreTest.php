@@ -278,4 +278,58 @@ final class SignedFileStoreTest extends TestCase
 
         self::assertSame(['n' => 25], $this->get('counter'));
     }
+
+    /**
+     * IJ-02: record names come from tokens (kid, jti) or IDs; whatever they contain, the files stay in the folder.
+     */
+    public function testRecordNamesCantEscapeTheFolder(): void
+    {
+        $names = ['../escape', '../../etc/passwd', 'a/b', 'a\\b', "nul\x00byte", '%00', str_repeat('x', 5000), '.', '..', ''];
+        foreach ($names as $name) {
+            $this->put($name, ['x' => 1]);
+            self::assertSame(['x' => 1], $this->get($name));
+        }
+
+        $parent = dirname($this->dir);
+        self::assertFileDoesNotExist($parent . '/escape');
+        foreach (glob($this->dir . '/*') ?: [] as $file) {
+            self::assertSame($this->dir, dirname($file));
+            self::assertMatchesRegularExpression('/^sec-[0-9a-f]{64}\.(json|lock)$/', basename($file));
+        }
+        self::assertCount(2 * count($names), glob($this->dir . '/*') ?: [], 'Every name has its own data and lock file.');
+    }
+
+    /**
+     * TR-03: real processes updating the same record at the same time lose no update.
+     */
+    public function testParallelProcessesLoseNoUpdate(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('pcntl and posix are needed for real parallel processes.');
+        }
+        $go = $this->dir . '-go';
+        $children = [];
+        for ($i = 0; $i < 6; $i++) {
+            $pid = pcntl_fork();
+            self::assertNotSame(-1, $pid);
+            if ($pid === 0) {
+                while (!file_exists($go)) {
+                    usleep(500);
+                }
+                $store = $this->store();
+                for ($n = 0; $n < 25; $n++) {
+                    $store->update('counter', static fn(array $d): array => ['n' => (is_int($d['n'] ?? null) ? $d['n'] : 0) + 1]);
+                }
+                posix_kill(getmypid(), SIGKILL);
+            }
+            $children[] = $pid;
+        }
+        touch($go);
+        foreach ($children as $pid) {
+            pcntl_waitpid($pid, $status);
+        }
+        @unlink($go);
+
+        self::assertSame(['n' => 150], $this->get('counter'));
+    }
 }

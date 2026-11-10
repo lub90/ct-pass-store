@@ -529,6 +529,143 @@ final class GuzzleChurchToolsClientTest extends TestCase
         }
     }
 
+    /**
+     * CC-06 for every kind of call that carries a secret, on every kind of failure, including network errors whose
+     * Guzzle message would contain the request.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function secretCarryingCalls(): iterable
+    {
+        foreach (['user call', 'service call', 'login', 'code exchange'] as $call) {
+            yield $call => [$call];
+        }
+    }
+
+    #[DataProvider('secretCarryingCalls')]
+    public function testNoSecretInAnyFailureOfAnyCall(string $call): void
+    {
+        $secrets = [self::USER_TOKEN, self::SERVICE_TOKEN, self::PASSWORD, self::CLIENT_SECRET, self::CODE, self::VERIFIER];
+        $echo = 'echo ' . implode(' ', $secrets);
+        $failures = [400, 401, 403, 404, 429, 500, 503, 302, 200];
+        $client = $this->client();
+        foreach ($failures as $status) {
+            $this->respond($status, $status === 200 ? '<html>' . $echo . '</html>' : ['message' => $echo, 'error' => $echo]);
+        }
+        $this->mock->append(new ConnectException('cURL error 28: ' . $echo, new Request('POST', 'x'), null, ['errno' => 28]));
+
+        $send = match ($call) {
+            'user call' => fn() => $client->whoami(Credential::bearerToken(self::USER_TOKEN)),
+            'service call' => fn() => $client->getValues(7, 8),
+            'login' => fn() => $client->verifyLogin('jdoe', self::PASSWORD),
+            default => fn() => $this->exchange($client),
+        };
+        foreach ([...$failures, 'network'] as $failure) {
+            try {
+                $send();
+            } catch (ChurchToolsException $e) {
+                foreach ($secrets as $secret) {
+                    self::assertStringNotContainsString($secret, $e->getMessage(), "$call, $failure");
+                }
+                self::assertStringNotContainsString('echo', $e->getMessage(), "$call, $failure: bodies are never copied.");
+            }
+        }
+    }
+
+    /**
+     * IJ-01: the OAuth code only ever goes into the form body, properly encoded. Characters that mean something in a
+     * form can't add or replace parameters.
+     */
+    public function testACodeCantAddParametersToTheTokenRequest(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['access_token' => 'ct-access-token']);
+        $code = "x&grant_type=password&client_id=evil#frag\r\nX-Evil: 1";
+
+        $client->exchangeAuthorizationCode('client-id', self::CLIENT_SECRET, $code, 'https://example.church.tools/ccm/ctpassstore/', self::VERIFIER);
+
+        $request = $this->lastRequest();
+        self::assertSame('https://example.church.tools/oauth/access_token', (string) $request->getUri(), 'Nothing reaches the URL.');
+        self::assertFalse($request->hasHeader('X-Evil'));
+        parse_str((string) $request->getBody(), $form);
+        self::assertSame(['grant_type', 'client_id', 'client_secret', 'redirect_uri', 'code', 'code_verifier'], array_keys($form));
+        self::assertSame('authorization_code', $form['grant_type']);
+        self::assertSame('client-id', $form['client_id']);
+        self::assertSame($code, $form['code']);
+    }
+
+    /**
+     * IJ-01: IDs in KV paths are integers and must be positive; there's no way to put text into the path.
+     */
+    public function testKvPathsTakeOnlyPositiveIntegers(): void
+    {
+        $client = $this->client();
+        foreach ([fn() => $client->getValues(0, 1), fn() => $client->getValues(1, -1), fn() => $client->deleteValue(1, 1, 0)] as $call) {
+            try {
+                $call();
+                self::fail('Expected an InvalidArgumentException.');
+            } catch (\InvalidArgumentException) {
+            }
+        }
+        self::assertSame([], $this->history, 'No request was sent.');
+    }
+
+    /**
+     * CC-15: against a real TLS server with a self-signed certificate, the real client (no injected Guzzle) refuses
+     * the connection before any request, and with it the service token, goes out.
+     */
+    public function testASelfSignedCertificateIsRejected(): void
+    {
+        if (!function_exists('pcntl_fork') || !function_exists('posix_kill')) {
+            self::markTestSkipped('pcntl and posix are needed for the local TLS server.');
+        }
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        self::assertNotFalse($key);
+        $csr = openssl_csr_new(['commonName' => '127.0.0.1'], $key);
+        self::assertNotFalse($csr);
+        $certificate = openssl_csr_sign($csr, null, $key, 1);
+        self::assertNotFalse($certificate);
+        self::assertTrue(openssl_x509_export($certificate, $certPem));
+        self::assertTrue(openssl_pkey_export($key, $keyPem));
+        $pem = (string) tempnam(sys_get_temp_dir(), 'ctps-tls-');
+        file_put_contents($pem, $certPem . $keyPem);
+
+        $server = stream_socket_server('tcp://127.0.0.1:0', $errno, $error, STREAM_SERVER_BIND | STREAM_SERVER_LISTEN, stream_context_create(['ssl' => ['local_cert' => $pem]]));
+        self::assertNotFalse($server, $error);
+        $port = (int) substr((string) strrchr((string) stream_socket_get_name($server, false), ':'), 1);
+        $requestSeen = (string) tempnam(sys_get_temp_dir(), 'ctps-tls-seen-');
+
+        $pid = pcntl_fork();
+        self::assertNotSame(-1, $pid);
+        if ($pid === 0) {
+            $connection = @stream_socket_accept($server, 10);
+            if ($connection !== false) {
+                stream_set_timeout($connection, 5);
+                if (@stream_socket_enable_crypto($connection, true, STREAM_CRYPTO_METHOD_TLS_SERVER) === true) {
+                    // Only reached if the client accepted the certificate.
+                    file_put_contents($requestSeen, (string) fread($connection, 8192));
+                }
+            }
+            posix_kill(getmypid(), SIGKILL);
+        }
+        fclose($server);
+
+        try {
+            $client = new GuzzleChurchToolsClient("https://127.0.0.1:$port/api", Credential::loginToken(self::SERVICE_TOKEN), 5.0);
+            $client->getCategories(7);
+            self::fail('A self-signed certificate must not be accepted.');
+        } catch (UnavailableException $e) {
+            self::assertStringContainsString('cURL error 60', $e->getMessage(), 'cURL 60: the peer certificate can\'t be verified.');
+        } finally {
+            pcntl_waitpid($pid, $status);
+            $seen = (string) file_get_contents($requestSeen);
+            @unlink($pem);
+            @unlink($requestSeen);
+        }
+        self::assertStringNotContainsString(self::SERVICE_TOKEN, $seen, 'The token never reached the server.');
+        self::assertSame('', $seen);
+    }
+
     public function testCredentialsNeverRevealTheirSecret(): void
     {
         $credential = Credential::bearerToken(self::USER_TOKEN);

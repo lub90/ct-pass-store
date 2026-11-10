@@ -88,7 +88,7 @@ normal case names it ("→ PV-05").
   bit, a truncated or an extended ciphertext fails to decrypt (no wrong plaintext comes out) — 5.2.1
 - [x] **EN-02** (N · U) The output is valid base64, and decoded it's exactly 512 bytes (RSA-4096) — 5.2.2
 - [x] **EN-03** (! · U) Encrypting the same plaintext twice gives different ciphertexts (OAEP is randomized) — 5.2.3
-- [ ] **EN-04** (! · U) The padding is OAEP with SHA-256 and MGF1-SHA-256: decrypting with PKCS#1 v1.5 or OAEP-SHA1
+- [x] **EN-04** (! · U) The padding is OAEP with SHA-256 and MGF1-SHA-256: decrypting with PKCS#1 v1.5 or OAEP-SHA1
   fails — 5.2.1
 - [x] **EN-05** (! · U) A 2048-bit public key is rejected as `misconfigured` — 5.2.4
 - [x] **EN-06** (S · U) An unparsable key, an empty key or a private key instead of a public one is rejected as
@@ -138,7 +138,7 @@ normal case names it ("→ PV-05").
 - [x] **ST-22** (S · U) Values with the reserved `personId` `0` (a leftover self-test value) are invisible to the normal
   operations: reading, writing and deleting for persons neither return, change nor delete them, they don't count as
   duplicates, and no warning is logged — 5.3.11
-- [ ] **ST-19** (N · U) The module `ctpassstore` or the `passwordStore`/`settings`/`encryptionSettings` category doesn't
+- [x] **ST-19** (N · U) The module `ctpassstore` or the `passwordStore`/`settings`/`encryptionSettings` category doesn't
   exist → `500 misconfigured` naming it — 5.3.10
 
 ## 4. Settings and configuration (spec 3)
@@ -165,8 +165,8 @@ normal case names it ("→ PV-05").
 - [x] **SE-08** (! · U) `encryptionSettings` empty, with several values or without `publicKey` → `misconfigured` — 3.2
 - [x] **SE-06** (N · U) `machineClients`: a valid entry is accepted; an invalid `id`, an invalid key or a duplicate `id`
   disables only that entry and is reported — 3.2
-- [ ] **SE-06a** (E · U) Client `id` length boundaries: 2 and 41 characters are rejected, 3 and 40 accepted — 3.2
-- [ ] **SE-06b** (! · U) An empty `publicKeys` list disables the client; `permissions` with unknown values
+- [x] **SE-06a** (E · U) Client `id` length boundaries: 2 and 41 characters are rejected, 3 and 40 accepted — 3.2
+- [x] **SE-06b** (! · U) An empty `publicKeys` list disables the client; `permissions` with unknown values
   (`entries:write`, `*`, `admin`) grant nothing and are reported — 3.2
 - [x] **SE-09** (! · U) `backendUrl`: `https://host/path/` is normalized to `https://host/path`; `http://…`, an empty string,
   a query, a fragment or credentials are invalid. A missing or invalid `backendUrl` makes machine authentication fail
@@ -186,7 +186,7 @@ normal case names it ("→ PV-05").
   `Retry-After`, `500`, `503`, timeout, connection error, non-JSON body) gives the right exception type — 5.6.6
 - [x] **CC-05** (! · U) `401`/`403` on a **service** call maps to `misconfigured`, never to "user not authorized" —
   5.6.6
-- [ ] **CC-06** (! · U) No exception message and no log entry of the client contains a token, password, code or
+- [x] **CC-06** (! · U) No exception message and no log entry of the client contains a token, password, code or
   secret, including on errors — 5.6.2
 - [x] **CC-07** (N · U) No cookies are stored or sent between calls — 5.6.3
 - [x] **CC-12** (! · U) Credentials are never mixed up: a user's bearer token is never sent on KV calls, the service
@@ -197,7 +197,7 @@ normal case names it ("→ PV-05").
 - [x] **CC-10** (N · C) `GET /custommodules/{key}` returns the module; categories and values have the assumed shape —
   5.6
 - [ ] **CC-11** (! · C) An anonymous call with `X-OnlyAuthenticated: 1` gets `401`, not empty data — 5.6.2
-- [ ] **CC-15** (! · U) TLS verification is never disabled and redirects aren't followed: a `302` from ChurchTools isn't
+- [x] **CC-15** (! · U) TLS verification is never disabled and redirects aren't followed: a `302` from ChurchTools isn't
   followed (no credentials go to the redirect target); a self-signed certificate is rejected (checked against a local
   HTTPS test server, or in the contract layer) — 5.6.6
 - [x] **CC-16** (E · U) `Retry-After` parsing: seconds (`120`), an HTTP date, a missing header and garbage (`soon`) give
@@ -465,10 +465,10 @@ normal case names it ("→ PV-05").
   for each type is fixed and equals the title documented there (the test parses the file) — 4.9
 - [x] **ER-04** (! · A) An unexpected exception → `500 internal-error` with a generic `detail`; class names, stack
   traces, SQL or paths never reach the client — 4.9
-- [ ] **ER-05** (! · A) `misconfigured` names the setting or key, never its value — 4.9
+- [x] **ER-05** (! · A) `misconfigured` names the setting or key, never its value — 4.9
 - [x] **ER-06** (N · A) `upstream-rate-limited` and `too-many-attempts` carry a `Retry-After` header (at least 60 for
   `upstream-rate-limited`) and the same value as the `retryAfter` member — 4.9, 6.2
-- [ ] **ER-08** (! · A) PHP warnings, notices and deprecations never reach a response body (`display_errors` off); they
+- [x] **ER-08** (! · A) PHP warnings, notices and deprecations never reach a response body (`display_errors` off); they
   go to the log — 4.1
 - [x] **ER-09** (N · A) The new problem types `payload-too-large` (413) and `unsupported-media-type` (415) are produced
   as specified — 4.9
@@ -559,22 +559,22 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   5.3
 - [x] **TY-03** (S · A) JSON numbers where strings are expected, and vice versa (`"primaryPwd": 123456`,
   `"secondaryPwd": true`, `"code": ["x"]`) → `400 invalid-body`, never cast silently — 4.1
-- [ ] **TY-04** (! · U) Claim types in backend and machine tokens: `exp`/`iat`/`nbf` as strings, floats, negative or huge
+- [x] **TY-04** (! · U) Claim types in backend and machine tokens: `exp`/`iat`/`nbf` as strings, floats, negative or huge
   numbers; `sub` as a number; `aud` as an array; `kid` as a number, an array or empty → rejected or handled exactly as
   specified, never cast in a way that extends validity or changes the identity — 4.4, 4.4a
 - [x] **TY-05** (! · U) ChurchTools token claim types during login: `scopes` as a string instead of an array (`"apix"`
   must not count as containing `api`), `sub` as a number, `aud` as an array → no token issued unless they exactly match
   — 4.4.3
-- [ ] **TY-06** (! · U) Machine client `id`s and `kid`s with lookalike characters (`ct-rаdius` with a Cyrillic `а`),
+- [x] **TY-06** (! · U) Machine client `id`s and `kid`s with lookalike characters (`ct-rаdius` with a Cyrillic `а`),
   uppercase, spaces or Unicode are rejected by the `^[a-z0-9-]{3,40}$` rule, so they can't impersonate a registered
   client — 3.2
 
 ### Injection
 
-- [ ] **IJ-01** (! · U) No user input ends up in a ChurchTools URL unvalidated: the person ID is an integer, the module
+- [x] **IJ-01** (! · U) No user input ends up in a ChurchTools URL unvalidated: the person ID is an integer, the module
   key a constant, the OAuth `code` goes only into the form body. A `code` with `&`, `=`, `#` or newlines can't add
   parameters to the token request — 5.6
-- [ ] **IJ-02** (! · U) Path traversal in cache file names: `kid`, `jti` and other cache keys with `../`, `/`, `\`, `%00`
+- [x] **IJ-02** (! · U) Path traversal in cache file names: `kid`, `jti` and other cache keys with `../`, `/`, `\`, `%00`
   or very long values can't escape the cache folder (keys are hashed before they're used as file names) — 6.1, 4.4a.4
 - [x] **IJ-03** (! · A) Log injection: values that end up in the log (person IDs, `kid`, IP addresses, request path)
   containing newlines or control characters can't forge additional log lines — 6.4
@@ -613,7 +613,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   over 128 characters is reported only as `too-long`, before any other rule runs or encryption starts — 4.1, 5.1.4
 - [x] **RX-03** (! · U) A huge `passwordLength` in the settings (e.g. `1000000000`) is a configuration error before the
   generator allocates anything — 3.2
-- [ ] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap
+- [x] **RX-04** (! · U) Integer overflow: IDs, `exp` and counters above `PHP_INT_MAX` or as floats (`1e30`) never wrap
   around or turn into `0`/negative values that pass a check — 4.1, 4.4
 - [ ] **RX-06** (! · A) ChurchTools call budget for requests that aren't authenticated (plan 4.1a): a missing or forged
   token, a forged machine token with any `kid`, and `POST /v1/auth/token` beyond the per-IP limit cost no ChurchTools
@@ -640,7 +640,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 - [x] **TR-02c** (S · A) Two concurrent `DELETE`s both answer `204` — 5.3.6
 - [x] **TR-02d** (S · C) Parallel `PUT`s through the local backend against the test instance: all succeed, the read
   gives the newest entry, the next write leaves exactly one (LS-02) — 5.3.6
-- [ ] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
+- [x] **TR-03** (S · U) Concurrent requests updating the rate-limit counter or the `jti` cache don't lose updates (file
   locking) — 6.3, 4.4a.4
 - [x] **TR-05** (! · U) Parallel primary-password attempts can't run more checks than the limit: with 50 attempts in
   flight at once, at most 5 reach ChurchTools and the rest get `429`. An attempt that hits a ChurchTools error is
@@ -695,7 +695,7 @@ tester has; it's documented in `backend/docs/testing.md`.
   unit layer, so the fake can't drift from real ChurchTools — 6.6
 - [x] **CT-08** (S · C) Updating a value that was deleted gives `404` and doesn't bring the value back. TR-02b relies on
   it — 5.3.6
-- [ ] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing
+- [x] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing
   and a non-zero exit code; it's never reported as passed (the test runs PHPUnit in a subprocess without the
   configuration) — 6.6
 

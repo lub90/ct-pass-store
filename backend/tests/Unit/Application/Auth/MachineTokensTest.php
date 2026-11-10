@@ -317,6 +317,59 @@ final class MachineTokensTest extends TestCase
         }
     }
 
+    /**
+     * TY-04, RX-04: claim types are never cast in a way that extends validity or changes the client.
+     *
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function badClaimTypes(): iterable
+    {
+        yield 'exp as float far in the future' => [['exp' => 1.0e30]];
+        yield 'exp as numeric string' => [['exp' => '9999999999']];
+        yield 'iat as string' => [['iat' => '0']];
+        yield 'exp above PHP_INT_MAX' => [['exp' => 9.3e18]];
+        yield 'iss as list' => [['iss' => ['ct-radius']]];
+        yield 'sub as number' => [['sub' => 123]];
+        yield 'aud as list' => [['aud' => [self::BACKEND_URL]]];
+    }
+
+    /**
+     * @param array<string, mixed> $overrides
+     */
+    #[DataProvider('badClaimTypes')]
+    public function testClaimsOfTheWrongTypeAreRejected(array $overrides): void
+    {
+        $this->assertInvalid($this->sign($this->claims($overrides)));
+    }
+
+    /**
+     * TY-06: a kid that only looks like a registered client never matches it.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function lookalikeKids(): iterable
+    {
+        yield 'Cyrillic a' => ['ct-r' . mb_chr(0x430) . 'dius'];
+        yield 'uppercase' => ['CT-RADIUS'];
+        yield 'trailing space' => ['ct-radius '];
+        yield 'zero-width space' => ['ct-radius' . mb_chr(0x200B)];
+        yield 'empty' => [''];
+    }
+
+    #[DataProvider('lookalikeKids')]
+    public function testLookalikeKidsDontMatchTheClient(string $kid): void
+    {
+        $this->assertInvalid($this->sign($this->claims(['iss' => $kid, 'sub' => $kid]), 'radius-1', $kid));
+    }
+
+    public function testKidsOfOtherTypesAreRejected(): void
+    {
+        foreach ([5, ['ct-radius']] as $kid) {
+            $token = \Firebase\JWT\JWT::encode($this->claims(), base64_encode($this->secretKeys['radius-1']), 'EdDSA', null, ['kid' => $kid]);
+            $this->assertInvalid($token);
+        }
+    }
+
     public function testShortOrHugeJtisAreRejected(): void
     {
         $this->assertInvalid($this->sign($this->claims(['jti' => 'short'])));

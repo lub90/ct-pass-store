@@ -65,6 +65,24 @@ final class RsaPasswordCipherTest extends TestCase
         self::decrypt($ciphertext, 'sha1');
     }
 
+    /**
+     * EN-04: the padding is OAEP; PKCS#1 v1.5 (which the old backend's clients may have assumed) can't decrypt it.
+     */
+    public function testPkcs1V15CantDecrypt(): void
+    {
+        $raw = (string) base64_decode($this->cipher()->encrypt('Aa1!aaaaaaaa'), true);
+        $key = PublicKeyLoader::loadPrivateKey((string) file_get_contents(self::KEYS . 'privateKey1.pem'));
+        self::assertInstanceOf(RSA\PrivateKey::class, $key);
+
+        try {
+            $plaintext = $key->withPadding(RSA::ENCRYPTION_PKCS1)->decrypt($raw);
+        } catch (\Throwable) {
+            $plaintext = false;
+        }
+
+        self::assertNotSame('Aa1!aaaaaaaa', $plaintext);
+    }
+
     // ---------------------------------------------------------------- EN-09
 
     /**

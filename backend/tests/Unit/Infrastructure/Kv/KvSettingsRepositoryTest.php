@@ -439,6 +439,19 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertCount(2, $this->repository->findings());
     }
 
+    /**
+     * SE-06a: 3 and 40 characters are the boundaries (2 and 41 are in invalidClients).
+     */
+    public function testClientIdLengthBoundariesAreAccepted(): void
+    {
+        $settings = $this->machineSettings([
+            self::client(['id' => 'abc', 'publicKeys' => [base64_encode(str_repeat('a', 32))]]),
+            self::client(['id' => str_repeat('b', 40), 'publicKeys' => [base64_encode(str_repeat('b', 32))]]),
+        ]);
+
+        self::assertSame(['abc', str_repeat('b', 40)], array_keys($settings->machineClients));
+    }
+
     public function testClientsSharingAPublicKeyAreAllDisabled(): void
     {
         $shared = base64_encode(str_repeat('s', 32));
@@ -465,11 +478,12 @@ final class KvSettingsRepositoryTest extends TestCase
 
     public function testUnknownPermissionsGrantNothingAndAreReported(): void
     {
-        $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 42]])]);
+        $settings = $this->machineSettings([self::client(['permissions' => ['entries:read', 'entries:write', '*', 'admin', 42]])]);
 
         self::assertSame(['entries:read'], $settings->machineClients['ct-radius']->permissions);
-        self::assertCount(3, $this->repository->findings());
+        self::assertCount(4, $this->repository->findings());
         self::assertStringContainsString('entries:write', $this->repository->findings()[0]);
+        self::assertStringContainsString('admin', $this->repository->findings()[2]);
     }
 
     public function testAClientWithoutPermissionsIsEnabledWithoutRights(): void

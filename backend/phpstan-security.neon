@@ -14,6 +14,7 @@ parameters:
           allowIn:
               - tests/Contract/Helpers/BackendSandboxManager.php
               - tests/Contract/NodeSignedMachineTokenTest.php
+              - tests/Support/PhpProcess.php
               - tests/Unit/Security/BannedCallsTest.php
         - function: ['putenv()', 'apache_setenv()', 'extract()']
           message: 'changes the environment or creates variables from data'
