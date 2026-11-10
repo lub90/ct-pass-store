@@ -29,10 +29,9 @@ use Psr\Log\LoggerInterface;
  */
 final class SignedFileStore
 {
-    private const FORMAT = 1;
+    public const PURPOSE = 'ctpassstore security store v1';
 
-    private readonly string $key;
-    private readonly string $keyId;
+    private readonly RecordSigner $signer;
 
     public function __construct(
         private readonly string $directory,
@@ -40,8 +39,7 @@ final class SignedFileStore
         string $jwtSecret,
         private readonly LoggerInterface $logger,
     ) {
-        $this->key = hash_hmac('sha256', 'ctpassstore security store v1', $jwtSecret, true);
-        $this->keyId = substr(hash('sha256', $this->key), 0, 16);
+        $this->signer = new RecordSigner($jwtSecret, self::PURPOSE);
     }
 
     /**
@@ -73,13 +71,7 @@ final class SignedFileStore
 
             $data = $change($this->verified($name, $raw));
 
-            $encoded = json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
-            $this->replace($path, $base . '.' . bin2hex(random_bytes(8)) . '.tmp', json_encode([
-                'format' => self::FORMAT,
-                'keyId' => $this->keyId,
-                'data' => $encoded,
-                'mac' => $this->mac($name, $encoded),
-            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
+            $this->replace($path, $base . '.' . bin2hex(random_bytes(8)) . '.tmp', $this->signer->seal($name, $data));
 
             return $data;
         } finally {
@@ -134,35 +126,15 @@ final class SignedFileStore
      */
     private function verified(string $name, string $raw): array
     {
-        if ($raw === '') {
-            return [];
-        }
-
-        $file = json_decode($raw, true, 4);
-        if (!is_array($file) || !is_string($file['keyId'] ?? null)) {
+        $opened = $this->signer->open($name, $raw);
+        if ($opened->status === OpenedStatus::Tampered) {
             throw $this->tampered($name);
         }
-        if (!hash_equals($this->keyId, $file['keyId'])) {
+        if ($opened->status === OpenedStatus::OldKey) {
             $this->logger->notice("Security store record $name was signed with an earlier JWT_SECRET; it starts over.");
-
-            return [];
-        }
-        $encoded = $file['data'] ?? null;
-        $mac = $file['mac'] ?? null;
-        if (($file['format'] ?? null) !== self::FORMAT || !is_string($encoded) || !is_string($mac) || !hash_equals($this->mac($name, $encoded), $mac)) {
-            throw $this->tampered($name);
-        }
-        $data = json_decode($encoded, true, 16);
-        if (!is_array($data) || ($data !== [] && array_is_list($data))) {
-            throw $this->tampered($name);
         }
 
-        return $data;
-    }
-
-    private function mac(string $name, string $encoded): string
-    {
-        return hash_hmac('sha256', $this->keyId . "\n" . $name . "\n" . $encoded, $this->key);
+        return $opened->data;
     }
 
     private function tampered(string $name): ConfigurationException

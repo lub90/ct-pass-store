@@ -524,12 +524,12 @@ normal case names it ("→ PV-05").
 - [ ] **CA-08** (! · U) Tampering with the settings cache: an entry with the current key identifier but a missing or
   wrong HMAC (e.g. another webspace user wrote `adminUsers: [99]`) isn't trusted, is reloaded from ChurchTools, and an
   `error` is logged. Cache files are created with mode `600` and the folder with `700` — 6.1
-- [ ] **CA-10** (! · U) Tampering with a security store: a `jti` cache or rate-limit file with the current key identifier
+- [x] **CA-10** (! · U) Tampering with a security store: a `jti` cache or rate-limit file with the current key identifier
   but a wrong or missing HMAC → the affected requests are rejected (`500 misconfigured`), never treated as "not seen"
   or "no failures" — 6.1
 - [ ] **CA-11** (! · U) Rotation of `JWT_SECRET`: cache files with the old key identifier aren't trusted. The settings and
   ID cache is reloaded from ChurchTools; the security stores are cleared and start over (no `500`) — 6.1
-- [ ] **CA-09** (! · U) The cache format is JSON: a cache file containing a serialized PHP object is never
+- [x] **CA-09** (! · U) The cache format is JSON: a cache file containing a serialized PHP object is never
   unserialized — 6.1
 - [x] **CA-06** (! · U) The `jti` replay cache survives across requests (file-based) and forgets entries after their
   `exp` — 4.4a.4
