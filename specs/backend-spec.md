@@ -92,7 +92,7 @@ Data lives in three KV categories of the `ctpassstore` module:
 ### 3.2 Settings from ChurchTools
 
 - Settings and the public key are read from ChurchTools.
-- **⏳ 4.1** They're cached (see [6.1](#61-performance-and-caching)).
+- They're cached (see [6.1](#61-performance-and-caching)).
 - Settings are validated when loaded:
   - `passwordLength` is an integer from **12 to 64** (Q7).
   - `adminUsers` is a list of positive integers; missing means empty.
@@ -237,11 +237,11 @@ The matrix for persons is the old backend's, minus the removed read-access users
   machine client with the `id` `123` isn't person 123 and has no "own" entry, and a user whose person ID equals a client
   `id` gets nothing of that client's permissions.
 
-- The admin role is taken from the **current settings** (cached, 6.1, **⏳ 4.1**), not from the token. Changes to
+- The admin role is taken from the **current settings** (cached, 6.1), not from the token. Changes to
   the admin lists therefore apply within the settings cache TTL.
 - **The extension's `view` permission is checked once, at login** (4.4), not on every request. Revoking it takes effect
   when the backend token expires.
-- These steps need **no call to ChurchTools**, apart from loading the settings (cached from **⏳ 4.1** on).
+- These steps need **no call to ChurchTools**, apart from loading the settings (cached, 6.1).
 
 ### 4.4 `POST /v1/auth/token` (login)
 
@@ -595,9 +595,11 @@ This covers the lookup and write logic in `KvPasswordRepository`.
    `meta.count`. If not, or if `meta.count` is missing or not an integer, it fails with `502 upstream-invalid` instead
    of answering "no entry" or creating a duplicate.
 10. **Module and categories:** if the module `ctpassstore` or one of its categories doesn't exist, the answer is
-    `500 misconfigured`. **⏳ 4.1** If ChurchTools answers `404` for a **cached** module or category ID (e.g. after a
-    reinstall), the cached IDs are discarded and resolved once more within the same request; if that fails too, `500
-    misconfigured`. (Until 4.1 the IDs are resolved once per request, so they can't be stale.) A `404` for the module or a category never becomes `entry-not-found`.
+    `500 misconfigured`. If ChurchTools answers `404` for a **cached** module or category ID (e.g. after a
+    reinstall) when reading or creating values, or a category is missing from the cached IDs (e.g. the setup was
+    completed later), the cached IDs are discarded and resolved once more within the same request; if that fails too,
+    `500 misconfigured`. A `404` on update or delete isn't retried: it means the value is gone (rule 6). A `404` for
+    the module or a category never becomes `entry-not-found`.
 11. **Reserved `personId` `0`:** values with `personId` `0` belong to the self-test (4.8). The normal operations
     for persons ignore them **silently** (no warning): they're never returned, overwritten or deleted on behalf of a
     person, and they don't count as duplicates. Only the self-test reads, writes and deletes them. A leftover test value
@@ -606,7 +608,7 @@ This covers the lookup and write logic in `KvPasswordRepository`.
 ### 5.4 Settings (`KvSettingsRepository`)
 
 1. Settings and the public key are loaded lazily and at most once per request.
-2. **⏳ 4.1** They're cached across requests (6.1).
+2. They're cached across requests (6.1).
 3. They're validated according to 3.2 (`SettingsParser`).
 4. Missing optional lists (`adminUsers`, `machineClients`) mean "empty".
 
@@ -693,7 +695,7 @@ ChurchTools communication goes through it.
 
 ### 6.1 Performance and caching
 
-The settings and ID cache is **⏳ 4.1**. The security stores (`jti` replay cache, rate-limit counters;
+The security stores (`jti` replay cache, rate-limit counters;
 `SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**/**⏳ 4.1a**, with their check in
 `/v1/test` **⏳ 4.2**.
 

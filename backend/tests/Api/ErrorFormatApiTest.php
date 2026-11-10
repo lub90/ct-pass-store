@@ -378,8 +378,7 @@ final class ErrorFormatApiTest extends ApiTestCase
 
     public function testABrokenPublicKeyIsNamedNotShown(): void
     {
-        $this->churchTools->clearValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY]);
-        $this->churchTools->seedValue($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => "-----BEGIN PUBLIC KEY-----\nVALUE-SECRET-KEY\n-----END PUBLIC KEY-----"], JSON_THROW_ON_ERROR));
+        $this->setPublicKey("-----BEGIN PUBLIC KEY-----\nVALUE-SECRET-KEY\n-----END PUBLIC KEY-----");
 
         $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, []));
 

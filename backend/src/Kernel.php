@@ -37,6 +37,8 @@ use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
+use CtPassStore\Infrastructure\Store\RecordSigner;
+use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use Monolog\Handler\StreamHandler;
@@ -66,8 +68,11 @@ final class Kernel
         $clock ??= new SystemClock();
         $codec = new FirebaseTokenCodec();
         $tokens = new UserTokens($config->jwtSecret, $clock, $codec);
-        $extensionData = new ExtensionData($churchTools);
-        $settings = new KvSettingsRepository($extensionData, $logger);
+        // One folder (spec 6.1): the fail-open cache for settings, public key and IDs (`cache-*`), and the fail-closed
+        // security stores (`sec-*`). Different purposes, so a record of one is never accepted by the other.
+        $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
+        $extensionData = new ExtensionData($churchTools, cache: $cache);
+        $settings = new KvSettingsRepository($extensionData, $logger, $cache);
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);

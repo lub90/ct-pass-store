@@ -131,7 +131,7 @@ normal case names it ("→ PV-05").
 - [x] **ST-15** (E · U) A stored value longer than 10,000 characters is refused before writing — 5.3.8
 - [x] **ST-16** (N · C) Create, read, update, delete against the real KV store; `meta.count` is present and matches —
   5.3
-- [ ] **ST-18** (! · U) Stale cached IDs: ChurchTools answers `404` for a cached module or category ID → the IDs are
+- [x] **ST-18** (! · U) Stale cached IDs: ChurchTools answers `404` for a cached module or category ID → the IDs are
   resolved **exactly once** more; if that works, the request succeeds; if not, `500 misconfigured`. Never
   `entry-not-found`. If the fake keeps answering `404`, the call count shows one re-resolution and no loop — 5.3.10,
   5.6.8
@@ -512,22 +512,22 @@ normal case names it ("→ PV-05").
 
 ## 12. Cache (spec 6.1)
 
-- [ ] **CA-01** (N · U) Settings are loaded from ChurchTools only once within the TTL — 6.1
-- [ ] **CA-02** (E · U) After the TTL they're loaded again — 6.1
-- [ ] **CA-03** (! · U) `passwordStore` values are never cached: a read right after a write sees the new value — 6.1
-- [ ] **CA-04** (! · U) Cache files contain no secrets, and the cache folder isn't inside `public/` — 6.1
-- [ ] **CA-05** (S · U) A corrupt or unwritable **settings or ID** cache leads to loading from ChurchTools, not to an
+- [x] **CA-01** (N · U) Settings are loaded from ChurchTools only once within the TTL — 6.1
+- [x] **CA-02** (E · U) After the TTL they're loaded again — 6.1
+- [x] **CA-03** (! · U) `passwordStore` values are never cached: a read right after a write sees the new value — 6.1
+- [x] **CA-04** (! · U) Cache files contain no secrets, and the cache folder isn't inside `public/` — 6.1
+- [x] **CA-05** (S · U) A corrupt or unwritable **settings or ID** cache leads to loading from ChurchTools, not to an
   error response — 6.1
 - [x] **CA-07** (! · U) The security-relevant stores fail closed: an unwritable `jti` cache rejects machine requests
   (MC-19); unwritable rate-limit counters reject primary-password checks (`500 misconfigured`), never skip the limit —
   6.1
-- [ ] **CA-08** (! · U) Tampering with the settings cache: an entry with the current key identifier but a missing or
+- [x] **CA-08** (! · U) Tampering with the settings cache: an entry with the current key identifier but a missing or
   wrong HMAC (e.g. another webspace user wrote `adminUsers: [99]`) isn't trusted, is reloaded from ChurchTools, and an
   `error` is logged. Cache files are created with mode `600` and the folder with `700` — 6.1
 - [x] **CA-10** (! · U) Tampering with a security store: a `jti` cache or rate-limit file with the current key identifier
   but a wrong or missing HMAC → the affected requests are rejected (`500 misconfigured`), never treated as "not seen"
   or "no failures" — 6.1
-- [ ] **CA-11** (! · U) Rotation of `JWT_SECRET`: cache files with the old key identifier aren't trusted. The settings and
+- [x] **CA-11** (! · U) Rotation of `JWT_SECRET`: cache files with the old key identifier aren't trusted. The settings and
   ID cache is reloaded from ChurchTools; the security stores are cleared and start over (no `500`) — 6.1
 - [x] **CA-09** (! · U) The cache format is JSON: a cache file containing a serialized PHP object is never
   unserialized — 6.1

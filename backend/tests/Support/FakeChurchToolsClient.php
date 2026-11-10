@@ -136,6 +136,22 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
+     * Removes a module with its categories and values, as uninstalling the extension does (test setup). Adding it
+     * again gives new IDs, so IDs cached before are stale: ChurchTools answers 404 for them (spec 5.3.10).
+     */
+    public function removeModule(string $key): void
+    {
+        $moduleId = $this->modules[$key]['id'] ?? null;
+        if (!is_int($moduleId)) {
+            return;
+        }
+        foreach ($this->categories[$moduleId] ?? [] as $category) {
+            unset($this->values[$category['id']]);
+        }
+        unset($this->modules[$key], $this->categories[$moduleId]);
+    }
+
+    /**
      * Puts a raw value into a category, bypassing the recorded calls (test setup).
      */
     public function seedValue(int $categoryId, string $value): int

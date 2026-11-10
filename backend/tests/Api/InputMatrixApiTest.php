@@ -224,8 +224,7 @@ final class InputMatrixApiTest extends ApiTestCase
     {
         $this->seedEntry(self::USER, 'b2xk');
         // A key that can't be used for encryption (RSA 2048, too short): encrypting fails.
-        $this->churchTools->clearValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY]);
-        $this->churchTools->seedValue($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => file_get_contents(__DIR__ . '/../keys/invalid/rsa2048.pub.pem')], JSON_THROW_ON_ERROR));
+        $this->setPublicKey((string) file_get_contents(__DIR__ . '/../keys/invalid/rsa2048.pub.pem'));
 
         $generated = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
         $custom = $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => self::PASSWORD]);

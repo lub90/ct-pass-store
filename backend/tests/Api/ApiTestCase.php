@@ -28,8 +28,11 @@ use Slim\Psr7\Factory\StreamFactory;
  * Base class for the API test layer (spec 6.6): the complete app in-process, with a fake ChurchTools.
  *
  * Every test starts with a fresh ChurchTools containing the ctpassstore module, valid settings, the test public key,
- * a frozen clock and these callers (spec 4.3). Persons send backend tokens signed with the test JWT_SECRET; machine
- * clients sign their own EdDSA tokens with test keys.
+ * a frozen clock, an empty cache folder and these callers (spec 4.3). Persons send backend tokens signed with the test
+ * JWT_SECRET; machine clients sign their own EdDSA tokens with test keys.
+ *
+ * The app caches settings, public key and IDs across requests (spec 6.1). setSettings() and setPublicKey() clear that
+ * cache; a test that changes the fake's settings, key or module in another way after a request calls forgetCache().
  *
  * | Caller        | ID          | Role in the settings                |
  * | ------------- | ----------- | ----------------------------------- |
@@ -95,15 +98,12 @@ abstract class ApiTestCase extends TestCase
             $this->churchTools->addLogin($name, $this->primaryPasswordOf($personId), $personId);
         }
 
+        $this->cacheDir = sys_get_temp_dir() . '/ctps-cache-' . bin2hex(random_bytes(6));
         $this->setSettings([]);
-        $this->churchTools->seedValue(
-            $this->categoryIds[KvSchema::ENCRYPTION_CATEGORY],
-            json_encode([KvSchema::PUBLIC_KEY => file_get_contents(__DIR__ . '/../keys/publicKey1.pem')], JSON_THROW_ON_ERROR),
-        );
+        $this->setPublicKey((string) file_get_contents(__DIR__ . '/../keys/publicKey1.pem'));
 
         $this->credentialsPath = (string) tempnam(sys_get_temp_dir(), 'ctps-credentials-');
         chmod($this->credentialsPath, 0o600);
-        $this->cacheDir = sys_get_temp_dir() . '/ctps-cache-' . bin2hex(random_bytes(6));
 
         $this->log = new TestHandler();
     }
@@ -123,10 +123,13 @@ abstract class ApiTestCase extends TestCase
      * Replaces the settings value. Unset keys get these defaults: no primary password required, custom passwords
      * allowed, length 12, admin 100, the backend URL and the two machine clients.
      *
+     * Takes effect with the next request: the settings cache is cleared (spec 6.1; Review Focus 1).
+     *
      * @param array<string, mixed> $overrides
      */
     protected function setSettings(array $overrides): void
     {
+        $this->forgetCache();
         $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
         $this->churchTools->seedValue($categoryId, json_encode($overrides + [
@@ -140,6 +143,29 @@ abstract class ApiTestCase extends TestCase
                 ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
             ],
         ], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Replaces the encryption settings value with this public key (any string, valid or not). Like setSettings(), it
+     * takes effect with the next request.
+     */
+    protected function setPublicKey(string $pem): void
+    {
+        $this->forgetCache();
+        $categoryId = $this->categoryIds[KvSchema::ENCRYPTION_CATEGORY];
+        $this->churchTools->clearValues($categoryId);
+        $this->churchTools->seedValue($categoryId, json_encode([KvSchema::PUBLIC_KEY => $pem], JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * Removes the settings and ID cache (`cache-*`), as if its entries had expired, so a change the test makes in the
+     * fake ChurchTools applies to the next request. The security stores (`sec-*`) are kept.
+     */
+    protected function forgetCache(): void
+    {
+        foreach (glob($this->cacheDir . '/cache-*') ?: [] as $file) {
+            @unlink($file);
+        }
     }
 
     /**

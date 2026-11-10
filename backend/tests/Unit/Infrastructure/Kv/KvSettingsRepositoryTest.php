@@ -8,12 +8,16 @@ use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Store\RecordSigner;
+use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Tests\Support\FakeChurchToolsClient;
+use CtPassStore\Tests\Support\FrozenClock;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Catalog SE-01 to SE-05, SE-07 to SE-09, EN-05, EN-06, EN-10.
+ * Catalog SE-01 to SE-05, SE-07 to SE-09, EN-05, EN-06, EN-10; the settings cache CA-01, CA-02, CA-05, CA-08, CA-11
+ * (spec 6.1).
  */
 final class KvSettingsRepositoryTest extends TestCase
 {
@@ -29,8 +33,16 @@ final class KvSettingsRepositoryTest extends TestCase
     /** @var array<string, int> */
     private array $categories;
 
+    private const CACHE_SECRET = 'settings-cache-test-secret-with-32-bytes';
+
+    private string $cacheDir;
+
+    private FrozenClock $clock;
+
     protected function setUp(): void
     {
+        $this->cacheDir = sys_get_temp_dir() . '/ctps-settings-cache-' . bin2hex(random_bytes(6));
+        $this->clock = new FrozenClock();
         $this->fake = new FakeChurchToolsClient();
         $this->log = new \Monolog\Handler\TestHandler();
         $this->categories = $this->fake->addModule(KvSchema::EXTENSION_KEY, [
@@ -38,6 +50,35 @@ final class KvSettingsRepositoryTest extends TestCase
             KvSchema::ENCRYPTION_CATEGORY,
             KvSchema::PASSWORD_CATEGORY,
         ]);
+    }
+
+    protected function tearDown(): void
+    {
+        foreach (glob($this->cacheDir . '/*') ?: [] as $file) {
+            @unlink($file);
+        }
+        @rmdir($this->cacheDir);
+    }
+
+    private function cache(string $secret = self::CACHE_SECRET): SignedFileCache
+    {
+        return new SignedFileCache($this->cacheDir, new RecordSigner($secret, SignedFileCache::PURPOSE), $this->clock, new \Monolog\Logger('test', [$this->log]));
+    }
+
+    /**
+     * A repository as one request builds it: its own ExtensionData, the shared cache folder.
+     */
+    private function cachedRepository(string $secret = self::CACHE_SECRET): KvSettingsRepository
+    {
+        return new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $this->cache($secret));
+    }
+
+    private function settingsReads(): int
+    {
+        return count(array_filter(
+            $this->fake->calls(),
+            fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categories[KvSchema::SETTINGS_CATEGORY],
+        ));
     }
 
     /**
@@ -500,5 +541,168 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertSame([], $settings->machineClients);
         self::assertStringContainsString('isn\'t a list', $this->repository->findings()[0]);
         self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
+    }
+
+    // ---------------------------------------------------------------- cache (spec 3.2, 5.4.2, 6.1)
+
+    /**
+     * CA-01: two requests within the TTL load the settings from ChurchTools once.
+     */
+    public function testSettingsAreLoadedOnceWithinTtl(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+
+        $first = $this->cachedRepository()->settings();
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL - 1);
+        $second = $this->cachedRepository()->settings();
+
+        self::assertSame([7, 8], $first->adminUsers);
+        self::assertEquals($first, $second);
+        self::assertSame(1, $this->settingsReads());
+    }
+
+    /**
+     * CA-02: after the TTL, the settings are loaded again and changes apply.
+     */
+    public function testSettingsAreReloadedAfterTtl(): void
+    {
+        $category = $this->categories[KvSchema::SETTINGS_CATEGORY];
+        $this->fake->seedValue($category, json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->cachedRepository()->settings();
+
+        $this->fake->clearValues($category);
+        $this->fake->seedValue($category, json_encode(['adminUsers' => [42]] + self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->clock->advance(61);
+
+        self::assertSame([42], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(2, $this->settingsReads());
+    }
+
+    /**
+     * The cache holds the raw JSON; validation and findings run on every request (spec 3.2).
+     */
+    public function testInvalidCachedSettingsStillFailValidation(): void
+    {
+        $this->cache()->put('settings', ['passwordLength' => 3] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
+
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('passwordLength', $e->getMessage());
+        }
+        self::assertSame(0, $this->settingsReads(), 'The cached value was used, not reloaded.');
+    }
+
+    public function testFindingsAreLoggedOnEveryRequestFromTheCache(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(['backendUrl' => 'http://x.example'] + self::validSettings(), JSON_THROW_ON_ERROR));
+
+        $first = $this->cachedRepository();
+        $second = $this->cachedRepository();
+
+        self::assertCount(1, $first->findings());
+        self::assertCount(1, $second->findings());
+        self::assertCount(2, array_filter($this->log->getRecords(), static fn(array $r): bool => $r['level_name'] === 'WARNING'));
+        self::assertSame(1, $this->settingsReads());
+    }
+
+    /**
+     * CA-08: a planted entry with the current key ID but a wrong MAC grants nothing; the settings come from ChurchTools.
+     */
+    public function testATamperedSettingsCacheIsReloadedFromChurchTools(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->cache()->put('settings', ['adminUsers' => [99]] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
+        $file = $this->cacheDir . '/cache-' . hash('sha256', 'settings') . '.json';
+        $record = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
+        $record['mac'] = str_repeat('0', strlen((string) $record['mac']));
+        file_put_contents($file, json_encode($record, JSON_THROW_ON_ERROR));
+
+        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(1, $this->settingsReads());
+        self::assertTrue($this->log->hasErrorThatContains('integrity check'));
+    }
+
+    /**
+     * CA-11: after JWT_SECRET is rotated, the old entry isn't trusted; the settings come from ChurchTools, no error.
+     */
+    public function testAnOldKeySettingsCacheIsReloadedFromChurchTools(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->cache('the-old-secret-before-the-rotation-32b')->put('settings', ['adminUsers' => [99]] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
+
+        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(1, $this->settingsReads());
+        self::assertFalse($this->log->hasErrorRecords());
+    }
+
+    /**
+     * CA-05: a corrupt cache file is a miss, not an error.
+     */
+    public function testACorruptSettingsCacheIsReloadedFromChurchTools(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        mkdir($this->cacheDir, 0o700);
+        file_put_contents($this->cacheDir . '/cache-' . hash('sha256', 'settings') . '.json', '{not json');
+
+        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(1, $this->settingsReads());
+    }
+
+    /**
+     * CA-05: an unusable cache folder only costs the ChurchTools calls.
+     */
+    public function testAnUnusableCacheFolderStillLoadsTheSettings(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $file = (string) tempnam(sys_get_temp_dir(), 'ctps-not-a-folder-');
+        try {
+            $cache = new SignedFileCache($file . '/cache', new RecordSigner(self::CACHE_SECRET, SignedFileCache::PURPOSE), $this->clock, new \Monolog\Logger('test', [$this->log]));
+            foreach ([1, 2] as $request) {
+                self::assertSame([7, 8], (new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $cache))->settings()->adminUsers);
+            }
+        } finally {
+            @unlink($file);
+        }
+
+        self::assertSame(2, $this->settingsReads());
+    }
+
+    public function testThePublicKeyIsLoadedOnceWithinTtl(): void
+    {
+        $pem = (string) file_get_contents(self::KEYS . 'publicKey1.pem');
+        $category = $this->categories[KvSchema::ENCRYPTION_CATEGORY];
+        $this->fake->seedValue($category, json_encode([KvSchema::PUBLIC_KEY => $pem], JSON_THROW_ON_ERROR));
+        $reads = fn(): int => count(array_filter($this->fake->calls(), static fn(array $c): bool => $c['method'] === 'getValues' && $c['args'][1] === $category));
+
+        $this->cachedRepository()->publicKey();
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL - 1);
+        $this->cachedRepository()->publicKey();
+        self::assertSame(1, $reads());
+
+        $this->clock->advance(2);
+        $this->cachedRepository()->publicKey();
+        self::assertSame(2, $reads());
+    }
+
+    /**
+     * Only what passed the structural check (exactly one value, a JSON object) is cached; a broken value is loaded
+     * again on the next request, so a fix applies at once.
+     */
+    public function testABrokenSettingsValueIsNotCached(): void
+    {
+        $category = $this->categories[KvSchema::SETTINGS_CATEGORY];
+        $this->fake->seedValue($category, '{broken');
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException) {
+        }
+
+        $this->fake->clearValues($category);
+        $this->fake->seedValue($category, json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+
+        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
     }
 }
