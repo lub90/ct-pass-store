@@ -7,7 +7,6 @@ namespace CtPassStore\Tests\Unit\Infrastructure\Store;
 use CtPassStore\Infrastructure\Store\OpenedStatus;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
-use Monolog\Logger;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -84,30 +83,20 @@ final class RecordSignerTest extends TestCase
     }
 
     /**
-     * Files written before the signer existed must keep verifying (spec 6.1).
+     * Golden values from the SignedFileStore as of commit 979e110 (before the signer existed): files written then
+     * must keep verifying, so the label, the MAC input and the key ID length can't change (spec 6.1).
      */
     public function testFormatIsUnchanged(): void
     {
-        $dir = sys_get_temp_dir() . '/ctps-signer-' . bin2hex(random_bytes(6));
-        try {
-            $store = new SignedFileStore($dir, self::SECRET, new Logger('test'));
-            $store->update('jti:ct-radius', static fn(array $old): array => ['j:abc' => 1700000000]);
-            $written = json_decode((string) file_get_contents($dir . '/sec-' . hash('sha256', 'jti:ct-radius') . '.json'), true);
+        $secret = 'golden-secret-with-at-least-32-bytes-xx';
+        $data = ['j:abc' => 1700000000, 'j:def' => 1700000060];
+        $oldFile = '{"format":1,"keyId":"4be228b36d254ef7","data":"{\"j:abc\":1700000000,\"j:def\":1700000060}",'
+            . '"mac":"dea8483de770b2941a42c813aa7431936caa3c19be5e0f25269c443a488cc790"}';
+        $signer = new RecordSigner($secret, SignedFileStore::PURPOSE);
 
-            $signer = new RecordSigner(self::SECRET, 'ctpassstore security store v1');
-            $sealed = json_decode($signer->seal('jti:ct-radius', ['j:abc' => 1700000000]), true);
-
-            self::assertIsArray($written);
-            self::assertIsArray($sealed);
-            self::assertSame($written['keyId'], $sealed['keyId']);
-            self::assertSame($written['data'], $sealed['data']);
-            self::assertSame($written['mac'], $sealed['mac']);
-            self::assertSame($written['format'], $sealed['format']);
-        } finally {
-            foreach (glob($dir . '/*') ?: [] as $file) {
-                @unlink($file);
-            }
-            @rmdir($dir);
-        }
+        self::assertSame($oldFile, $signer->seal('jti:ct-radius', $data));
+        $opened = $signer->open('jti:ct-radius', $oldFile);
+        self::assertSame(OpenedStatus::Valid, $opened->status);
+        self::assertSame($data, $opened->data);
     }
 }
