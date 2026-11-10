@@ -206,6 +206,21 @@ final class SignedFileCacheTest extends TestCase
         self::assertSame([], glob($this->dir . '/*'));
     }
 
+    public function testUnreadableFileIsAMissWithWarning(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Running as root: chmod 0000 does not make the file unreadable.');
+        }
+        $cache = $this->cache();
+        $cache->put('settings', ['a' => 1], 60);
+        chmod($this->fileFor('settings'), 0o000);
+
+        self::assertNull($cache->get('settings'));
+        self::assertTrue($this->log->hasRecords(Logger::WARNING));
+        self::assertFalse($this->log->hasRecords(Logger::ERROR));
+        self::assertStringNotContainsString('"mac"', implode("\n", array_column($this->log->getRecords(), 'message')));
+    }
+
     /** CA-05: the folder can't even be created */
     public function testFolderThatCannotBeCreatedNeverThrows(): void
     {

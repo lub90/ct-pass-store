@@ -41,6 +41,8 @@ final class SignedFileCache
             }
             $raw = @file_get_contents($path);
             if ($raw === false) {
+                $this->logger->warning("Cache entry $name can't be read; it is loaded again.");
+
                 return null;
             }
 
@@ -62,6 +64,8 @@ final class SignedFileCache
 
             return $data;
         } catch (\Throwable) {
+            $this->logger->warning("Cache entry $name could not be used; it is loaded again.");
+
             return null;
         }
     }
@@ -71,28 +75,15 @@ final class SignedFileCache
      */
     public function put(string $name, array $data, int $ttlSeconds): void
     {
-        $temporary = null;
         try {
             if (!is_dir($this->directory) && !@mkdir($this->directory, 0o700, true) && !is_dir($this->directory)) {
                 throw new \RuntimeException('the folder can\'t be created');
             }
-            $path = $this->path($name);
-            $temporary = $path . '.' . bin2hex(random_bytes(8)) . '.tmp';
-            $content = $this->signer->seal($name, ['expires' => $this->clock->now()->getTimestamp() + $ttlSeconds, 'data' => $data]);
-
-            $handle = @fopen($temporary, 'x');
-            if ($handle === false) {
-                throw new \RuntimeException('the file can\'t be created');
-            }
-            $written = @chmod($temporary, 0o600) && fwrite($handle, $content) === strlen($content) && fflush($handle);
-            fclose($handle);
-            if (!$written || !@rename($temporary, $path)) {
-                throw new \RuntimeException('the file can\'t be written');
-            }
+            AtomicFile::write(
+                $this->path($name),
+                $this->signer->seal($name, ['expires' => $this->clock->now()->getTimestamp() + $ttlSeconds, 'data' => $data]),
+            );
         } catch (\Throwable $e) {
-            if ($temporary !== null) {
-                @unlink($temporary);
-            }
             $this->logger->warning("Cache entry $name could not be written ({$e->getMessage()}); it is loaded again next time.");
         }
     }

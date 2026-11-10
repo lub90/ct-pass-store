@@ -71,7 +71,11 @@ final class SignedFileStore
 
             $data = $change($this->verified($name, $raw));
 
-            $this->replace($path, $base . '.' . bin2hex(random_bytes(8)) . '.tmp', $this->signer->seal($name, $data));
+            try {
+                AtomicFile::write($path, $this->signer->seal($name, $data));
+            } catch (\RuntimeException) {
+                throw self::unusable();
+            }
 
             return $data;
         } finally {
@@ -98,27 +102,6 @@ final class SignedFileStore
         }
 
         return $handle;
-    }
-
-    /**
-     * Writes the content to a new temporary file (`600` before any content is in it), flushes it to disk and moves it
-     * over the data file in one step.
-     */
-    private function replace(string $path, string $temporary, string $content): void
-    {
-        $handle = @fopen($temporary, 'x');
-        if ($handle === false) {
-            throw self::unusable();
-        }
-        $written = @chmod($temporary, 0o600)
-            && fwrite($handle, $content) === strlen($content)
-            && fflush($handle)
-            && fsync($handle);
-        fclose($handle);
-        if (!$written || !@rename($temporary, $path)) {
-            @unlink($temporary);
-            throw self::unusable();
-        }
     }
 
     /**
