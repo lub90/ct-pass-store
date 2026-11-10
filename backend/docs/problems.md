@@ -174,7 +174,7 @@ A non-empty request body was sent without `Content-Type: application/json`.
 - **Status:** 429
 - **Title:** Too many attempts
 
-Too many wrong ChurchTools passwords in a short time. The `Retry-After` header and the member `retryAfter` say how many seconds are left.
+Too many wrong ChurchTools passwords in a short time, or too many logins or rejected tokens from one address (or too many logins in total) within a minute. The `Retry-After` header and the member `retryAfter` say how many seconds are left.
 
 **What to do:** Wait until the block ends.
 

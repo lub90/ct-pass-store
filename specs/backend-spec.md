@@ -507,7 +507,7 @@ validates) the settings and the public key. Everything else in this section is *
 | 405 | `method-not-allowed` | Known route, wrong method |
 | 413 | `payload-too-large` | Body larger than 16 KB |
 | 415 | `unsupported-media-type` | Non-empty body without `Content-Type: application/json` |
-| 429 | `too-many-attempts` | Too many primary-password attempts, or (**⏳ 4.1a**) too many logins or rejected tokens from one address (see 6.3); with `Retry-After` |
+| 429 | `too-many-attempts` | Too many primary-password attempts, or too many logins or rejected tokens from one address (see 6.3); with `Retry-After` |
 | 500 | `misconfigured` | Configuration, settings, OAuth setup or service-user rights are missing or wrong. `detail` says exactly what. |
 | 500 | `internal-error` | Anything unexpected. Generic `detail`; details only go to the log. |
 | 502 | `upstream-unavailable` | ChurchTools unreachable, timed out or answered `5xx` |
@@ -696,7 +696,7 @@ ChurchTools communication goes through it.
 ### 6.1 Performance and caching
 
 The security stores (`jti` replay cache, rate-limit counters;
-`SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**/**⏳ 4.1a**, with their check in
+`SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**, with their check in
 `/v1/test` **⏳ 4.2**.
 
 - **Goal:** a typical request makes as few ChurchTools calls as possible. With backend tokens (4.3) authentication
@@ -740,7 +740,7 @@ The security stores (`jti` replay cache, rate-limit counters;
     | --- | --- | --- |
     | `jti` replay cache | one per registered machine client | number of clients |
     | Primary-password attempts | one per **authenticated** person who entered a primary password | number of persons |
-    | Per-address limit (6.3, **⏳ 4.1a**) | a **fixed** number of buckets (e.g. 256); the address is hashed into one, plus one global login record | fixed |
+    | Per-address limit (6.3) | a **fixed** number of buckets (e.g. 256); the address is hashed into one, plus one global login record | fixed |
 
     Per-address records are never one file per address: IPv6 gives an attacker practically unlimited addresses, and
     lock files are never deleted (deleting one under a waiting process breaks the lock). Two addresses sharing a bucket
@@ -758,7 +758,7 @@ The security stores (`jti` replay cache, rate-limit counters;
 - When ChurchTools answers `429`, the backend doesn't retry within the request. It answers
   `503 upstream-rate-limited` with `Retry-After: 60` (or ChurchTools' value, if larger) (Q14).
 - Timeouts or connection errors → `502 upstream-unavailable`.
-- **⏳ 4.1a Call budget for unauthenticated requests.** Because the 600/min are shared, an unauthenticated caller must
+- **Call budget for unauthenticated requests.** Because the 600/min are shared, an unauthenticated caller must
   not be able to spend them. With the settings cache, a forged or unknown token costs **0** ChurchTools calls; only
   `POST /v1/auth/token` costs calls (the code exchange and the two user calls of 4.4), and it's limited per address
   (6.3).
@@ -780,8 +780,11 @@ The security stores (`jti` replay cache, rate-limit counters;
     are still in flight, further ones get `429` as well.
 
   This protects accounts, and it prevents the backend's IP from being locked out by ChurchTools.
-- **⏳ 4.1a Per-address limit** for requests that come before or without authentication:
-  - It applies to `POST /v1/auth/token` (every request counts) and to requests rejected with `401 invalid-token`.
+- **Per-address limit** for requests that come before or without authentication:
+  - It applies to `POST /v1/auth/token` (every request counts, checked before the body is read) and to requests
+    rejected with `401 invalid-token`. The token is verified first: a valid token never touches the limit (otherwise
+    one address's garbage tokens would lock out others behind the same bucket, machine clients included), and a
+    missing or expired token doesn't count.
     Exceeding it gives `429 too-many-attempts` with `Retry-After`, **without** calling ChurchTools.
   - The address is `REMOTE_ADDR`; IPv6 addresses count per `/64` prefix, because one host usually has a whole `/64`.
   - Limits are generous and windows short, so a parish behind one NAT address isn't locked out by one person's

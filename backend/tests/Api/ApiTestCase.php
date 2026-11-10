@@ -78,6 +78,9 @@ abstract class ApiTestCase extends TestCase
 
     private string $credentialsPath;
 
+    /** The REMOTE_ADDR of the requests; a test may change it to play another address. */
+    protected string $clientIp = self::CLIENT_IP;
+
     /** A fresh, empty cache folder per test. */
     protected string $cacheDir;
 
@@ -252,7 +255,7 @@ abstract class ApiTestCase extends TestCase
     protected function request(string $method, string $path, int|string|null $as = null, ?array $json = null, array $headers = []): ResponseInterface
     {
         $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, [
-            'REMOTE_ADDR' => self::CLIENT_IP,
+            'REMOTE_ADDR' => $this->clientIp,
         ]);
         $authorization = $this->authorizationFor($as);
         if ($authorization !== null) {
@@ -285,7 +288,7 @@ abstract class ApiTestCase extends TestCase
      */
     protected function rawRequest(string $method, string $path, int|string|null $as, string $body, array $headers = ['Content-Type' => 'application/json']): ResponseInterface
     {
-        $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, ['REMOTE_ADDR' => self::CLIENT_IP])
+        $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, ['REMOTE_ADDR' => $this->clientIp])
             ->withBody((new StreamFactory())->createStream($body));
         $authorization = $this->authorizationFor($as);
         if ($authorization !== null) {

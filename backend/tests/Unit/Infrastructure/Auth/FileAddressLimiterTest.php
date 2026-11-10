@@ -150,7 +150,6 @@ final class FileAddressLimiterTest extends TestCase
     {
         $this->hits(AddressLimit::Login, '192.0.2.1', 30);
         $this->limiter->hit(AddressLimit::RejectedToken, '192.0.2.1');
-        $this->limiter->assertOpen(AddressLimit::RejectedToken, '192.0.2.1');
         $this->addToAssertionCount(1);
     }
 
@@ -188,17 +187,6 @@ final class FileAddressLimiterTest extends TestCase
             $this->limiter->hit(AddressLimit::RejectedToken, implode('.', [random_int(1, 223), random_int(0, 255), random_int(0, 255), random_int(1, 254)]));
         }
         self::assertLessThanOrEqual(2 * FileAddressLimiter::BUCKETS, count(glob($this->dir . '/*') ?: []));
-    }
-
-    public function testAssertOpenNeverCounts(): void
-    {
-        for ($i = 0; $i < 100; $i++) {
-            $this->limiter->assertOpen(AddressLimit::Login, '192.0.2.1');
-        }
-        $this->hits(AddressLimit::Login, '192.0.2.1', 29);
-        $this->limiter->assertOpen(AddressLimit::Login, '192.0.2.1');
-        $this->limiter->hit(AddressLimit::Login, '192.0.2.1');
-        $this->assertRefused(fn() => $this->limiter->assertOpen(AddressLimit::Login, '192.0.2.1'));
     }
 
     public function testTheRecordStaysBounded(): void

@@ -33,16 +33,6 @@ final class FileAddressLimiter implements AddressLimiter
         $this->key = hash_hmac('sha256', 'ctpassstore address buckets v1', $jwtSecret);
     }
 
-    public function hit(AddressLimit $limit, string $remoteAddr): void
-    {
-        $this->check($limit, $remoteAddr, true);
-    }
-
-    public function assertOpen(AddressLimit $limit, string $remoteAddr): void
-    {
-        $this->check($limit, $remoteAddr, false);
-    }
-
     /**
      * The network an address counts as: IPv4 as is, IPv4-mapped IPv6 as IPv4, other IPv6 as its /64, else "unknown".
      */
@@ -62,7 +52,7 @@ final class FileAddressLimiter implements AddressLimiter
         return bin2hex(substr($bytes, 0, 8)) . '/64';
     }
 
-    private function check(AddressLimit $limit, string $remoteAddr, bool $count): void
+    public function hit(AddressLimit $limit, string $remoteAddr): void
     {
         $now = $this->clock->now()->getTimestamp();
         $max = $limit->max();
@@ -75,7 +65,7 @@ final class FileAddressLimiter implements AddressLimiter
         // both or in neither.
         $store->update(
             $this->name($limit, $remoteAddr),
-            static function (array $state) use ($now, $max, $count, $globalMax, $globalName, $store, &$blockedFor): array {
+            static function (array $state) use ($now, $max, $globalMax, $globalName, $store, &$blockedFor): array {
                 $times = self::recent($state['hits'] ?? null, $now);
                 $bucketFull = count($times) >= $max;
                 if ($bucketFull) {
@@ -84,11 +74,11 @@ final class FileAddressLimiter implements AddressLimiter
                 if ($globalMax !== null) {
                     $store->update(
                         $globalName,
-                        static function (array $global) use ($now, $globalMax, $count, $bucketFull, &$blockedFor): array {
+                        static function (array $global) use ($now, $globalMax, $bucketFull, &$blockedFor): array {
                             $all = self::recent($global['hits'] ?? null, $now);
                             if (count($all) >= $globalMax) {
                                 $blockedFor = max($blockedFor, self::retryAfter($all, $now));
-                            } elseif ($count && !$bucketFull) {
+                            } elseif (!$bucketFull) {
                                 $all[] = $now;
                             }
 
@@ -96,7 +86,7 @@ final class FileAddressLimiter implements AddressLimiter
                         },
                     );
                 }
-                if ($count && $blockedFor === 0) {
+                if ($blockedFor === 0) {
                     $times[] = $now;
                 }
 

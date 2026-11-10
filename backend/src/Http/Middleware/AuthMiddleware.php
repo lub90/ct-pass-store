@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Middleware;
 
+use CtPassStore\Application\Auth\AddressLimit;
 use CtPassStore\Application\Auth\Authenticator;
 use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
+use CtPassStore\Application\Exception\TooManyAttemptsException;
+use CtPassStore\Application\Port\AddressLimiter;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -26,6 +29,7 @@ final class AuthMiddleware implements MiddlewareInterface
 
     public function __construct(
         private readonly Authenticator $authenticator,
+        private readonly AddressLimiter $limiter,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -51,9 +55,29 @@ final class AuthMiddleware implements MiddlewareInterface
             $principal = $this->authenticator->authenticate($match[1]);
         } catch (InvalidTokenException|TokenExpiredException $e) {
             $this->logger->warning('Unauthorized access attempt: ' . ($e instanceof TokenExpiredException ? 'expired token.' : 'invalid token.'), ['ip' => $ip]);
+            if ($e instanceof InvalidTokenException) {
+                $this->countRejection($ip, $e);
+            }
             throw $e;
         }
 
         return $handler->handle($request->withAttribute(self::PRINCIPAL, $principal));
+    }
+
+    /**
+     * Only a rejected token counts against the address, and only after verification: a valid token never touches the
+     * limiter, so one address's garbage can't lock out others behind the same bucket (spec 6.3). A blocked address
+     * gets 429 instead of 401.
+     */
+    private function countRejection(string $ip, InvalidTokenException $rejection): never
+    {
+        try {
+            $this->limiter->hit(AddressLimit::RejectedToken, $ip);
+        } catch (TooManyAttemptsException $blocked) {
+            $this->logger->warning('Too many rejected tokens from this address.', ['ip' => $ip]);
+            throw $blocked;
+        }
+
+        throw $rejection;
     }
 }

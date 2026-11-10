@@ -24,6 +24,7 @@ use CtPassStore\Http\Middleware\CorsMiddleware;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\Auth\FileAddressLimiter;
 use CtPassStore\Infrastructure\Auth\FileAttemptLimiter;
 use CtPassStore\Infrastructure\Auth\FileReplayCache;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
@@ -75,6 +76,7 @@ final class Kernel
         $settings = new KvSettingsRepository($extensionData, $logger, $cache);
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
+        $addressLimiter = new FileAddressLimiter($securityStore, $clock, $config->jwtSecret);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
 
         /** @var App<null> $app */
@@ -91,7 +93,7 @@ final class Kernel
             new ChurchToolsIdentityProvider($churchTools, $config->oauthClientId, $config->oauthClientSecret, $logger),
             $tokens,
             $logger,
-        ));
+        ), $addressLimiter, $logger);
 
         $authenticator = new Authenticator($codec, $tokens, new MachineTokens($settings, new FileReplayCache($securityStore), $clock, $codec));
 
@@ -105,7 +107,7 @@ final class Kernel
             $group->put('/entries/{id}', [$entries, 'put']);
             $group->delete('/entries/{id}', [$entries, 'delete']);
             $group->get('/test', [$selfCheck, 'get']);
-        })->add(new AuthMiddleware($authenticator, $logger));
+        })->add(new AuthMiddleware($authenticator, $addressLimiter, $logger));
 
         // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):
         // CORS → error handling → routing (404/405) → authentication (per route) → endpoint.

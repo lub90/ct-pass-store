@@ -18,11 +18,4 @@ interface AddressLimiter
      * @throws TooManyAttemptsException if the address is blocked; that request isn't counted
      */
     public function hit(AddressLimit $limit, string $remoteAddr): void;
-
-    /**
-     * Throws like hit() if the address is blocked, but never counts.
-     *
-     * @throws TooManyAttemptsException
-     */
-    public function assertOpen(AddressLimit $limit, string $remoteAddr): void;
 }
