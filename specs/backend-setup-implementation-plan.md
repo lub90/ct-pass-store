@@ -19,14 +19,21 @@ classes. Outgoing calls during setup go through a pinned, size-limited Guzzle co
 `SU-` in [`backend-test-catalog.md`](backend-test-catalog.md). Add a case to the catalog before its test, and tick it
 in the commit that proves it.
 
-**Starts after** Tasks 13 and 14 of [`backend-phase4-implementation-plan.md`](backend-phase4-implementation-plan.md)
-(4.4, 4.5) are committed. Task 7 here changes their `setup.sh` and docs.
+**Can start now:** 4.1–4.5 are done (2026-11-12). Task 7 changes the closing hints of their `setup.sh` and their
+`docs/setup.md`. The release workflow (`.github/workflows/backend-release.yml`) keeps building its zip with
+`setup.sh`.
 
 ## Global Constraints
 
 - Branch `feature/backend-cleanup`; one commit per task. Every commit passes `composer check` in `backend/`.
 - Layer rules of `tests/Unit/Security/ArchitectureTest.php` hold: `Http` and `Application` never import
   `Infrastructure`.
+- Errors follow the existing pattern: an exception extends `ApplicationException` (or `ChurchToolsException`) with a
+  `Reason`; `ProblemMapping` maps every `Reason` exhaustively; extension members come from `Failure::extensions()`
+  (like `PasswordRejectedException`'s `violations`). Controllers don't catch them; `ErrorMiddleware` answers.
+- The deploy check (`bin/check-deploy.php`) rejects any `church.tools` host in shipped files except
+  `example.church.tools` and `your.church.tools`. Messages and comments in `src/` use only those two; tests may use
+  others.
 - No new runtime dependency. Banned calls stay banned (`phpstan-security.neon`); randomness only from `random_bytes`.
 - `JWT_SECRET` = base64url (no padding) of **48** `random_bytes` (spec 4.10.4).
 - `credentials.php` mode **`600`**; `cache/` and `logs/` mode **`700`** (spec 3.1, 4.10.7).
@@ -75,8 +82,10 @@ in the commit that proves it.
   `backend/src/Application/Setup/SetupReport.php`, `backend/src/Application/Exception/AlreadyConfiguredException.php`,
   `backend/src/Application/Exception/SetupCheckFailedException.php`, `backend/src/Http/Controller/SetupController.php`,
   `backend/src/Http/Middleware/SetupCorsMiddleware.php`
-- Modify: `backend/src/Kernel.php`, `backend/src/Http/Problem/ProblemType.php`, `backend/docs/problems.md`,
-  `specs/backend-test-catalog.md` (new section 17)
+- Create also: `backend/src/Application/Exception/NotConfiguredException.php`
+- Modify: `backend/src/Kernel.php`, `backend/src/Http/Problem/ProblemType.php`,
+  `backend/src/Application/Failure/Reason.php`, `backend/src/Http/Problem/ProblemMapping.php`,
+  `backend/docs/problems.md`, `specs/backend-test-catalog.md` (new section 17)
 - Test: `backend/tests/Api/SetupModesApiTest.php`, `backend/tests/Unit/Http/ProblemTypeTest.php` (extend)
 
 **Interfaces:**
@@ -90,14 +99,17 @@ in the commit that proves it.
     `install` throws `AlreadyConfiguredException`, `SetupCheckFailedException` (public `SetupReport $report`),
     `ConfigurationException` (writing failed), and `ChurchToolsException` subclasses unchanged (they become `502`
     through the existing error middleware).
+  - New reasons `Reason::AlreadyConfigured`, `Reason::SetupCheckFailed` and `Reason::NotConfigured`, mapped in
+    `ProblemMapping` to the three new problem types, each with a fixed detail. The three exceptions extend
+    `ApplicationException` with those reasons. `SetupCheckFailedException::extensions()` returns
+    `['tests' => $this->report->tests]`.
   - `SetupController::__construct(Installer $installer)`:
     - `get` answers `200 {"state": "unconfigured", "version", "tests"}`.
     - `post` reads the `Origin` header line and `REMOTE_ADDR`, then `JsonBody::parse` with the four string fields `serviceLogin`,
       `servicePassword`, `oauthClientId` and `oauthClientSecret`. If any is missing or empty: `400 invalid-body` naming
       the field.
-    - `201 {"instanceUrl", "oauthClientId", "version", "tests"}` on success.
-    - It catches the two setup exceptions and throws `ProblemException`, like `AuthController` does for
-      `TooManyAttemptsException`; `422` carries `['tests' => $report->tests]`.
+    - `201 {"instanceUrl", "oauthClientId", "version", "tests"}` on success. Exceptions pass through to
+      `ErrorMiddleware`.
   - `SetupCorsMiddleware`: for the path `/v1/setup` only, it answers `OPTIONS` with `204` and adds the three headers
     of the Global Constraints to every response; other paths pass through untouched. It sits **outside**
     `CorsMiddleware` (added after it), so the normal CORS never sees this route.
@@ -107,10 +119,10 @@ in the commit that proves it.
     - else `create()`.
   - `Kernel::setup(string $credentialsPath, string $cacheDir, string $logFile, Installer $installer, string $version): App`
     (Task 6 adds a factory that builds the real installer):
-    - routes `GET`/`POST /v1/setup`; every other path and method answers `503 not-configured`
-      ("The backend isn't set up yet. Run the setup wizard in the CtPassStore extension.");
+    - routes `GET`/`POST /v1/setup`; every other path and method throws `NotConfiguredException`
+      (`503 not-configured`, "The backend isn't set up yet. Run the setup wizard in the CtPassStore extension.");
     - middleware: security headers, `SetupCorsMiddleware`, `HttpsOnlyMiddleware`, error middleware.
-  - `create()` adds `GET`/`POST /v1/setup` → `409 already-configured`, outside the authentication group, with no
+  - `create()` adds `GET`/`POST /v1/setup` → `AlreadyConfiguredException` (`409 already-configured`), outside the authentication group, with no
     detail about the instance. `misconfigured()` adds `SetupCorsMiddleware` so its `500` on `/v1/setup` is readable.
 
 - [ ] **Step 1: Add catalog section 17** with SU-01…SU-05 (modes, CORS in three modes, 503 elsewhere, 409, body
@@ -212,8 +224,8 @@ in the commit that proves it.
     3. `GET persons/{personId}/logintoken` → `data` must be a non-empty string.
     
     Other failures use the existing `ChurchToolsException` subclasses.
-  - `ServiceLoginRejectedException extends ChurchToolsException`; its message never contains the login or the
-    password.
+  - `ServiceLoginRejectedException extends ChurchToolsException` with `REASON = Reason::ServiceUserRejected` (exists);
+    its message never contains the login or the password.
 
 - [ ] **Step 1: Write the failing tests** (SU-08). With MockHandler and history middleware:
   - the happy path: the second request carries the cookie of the first, and the result has the person ID and token;
@@ -338,7 +350,7 @@ many* rights, plus read access to `passwordStore`.
     3. The pre-checks.
     4. `Service user login`: fetch the token, then `whoami(Credential::loginToken($token))` must return the
        fetched `personId` (spec 4.10.5.3). `ServiceLoginRejectedException` or a different person → fail with an
-       admin-readable message. `UpstreamUnavailableException` and the like propagate (`502`).
+       admin-readable message. `UnavailableException` and the like propagate (`502`).
     5. Build the candidate `BackendConfig::fromArray([... 'JWT_SECRET' => <48 bytes base64url>], …)` and the client
        with the fetched token. Then run `Extension module` (ok when `categoryIdOf('passwordStore')` resolves; it needs `view` on the
        extension, measured 2026-11-10), `Service user rights`,
@@ -419,7 +431,8 @@ many* rights, plus read access to `passwordStore`.
 - [ ] **Step 3: Spec and plan edits** as listed under Files.
 - [ ] **Step 4: Manual end-to-end check on the test instance.** It needs:
   - a backend on a public HTTPS host without `credentials.php`;
-  - a service user created by hand in the service-user group with a known password;
+  - a service user as 5.1 describes it ("CtPassStore API", `ctpassstore-api`, the service-user rights), its password
+    set with `setPersonPassword` (see the API facts under 5.1 in `backend-plan.md`);
   - an OAuth client.
 
   `curl -X POST https://<backend>/v1/setup -H 'Origin: https://jeremia-090218c7.church.tools' -H 'Content-Type: application/json' -d '{…}'`
