@@ -179,7 +179,7 @@ final class KvSettingsRepository implements SettingsRepository
         $remaining = max(1, (is_int($failure['until'] ?? null) ? $failure['until'] : 0) - $this->clock->now()->getTimestamp());
         $message = 'ChurchTools failed a moment ago and isn\'t asked again yet.';
 
-        throw ($failure['kind'] ?? null) === 'rateLimited' ? new RateLimitedException($message, $remaining) : new UnavailableException($message);
+        throw ($failure['kind'] ?? null) === 'rateLimited' ? new RateLimitedException($message, max(60, $remaining)) : new UnavailableException($message);
     }
 
     /**

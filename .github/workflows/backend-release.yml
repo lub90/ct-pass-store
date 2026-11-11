@@ -19,6 +19,8 @@ jobs:
         working-directory: backend
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - uses: shivammathur/setup-php@v2
         with:
@@ -27,14 +29,14 @@ jobs:
           coverage: none
           tools: composer:v2
 
+      - name: Release check (tag, VERSION, CHANGELOG)
+        run: php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
 
       - name: Checks
         run: composer check
-
-      - name: Release check (tag, VERSION, CHANGELOG)
-        run: php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
 
       - name: Build the upload-ready folder
         run: bash setup/setup.sh "$RUNNER_TEMP/ctpassstore-backend"
@@ -42,6 +44,11 @@ jobs:
       - name: Zip it
         run: |
           VERSION="$(tr -d '[:space:]' < VERSION)"
+          BUILT="$(tr -d '[:space:]' < "$RUNNER_TEMP/ctpassstore-backend/version.txt")"
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "version.txt is '$BUILT' but VERSION is '$VERSION'; a release must not ship a +sha version." >&2
+            exit 1
+          fi
           cd "$RUNNER_TEMP/ctpassstore-backend"
           zip -r -q "$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" .
           echo "ZIP=$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" >> "$GITHUB_ENV"

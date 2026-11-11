@@ -797,7 +797,7 @@ ChurchTools communication goes through it.
 ### 6.1 Performance and caching
 
 The security stores (`jti` replay cache, rate-limit counters;
-`SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**, with their check in
+`SignedFileStore`) exist; the rules on locking and bounded size below are built, with their check in
 `/v1/test`.
 
 - **Goal:** a typical request makes as few ChurchTools calls as possible. With backend tokens (4.3) authentication
@@ -895,7 +895,8 @@ The security stores (`jti` replay cache, rate-limit counters;
     minute, kept in **256** buckets. A block lasts until the window has passed.
   - A global cap of **100** logins per minute across all addresses keeps logins below half of ChurchTools' budget,
     however many addresses an attacker has (ruling 2026-11-10). A refused login counts in neither the address bucket
-    nor the global record.
+    nor the global record. While a flood lasts, logins from everyone are refused; existing sessions (15-minute tokens)
+    and machine clients keep working.
   - It's kept in a fixed number of buckets (6.1), and it fails closed for the login like the other security stores.
 - The client IP address is always `REMOTE_ADDR`. `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are ignored, because
   shared hosting has no trusted proxy configuration.
