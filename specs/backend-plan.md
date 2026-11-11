@@ -288,7 +288,9 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
     - **Creating a person** (measured 2026-11-10, refined 2026-11-11): `POST /api/persons` needs `departmentIds`,
       `campusId`, `statusId` and, on instances that require it, `privacyPolicyAgreementTypeId`,
       `privacyPolicyAgreementWhoId` and `privacyPolicyAgreementDate` (`Y-m-d`). Departments, campuses and statuses come
-      from `GET /api/person/masterdata`. **The privacy values don't:** neither `/api/person/masterdata` nor
+      from `GET /api/person/masterdata`. **The status (the type of person, e.g. `status.friend`, `status.member`) is
+      chosen by the admin in the wizard** (decided 2026-11-12), from that list with the instance's labels; the wizard
+      doesn't preselect one. **The privacy values don't:** neither `/api/person/masterdata` nor
       `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
       (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
       meaning. **Decided 2026-11-11:** the wizard fills in only what ChurchTools needs to create the person. No privacy
