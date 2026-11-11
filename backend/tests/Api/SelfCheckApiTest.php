@@ -267,4 +267,79 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('https://example.church.tools/ccm/ctpassstore/', $exchange[0]['args'][1]);
         self::assertDoesNotMatchRegularExpression('~[A-Za-z0-9+/]{300,}~', $body);
     }
+
+    /**
+     * @return list<array<string, mixed>> the values with the reserved personId 0 in the fake KV store
+     */
+    private function selfTestValues(): array
+    {
+        return array_values(array_filter(
+            $this->storedEntries(),
+            static fn(array $entry): bool => ($entry[KvSchema::ENTRY_PERSON_ID] ?? null) === 0,
+        ));
+    }
+
+    /** TS-06 */
+    public function testWriteUsesReservedPersonZeroAndCleansUp(): void
+    {
+        $this->seedEntry(self::USER, 'cmVhbA==');
+        $before = $this->storedEntries();
+
+        $response = $this->request('GET', '/v1/test?write=1', self::ADMIN);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('ok', $this->checks($response)['Write round trip']['status']);
+        $writes = array_values(array_filter(
+            $this->churchTools->calls(),
+            static fn(array $call): bool => $call['method'] === 'createValue',
+        ));
+        self::assertCount(1, $writes);
+        $created = json_decode((string) $writes[0]['args'][2], true);
+        self::assertSame(0, $created[KvSchema::ENTRY_PERSON_ID]);
+        self::assertNotSame('', $created[KvSchema::ENTRY_CIPHERTEXT]);
+        self::assertStringNotContainsString($created[KvSchema::ENTRY_CIPHERTEXT], (string) $response->getBody());
+        self::assertSame([], $this->selfTestValues());
+        self::assertSame($before, $this->storedEntries());
+    }
+
+    /** TS-06 */
+    public function testWithoutWriteNothingIsWritten(): void
+    {
+        foreach (['/v1/test', '/v1/test?write=0', '/v1/test?write=true', '/v1/test?write=1&write=0', '/v1/test?write'] as $path) {
+            $response = $this->request('GET', $path, self::ADMIN);
+
+            self::assertArrayNotHasKey('Write round trip', $this->checks($response), $path);
+        }
+        self::assertSame(0, $this->churchTools->writeCount());
+    }
+
+    /** TS-06 */
+    public function testDeletedEvenWhenReadBackFails(): void
+    {
+        $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('ChurchTools is down.'));
+        // The first read of the password store is the leftover scan; let the second (the read-back) fail.
+        $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('ChurchTools is down.'));
+
+        $response = $this->request('GET', '/v1/test?write=1', self::ADMIN);
+
+        self::assertSame(207, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame([], $this->selfTestValues());
+    }
+
+    /** TS-07 */
+    public function testLeftoverIsRemovedByTheNextRun(): void
+    {
+        $this->seedEntry(0, 'bGVmdG92ZXI=');
+        $this->seedEntry(self::USER, 'cmVhbA==');
+
+        // Until then it disturbs nobody (ST-22).
+        self::assertSame(200, $this->request('GET', '/v1/test', self::ADMIN)->getStatusCode());
+        self::assertCount(1, $this->selfTestValues());
+
+        $response = $this->request('GET', '/v1/test?write=1', self::ADMIN);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame([], $this->selfTestValues());
+        self::assertCount(1, $this->storedEntries());
+    }
 }

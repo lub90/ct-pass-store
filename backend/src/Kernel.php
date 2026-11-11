@@ -48,6 +48,7 @@ use CtPassStore\Infrastructure\SelfCheck\PasswordStoreReadCheck;
 use CtPassStore\Infrastructure\SelfCheck\PublicKeyCheck;
 use CtPassStore\Infrastructure\SelfCheck\ServiceUserRightsCheck;
 use CtPassStore\Infrastructure\SelfCheck\SettingsCheck;
+use CtPassStore\Infrastructure\SelfCheck\WriteRoundTripCheck;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
@@ -110,7 +111,9 @@ final class Kernel
             new PasswordStoreReadCheck($extensionData),
             new ServiceUserRightsCheck($churchTools, $extensionData),
             new OAuthClientCheck($churchTools, $config),
-        ], $logger), $version);
+        ], $logger, [
+            new WriteRoundTripCheck($passwords, new RsaPasswordCipher($settings)),
+        ]), $version);
         $login = new AuthController(new Login(
             $config->instanceOrigin(),
             new ChurchToolsIdentityProvider($churchTools, $config->oauthClientId, $config->oauthClientSecret, $logger),

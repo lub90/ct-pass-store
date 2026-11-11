@@ -439,7 +439,7 @@ normal case names it ("→ PV-05").
 
 ### `GET /v1/test` (4.8)
 
-- [ ] **TS-01** (N · A) Everything in order → `200`, every check `ok`, version included — 4.8
+- [x] **TS-01** (N · A) Everything in order → `200`, every check `ok`, version included — 4.8
 - [x] **TS-02** (N · A) Each check fails on its own → `207` with exactly that check `fail`:
   - `credentials.php` readable by others; `logs/` not writable
   - cache folder not writable by PHP, or writable by others
@@ -451,11 +451,11 @@ normal case names it ("→ PV-05").
   with write access beyond `passwordStore` → that check `fail` — 4.8
 - [x] **TS-04** (! · A) The response contains no secrets, no file paths outside the project and no other users' data
   — 4.8
-- [ ] **TS-05** (N · A) Admin → `200`/`207`; normal user and machine client → `403 forbidden` — 4.8
-- [ ] **TS-06** (! · A) `?write=1`: the test value uses the reserved `personId` `0`, is found again by the self-test's
+- [x] **TS-05** (N · A) Admin → `200`/`207`; normal user and machine client → `403 forbidden` — 4.8
+- [x] **TS-06** (! · A) `?write=1`: the test value uses the reserved `personId` `0`, is found again by the self-test's
   read step, is deleted again even when a step in between fails, and never touches a real person's entry. Without
   `?write=1` nothing is written — 4.8, 5.3.11
-- [ ] **TS-07** (S · A) A test value left over from an earlier run (e.g. after a timeout) is removed by the next
+- [x] **TS-07** (S · A) A test value left over from an earlier run (e.g. after a timeout) is removed by the next
   `?write=1` run, and until then disturbs neither reads nor writes for persons (with ST-22) — 4.8, 5.3.11
 
 ## 9. Error format (spec 4.9)
@@ -712,8 +712,7 @@ tester has; it's documented in `backend/docs/testing.md`.
 ## 16. Migration of the existing end-to-end tests
 
 Where the cases of the former `tests/EndToEnd` suite went, so nothing is lost silently. **Done in plan 3.6:** the old
-tests are removed; the suite is now `tests/Contract`. Still open from this table: TS-01 and TS-05 (self-check, plan
-4.2), SM-05 (deployed backend, plan 4), CT-03 (manual OAuth checklist in `backend/docs/testing.md`).
+tests are removed; the suite is now `tests/Contract`. Still open from this table: SM-05 (deployed backend, plan 4), CT-03 (manual OAuth checklist in `backend/docs/testing.md`).
 
 | Today's test | What it checks | New cases | Note |
 | --- | --- | --- | --- |

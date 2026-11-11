@@ -392,4 +392,25 @@ final class KvPasswordRepositoryTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         new PersonId(KvPasswordRepository::SELF_TEST_PERSON_ID);
     }
+
+    public function testSelfTestValueRoundTrip(): void
+    {
+        $this->seed(5, 'cmVhbA==');
+        $this->seed(0, 'bGVmdG92ZXI=');
+
+        $leftover = $this->store->selfTestValueIds();
+        self::assertCount(1, $leftover);
+        self::assertSame('bGVmdG92ZXI=', $this->store->selfTestCiphertext($leftover[0]));
+
+        $id = $this->store->createSelfTestValue('dGVzdA==');
+        self::assertSame('dGVzdA==', $this->store->selfTestCiphertext($id));
+        self::assertNull($this->store->selfTestCiphertext(999_999));
+
+        foreach ($this->store->selfTestValueIds() as $valueId) {
+            $this->store->deleteSelfTestValue($valueId);
+        }
+        $this->store->deleteSelfTestValue($id); // already gone: 404 counts as done
+        self::assertSame([], $this->store->selfTestValueIds());
+        self::assertSame('cmVhbA==', $this->store->find(new PersonId(5)));
+    }
 }

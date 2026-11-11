@@ -31,7 +31,8 @@ final class SelfCheckController
             throw new ProblemException(ProblemType::Forbidden, 'Only admins can run the self-check.');
         }
 
-        $result = $this->selfCheck->run();
+        // Only the exact value `write=1` runs the checks that change data (spec 4.8).
+        $result = $this->selfCheck->run(($request->getQueryParams()['write'] ?? null) === '1');
         $summary = $result['passed']
             ? 'All backend self-tests passed successfully.'
             : 'Backend self-test completed with failures.';

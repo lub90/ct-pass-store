@@ -118,6 +118,58 @@ final class KvPasswordRepository implements PasswordRepository
     }
 
     /**
+     * The values with the reserved person ID 0, oldest first: leftovers of the self-test (spec 5.3.11). This and the
+     * three methods below are the only code that touches person ID 0.
+     *
+     * @return list<int>
+     */
+    public function selfTestValueIds(): array
+    {
+        return array_map(static fn(array $entry): int => $entry['id'], $this->entriesOf(self::SELF_TEST_PERSON_ID));
+    }
+
+    /**
+     * Creates a self-test value that looks like a normal entry and returns its ID.
+     */
+    public function createSelfTestValue(#[\SensitiveParameter] string $ciphertext): int
+    {
+        $value = json_encode([
+            KvSchema::ENTRY_PERSON_ID => self::SELF_TEST_PERSON_ID,
+            KvSchema::ENTRY_CIPHERTEXT => $ciphertext,
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        if (strlen($value) > self::MAX_VALUE_LENGTH) {
+            throw new \LogicException(sprintf('A self-test value would have %d characters; the KV store allows %d.', strlen($value), self::MAX_VALUE_LENGTH));
+        }
+
+        return $this->extension->create(KvSchema::PASSWORD_CATEGORY, $value);
+    }
+
+    /**
+     * The ciphertext of a self-test value, or null if it isn't there (or has none).
+     */
+    public function selfTestCiphertext(int $valueId): ?string
+    {
+        foreach ($this->entriesOf(self::SELF_TEST_PERSON_ID) as $entry) {
+            if ($entry['id'] === $valueId) {
+                return $entry['ciphertext'];
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Deletes a self-test value; one that is already gone counts as deleted.
+     */
+    public function deleteSelfTestValue(int $valueId): void
+    {
+        try {
+            $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $valueId);
+        } catch (NotFoundException) {
+        }
+    }
+
+    /**
      * All entries of the person, sorted by value ID (oldest first). `ciphertext` is null for a corrupt entry
      * (valid person ID, but no usable password).
      *

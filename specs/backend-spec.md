@@ -80,8 +80,7 @@ Data lives in three KV categories of the `ctpassstore` module:
   - PHP runs as the hosting user (PHP-FPM, suPHP; most shared hosts): `600`.
   - PHP runs as the web server user (e.g. `mod_php`): e.g. `640` with the web server's group.
 
-  **⏳ 4.2** `/v1/test` checks exactly this. It still requires `0600` or stricter, which can never pass on hosts of the
-  second kind.
+  `/v1/test` checks exactly this.
 - Formats: `CT_API_URL` is an `https://` URL without credentials, query or fragment. `CORS` is a non-empty
   list of origins (`https://host[:port]`, no path, no `*`). `JWT_SECRET` has at least 32 bytes.
 - Missing or invalid keys don't cause a PHP error further down the line. The backend answers every request
@@ -454,9 +453,6 @@ Deletes the entry of person `{id}`.
 
 ### 4.8 `GET /v1/test` (self-check)
 
-Today `/v1/test` refuses machine clients, checks `credentials.php` for `0600` or stricter, and loads (and thereby
-validates) the settings and the public key. Everything else in this section is **⏳ 4.2**.
-
 - Only admin users may call it (Q11); others get `403 forbidden`, machine clients too.
 - It runs these checks and reports each one as `{name, status: "ok"|"fail", message}`:
   - `credentials.php` is readable by PHP but not by other users (3.1, instead of requiring `0600`), and
@@ -785,7 +781,7 @@ ChurchTools communication goes through it.
 
 The security stores (`jti` replay cache, rate-limit counters;
 `SignedFileStore`) exist; the rules on locking and bounded size below are **⏳ 4.1**, with their check in
-`/v1/test` **⏳ 4.2**.
+`/v1/test`.
 
 - **Goal:** a typical request makes as few ChurchTools calls as possible. With backend tokens (4.3) authentication
   costs none; with the cache, a typical request only costs the calls to the `passwordStore` values.
@@ -1173,7 +1169,7 @@ redesign fixed. The rules above are authoritative; this section only says what w
 | Wrong primary password | `401`, indistinguishable from an invalid token | `403 invalid-primary-password` (Q6) |
 | `404` on `GET` | Same answer for "no entry" and "wrong URL" | `entry-not-found` versus `not-found` (4.5) |
 | Invalid custom password | `400` with a message only | `400 password-invalid` with `violations` (5.1.6) |
-| `/test` | Anyone with a valid token | Admins only (Q11); machine clients refused (⏳ 4.2 for the admin restriction) |
+| `/test` | Anyone with a valid token | Admins only (Q11); machine clients refused |
 | Configuration | `credentials.php` with `CT_API_URL`, `CT_API_TOKEN`, `CORS` | Also `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `JWT_SECRET` (required) and `LOG_LEVEL` (3.1) |
 
 **Bugs and weaknesses the redesign fixed:**

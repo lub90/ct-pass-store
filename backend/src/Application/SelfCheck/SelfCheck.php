@@ -14,21 +14,23 @@ use Psr\Log\LoggerInterface;
 final class SelfCheck
 {
     /**
-     * @param iterable<Check> $checks
+     * @param iterable<Check> $checks always run
+     * @param iterable<Check> $writeChecks run only when asked to (`?write=1`), because they change data
      */
     public function __construct(
         private readonly iterable $checks,
         private readonly LoggerInterface $logger,
+        private readonly iterable $writeChecks = [],
     ) {}
 
     /**
      * @return array{passed: bool, tests: list<array{name: string, status: 'ok'|'fail', message: string}>}
      */
-    public function run(): array
+    public function run(bool $withWrite = false): array
     {
         $passed = true;
         $tests = [];
-        foreach ($this->checks as $check) {
+        foreach ($withWrite ? [...$this->checks, ...$this->writeChecks] : $this->checks as $check) {
             try {
                 $outcome = $check->run();
             } catch (\Throwable $e) {
