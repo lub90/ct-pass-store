@@ -241,12 +241,29 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       extension; without it ChurchTools answers `403`. `GET …/customdatacategories` answers `200` but lists only the
       categories the person may see. So the service user needs `view` on the extension, `view custom category` and
       `view custom data` for its categories, and create/edit/delete custom data for `passwordStore` only.
-    - **Setting the service user's password (open, blocking for 5.1):** `PUT /api/persons/{id}/password` changes the
-      password of the **logged-in** person, whatever `{id}` says, and needs that person's current password as
-      `oldPassword` (measured 2026-11-10: called as admin with another person's ID, it changed the admin's password).
-      So the wizard can't set the new person's password this way. To find out: the right way for an admin to set or
-      reset another person's password through the API (e.g. an invitation, an admin-only endpoint, or the legacy AJAX
-      API). Until then, the person's first password is set by hand.
+    - **Setting the service user's password:** `PUT /api/persons/{id}/password` changes the password of the
+      **logged-in** person, whatever `{id}` says, and needs that person's current password as `oldPassword` (measured
+      2026-11-10: called as admin with another person's ID, it changed the admin's password). So the wizard can't set
+      the new person's password this way.
+      **Found 2026-11-11** (recorded in the browser, from the person view of the ChurchTools admin): the legacy AJAX
+      API sets another person's password. `POST /index.php?q=churchdb/ajax`, form-encoded
+      (`application/x-www-form-urlencoded`), body `func=setPersonPassword&id=<personId>&password=<new password>`
+      (the UI also sends `browsertabId`, probably not needed), with the admin's session cookie and the `CSRF-Token`
+      header (from `GET /api/csrftoken`, see `ct-extension-info.md`). Answer: `200 {"status":"success","data":null}`.
+      The extension runs on the instance's own origin with the admin's session, so it can make this call. Still to
+      check before the setup part of 5.1 starts:
+      - which right the admin needs (probably "administer persons" or a churchdb password right), and what the answer
+        is without it;
+      - whether the call follows the instance's password rules and how a rejected password is reported (AJAX answers
+        `status` other than `success` instead of an HTTP error);
+      - whether it invalidates the person's login token, like a password change does (needed for re-arm).
+      It's a legacy API that ChurchTools may remove; the wizard puts it behind one function, so it can be swapped.
+    - **Getting the service user's token without losing the admin's session (open, blocking for 5.1):** a browser holds
+      only one ChurchTools session (`ct-extension-info.md`). The plan in 5.1 (log in as the service user with
+      `POST /api/login`, then `GET /api/persons/{id}/logintoken`) would most likely replace the admin's session in the
+      middle of the wizard. To find out: whether an admin may call `GET /api/persons/{id}/logintoken` for **another**
+      person, or whether `POST /api/login` with `credentials: "omit"` returns something usable without touching the
+      admin's cookie.
     - **Creating a person** (measured 2026-11-10): `POST /api/persons` needs `departmentIds`, `campusId`, `statusId`
       and, on instances that require it, `privacyPolicyAgreementTypeId`, `privacyPolicyAgreementWhoId` and
       `privacyPolicyAgreementDate`. The wizard reads the valid values from `GET /api/person/masterdata`.
@@ -300,10 +317,12 @@ These live outside the backend, but the new API is only usable once they're done
 
       The backend's admin role still comes from the `adminUsers` list in the settings until Q22 (roles via groups) is
       decided; the wizard says so and doesn't silently mix the two.
-    - **Service user:** create the person, set a random password, add it to the service-user group, log in as that
-      person with `POST /api/login` and fetch its token with `GET /api/persons/{id}/logintoken` (the mechanism the
-      contract test helpers use; it works on the test instance). The password isn't shown or stored. **Never** call
-      `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the open points in 4.6).
+    - **Service user:** create the person, set a random password with the legacy `setPersonPassword` call (4.6, found
+      2026-11-11), add it to the service-user group, and fetch its token. How to fetch the token without replacing the
+      admin's session is open (4.6); logging in as that person with `POST /api/login` and fetching
+      `GET /api/persons/{id}/logintoken` works in the contract test helpers, but they don't share a browser session
+      with an admin. The password isn't shown or stored. **Never** call `PUT /persons/{id}/password` for this: it
+      changes the logged-in admin's password (see the open points in 4.6).
     - **OAuth application:** create it (`POST /api/oauthclients`) and grant the users' group the login right.
     - **Order:** ask for the backend URL and run the pre-check (`GET /v1/setup`) **before** creating anything in
       ChurchTools. A host that doesn't work, or `409`, stops the wizard with a clear message, and nothing is left
