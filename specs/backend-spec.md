@@ -946,7 +946,7 @@ The security stores (`jti` replay cache, rate-limit counters;
 - **PHP:** `^8.3`; tested with 8.3, 8.4 and 8.5 (D3).
 - Runs on ordinary shared hosting with Apache and `.htaccess`. No daemon, no database, no shell access needed at
   runtime.
-- The `setup/setup.sh` script produces an upload-ready folder. **⏳ 4.4** It sets sensible permissions
+- The `setup/setup.sh` script produces an upload-ready folder. It sets sensible permissions
   there, and the setup docs list the target permissions for both hosting cases (3.1), because uploads don't keep them.
 - **⏳ 4.6** Installation without a shell (D6):
   - `setup/setup.sh` is removed. The release workflow builds an upload-ready zip,
@@ -985,7 +985,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   - PHPStan
   - unit and API tests
 - **An architecture test:** `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
-- **⏳ 4.4 A post-build check of the deploy folder:** no real `credentials.php`, no instance URL or token, no dev files
+- **A post-build check of the deploy folder** (`bin/check-deploy.php`): no real `credentials.php`, no instance URL or token, no dev files
   (tests, `phpunit.xml`, fixtures), and the expected layout.
 - **⏳ 4.5 A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
