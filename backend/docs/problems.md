@@ -16,6 +16,17 @@ Every error response of the CtPassStore backend is an RFC 9457 problem details o
 Each section names the status, the fixed `title`, what the problem means and what to do. This page is checked
 against the code by a unit test.
 
+## https-required
+
+- **Status:** 400
+- **Title:** HTTPS required
+
+The request came over plain HTTP. The backend only answers over HTTPS; normally `.htaccess` redirects plain HTTP
+before PHP runs, and this answer means the web server didn't (e.g. it ignores `.htaccess`).
+
+**What to do:** Use the `https://` URL of the backend. If that's what you use, check that the web server or proxy
+tells PHP the request is HTTPS (server variable `HTTPS=on`).
+
 ## invalid-id
 
 - **Status:** 400

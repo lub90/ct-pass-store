@@ -9,6 +9,13 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface as Handler;
 
+/**
+ * CORS for the configured origins (spec 4.2).
+ *
+ * The `Origin` header is compared exactly with the `CORS` list and echoed back; `*` and `Access-Control-Allow-Credentials`
+ * are never sent (bearer tokens, no cookies). Preflights (`OPTIONS`) are answered here with `204`, before any other
+ * check, and never reach an endpoint. Every response varies by `Origin`.
+ */
 final class CorsMiddleware implements MiddlewareInterface
 {
     /**
@@ -18,27 +25,23 @@ final class CorsMiddleware implements MiddlewareInterface
 
     public function process(Request $request, Handler $handler): Response
     {
-        $origin = $request->getHeaderLine('Origin');
+        $response = $request->getMethod() === 'OPTIONS'
+            ? new \Slim\Psr7\Response(204)
+            : $handler->handle($request);
 
-        // Handle preflight OPTIONS request
-        if ($request->getMethod() === 'OPTIONS') {
-            $response = new \Slim\Psr7\Response();
-            return $this->addCorsHeaders($response, $origin);
-        }
-
-        // Normal request → run next handler
-        $response = $handler->handle($request);
-        return $this->addCorsHeaders($response, $origin);
+        return $this->withCorsHeaders($response, $request->getHeaderLine('Origin'));
     }
 
-    private function addCorsHeaders(Response $response, string $origin): Response
+    private function withCorsHeaders(Response $response, string $origin): Response
     {
-        if (in_array($origin, $this->allowedOrigins, true)) {
-            $response = $response->withHeader('Access-Control-Allow-Origin', $origin)
-                ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-                ->withHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
-                ->withHeader('Access-Control-Allow-Credentials', 'true');
+        $response = $response->withAddedHeader('Vary', 'Origin');
+        if (!in_array($origin, $this->allowedOrigins, true)) {
+            return $response;
         }
-        return $response;
+
+        return $response->withHeader('Access-Control-Allow-Origin', $origin)
+            ->withHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            ->withHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+            ->withHeader('Access-Control-Max-Age', '600');
     }
 }

@@ -266,9 +266,7 @@ abstract class ApiTestCase extends TestCase
      */
     protected function request(string $method, string $path, int|string|null $as = null, ?array $json = null, array $headers = []): ResponseInterface
     {
-        $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, [
-            'REMOTE_ADDR' => $this->clientIp,
-        ]);
+        $request = $this->serverRequest($method, $path);
         $authorization = $this->authorizationFor($as);
         if ($authorization !== null) {
             $request = $request->withHeader('Authorization', $authorization);
@@ -286,7 +284,21 @@ abstract class ApiTestCase extends TestCase
     }
 
     /**
-     * Sends a request built by the test itself through the complete app.
+     * A request to the backend as the web server hands it to PHP: from `REMOTE_ADDR` $clientIp, over HTTPS (server
+     * param `HTTPS=on`, spec 4.1). `$serverParams` adds to or replaces these; `HTTPS => null` removes it.
+     *
+     * @param array<string, string|null> $serverParams
+     */
+    protected function serverRequest(string $method, string $path, array $serverParams = []): \Psr\Http\Message\ServerRequestInterface
+    {
+        $params = array_filter($serverParams + ['REMOTE_ADDR' => $this->clientIp, 'HTTPS' => 'on'], static fn(?string $v): bool => $v !== null);
+
+        return (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, $params);
+    }
+
+    /**
+     * Sends a request built by the test itself through the complete app, unchanged. Build it with serverRequest(), so
+     * it carries the server params of a real request.
      */
     protected function send(\Psr\Http\Message\ServerRequestInterface $request): ResponseInterface
     {
@@ -300,7 +312,7 @@ abstract class ApiTestCase extends TestCase
      */
     protected function rawRequest(string $method, string $path, int|string|null $as, string $body, array $headers = ['Content-Type' => 'application/json']): ResponseInterface
     {
-        $request = (new ServerRequestFactory())->createServerRequest($method, 'https://backend.example.org' . $path, ['REMOTE_ADDR' => $this->clientIp])
+        $request = $this->serverRequest($method, $path)
             ->withBody((new StreamFactory())->createStream($body));
         $authorization = $this->authorizationFor($as);
         if ($authorization !== null) {

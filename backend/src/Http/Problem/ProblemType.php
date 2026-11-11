@@ -13,6 +13,7 @@ enum ProblemType: string
 {
     public const TYPE_BASE_URI = 'https://github.com/lub90/ct-pass-store/blob/main/backend/docs/problems.md#';
 
+    case HttpsRequired = 'https-required';
     case InvalidId = 'invalid-id';
     case InvalidBody = 'invalid-body';
     case OauthCodeInvalid = 'oauth-code-invalid';
@@ -45,7 +46,7 @@ enum ProblemType: string
     public function status(): int
     {
         return match ($this) {
-            self::InvalidId, self::InvalidBody, self::OauthCodeInvalid, self::PrimaryPasswordRequired,
+            self::HttpsRequired, self::InvalidId, self::InvalidBody, self::OauthCodeInvalid, self::PrimaryPasswordRequired,
             self::CustomPasswordNotAllowed, self::PasswordInvalid => 400,
             self::MissingToken, self::InvalidToken, self::TokenExpired => 401,
             self::NoServiceAccess, self::Forbidden, self::InvalidPrimaryPassword => 403,
@@ -63,6 +64,7 @@ enum ProblemType: string
     public function title(): string
     {
         return match ($this) {
+            self::HttpsRequired => 'HTTPS required',
             self::InvalidId => 'Invalid person ID',
             self::InvalidBody => 'Invalid request body',
             self::OauthCodeInvalid => 'Invalid authorization code',

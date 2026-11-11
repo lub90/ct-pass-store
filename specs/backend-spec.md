@@ -175,13 +175,15 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
   - Fields that the endpoint doesn't define are rejected, so a client can't smuggle in `personId`, `username` or
     similar.
 - **Secrets never appear** in problem details, logs or response headers.
-- **⏳ 4.3 Security headers** on all responses: `Cache-Control: no-store`, `X-Content-Type-Options: nosniff`.
+- **Security headers** on all responses, also preflights and the misconfigured app (3.1): `Cache-Control: no-store`,
+  `X-Content-Type-Options: nosniff`.
 - **No PHP output:** `display_errors` is off; PHP warnings, notices and deprecations go to the log, never into a
   response body.
 - **Methods:** `X-HTTP-Method-Override`, `_method` and similar are ignored. `HEAD`, `PATCH`, `TRACE` and other
-  undefined methods give `405`.
-- **⏳ 4.3 Plain HTTP** is rejected with `400` when it's detectable at the PHP level, in addition to the redirect in
-  `.htaccess` (Q17).
+  undefined methods give `405` with `Allow`; `HEAD` never runs the `GET` handler.
+- **Plain HTTP** is rejected with `400 https-required` when it's detectable at the PHP level, in addition to the
+  redirect in `.htaccess` (Q17), so hosts that ignore `.htaccess` are protected too. The condition is exactly the
+  redirect's: the server variable `HTTPS` is missing, empty or `off` (any case). Forwarding headers are ignored (6.3).
 - **Order of checks** (when several problems apply, the first one wins):
   1. Route and method: `404 not-found`, `405 method-not-allowed`
   2. Authentication: `401 missing-token`, `invalid-token`, `token-expired`
@@ -191,7 +193,7 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
   5. Everything else (primary password, password policy, storage)
 
   Configuration errors (`500 misconfigured`) can occur at any step that needs the broken part. Preflight requests
-  (`OPTIONS`) are answered before step 1.
+  (`OPTIONS`) are answered before step 1, then plain HTTP is rejected (`400 https-required`).
 
 ### 4.2 CORS
 
@@ -203,10 +205,9 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
 - Headers for allowed origins:
   - `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`
   - `Access-Control-Allow-Headers: Authorization, Content-Type`
-  - **⏳ 4.3** `Access-Control-Max-Age: 600`
-  - **⏳ 4.3** **no** `Access-Control-Allow-Credentials` (the backend uses bearer tokens, not cookies). The code still
-    sends `true`.
-- **⏳ 4.3** `Vary: Origin` on every response.
+  - `Access-Control-Max-Age: 600`
+  - **no** `Access-Control-Allow-Credentials` (the backend uses bearer tokens, not cookies).
+- `Vary: Origin` on every response.
 - Error responses (`4xx`, `5xx`) carry the same CORS headers as successful ones. Otherwise the extension
   couldn't read the problem details.
 - **⏳ 4.6** **Exception: `/v1/setup`** (4.10) answers **every** origin, in every mode (setup, normal, misconfigured),
@@ -504,6 +505,7 @@ Deletes the entry of person `{id}`.
 
 | Status | Type slug | When |
 | --- | --- | --- |
+| 400 | `https-required` | Request over plain HTTP that `.htaccess` didn't redirect (4.1) |
 | 400 | `invalid-id` | `{id}` isn't a positive integer |
 | 400 | `invalid-body` | Body isn't empty and isn't a JSON object, or fields are invalid |
 | 400 | `oauth-code-invalid` | Authorization code invalid, expired or already used |
@@ -768,8 +770,8 @@ ChurchTools communication goes through it.
 
 ### 5.7 Middleware
 
-1. **Order:** CORS → error handling → routing → authentication → request syntax → authorization → endpoint, matching
-   the order of checks in 4.1.
+1. **Order:** security headers → CORS (answers preflights) → HTTPS check → error handling → routing (`HEAD` is `405`)
+   → authentication → request syntax → authorization → endpoint, matching the order of checks in 4.1.
 2. **Error middleware:** turns every exception into a problem details response (4.9). It logs internal errors with a
    stack trace and returns only a generic `detail` for `internal-error`.
 3. **Auth middleware:** implements 4.3 and attaches the authenticated principal (person or machine client, typed) to

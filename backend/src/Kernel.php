@@ -23,6 +23,9 @@ use CtPassStore\Http\Controller\SelfCheckController;
 use CtPassStore\Http\Middleware\AuthMiddleware;
 use CtPassStore\Http\Middleware\CorsMiddleware;
 use CtPassStore\Http\Middleware\ErrorMiddleware;
+use CtPassStore\Http\Middleware\HeadNotAllowedMiddleware;
+use CtPassStore\Http\Middleware\HttpsOnlyMiddleware;
+use CtPassStore\Http\Middleware\SecurityHeadersMiddleware;
 use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FileAddressLimiter;
@@ -135,11 +138,15 @@ final class Kernel
             $group->get('/test', [$selfCheck, 'get']);
         })->add(new AuthMiddleware($authenticator, $addressLimiter, $logger));
 
-        // Slim calls the middleware added last first. Resulting order (spec 4.1, 5.7):
-        // CORS → error handling → routing (404/405) → authentication (per route) → endpoint.
+        // Slim calls the middleware added last first. Resulting order (spec 4.1, 4.2, 5.7):
+        // security headers → CORS (answers preflights) → HTTPS check → error handling → routing (404/405)
+        // → HEAD is 405 → authentication (per route) → endpoint.
+        $app->add(new HeadNotAllowedMiddleware());
         $app->addRoutingMiddleware();
         $app->add(new ErrorMiddleware($logger));
+        $app->add(new HttpsOnlyMiddleware());
         $app->add(new CorsMiddleware($config->corsOrigins));
+        $app->add(new SecurityHeadersMiddleware());
 
         return $app;
     }
@@ -181,8 +188,8 @@ final class Kernel
     }
 
     /**
-     * An app that answers every request, including preflights, with `500 misconfigured` and no CORS headers. Used
-     * when `credentials.php` itself is broken, so nothing else can be trusted (spec 3.1).
+     * An app that answers every request, including preflights, with `500 misconfigured`, the security headers and no
+     * CORS headers. Used when `credentials.php` itself is broken, so nothing else can be trusted (spec 3.1).
      *
      * @return App<null>
      */
@@ -198,6 +205,7 @@ final class Kernel
                 return ProblemResponseFactory::create(ProblemType::Misconfigured, $this->detail);
             }
         });
+        $app->add(new SecurityHeadersMiddleware());
 
         return $app;
     }

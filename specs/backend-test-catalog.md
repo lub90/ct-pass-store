@@ -414,7 +414,7 @@ normal case names it ("→ PV-05").
 - [x] **EP-03** (N · A) Custom password while not allowed → `400 custom-password-not-allowed`, nothing stored — 4.6.3
 - [x] **EP-04** (S · A) `secondaryPwd: ""` counts as a custom password (→ `400`), not as "generate" — 4.6.3
 - [x] **EP-05** (N · A) Invalid custom password → `400 password-invalid` with `violations` — 4.6.3
-- [ ] **EP-06** (! · A) The generated password is returned with `Cache-Control: no-store` — 4.1
+- [x] **EP-06** (! · A) The generated password is returned with `Cache-Control: no-store` — 4.1
 - [x] **EP-07** (N · A) Setting the same password again works — 4.6
 - [x] **EP-08** (N · A) Afterwards exactly one entry exists, also when duplicates existed before — 4.6
 - [x] **EP-09** (N · A) Order of the checks: authorization before the primary password, the primary password before
@@ -481,21 +481,21 @@ normal case names it ("→ PV-05").
 ## 10. HTTP behavior (spec 4.1, 4.2)
 
 - [x] **HT-01** (N · A) Allowed origin → `Access-Control-Allow-Origin` with exactly that origin — 4.2
-- [ ] **HT-02** (! · A) A foreign origin, `null` or a lookalike (`https://instance.church.tools.evil.com`) → no CORS
+- [x] **HT-02** (! · A) A foreign origin, `null` or a lookalike (`https://instance.church.tools.evil.com`) → no CORS
   headers — 4.2
-- [ ] **HT-03** (N · A) Preflight `OPTIONS` from an allowed origin works without a token: status `204`,
+- [x] **HT-03** (N · A) Preflight `OPTIONS` from an allowed origin works without a token: status `204`,
   `Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS`, `Access-Control-Max-Age: 600` — 4.2
-- [ ] **HT-04** (! · A) Every response, including errors and `204`, carries `Cache-Control: no-store` and
+- [x] **HT-04** (! · A) Every response, including errors and `204`, carries `Cache-Control: no-store` and
   `X-Content-Type-Options: nosniff` — 4.1
-- [ ] **HT-05** (! · A) Plain HTTP is rejected with `400` when it's detectable at the PHP level — 4.1
-- [ ] **HT-06** (! · A) Origins are compared exactly: the allowed origin with another scheme (`http://`), another port,
+- [x] **HT-05** (! · A) Plain HTTP is rejected with `400` when it's detectable at the PHP level — 4.1
+- [x] **HT-06** (! · A) Origins are compared exactly: the allowed origin with another scheme (`http://`), another port,
   a trailing slash, a path or a subdomain gets no CORS headers — 4.2
-- [ ] **HT-08** (N · A) For allowed origins: `Access-Control-Allow-Headers` contains `Authorization` and `Content-Type`;
+- [x] **HT-08** (N · A) For allowed origins: `Access-Control-Allow-Headers` contains `Authorization` and `Content-Type`;
   `Access-Control-Allow-Credentials` is **not** set; `Access-Control-Allow-Origin` is never `*` — 4.2
-- [ ] **HT-09** (N · A) `Vary: Origin` is present on every response — 4.2
+- [x] **HT-09** (N · A) `Vary: Origin` is present on every response — 4.2
 - [x] **HT-10** (! · A) Error responses (`400`, `401`, `403`, `404`, `500`) to an allowed origin carry the same CORS
   headers as successful ones, so the extension can read the problem details — 4.2
-- [ ] **HT-07** (! · A) Counterparts of HT-03: a preflight from a foreign origin gets no `Access-Control-Allow-*`
+- [x] **HT-07** (! · A) Counterparts of HT-03: a preflight from a foreign origin gets no `Access-Control-Allow-*`
   headers, and a preflight never runs the endpoint's logic — 4.2
 
 ## 11. Logging (spec 6.4)
@@ -602,7 +602,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
 - [x] **HP-01a** (! · A) Rejected with `401 invalid-token`: an empty token (`Bearer`, `Bearer `), whitespace or a tab
   inside the token, two `Authorization` headers, a comma-joined value (`Bearer a, Bearer b`), a scheme with a typo
   (`Bearer:`, `Bearers`) — 4.3.2
-- [ ] **HP-02** (S · A) `HEAD` and unexpected methods (`PATCH`, `TRACE`) → `405`, never a write — 4.1
+- [x] **HP-02** (S · A) `HEAD` and unexpected methods (`PATCH`, `TRACE`) → `405`, never a write — 4.1
 - [x] **HP-03** (S · A) A non-empty body with a missing or wrong `Content-Type` (`text/plain`,
   `multipart/form-data`, `application/x-www-form-urlencoded`) → `415 unsupported-media-type`, never parsed as form
   data. An empty body needs no `Content-Type` — 4.1
@@ -623,7 +623,7 @@ general rules of spec 4.1, 4.3 and 6.3 hold under hostile input.
   call (counted on the fake). Below the limit a login costs at most its 3 calls — 6.2
 - [x] **RX-05** (S · U) The `jti` replay cache and the rate-limit counters stay bounded: expired entries are removed,
   and many distinct values can't fill the disk — 4.4a.4, 6.3
-- [ ] **RX-07** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`414` without a PHP error
+- [x] **RX-07** (S · A) A very long `Authorization` header or path (e.g. 64 KB) → `400`/`401`/`404`/`414` without a PHP error
   — 4.1
 
 ### Timing and races

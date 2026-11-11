@@ -160,8 +160,7 @@ final class AuthorizationApiTest extends ApiTestCase
 
     public function testSeveralAuthorizationHeadersAreRejected(): void
     {
-        $request = (new \Slim\Psr7\Factory\ServerRequestFactory())
-            ->createServerRequest('GET', 'https://backend.example.org/v1/entries/' . self::USER, ['REMOTE_ADDR' => self::CLIENT_IP])
+        $request = $this->serverRequest('GET', '/v1/entries/' . self::USER)
             ->withHeader('Authorization', 'Bearer ' . $this->tokenOf(self::USER))
             ->withAddedHeader('Authorization', 'Bearer ' . $this->tokenOf(self::ADMIN));
 
@@ -217,8 +216,7 @@ final class AuthorizationApiTest extends ApiTestCase
      */
     public function testValuesWithControlCharactersCantForgeLogLines(): void
     {
-        $request = (new \Slim\Psr7\Factory\ServerRequestFactory())
-            ->createServerRequest('GET', 'https://backend.example.org/v1/entries/' . self::USER, ['REMOTE_ADDR' => "203.0.113.7\r\n[forged] ct-pass-store.ERROR: x"])
+        $request = $this->serverRequest('GET', '/v1/entries/' . self::USER, ['REMOTE_ADDR' => "203.0.113.7\r\n[forged] ct-pass-store.ERROR: x"])
             ->withHeader('Authorization', 'Bearer abc.def.ghi');
 
         $this->send($request);
