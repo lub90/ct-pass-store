@@ -133,6 +133,26 @@ final class LoggerTest extends TestCase
         self::assertStringContainsString('0.1.0\\\\x0A[2026', $content);
     }
 
+    /** Person IDs and addresses stay private: new log files are 0600 and a new logs folder 0700 (spec 6.3, 6.4). */
+    public function testLogFilesAndANewFolderArePrivate(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            self::markTestSkipped('Modes are not enforced for root.');
+        }
+        $logs = $this->dir . '/logs';
+
+        Kernel::logger($logs . '/app.log', 'info', '0.1.0+test')->info('x');
+
+        $files = glob($logs . '/app-*.log') ?: [];
+        self::assertCount(1, $files);
+        self::assertSame(0o600, fileperms($files[0]) & 0o777);
+        self::assertSame(0o700, fileperms($logs) & 0o777);
+        foreach ($files as $f) {
+            unlink($f);
+        }
+        rmdir($logs);
+    }
+
     public function testTheLoggerIsALogger(): void
     {
         self::assertInstanceOf(Logger::class, Kernel::logger($this->file, 'info', '0.1.0'));

@@ -96,10 +96,12 @@ final class LoggingApiTest extends ApiTestCase
         self::assertSame(204, $this->asAlice('DELETE', ['primaryPwd' => self::PRIMARY])->getStatusCode());
 
         self::assertNotSame([], $this->log->getRecords());
+        // JSON would escape `/` in a leaked ciphertext, so the search runs on unescaped JSON; make sure that matters.
+        self::assertSame(1, preg_match('#[/+]#', implode('', $ciphertexts)), 'The test ciphertexts contain a character JSON escapes.');
         foreach ([...$secrets, ...$ciphertexts] as $secret) {
             self::assertNotSame('', $secret);
             foreach ($this->log->getRecords() as $record) {
-                $line = (string) json_encode([$record['message'], $record['context']]);
+                $line = (string) json_encode([$record['message'], $record['context']], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                 self::assertStringNotContainsString($secret, $line, "A secret reached the log: {$record['message']}");
             }
         }

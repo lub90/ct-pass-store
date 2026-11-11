@@ -185,8 +185,14 @@ final class Kernel
      */
     public static function logger(string $logFile, string $level, string $version): Logger
     {
+        // Person IDs and addresses are personal data: private folder and files, other webspace users can't read them.
+        // Monolog would create a missing folder with 0777 and the files with the umask, so both are set here.
+        $dir = dirname($logFile);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o700, true);
+        }
         $logger = new Logger('ct-pass-store');
-        $logger->pushHandler(new RotatingFileHandler($logFile, 14, Logger::toMonologLevel($level)));
+        $logger->pushHandler(new RotatingFileHandler($logFile, 14, Logger::toMonologLevel($level), true, 0o600));
         $logger->pushProcessor(new EscapeControlCharacters());
         $logger->pushProcessor(new AddVersionToErrors($version));
 
