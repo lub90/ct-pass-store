@@ -143,7 +143,7 @@ Decided: Q4, Q5, Q20, Q21, Q23 (spec section 7).
 
 Decided: Q11, Q14, Q17, Q18 (spec section 7).
 
-- [ ] **4.1 Cache** (spec 6.1)
+- [x] **4.1 Cache** (spec 6.1)
   - A file cache outside the web root for settings, the public key, the module and category IDs. No APCu (Q3, kept
     lean). The `jti` replay cache and the attempt counters already live in the `SignedFileStore`.
   - Re-resolve stale cached module/category IDs once per request (spec 5.3.10, catalog ST-18).
@@ -162,19 +162,19 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
   - IPv6 addresses count per `/64`. The counters live in a **fixed number of buckets** (the address hashed into one),
     never one file per address: the interface is public, and lock files are never deleted (spec 6.1).
   - Test (catalog RX-06): a call budget per kind of unauthenticated request, counted on the fake.
-- [ ] **4.2 Extend `/test`** (spec 4.8)
+- [x] **4.2 Extend `/test`** (spec 4.8)
   - File permissions, the OAuth and JWT configuration, the service user's rights (warn on admin rights), valid machine
     clients, the version.
   - The cache folder: `flock` works there, and the number of files is reported and stays below the limit (spec 4.8,
     6.1).
-- [ ] **4.3 Hardening**
+- [x] **4.3 Hardening**
   - Security headers, the CORS method list, the HTTPS check (Q17).
   - Configurable log level and rotation, no secrets in logs (spec 6.4).
-- [ ] **4.4 Deployment**
+- [x] **4.4 Deployment**
   - `setup.sh` sets permissions and runs a check of the deploy folder (no `credentials.php`, no dev files, no instance
     URL).
   - Update `backend/docs/setup.md`: permissions for both hosting cases, OAuth setup, rotating secrets.
-- [ ] **4.5 Release**
+- [x] **4.5 Release**
   - The version string `x.y.z[+sha[-dirty]]` (spec 6.5).
   - A `CHANGELOG.md` and a release workflow on tags with a release check.
   - Updated API docs in `backend/README.md`. First release of the new API.

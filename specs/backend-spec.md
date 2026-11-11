@@ -477,7 +477,7 @@ Deletes the entry of person `{id}`.
     Before writing, the self-test removes test values left over from an earlier run (e.g. after a timeout); after
     writing, it deletes its value again even if a step in between fails.
 - Response: `200` if all checks pass, otherwise `207`. Body: `{"version": "...", "summary": "...", "tests": [...]}`
-  (`version` from **⏳ 4.5**, 6.5).
+  (`version`, 6.5).
 - The checks must not reveal secrets, file paths outside the project, or other users' data.
 
 ### 4.9 Error format (RFC 9457)
@@ -956,7 +956,7 @@ The security stores (`jti` replay cache, rate-limit counters;
     setup wizard, which configures the backend through `/v1/setup` (4.10). The backend sets its own file modes
     (3.1), because uploads don't keep them.
   - Developers run `composer install`.
-- **⏳ 4.5** The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
+- The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
   release, `x.y.z+<sha>` for other commits, `x.y.z+<sha>-dirty` for uncommitted changes.
 
 ### 6.6 Quality gates
@@ -987,7 +987,7 @@ The security stores (`jti` replay cache, rate-limit counters;
 - **An architecture test:** `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
 - **A post-build check of the deploy folder** (`bin/check-deploy.php`): no real `credentials.php`, no instance URL or token, no dev files
   (tests, `phpunit.xml`, fixtures), and the expected layout.
-- **⏳ 4.5 A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
+- **A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
 - The contract suite isn't part of the default test run or the CI. Run without its configuration (`phpunit.xml`,
   fixtures), it aborts with a clear message naming what's missing. It's never reported as passed.

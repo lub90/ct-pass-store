@@ -1,0 +1,52 @@
+# Builds the PHP backend release (spec 6.5, 6.6): runs the checks, verifies tag, VERSION and CHANGELOG, builds the
+# upload-ready zip and publishes it as a GitHub release with the CHANGELOG section as notes.
+name: Backend release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+# Needed to create the release; nothing else.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: curl, json, mbstring, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Checks
+        run: composer check
+
+      - name: Release check (tag, VERSION, CHANGELOG)
+        run: php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+
+      - name: Build the upload-ready folder
+        run: bash setup/setup.sh "$RUNNER_TEMP/ctpassstore-backend"
+
+      - name: Zip it
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          cd "$RUNNER_TEMP/ctpassstore-backend"
+          zip -r -q "$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" .
+          echo "ZIP=$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" >> "$GITHUB_ENV"
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
