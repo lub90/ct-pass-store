@@ -732,13 +732,31 @@ final class KvSettingsRepositoryTest extends TestCase
             $this->failingRepository()->settings();
             self::fail('expected the remembered rate limit');
         } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException $e) {
-            self::assertSame(40, $e->retryAfterSeconds());
+            self::assertSame(60, $e->retryAfterSeconds());
         }
         self::assertSame($calls, count($this->fake->calls()), 'ChurchTools isn\'t asked within the window.');
 
         $this->clock->advance(41);
         self::assertSame(16, $this->failingRepository()->settings()->passwordLength);
         self::assertGreaterThan($calls, count($this->fake->calls()), 'After the window ChurchTools is asked again.');
+    }
+
+    public function testARememberedRateLimitNeverAnswersLessThanSixtySeconds(): void
+    {
+        $this->fake->failNext('getValues', new \CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException('429', 60));
+        try {
+            $this->failingRepository()->settings();
+            self::fail('expected a rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException) {
+        }
+
+        $this->clock->advance(50);
+        try {
+            $this->failingRepository()->settings();
+            self::fail('expected the remembered rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException $e) {
+            self::assertGreaterThanOrEqual(60, $e->retryAfterSeconds());
+        }
     }
 
     public function testAnOutageIsRememberedForTenSeconds(): void

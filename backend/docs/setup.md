@@ -97,8 +97,13 @@ tested).
 | PHP runs as your hosting user (PHP-FPM, suPHP; most shared hosts) | `600` | `700` | `700` |
 | PHP runs as the web server user (e.g. `mod_php`) | `640`, group = the web server's group | `750`, same group | `770`, same group |
 
-The other files and folders can stay `640` and `750`. `/v1/test` checks that `credentials.php` is readable by PHP but
-not by other users, and that `logs/` and `cache/` are writable.
+The other files and folders can stay `640` and `750`. Under `mod_php` all files must belong to the web server's group
+(e.g. `chgrp -R <webserver-group> .`), otherwise PHP cannot read them.
+
+The backend must be served over HTTPS, and `credentials.php` must never be committed to a repository.
+
+`/v1/test` checks that `credentials.php` is readable by PHP, not writable by its group and closed to other users, and
+that `logs/` and `cache/` are writable and closed to other users.
 
 The **`cache/` folder must be on a local disk** where `flock` works between PHP processes, not on a network share
 without lock support. The backend keeps its security stores (replay cache, rate limits) there and, if locking fails,
@@ -117,7 +122,7 @@ token (others get `403`). A healthy installation answers `200`:
     "version": "0.1.0",
     "summary": "All backend self-tests passed successfully.",
     "tests": [
-        { "name": "credentials.php permissions", "status": "ok", "message": "..." }
+        { "name": "Credentials file", "status": "ok", "message": "..." }
     ]
 }
 ```

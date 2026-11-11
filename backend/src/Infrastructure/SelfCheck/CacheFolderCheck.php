@@ -9,7 +9,7 @@ use CtPassStore\Application\SelfCheck\CheckOutcome;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 
 /**
- * `cache/` is writable for PHP only, supports file locks and stays below the file limit (spec 3.1, 6.1).
+ * `cache/` is closed to other users (0700, or 0770 with the web server's group), supports file locks and stays below the file limit (spec 3.1, 6.1).
  */
 final class CacheFolderCheck implements Check
 {
@@ -34,8 +34,8 @@ final class CacheFolderCheck implements Check
         if ($mode === false || !is_dir($this->directory) || !is_writable($this->directory)) {
             return CheckOutcome::fail('cache/ does not exist or is not writable by PHP.');
         }
-        if (($mode & 0o022) !== 0) {
-            return CheckOutcome::fail(sprintf('cache/ is writable by other users (mode %04o). Set it to 0700.', $mode & 0o777));
+        if (($mode & 0o007) !== 0) {
+            return CheckOutcome::fail(sprintf('cache/ is accessible to other users (mode %04o). Set it to 0700, or to 0770 with the web server\'s group when PHP runs as the web server user.', $mode & 0o777));
         }
         if (!$locking) {
             return CheckOutcome::fail('File locking does not work in cache/; the login limits would not hold on this file system.');
@@ -45,6 +45,6 @@ final class CacheFolderCheck implements Check
             return CheckOutcome::fail("cache/ holds $count files, more than the limit of " . self::MAX_FILES . '. Empty the folder.');
         }
 
-        return CheckOutcome::ok("cache/ is writable only by PHP, locking works, $count files.");
+        return CheckOutcome::ok("cache/ is closed to other users, locking works, $count files.");
     }
 }
