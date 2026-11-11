@@ -290,7 +290,8 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       `privacyPolicyAgreementWhoId` and `privacyPolicyAgreementDate` (`Y-m-d`). Departments, campuses and statuses come
       from `GET /api/person/masterdata`. **The status (the type of person, e.g. `status.friend`, `status.member`) is
       chosen by the admin in the wizard** (decided 2026-11-12), from that list with the instance's labels; the wizard
-      doesn't preselect one. **The privacy values don't:** neither `/api/person/masterdata` nor
+      doesn't preselect one. **Department and campus** (decided 2026-11-12): if the instance has exactly one, the
+      wizard uses it without asking; if it has several, the admin chooses (no preselection). **The privacy values don't:** neither `/api/person/masterdata` nor
       `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
       (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
       meaning. **Decided 2026-11-11:** the wizard fills in only what ChurchTools needs to create the person. No privacy
