@@ -279,12 +279,22 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
 
       **Decided 2026-11-11:** the backend fetches the token during `POST /v1/setup` from the service user's login name
       and password (spec 4.10, D6).
-    - **Login name of the service user (open, for 5.1):** the backend logs in with it (`POST /api/login`). To check
-      which field `POST /api/persons` must set so that the new person can log in (e.g. the email address or a
-      username), and whether a new person needs anything else before the first login.
-    - **Creating a person** (measured 2026-11-10): `POST /api/persons` needs `departmentIds`, `campusId`, `statusId`
-      and, on instances that require it, `privacyPolicyAgreementTypeId`, `privacyPolicyAgreementWhoId` and
-      `privacyPolicyAgreementDate`. The wizard reads the valid values from `GET /api/person/masterdata`.
+    - ~~Login name of the service user~~: **measured 2026-11-11, both work.** A person created with only `cmsUserId`
+      (username) and one created with only `email` could each log in right after `setPersonPassword`, with that value as
+      `username` in `POST /api/login`; `GET /api/persons/{id}/logintoken` in that session returned a working token.
+      No confirmation, invitation or other step was needed before the first login. **The wizard uses `cmsUserId`**
+      (e.g. `ctpassstore-backend`): the service user needs no email address, so ChurchTools never mails it, and the
+      name says what the person is for.
+    - **Creating a person** (measured 2026-11-10, refined 2026-11-11): `POST /api/persons` needs `departmentIds`,
+      `campusId`, `statusId` and, on instances that require it, `privacyPolicyAgreementTypeId`,
+      `privacyPolicyAgreementWhoId` and `privacyPolicyAgreementDate` (`Y-m-d`). Departments, campuses and statuses come
+      from `GET /api/person/masterdata`. **The privacy values don't:** neither `/api/person/masterdata` nor
+      `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
+      (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
+      meaning. To decide in the 5.1 design: what the wizard fills in for a service account (it isn't a real person
+      agreeing to anything), e.g. ask the admin once, with the instance's labels if another endpoint has them.
+      `DELETE /api/persons/{id}` removes a person completely (`204`, then `404`), so the wizard can clean up after a
+      failed setup.
     - ~~Licensing and data protection of the service user~~: checked 2026-11-10, an additional person has no
       licensing or data-protection side effects.
 
