@@ -178,40 +178,55 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
   - The version string `x.y.z[+sha[-dirty]]` (spec 6.5).
   - A `CHANGELOG.md` and a release workflow on tags with a release check.
   - Updated API docs in `backend/README.md`. First release of the new API.
-- [ ] **4.6 PHP setup wizard** (after the first release; spec 6.5)
+- [ ] **4.6 Setup endpoint `/v1/setup`, installation without a shell** (after the first release; spec 4.10, 6.5, D6)
   - **Why:** the new authentication makes the backend's setup harder: an OAuth application whose secret is shown only
     once, `JWT_SECRET`, the service user's token, the per-user login right, file permissions that uploads don't keep,
     and Ed25519 keys for machine clients. The setup is accepted as it is for the first release and documented in
-    `backend/docs/setup.md` (4.4); the wizard removes the manual steps later. User friendliness for church members
-    belongs to the extension (phase 5), not to the backend.
-  - **Split of the work** (decided 2026-11-10):
-    - The **extension's setup wizard** (5.1) does everything on the ChurchTools side, as a ChurchTools admin in the
-      browser: service user, groups and rights, OAuth application, login right. At the end it shows a **setup bundle**
-      once: one copyable string (e.g. `ctps-setup:<base64 JSON>`) with `CT_API_URL`, `CT_API_TOKEN`,
-      `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and the CORS origin.
-    - The **PHP wizard** does everything on the server side. The admin enters the setup code and pastes the bundle.
-      The wizard:
-      - checks the bundle against ChurchTools **before** writing anything: the service token works, the service user
-        has no more rights than needed (spec 4.8), the URL belongs to the instance;
-      - generates `JWT_SECRET` itself, so that secret never leaves the server;
-      - writes `credentials.php` with the right permissions for the hosting case (spec 3.1);
-      - creates `cache/` and `logs/` with the right permissions and checks that `flock` works (spec 6.1);
-      - finishes with the checks of `/v1/test` (spec 4.8).
-    - No public endpoint receives configuration from the extension, and the backend never handles admin credentials.
-  - **Lock** (decided 2026-11-10): the backend is publicly reachable, and whoever finishes the wizard first decides
-    which ChurchTools instance the backend trusts.
-    - `setup.sh` generates a random setup code, prints it once and stores only its hash in a file outside `public/`.
-    - The wizard exists only while that file exists. On success it deletes the file and switches itself off.
-    - A wrong code counts against the per-address limit (spec 6.3), so the code can't be found by trying.
-    - Secrets are never shown again after the step that creates them.
-  - **Replacing secrets later** (decided 2026-11-10): a small command (`setup.sh --rearm` or a PHP CLI script) creates a
-    new setup code. The extension wizard can produce a bundle with only the changed values (e.g. a new service token or
-    OAuth secret); the PHP wizard replaces just those. `JWT_SECRET` is replaced only if the admin ticks "rotate".
+    `backend/docs/setup.md` (4.4). 4.6 removes the manual steps: the admin uploads the release zip by FTP and clicks
+    through the extension's wizard. User friendliness for church members belongs to the extension (phase 5), not to
+    the backend.
+  - **Decided 2026-11-11 (D6), replacing the setup code, the PHP wizard page and the copied bundle of 2026-11-10:**
+    - The **extension's setup wizard** (5.1) does everything on the ChurchTools side and then sends the service token
+      and the OAuth client ID and secret to `POST /v1/setup`. The instance comes from the `Origin` header.
+    - **No setup code.** Setup mode exists while `credentials.php` doesn't; the first valid setup wins. Accepted
+      risk: someone can block the setup, but never take it over unnoticed, because the extension does the binding
+      check (spec 6.3, D6).
+    - The backend never handles admin credentials, and the backend has no HTML UI.
+  - **Backend:**
+    - `Kernel::bootstrap()` picks the app from the state of `credentials.php` (spec 3.1): missing → setup app; broken or
+      unreadable → misconfigured app (never the setup app); valid → normal app.
+    - `GET` and `POST /v1/setup` as in spec 4.10: pre-check, `Origin` and address checks, ChurchTools checks with the
+      new values, writing under a lock, `201` with `instanceUrl` and `oauthClientId`. The other modes answer `409` or
+      `500`. CORS `*` for this route in every mode (spec 4.2).
+    - Reuse the checks of 4.2 (local checks, the OAuth client check, the rights check); don't duplicate them.
+    - New problem types `already-configured`, `setup-check-failed`, `not-configured` (spec 4.9), documented in
+      `backend/docs/problems.md`.
+  - **Release and deployment** (takes over from 4.4 and 4.5 without changing what they ship for the first release):
+    - Remove `setup/setup.sh`.
+    - The release workflow builds `ctpassstore-backend-x.y.z.zip` (`vendor/` with `--no-dev`, no `credentials.php`, no
+      dev files); the deploy-folder check of 4.4 runs on the zip.
+    - Rewrite `backend/docs/setup.md`: download the zip, upload it by FTP, set `public/` as the web root, and
+      **continue in the extension's setup wizard right after the upload, without a break** (until then, anyone who
+      finds the URL can block the setup). Troubleshooting: `409` and re-arm (delete `config/credentials.php` and run the
+      wizard again), HTTPS and certificate errors, a web root that ignores `.htaccess`, a `config/` folder that PHP
+      can't write. Writing `credentials.php` by hand stays documented as the manual path.
+  - **Replacing secrets later** (decided 2026-11-11, replaces `setup.sh --rearm`): delete `config/credentials.php` over
+    FTP and run the extension's wizard again. It creates a new service token and OAuth client; the backend generates a
+    new `JWT_SECRET`.
+  - **Tests:**
+    - Kernel modes: missing, unreadable, broken and valid `credentials.php`.
+    - The setup endpoint against the ChurchTools fake: every check that can fail; nothing written after a failure;
+      `Origin` turned into `CT_API_URL` and `CORS`; the request-forgery rules (`http`, IP literal, private address,
+      redirect).
+    - Writing: the written file loads through `BackendConfig::fromArray`; values with quotes or `?>` can't inject
+      code; mode `600`; two parallel setups give one `201` and one `409`.
+    - CORS preflight of `/v1/setup` in all three modes.
+    - A contract test against the test instance: one real setup into a temporary folder.
   - **Open, to check before 4.6 and the setup part of 5.1 start:**
     - ~~OAuth client check without a browser~~: **measured 2026-11-10, possible.** `POST /oauth/access_token` with a
       made-up code answers `400 {"error":"invalid_grant"}` when client ID and secret are right, `401
       {"error":"invalid_client"}` when the secret is wrong, and `404 error.notfound` (a ChurchTools error, not OAuth)
-      for an unknown client ID. So the PHP wizard and `/v1/test` can check the client by exchanging a made-up code.
+      for an unknown client ID. So `/v1/setup` and `/v1/test` can check the client by exchanging a made-up code.
       The skipped contract cases `testAnUnknownAuthorizationCodeIsRejected` and
       `testAWrongClientSecretIsRejectedAsClient` still need `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` in the test
       instance's `config/credentials.php` to run.
@@ -267,7 +282,7 @@ These live outside the backend, but the new API is only usable once they're done
     - Popup logins count against the per-address limit of `POST /v1/auth/token` (spec 6.3, Q26); its values must leave
       room for them.
   - Handling of Problem Details.
-  - **Setup wizard** (ChurchTools side of the setup; the server side is the PHP wizard, 4.6):
+  - **Setup wizard** (ChurchTools side of the setup; the server side is `/v1/setup`, 4.6, spec 4.10, D6):
     - **Groups per access level:** create one group per access level and assign its rights through the API (auth IDs
       looked up per instance, never hard-coded; see `ct-extension-info.md`), then re-check them and warn about groups
       with more rights than intended:
@@ -290,8 +305,20 @@ These live outside the backend, but the new API is only usable once they're done
       contract test helpers use; it works on the test instance). The password isn't shown or stored. **Never** call
       `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the open points in 4.6).
     - **OAuth application:** create it (`POST /api/oauthclients`) and grant the users' group the login right.
-    - **Setup bundle:** show the bundle for the PHP wizard once (4.6). For a later re-arm, produce a bundle with only
-      the changed values.
+    - **Order:** ask for the backend URL and run the pre-check (`GET /v1/setup`) **before** creating anything in
+      ChurchTools. A host that doesn't work, or `409`, stops the wizard with a clear message, and nothing is left
+      half-created. Name the browser-side failures, never just "network error": no valid HTTPS (certificate), a URL
+      that doesn't answer as CtPassStore (web root or `.htaccess` ignored), `500 misconfigured` (a broken
+      `credentials.php` exists).
+    - **Configure the backend:** after the ChurchTools side, send `POST /v1/setup` with the service token and the OAuth
+      client ID and secret. They stay only in memory and are never shown. On `422` or a network error, offer "retry"
+      with the same values; if the tab was closed in between, delete the OAuth client (by `identifier`), create a new
+      one and fetch a new token.
+    - **Binding check** (spec D6): compare `instanceUrl` and `oauthClientId` of the `201` with the wizard's own values,
+      then log in once through OAuth against the backend. `409`, values that don't match or a failed login give a red
+      warning: "someone else configured this backend; delete `config/credentials.php` over FTP and repeat".
+    - Only then save `backendUrl` in the settings.
+    - **Re-arm** is the same flow after the admin deleted `credentials.php`.
   - An admin UI for machine clients.
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)

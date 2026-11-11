@@ -88,6 +88,14 @@ Data lives in three KV categories of the `ctpassstore` module:
   with `500 misconfigured` (see 4.9), naming the missing or invalid key (never its value) in `detail`, and logs an `error`. If the `CORS` key itself is
   broken, the answer (also to `OPTIONS`) has no CORS headers, so browsers show a CORS error; the admin finds the cause
   by calling the backend directly or in the log.
+- **⏳ 4.6** Normally the file is written by the backend itself, through `POST /v1/setup` (4.10, D6). Because PHP
+  creates it, PHP owns it, and the mode is always `600`, whatever the hosting case. Writing the file by hand stays
+  possible (`config/credentials-example.php` documents it).
+- **⏳ 4.6** The three states of the file decide what the backend is (4.10):
+  - **Doesn't exist:** setup mode. Only `/v1/setup` works.
+  - **Exists and is valid:** the normal backend.
+  - **Exists but is unreadable or invalid:** `500 misconfigured` as above. This **never** falls back to setup mode,
+    so a lost read permission or a broken upload can't reopen the setup.
 
 ### 3.2 Settings from ChurchTools
 
@@ -137,7 +145,8 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
    - confidential (with client secret)
    - redirect URI = the extension's page, `https://<instance>/ccm/ctpassstore/`
    - The setup wizard can create it through `POST /api/oauthclients` (needs "administer settings"). ChurchTools
-     returns the secret **only once**; the admin copies client ID and secret into `credentials.php`.
+     returns the secret **only once**; the admin copies client ID and secret into `credentials.php`. **⏳ 4.6** The
+     extension's setup wizard sends them to `POST /v1/setup` (4.10) instead, so nobody copies them.
 2. **The right to use it** for every user of the extension: `churchcore` → "Bei Drittsystem via
    ChurchTools-Benutzerkonto einloggen" (`login to external system`, a per-client data permission). Without it, users
    see "Du bist nicht berechtigt dich bei … einzuloggen". The setup wizard grants it together with the module rights.
@@ -201,6 +210,15 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
 - **⏳ 4.3** `Vary: Origin` on every response.
 - Error responses (`4xx`, `5xx`) carry the same CORS headers as successful ones. Otherwise the extension
   couldn't read the problem details.
+- **⏳ 4.6** **Exception: `/v1/setup`** (4.10) answers **every** origin, in every mode (setup, normal, misconfigured),
+  with `Access-Control-Allow-Origin: *`, `Access-Control-Allow-Methods: GET, POST, OPTIONS` and
+  `Access-Control-Allow-Headers: Content-Type`, without `Access-Control-Allow-Credentials`.
+  - In setup mode, the backend has no `CORS` list yet.
+  - In the other modes, the extension must be able to read `409 already-configured` even when someone else configured
+    the backend with *their* origin. Otherwise it would see only a CORS error and couldn't tell it apart from a wrong
+    URL.
+  - `*` is safe here: the route takes no cookies and no `Authorization` header, and outside setup mode it does
+    nothing.
 
 ### 4.3 Authentication and authorization pipeline
 
@@ -484,7 +502,7 @@ validates) the settings and the public key. Everything else in this section is *
 | `title` | Short, fixed summary of the type |
 | `status` | The HTTP status, repeated |
 | `detail` | Explanation of this specific occurrence. For configuration problems it names exactly what's wrong and how to fix it. |
-| Extension members | Only where useful: `violations` (list of rule codes) for `password-invalid`; `retryAfter` (seconds, the same value as the `Retry-After` header) for `upstream-rate-limited` and `too-many-attempts` |
+| Extension members | Only where useful: `violations` (list of rule codes) for `password-invalid`; `retryAfter` (seconds, the same value as the `Retry-After` header) for `upstream-rate-limited` and `too-many-attempts`; **⏳ 4.6** `tests` (the check list of 4.10) for `setup-check-failed` |
 
 **Problem types:**
 
@@ -506,13 +524,16 @@ validates) the settings and the public key. Everything else in this section is *
 | 404 | `entry-not-found` | No entry for this person (`GET` only) |
 | 405 | `method-not-allowed` | Known route, wrong method |
 | 413 | `payload-too-large` | Body larger than 16 KB |
+| 409 | `already-configured` | **⏳ 4.6** `/v1/setup` called while `credentials.php` exists (4.10) |
 | 415 | `unsupported-media-type` | Non-empty body without `Content-Type: application/json` |
+| 422 | `setup-check-failed` | **⏳ 4.6** A check of `POST /v1/setup` failed; `tests` lists all checks (4.10) |
 | 429 | `too-many-attempts` | Too many primary-password attempts, or too many logins or rejected tokens from one address (see 6.3); with `Retry-After` |
 | 500 | `misconfigured` | Configuration, settings, OAuth setup or service-user rights are missing or wrong. `detail` says exactly what. |
 | 500 | `internal-error` | Anything unexpected. Generic `detail`; details only go to the log. |
 | 502 | `upstream-unavailable` | ChurchTools unreachable, timed out or answered `5xx` |
 | 502 | `upstream-invalid` | ChurchTools answered something the backend can't use (e.g. a token without the `api` scope) |
 | 503 | `upstream-rate-limited` | ChurchTools answered `429`; with a `Retry-After` header |
+| 503 | `not-configured` | **⏳ 4.6** Setup mode: any route except `/v1/setup` (4.10) |
 
 - `detail` may contain input from the request (e.g. an unknown path), but only JSON-encoded inside the problem body.
   Error responses are always `application/problem+json`, also when the client sends `Accept: text/html`; an HTML error
@@ -522,6 +543,73 @@ validates) the settings and the public key. Everything else in this section is *
 application, service-user permissions) is `misconfigured` with a precise `detail`. For example, a `403` from
 ChurchTools on a service-user call means missing permissions, which is `misconfigured`, not an upstream failure. Only
 real bugs are `internal-error`.
+
+### 4.10 `/v1/setup` (first configuration)
+
+**⏳ 4.6, D6.** The backend configures itself from a request of the extension's setup wizard. The admin needs only FTP:
+no shell, no `setup.sh`, no copying secrets. The extension side is in the plan (5.1).
+
+1. **Setup mode.** It exists only while `config/credentials.php` doesn't exist (3.1). Then:
+   - `GET /v1/setup` and `POST /v1/setup` work, with the CORS rules of 4.2 for this route.
+   - Every other route answers `503 not-configured`.
+   - There's no per-address limit (6.3): without `JWT_SECRET` there's no key to sign its counters, and the first
+     successful setup ends setup mode.
+2. **Outside setup mode,** both methods answer `409 already-configured` when the backend is configured, and `500
+   misconfigured` when it's broken (3.1). Neither answer says which instance the backend is connected to.
+3. **`GET /v1/setup`** (the pre-check) answers `200`:
+
+   ```json
+   {"state": "unconfigured", "version": "1.2.0",
+    "tests": [{"name": "...", "status": "ok"|"fail", "message": "..."}]}
+   ```
+
+   The checks: the PHP version and the extensions the backend needs; `config/` writable by PHP; `cache/` and `logs/`
+   exist and are writable, or can be created; `flock` works in `cache/` (6.1). It calls nothing outside the server.
+   The extension runs it **before** it creates anything in ChurchTools.
+4. **`POST /v1/setup`** takes the body `{"ctApiToken": "...", "oauthClientId": "...", "oauthClientSecret": "..."}`. The
+   general body rules apply (4.1: 16 KB, JSON, `Content-Type`).
+   - The instance comes from the request's **`Origin` header**, not from the body: `CT_API_URL = <Origin>/api`,
+     `CORS = [<Origin>]`. A browser can only connect the backend to the instance whose page runs the wizard.
+   - `JWT_SECRET` is generated by the backend (48 random bytes, base64url) and never leaves the server.
+5. **Checks, in this order.** All of them run before anything is written. If one fails, the answer is
+   `422 setup-check-failed` with all checks in `tests` (names and messages, never a secret), and nothing is written.
+   1. The `Origin` header: present, `https://`, a host name (no IP literal), no path. The host must not resolve to a
+      loopback, private, link-local or otherwise reserved address (IPv4 and IPv6).
+   2. The checks of `GET /v1/setup`.
+   3. ChurchTools, with the new values:
+      - `whoami` with `ctApiToken` succeeds;
+      - the module lookup succeeds (`view` on the extension, measured 2026-11-10);
+      - the OAuth client is accepted: exchanging a made-up code answers `invalid_grant` (measured 2026-11-10);
+      - the service user's rights pass the rights check of 4.8: no administrative rights, and enough rights for the
+        extension's categories.
+6. **Outgoing calls during setup** (server-side request forgery):
+   - only to the address checked in 5.1, pinned for the request, so DNS can't change it in between;
+   - no redirects;
+   - the timeouts of 5.6;
+   - the response size is limited.
+
+   ChurchTools being unreachable gives `502 upstream-unavailable`, like everywhere else.
+7. **Writing:**
+   1. Take an exclusive `flock` on `config/.setup.lock`.
+   2. Check again that `credentials.php` doesn't exist; otherwise `409`. Of two parallel requests, only one wins.
+   3. Write a temp file in `config/`. Values are written with `var_export`, so no input can inject PHP code.
+   4. Set the mode to `600` and `rename` the temp file to `credentials.php`.
+   5. Create `cache/` and `logs/` (mode `700`) if they're missing.
+
+   If writing fails, the temp file is removed, and the answer is `500 misconfigured` with a `detail` that says which
+   folder isn't writable.
+8. **Success** answers `201`:
+
+   ```json
+   {"instanceUrl": "https://example.church.tools", "oauthClientId": "...", "version": "1.2.0", "tests": [...]}
+   ```
+
+   - `instanceUrl` and `oauthClientId` are what the backend is now connected to. The extension compares them with its
+     own values (the binding check, D6).
+   - `tests` are the checks of 4.8 (without `?write=1`), run once with the new file.
+9. **Logging:** a successful setup is logged as `info` with the instance URL and the IP address; a failed one as
+   `warning` with the failed check names and the IP address. Before `logs/` exists, PHP's `error_log` is used. No
+   secret is ever logged.
 
 ## 5. Units
 
@@ -810,6 +898,18 @@ The security stores (`jti` replay cache, rate-limit counters;
   | `JWT_SECRET` | `credentials.php` | Replace it; all backend tokens become invalid and users log in again silently |
   | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one |
 
+  **⏳ 4.6** The first three can also be replaced together: delete `config/credentials.php` over FTP and run the
+  extension's setup wizard again (4.10). It creates a new service token and OAuth client; the backend generates a new
+  `JWT_SECRET`.
+- **⏳ 4.6** **Setup mode is open to the first caller** (4.10, D6). Between the upload and the setup, anyone who finds the
+  backend's URL can configure it. Accepted (ruling 2026-11-11), because:
+  - They can only connect it to an instance where they have a working service token and an OAuth client, which in
+    practice means their own instance. A member of the real instance can't create an OAuth client there.
+  - The real admin always notices: the wizard gets `409 already-configured` or values that don't match, and its own
+    OAuth login against the backend fails. The fix is to delete `credentials.php` over FTP.
+  - No passwords exist yet at that point. The worst case is a blocked setup, not a data leak.
+  - The setup docs tell the admin to run the wizard right after the upload, without a break.
+
 ### 6.4 Logging
 
 - PSR-3 logger (Monolog) writing to `logs/app.log`.
@@ -835,7 +935,14 @@ The security stores (`jti` replay cache, rate-limit counters;
   runtime.
 - The `setup/setup.sh` script produces an upload-ready folder. **⏳ 4.4** It sets sensible permissions
   there, and the setup docs list the target permissions for both hosting cases (3.1), because uploads don't keep them.
-- **⏳ 4.6** Later, a PHP-based setup wizard takes over the manual steps (see the plan).
+- **⏳ 4.6** Installation without a shell (D6):
+  - `setup/setup.sh` is removed. The release workflow builds an upload-ready zip,
+    `ctpassstore-backend-x.y.z.zip`, with `vendor/` installed `--no-dev`, and without `credentials.php` or dev files.
+    The deploy-folder check of 4.4 runs on that zip.
+  - The admin uploads the zip's contents by FTP, sets `public/` as the web root and **right away** runs the extension's
+    setup wizard, which configures the backend through `/v1/setup` (4.10). The backend sets its own file modes
+    (3.1), because uploads don't keep them.
+  - Developers run `composer install`.
 - **⏳ 4.5** The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
   release, `x.y.z+<sha>` for other commits, `x.y.z+<sha>-dirty` for uncommitted changes.
 
@@ -999,6 +1106,36 @@ the backend verifies it with the registered public key (4.4a).
 - Roughly synchronized clocks.
 - A registry of clients in the settings with a small admin UI.
 - A `jti` cache in the backend.
+
+### D6. Setup over the extension, without a setup code
+
+**Decided 2026-11-11** (replaces the setup-code lock and the copied setup bundle decided 2026-11-10). The extension's
+setup wizard configures the backend directly with `POST /v1/setup` (4.10). Setup mode has no setup code: the first
+valid setup wins, and the extension checks that it was its own.
+
+**Why:** with a setup code, someone has to run `setup.sh` (shell, Composer) to create it, and copy it into the
+backend. Without a code, installing is "upload by FTP, click in the extension".
+
+**The binding check makes a takeover visible.** After `POST /v1/setup`, the extension:
+
+- compares `instanceUrl` and `oauthClientId` in the answer with its own values;
+- then logs in once through OAuth against the backend, which works only if the backend really trusts this instance and
+  this client.
+
+`409`, values that don't match, or a failed login give the admin a clear warning with the fix (delete
+`credentials.php` over FTP and repeat). The remaining risk is a blocked setup (6.3).
+
+**Alternatives considered:**
+
+| Option | Why not |
+| --- | --- |
+| Setup code from `setup.sh`, entered in a PHP wizard page (2026-11-10) | Needs a shell and Composer; the admin copies a code and a bundle by hand. |
+| The backend writes a code to a file outside `public/` on the first visit; the admin downloads it by FTP | Protects only the few minutes between upload and setup, and adds a manual step that confuses non-technical admins. |
+| A backend HTML page that receives the data by form POST or `postMessage` | The extension can't read the result in the other tab, so the binding check needs a second round trip; the admin sees two UIs; the backend would need HTML templates. |
+| The setup values in the link's query string | Secrets would land in access logs, browser history and `Referer` headers. |
+
+**Cost:** one more route that answers every origin (4.2) and makes outgoing calls to a caller-chosen host, while the
+backend is unconfigured. It is guarded against server-side request forgery (4.10).
 
 ## 9. Later (not part of the first release)
 
