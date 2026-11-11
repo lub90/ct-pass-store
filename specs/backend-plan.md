@@ -225,48 +225,22 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
     - Writing: the written file loads through `BackendConfig::fromArray`; values with quotes or `?>` can't inject
       code; mode `600`; two parallel setups give one `201` and one `409`.
     - CORS preflight of `/v1/setup` in all three modes.
-    - A contract test against the test instance: one real setup into a temporary folder.
-  - **Open, to check before 4.6 and the setup part of 5.1 start:**
-    - ~~OAuth client check without a browser~~: **measured 2026-11-10, possible.** `POST /oauth/access_token` with a
+    - A contract test of fetching the token with login and password; a manual end-to-end setup on a real HTTPS host
+      (the existing service user's password isn't known, so a full contract run isn't possible).
+  - **ChurchTools facts the backend relies on** (measured; the wizard's facts are under 5.1):
+    - **OAuth client check without a browser** (measured 2026-11-10, possible): `POST /oauth/access_token` with a
       made-up code answers `400 {"error":"invalid_grant"}` when client ID and secret are right, `401
       {"error":"invalid_client"}` when the secret is wrong, and `404 error.notfound` (a ChurchTools error, not OAuth)
       for an unknown client ID. So `/v1/setup` and `/v1/test` can check the client by exchanging a made-up code.
       The skipped contract cases `testAnUnknownAuthorizationCodeIsRejected` and
       `testAWrongClientSecretIsRejectedAsClient` still need `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` in the test
       instance's `config/credentials.php` to run.
-    - **API details for the wizard** (measured 2026-11-10): `POST /api/oauthclients` expects `redirectUri` as a
-      **string** (it answers with a list) and returns `clientSecret` only in that response; `DELETE` (and the other
-      single-client calls) address the client by its `identifier`, not by its numeric `id`.
-    - ~~Service token rotation~~: **measured 2026-11-10.** Changing a person's password invalidates their login token
-      at once (`401 No valid token`), and `GET /persons/{id}/logintoken` afterwards returns a **new**, working token.
-      So the re-arm bundle gets a new token by setting a new password and fetching the token again.
-      `DELETE /persons/{id}/logintoken` also exists (not measured yet).
-    - ~~Module lookup right~~: **measured 2026-11-10.** `GET /api/custommodules/{key}` (and by ID) needs `view` on the
+    - **Module lookup right** (measured 2026-11-10): `GET /api/custommodules/{key}` (and by ID) needs `view` on the
       extension; without it ChurchTools answers `403`. `GET …/customdatacategories` answers `200` but lists only the
       categories the person may see. So the service user needs `view` on the extension, `view custom category` and
       `view custom data` for its categories, and create/edit/delete custom data for `passwordStore` only.
-    - **Setting the service user's password:** `PUT /api/persons/{id}/password` changes the password of the
-      **logged-in** person, whatever `{id}` says, and needs that person's current password as `oldPassword` (measured
-      2026-11-10: called as admin with another person's ID, it changed the admin's password). So the wizard can't set
-      the new person's password this way.
-      **Found 2026-11-11** (recorded in the browser, from the person view of the ChurchTools admin): the legacy AJAX
-      API sets another person's password. `POST /index.php?q=churchdb/ajax`, form-encoded
-      (`application/x-www-form-urlencoded`), body `func=setPersonPassword&id=<personId>&password=<new password>`
-      (the UI also sends `browsertabId`, probably not needed), with the admin's session cookie and the `CSRF-Token`
-      header (from `GET /api/csrftoken`, see `ct-extension-info.md`). Answer: `200 {"status":"success","data":null}`.
-      The extension runs on the instance's own origin with the admin's session, so it can make this call.
-      **Measured 2026-11-11** on the test instance:
-      - It needs the churchcore right **"simulate persons"** ("Personen simulieren, Passwort ändern und Zugang
-        sperren"). Without it, ChurchTools answers HTTP `200` with `{"status":"fail","data":"Keine ausreichende
-        Berechtigung. …"}`, so the wizard must check `status`, not the HTTP status.
-      - Without the `CSRF-Token` header: `401 CSRF-Token is invalid`. `browsertabId` isn't needed.
-      - **No password rules are applied**: the password `a` was accepted. The wizard generates a long random password
-        itself.
-      - It invalidates the person's login token at once (`401`); the next `GET /api/persons/{id}/logintoken` as that
-        person returns a new, working token. So re-arm works by setting a new password.
-      It's a legacy API that ChurchTools may remove; the wizard puts it behind one function, so it can be swapped.
-    - **Getting the service user's token without losing the admin's session (open, blocking for 5.1):** a browser holds
-      only one ChurchTools session (`ct-extension-info.md`). **Measured 2026-11-11** on the test instance:
+    - **Why the backend fetches the service user's token** (measured 2026-11-11 on the test instance): a
+      browser holds only one ChurchTools session (`ct-extension-info.md`).
       - An admin (with every right) can't read another person's token: `GET /api/persons/{id}/logintoken` answers
         `403 Forbidden to see Login Token for Person[…]`.
       - Simulating the person doesn't help: `POST /api/simulate` works, but `GET` and `DELETE …/logintoken` then answer
@@ -277,33 +251,8 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       - A login in a fresh session followed by `GET /api/persons/{id}/logintoken` as that person works (as in the
         contract test helpers).
 
-      **Decided 2026-11-11:** the backend fetches the token during `POST /v1/setup` from the service user's login name
-      and password (spec 4.10, D6).
-    - ~~Login name of the service user~~: **measured 2026-11-11, both work.** A person created with only `cmsUserId`
-      (username) and one created with only `email` could each log in right after `setPersonPassword`, with that value as
-      `username` in `POST /api/login`; `GET /api/persons/{id}/logintoken` in that session returned a working token.
-      No confirmation, invitation or other step was needed before the first login. **The wizard uses `cmsUserId`**
-      (`ctpassstore-api`, see below): the service user needs no email address, so ChurchTools never mails it, and the
-      name says what the person is for.
-    - **Creating a person** (measured 2026-11-10, refined 2026-11-11): `POST /api/persons` needs `departmentIds`,
-      `campusId`, `statusId` and, on instances that require it, `privacyPolicyAgreementTypeId`,
-      `privacyPolicyAgreementWhoId` and `privacyPolicyAgreementDate` (`Y-m-d`). Departments, campuses and statuses come
-      from `GET /api/person/masterdata`. **The status (the type of person, e.g. `status.friend`, `status.member`) is
-      chosen by the admin in the wizard** (decided 2026-11-12), from that list with the instance's labels; the wizard
-      doesn't preselect one. **Department and campus** (decided 2026-11-12): if the instance has exactly one, the
-      wizard uses it without asking; if it has several, the admin chooses (no preselection). **The privacy values don't:** neither `/api/person/masterdata` nor
-      `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
-      (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
-      meaning. **Decided 2026-11-11:** the wizard fills in only what ChurchTools needs to create the person. No privacy
-      concern arises, because the service user isn't a real person. So it first creates the person without the
-      privacy fields; if the `400` names them, it retries once with the first value of each `validOptions` and
-      today's date. It doesn't ask the admin. `DELETE /api/persons/{id}` removes a person completely (`204`, then `404`), so the wizard can clean up after a
-      failed setup.
-    - **Name of the service user** (decided 2026-11-11): recognizable as an API account, not a person: first name
-      `CtPassStore`, last name `API` (shown as "CtPassStore API"), login name (`cmsUserId`) `ctpassstore-api`, no
-      email address. If `ctpassstore-api` is taken, the wizard appends `-2`, `-3`, …
-    - ~~Licensing and data protection of the service user~~: checked 2026-11-10, an additional person has no
-      licensing or data-protection side effects.
+      So the backend fetches the token during `POST /v1/setup` from the service user's login name and password
+      (decided 2026-11-11, spec 4.10, D6).
 
 ## Phase 5 – Consumers (after the backend API is stable)
 
@@ -353,11 +302,11 @@ These live outside the backend, but the new API is only usable once they're done
       The backend's admin role still comes from the `adminUsers` list in the settings until Q22 (roles via groups) is
       decided; the wizard says so and doesn't silently mix the two.
     - **Service user:** create the person with a login name, set a long random password with the legacy
-      `setPersonPassword` call (needs "simulate persons" and a CSRF token; check `status`, not the HTTP status; 4.6,
-      measured 2026-11-11), and add it to the service-user group. The wizard **doesn't** fetch the token and never logs
+      `setPersonPassword` call (needs "simulate persons" and a CSRF token; check `status`, not the HTTP status; see
+      the API facts below), and add it to the service-user group. The wizard **doesn't** fetch the token and never logs
       in as that person: that would replace the admin's session. It sends login name and password to
       `POST /v1/setup`, and the backend fetches the token. The password isn't shown or stored. **Never** call
-      `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the open points in 4.6).
+      `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the API facts below).
     - **OAuth application:** create it (`POST /api/oauthclients`) and grant the users' group the login right.
     - **Order:** ask for the backend URL and run the pre-check (`GET /v1/setup`) **before** creating anything in
       ChurchTools. A host that doesn't work, or `409`, stops the wizard with a clear message, and nothing is left
@@ -374,6 +323,60 @@ These live outside the backend, but the new API is only usable once they're done
     - Only then save `backendUrl` in the settings.
     - **Re-arm** is the same flow after the admin deleted `credentials.php`: the existing service user gets a new
       password (which invalidates its old token), and the backend fetches the new token.
+    - **ChurchTools API facts for the wizard** (measured on the test instance; moved here from 4.6 on 2026-11-12):
+      - **API details for the wizard** (measured 2026-11-10): `POST /api/oauthclients` expects `redirectUri` as a
+        **string** (it answers with a list) and returns `clientSecret` only in that response; `DELETE` (and the other
+        single-client calls) address the client by its `identifier`, not by its numeric `id`.
+      - **Service token rotation** (measured 2026-11-10): Changing a person's password invalidates their login token
+        at once (`401 No valid token`), and `GET /persons/{id}/logintoken` afterwards returns a **new**, working token.
+        So re-arm sets a new password; the backend then fetches the new token.
+        `DELETE /persons/{id}/logintoken` also exists (not measured yet).
+      - **Setting the service user's password:** `PUT /api/persons/{id}/password` changes the password of the
+        **logged-in** person, whatever `{id}` says, and needs that person's current password as `oldPassword` (measured
+        2026-11-10: called as admin with another person's ID, it changed the admin's password). So the wizard can't set
+        the new person's password this way.
+        **Found 2026-11-11** (recorded in the browser, from the person view of the ChurchTools admin): the legacy AJAX
+        API sets another person's password. `POST /index.php?q=churchdb/ajax`, form-encoded
+        (`application/x-www-form-urlencoded`), body `func=setPersonPassword&id=<personId>&password=<new password>`
+        (the UI also sends `browsertabId`, probably not needed), with the admin's session cookie and the `CSRF-Token`
+        header (from `GET /api/csrftoken`, see `ct-extension-info.md`). Answer: `200 {"status":"success","data":null}`.
+        The extension runs on the instance's own origin with the admin's session, so it can make this call.
+        **Measured 2026-11-11** on the test instance:
+        - It needs the churchcore right **"simulate persons"** ("Personen simulieren, Passwort ändern und Zugang
+          sperren"). Without it, ChurchTools answers HTTP `200` with `{"status":"fail","data":"Keine ausreichende
+          Berechtigung. …"}`, so the wizard must check `status`, not the HTTP status.
+        - Without the `CSRF-Token` header: `401 CSRF-Token is invalid`. `browsertabId` isn't needed.
+        - **No password rules are applied**: the password `a` was accepted. The wizard generates a long random password
+          itself.
+        - It invalidates the person's login token at once (`401`); the next `GET /api/persons/{id}/logintoken` as that
+          person returns a new, working token. So re-arm works by setting a new password.
+        It's a legacy API that ChurchTools may remove; the wizard puts it behind one function, so it can be swapped.
+      - **Login name of the service user** (measured 2026-11-11, both work): A person created with only `cmsUserId`
+        (username) and one created with only `email` could each log in right after `setPersonPassword`, with that value as
+        `username` in `POST /api/login`; `GET /api/persons/{id}/logintoken` in that session returned a working token.
+        No confirmation, invitation or other step was needed before the first login. **The wizard uses `cmsUserId`**
+        (`ctpassstore-api`, see below): the service user needs no email address, so ChurchTools never mails it, and the
+        name says what the person is for.
+      - **Creating a person** (measured 2026-11-10, refined 2026-11-11): `POST /api/persons` needs `departmentIds`,
+        `campusId`, `statusId` and, on instances that require it, `privacyPolicyAgreementTypeId`,
+        `privacyPolicyAgreementWhoId` and `privacyPolicyAgreementDate` (`Y-m-d`). Departments, campuses and statuses come
+        from `GET /api/person/masterdata`. **The status (the type of person, e.g. `status.friend`, `status.member`) is
+        chosen by the admin in the wizard** (decided 2026-11-12), from that list with the instance's labels; the wizard
+        doesn't preselect one. **Department and campus** (decided 2026-11-12): if the instance has exactly one, the
+        wizard uses it without asking; if it has several, the admin chooses (no preselection). **The privacy values
+        aren't in the master data:** neither `/api/person/masterdata` nor
+        `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
+        (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
+        meaning. **Decided 2026-11-11:** the wizard fills in only what ChurchTools needs to create the person. No privacy
+        concern arises, because the service user isn't a real person. So it first creates the person without the
+        privacy fields; if the `400` names them, it retries once with the first value of each `validOptions` and
+        today's date. It doesn't ask the admin. `DELETE /api/persons/{id}` removes a person completely (`204`, then `404`), so the wizard can clean up after a
+        failed setup.
+      - **Name of the service user** (decided 2026-11-11): recognizable as an API account, not a person: first name
+        `CtPassStore`, last name `API` (shown as "CtPassStore API"), login name (`cmsUserId`) `ctpassstore-api`, no
+        email address. If `ctpassstore-api` is taken, the wizard appends `-2`, `-3`, …
+      - **Licensing and data protection of the service user** (checked 2026-11-10): an additional person has no
+        licensing or data-protection side effects.
   - An admin UI for machine clients.
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)
