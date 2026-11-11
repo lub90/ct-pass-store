@@ -440,16 +440,16 @@ normal case names it ("→ PV-05").
 ### `GET /v1/test` (4.8)
 
 - [ ] **TS-01** (N · A) Everything in order → `200`, every check `ok`, version included — 4.8
-- [ ] **TS-02** (N · A) Each check fails on its own → `207` with exactly that check `fail`:
+- [x] **TS-02** (N · A) Each check fails on its own → `207` with exactly that check `fail`:
   - `credentials.php` readable by others; `logs/` not writable
   - cache folder not writable by PHP, or writable by others
   - settings invalid; `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` or `JWT_SECRET` missing or `JWT_SECRET` too short
   - public key unusable; `passwordStore` not readable
   - a disabled machine client, an empty key list or unknown permissions; each reported **by client name and value**
   — 4.8
-- [ ] **TS-03** (! · A) Service user with `administer settings`, `administer persons` or `administer custom modules`, or
+- [x] **TS-03** (! · A) Service user with `administer settings`, `administer persons` or `administer custom modules`, or
   with write access beyond `passwordStore` → that check `fail` — 4.8
-- [ ] **TS-04** (! · A) The response contains no secrets, no file paths outside the project and no other users' data
+- [x] **TS-04** (! · A) The response contains no secrets, no file paths outside the project and no other users' data
   — 4.8
 - [ ] **TS-05** (N · A) Admin → `200`/`207`; normal user and machine client → `403 forbidden` — 4.8
 - [ ] **TS-06** (! · A) `?write=1`: the test value uses the reserved `personId` `0`, is found again by the self-test's
@@ -688,7 +688,7 @@ tester has; it's documented in `backend/docs/testing.md`.
   browser — 4.4.3
 - [ ] **CT-03** (N · C) `whoami` and `permissions/global` with `Authorization: Bearer` and `X-OnlyAuthenticated: 1` work
   and have the shape the backend reads (`data.id`, `data.cmsUserId`, `data.ctpassstore.view` as a boolean) — 4.4.4
-- [ ] **CT-04** (N · C) The service user's `permissions/global` has the shape the rights check in `/v1/test` relies on
+- [x] **CT-04** (N · C) The service user's `permissions/global` has the shape the rights check in `/v1/test` relies on
   (`churchcore` flags, `ctpassstore` category lists) — 4.8
 - [ ] **CT-05** (E · C) The KV value limit is real: 10,000 characters are accepted, 10,001 rejected with the status the
   client maps — 5.3.8

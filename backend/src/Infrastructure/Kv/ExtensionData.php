@@ -51,6 +51,16 @@ final class ExtensionData
     }
 
     /**
+     * The ID of a category of the extension, by name (for the service user's rights, spec 4.8).
+     *
+     * @throws ConfigurationException if the category doesn't exist
+     */
+    public function categoryIdOf(string $name): int
+    {
+        return $this->categoryId($name);
+    }
+
+    /**
      * Creates a value from an encoded JSON string and returns its ID.
      */
     public function create(string $category, string $json): int

@@ -224,6 +224,40 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         $this->client()->exchangeAuthorizationCode('unknown-client-' . bin2hex(random_bytes(8)), 'any-secret', 'not-a-real-code', $redirectUri, str_repeat('v', 43));
     }
 
+    /**
+     * CT-04: the service user's `permissions/global` has the shape the rights check of `/v1/test` relies on (spec 4.8):
+     * `churchcore` flags are booleans, the `ctpassstore` category lists are lists of integers.
+     */
+    public function testServiceUserPermissionsHaveTheExpectedShape(): void
+    {
+        $permissions = $this->client()->serviceUserGlobalPermissions();
+
+        $churchcore = $permissions->of('churchcore');
+        if ($churchcore !== null) {
+            foreach (['administer settings', 'administer persons', 'administer custom modules'] as $key) {
+                if (array_key_exists($key, $churchcore)) {
+                    self::assertIsBool($churchcore[$key], "churchcore.$key");
+                }
+            }
+        }
+
+        $extension = $permissions->of(KvSchema::EXTENSION_KEY);
+        if ($extension !== null) {
+            foreach (['view custom category', 'view custom data', 'create custom data', 'edit custom data', 'delete custom data', 'edit custom category', 'delete custom category'] as $key) {
+                if (array_key_exists($key, $extension)) {
+                    self::assertIsArray($extension[$key], "ctpassstore.$key");
+                    self::assertTrue(array_is_list($extension[$key]), "ctpassstore.$key is a list");
+                    foreach ($extension[$key] as $id) {
+                        self::assertIsInt($id, "ctpassstore.$key holds category IDs");
+                    }
+                }
+            }
+            if (array_key_exists('create custom category', $extension)) {
+                self::assertIsBool($extension['create custom category']);
+            }
+        }
+    }
+
     private function valueById(int $id): ?string
     {
         foreach ($this->client()->getValues($this->moduleId(), $this->passwordStoreId()) as $value) {

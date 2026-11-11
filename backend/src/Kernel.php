@@ -42,8 +42,11 @@ use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
 use CtPassStore\Infrastructure\SelfCheck\CacheFolderCheck;
 use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
 use CtPassStore\Infrastructure\SelfCheck\LogFolderCheck;
+use CtPassStore\Infrastructure\SelfCheck\OAuthClientCheck;
 use CtPassStore\Infrastructure\SelfCheck\OAuthConfigurationCheck;
+use CtPassStore\Infrastructure\SelfCheck\PasswordStoreReadCheck;
 use CtPassStore\Infrastructure\SelfCheck\PublicKeyCheck;
+use CtPassStore\Infrastructure\SelfCheck\ServiceUserRightsCheck;
 use CtPassStore\Infrastructure\SelfCheck\SettingsCheck;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
@@ -103,7 +106,10 @@ final class Kernel
             new CacheFolderCheck($config->cacheDir, $securityStore),
             new OAuthConfigurationCheck($config),
             new SettingsCheck($settings),
-            new PublicKeyCheck($settings),
+            new PublicKeyCheck($settings, new RsaPasswordCipher($settings)),
+            new PasswordStoreReadCheck($extensionData),
+            new ServiceUserRightsCheck($churchTools, $extensionData),
+            new OAuthClientCheck($churchTools, $config),
         ], $logger), $version);
         $login = new AuthController(new Login(
             $config->instanceOrigin(),

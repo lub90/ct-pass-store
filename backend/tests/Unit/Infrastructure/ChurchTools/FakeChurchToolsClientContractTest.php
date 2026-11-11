@@ -27,6 +27,7 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
         ]);
         $this->fake->seedValue($ids[KvSchema::PASSWORD_CATEGORY], '{"personId":5,"secondaryPwd":"x"}');
         $this->fake->addUser($this->validUserCredential(), 5, 'jdoe', [KvSchema::EXTENSION_KEY => ['view' => true]]);
+        $this->fake->setServiceUserPermissions(['churchcore' => ['administer settings' => false], KvSchema::EXTENSION_KEY => ['view' => true, 'edit custom data' => [$ids[KvSchema::PASSWORD_CATEGORY]]]]);
         $this->fake->addLogin('jdoe', 'Secret-1!', 5);
         $this->fake->setOAuthClient('oauth-client', 'oauth-secret');
     }

@@ -74,6 +74,33 @@ final class KvSettingsRepository implements SettingsRepository
     }
 
     /**
+     * Forgets everything this repository remembers, in memory and in the cache (settings, public key and remembered
+     * upstream failures), so the next call asks ChurchTools. For the self-check, so a fix shows at once (spec 4.8).
+     */
+    public function refresh(): void
+    {
+        $this->settings = null;
+        $this->findings = [];
+        $this->forget(self::CACHE_SETTINGS);
+        $this->refreshPublicKey();
+    }
+
+    /**
+     * Like refresh(), for the public key only; the settings stay as they are.
+     */
+    public function refreshPublicKey(): void
+    {
+        $this->publicKey = null;
+        $this->forget(self::CACHE_PUBLIC_KEY);
+    }
+
+    private function forget(string $cacheName): void
+    {
+        $this->cache?->forget($cacheName);
+        $this->cache?->forget($cacheName . '-failure');
+    }
+
+    /**
      * What was ignored or disabled when the settings were parsed, for `/test` (plan 4.2).
      *
      * @return list<string>
