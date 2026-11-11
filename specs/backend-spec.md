@@ -894,8 +894,8 @@ The security stores (`jti` replay cache, rate-limit counters;
     mistakes (Q26): at most **30** `POST /v1/auth/token` requests and **60** rejected tokens per address and
     minute, kept in **256** buckets. A block lasts until the window has passed.
   - A global cap of **100** logins per minute across all addresses keeps logins below half of ChurchTools' budget,
-    however many addresses an attacker has (ruling 2026-11-10). A refused login counts in neither the address bucket
-    nor the global record. While a flood lasts, logins from everyone are refused; existing sessions (15-minute tokens)
+    however many addresses an attacker has (ruling 2026-11-10, confirmed 2026-11-11). A refused login counts in
+    neither the address bucket nor the global record. While a flood lasts, logins from everyone are refused; existing sessions (15-minute tokens)
     and machine clients keep working.
   - It's kept in a fixed number of buckets (6.1), and it fails closed for the login like the other security stores.
 - The client IP address is always `REMOTE_ADDR`. `X-Forwarded-For`, `X-Real-IP` and `Forwarded` are ignored, because
