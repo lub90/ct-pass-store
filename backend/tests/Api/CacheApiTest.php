@@ -6,6 +6,7 @@ namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Kv\KvSchema;
+use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use Monolog\Logger;
@@ -48,7 +49,7 @@ final class CacheApiTest extends ApiTestCase
     }
 
     /**
-     * CA-02 through the app: after 60 s, changed settings apply without anyone clearing the cache.
+     * CA-02 through the app: after the settings TTL, changed settings apply without anyone clearing the cache.
      */
     public function testChangedSettingsApplyAfterTheTtl(): void
     {
@@ -61,7 +62,7 @@ final class CacheApiTest extends ApiTestCase
         $this->seedEntry(self::OTHER);
 
         $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
-        $this->clock->advance(61);
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
         self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER)->getStatusCode());
         self::assertSame(2, $this->settingsReads());
     }
@@ -216,7 +217,7 @@ final class CacheApiTest extends ApiTestCase
         $this->churchTools->seedValue($ids[KvSchema::SETTINGS_CATEGORY], (string) $settings);
         $this->churchTools->seedValue($ids[KvSchema::ENCRYPTION_CATEGORY], (string) $encryption);
         $this->churchTools->seedValue($ids[KvSchema::PASSWORD_CATEGORY], json_encode([KvSchema::ENTRY_PERSON_ID => self::USER, KvSchema::ENTRY_CIPHERTEXT => 'bmV3'], JSON_THROW_ON_ERROR));
-        $this->clock->advance(61);
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
 
         $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
 
@@ -232,7 +233,7 @@ final class CacheApiTest extends ApiTestCase
     {
         $this->request('GET', '/v1/entries/' . self::USER, self::USER);
         $this->churchTools->removeModule(KvSchema::EXTENSION_KEY);
-        $this->clock->advance(61);
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
 
         $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::USER, self::USER));
         self::assertSame(2, $this->churchTools->countCalls(['getModuleByKey']), 'One re-resolution, no loop.');

@@ -24,7 +24,8 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 
 ### Added
 
-- Cache for module and category IDs, settings and the public key, with HMAC-protected files.
+- Cache for module and category IDs (1 hour), settings and the public key (5 minutes), with HMAC-protected files.
+  Changes to admins and machine clients therefore take up to 5 minutes to apply.
 - Limits: 5 wrong primary passwords per person and 15 minutes; per address 30 logins and 60 rejected tokens per minute,
   plus 100 logins per minute overall.
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.
