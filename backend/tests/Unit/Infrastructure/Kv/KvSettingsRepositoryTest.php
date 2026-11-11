@@ -546,6 +546,15 @@ final class KvSettingsRepositoryTest extends TestCase
     // ---------------------------------------------------------------- cache (spec 3.2, 5.4.2, 6.1)
 
     /**
+     * Spec 6.1: settings and public key are cached for 5 minutes, so steady RADIUS traffic reloads them only once in
+     * that time (decided 2026-11-11, at the price of slower revocation of admins and machine clients).
+     */
+    public function testTheSettingsTtlIsFiveMinutes(): void
+    {
+        self::assertSame(300, KvSettingsRepository::SETTINGS_TTL);
+    }
+
+    /**
      * CA-01: two requests within the TTL load the settings from ChurchTools once.
      */
     public function testSettingsAreLoadedOnceWithinTtl(): void
@@ -572,7 +581,7 @@ final class KvSettingsRepositoryTest extends TestCase
 
         $this->fake->clearValues($category);
         $this->fake->seedValue($category, json_encode(['adminUsers' => [42]] + self::validSettings(), JSON_THROW_ON_ERROR));
-        $this->clock->advance(61);
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
 
         self::assertSame([42], $this->cachedRepository()->settings()->adminUsers);
         self::assertSame(2, $this->settingsReads());

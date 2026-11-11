@@ -380,7 +380,7 @@ key and send it as `Authorization: Bearer <jwt>`. The backend only knows the pub
 6. The client's `permissions` decide what it may do (4.3 matrix).
 
 **Revocation:** remove the client or one of its keys from the settings. This takes effect within the settings cache
-TTL (6.1).
+TTL (6.1), so within 5 minutes.
 
 ### 4.5 `GET /v1/entries/{id}`
 
@@ -807,7 +807,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   | Data | Proposed TTL | Effect |
   | --- | --- | --- |
   | Module ID, category IDs | 1 hour | These only change on reinstall |
-  | Settings, public key | 60 s | Admin changes take up to 1 minute to apply |
+  | Settings, public key | 5 minutes | Admin changes (admins, machine clients and their keys, the public key) take up to 5 minutes to apply. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
 
 - `passwordStore` values are **never** cached. Reads must always see the latest write.
 - **Cache backend:** a file cache outside the web root. No APCu, to keep the backend lean (Q3).

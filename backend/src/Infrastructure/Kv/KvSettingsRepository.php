@@ -32,7 +32,7 @@ use Psr\Log\LoggerInterface;
 final class KvSettingsRepository implements SettingsRepository
 {
     /** Admin changes apply within this many seconds (spec 6.1). */
-    public const SETTINGS_TTL = 60;
+    public const SETTINGS_TTL = 300;
 
     /** How long an outage of ChurchTools is remembered at least (spec 6.2). */
     public const FAILURE_MIN_SECONDS = 10;

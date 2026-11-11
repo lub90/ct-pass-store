@@ -27,7 +27,7 @@ A case added during implementation goes into the catalog first (plan "How we wor
   `/v1/test` output or exception messages (spec 4.1, 6.3).
 - `REMOTE_ADDR` only; forwarding headers are ignored (spec 6.3).
 - Cache folder: files `600`, folder `700`; JSON only; HMAC keyed from `JWT_SECRET` (spec 6.1).
-- TTLs: module/category IDs **3600 s**, settings and public key **60 s**; `passwordStore` values are never cached.
+- TTLs: module/category IDs **3600 s**, settings and public key **300 s** (changed from 60 s on 2026-11-11); `passwordStore` values are never cached.
 - Per-address limit (Q26): `POST /v1/auth/token` **30**/min, rejected tokens **60**/min, **256** buckets, IPv6 per
   `/64`; the block lasts until the 60-second window has passed.
 - `/v1/test` fails above **10,000** files in the cache folder.
