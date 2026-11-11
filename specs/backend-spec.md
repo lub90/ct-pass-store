@@ -761,7 +761,9 @@ The security stores (`jti` replay cache, rate-limit counters;
 - **Call budget for unauthenticated requests.** Because the 600/min are shared, an unauthenticated caller must
   not be able to spend them. With the settings cache, a forged or unknown token costs **0** ChurchTools calls; only
   `POST /v1/auth/token` costs calls (the code exchange and the two user calls of 4.4), and it's limited per address
-  (6.3).
+  (6.3). Failures of ChurchTools while loading the settings are remembered briefly (its Retry-After for 429,
+  otherwise 10 s), so an outage doesn't multiply calls. If the cache folder can't be written, every request loads
+  again; `/v1/test` reports that misconfiguration.
 
 ### 6.3 Security
 
@@ -782,7 +784,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   This protects accounts, and it prevents the backend's IP from being locked out by ChurchTools.
 - **Per-address limit** for requests that come before or without authentication:
   - It applies to `POST /v1/auth/token` (every request counts, checked before the body is read) and to requests
-    rejected with `401 invalid-token`. The token is verified first: a valid token never touches the limit (otherwise
+    rejected with `401 invalid-token` (a forged token as well as a malformed `Authorization` header). The token is verified first: a valid token never touches the limit (otherwise
     one address's garbage tokens would lock out others behind the same bucket, machine clients included), and a
     missing or expired token doesn't count.
     Exceeding it gives `429 too-many-attempts` with `Retry-After`, **without** calling ChurchTools.

@@ -73,7 +73,7 @@ final class Kernel
         // security stores (`sec-*`). Different purposes, so a record of one is never accepted by the other.
         $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
         $extensionData = new ExtensionData($churchTools, cache: $cache);
-        $settings = new KvSettingsRepository($extensionData, $logger, $cache);
+        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock);
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
         $addressLimiter = new FileAddressLimiter($securityStore, $clock, $config->jwtSecret);

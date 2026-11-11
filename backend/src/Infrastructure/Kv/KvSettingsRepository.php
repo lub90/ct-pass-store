@@ -5,10 +5,14 @@ declare(strict_types=1);
 namespace CtPassStore\Infrastructure\Kv;
 
 use CtPassStore\Application\Exception\ConfigurationException;
+use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\Settings;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Crypto\RsaPublicKey;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
+use CtPassStore\Infrastructure\Time\SystemClock;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -19,12 +23,19 @@ use Psr\Log\LoggerInterface;
  * before SettingsParser, so validation and its findings run on every request exactly as without the cache. Only a
  * value that passed the structural check (exactly one value, a JSON object) is cached.
  *
+ * A failed load because ChurchTools is unavailable or rate limiting is remembered briefly (its Retry-After for 429, at
+ * least FAILURE_MIN_SECONDS; otherwise FAILURE_MIN_SECONDS), so forged tokens can't make every request ask ChurchTools
+ * again during an outage (spec 6.2). Other failures (misconfigured, invalid) aren't remembered.
+ *
  * Loading only; the rules are in SettingsParser.
  */
 final class KvSettingsRepository implements SettingsRepository
 {
     /** Admin changes apply within this many seconds (spec 6.1). */
     public const SETTINGS_TTL = 60;
+
+    /** How long an outage of ChurchTools is remembered at least (spec 6.2). */
+    public const FAILURE_MIN_SECONDS = 10;
 
     private const CACHE_SETTINGS = 'settings';
 
@@ -41,6 +52,7 @@ final class KvSettingsRepository implements SettingsRepository
         private readonly ExtensionData $extension,
         private readonly LoggerInterface $logger,
         private readonly ?SignedFileCache $cache = null,
+        private readonly Clock $clock = new SystemClock(),
     ) {}
 
     public function settings(): Settings
@@ -105,10 +117,42 @@ final class KvSettingsRepository implements SettingsRepository
             return $cached;
         }
 
-        $raw = $this->singleValue($category, $what, $fix);
+        $failureName = $cacheName . '-failure';
+        $this->rethrowRememberedFailure($failureName);
+
+        try {
+            $raw = $this->singleValue($category, $what, $fix);
+        } catch (RateLimitedException $e) {
+            $this->rememberFailure($failureName, 'rateLimited', max(self::FAILURE_MIN_SECONDS, $e->retryAfterSeconds()));
+            throw $e;
+        } catch (UnavailableException $e) {
+            $this->rememberFailure($failureName, 'unavailable', self::FAILURE_MIN_SECONDS);
+            throw $e;
+        }
+        $this->cache?->forget($failureName);
         $this->cache?->put($cacheName, $raw, self::SETTINGS_TTL);
 
         return $raw;
+    }
+
+    private function rememberFailure(string $name, string $kind, int $seconds): void
+    {
+        $this->cache?->put($name, ['kind' => $kind, 'until' => $this->clock->now()->getTimestamp() + $seconds], $seconds);
+    }
+
+    /**
+     * @throws RateLimitedException|UnavailableException while a remembered failure is valid, without asking ChurchTools
+     */
+    private function rethrowRememberedFailure(string $name): void
+    {
+        $failure = $this->cache?->get($name);
+        if ($failure === null) {
+            return;
+        }
+        $remaining = max(1, (is_int($failure['until'] ?? null) ? $failure['until'] : 0) - $this->clock->now()->getTimestamp());
+        $message = 'ChurchTools failed a moment ago and isn\'t asked again yet.';
+
+        throw ($failure['kind'] ?? null) === 'rateLimited' ? new RateLimitedException($message, $remaining) : new UnavailableException($message);
     }
 
     /**

@@ -48,7 +48,8 @@ final class AuthMiddleware implements MiddlewareInterface
         // (spec 4.3.2). Several headers or a comma-joined value are never guessed at.
         if (count($headers) !== 1 || preg_match('/^bearer ([^\s,]+)\z/i', $headers[0], $match) !== 1) {
             $this->logger->warning('Unauthorized access attempt: the Authorization header isn\'t a single bearer token.', ['ip' => $ip]);
-            throw new ProblemException(ProblemType::InvalidToken, 'The Authorization header must be "Bearer <token>".');
+            // Rejected with 401 invalid-token like a forged token, so it counts the same (spec 6.3).
+            $this->countRejection($ip, new ProblemException(ProblemType::InvalidToken, 'The Authorization header must be "Bearer <token>".'));
         }
 
         try {
@@ -69,7 +70,7 @@ final class AuthMiddleware implements MiddlewareInterface
      * limiter, so one address's garbage can't lock out others behind the same bucket (spec 6.3). A blocked address
      * gets 429 instead of 401.
      */
-    private function countRejection(string $ip, InvalidTokenException $rejection): never
+    private function countRejection(string $ip, \Throwable $rejection): never
     {
         try {
             $this->limiter->hit(AddressLimit::RejectedToken, $ip);

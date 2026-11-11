@@ -705,4 +705,75 @@ final class KvSettingsRepositoryTest extends TestCase
 
         self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
     }
+
+    // ---------------------------------------------------------------- remembered ChurchTools failures (spec 6.2)
+
+    private function failingRepository(): KvSettingsRepository
+    {
+        if ($this->fake->storedValues($this->categories[KvSchema::SETTINGS_CATEGORY]) === []) {
+            $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        }
+
+        return new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $this->cache(), $this->clock);
+    }
+
+    public function testARateLimitIsRememberedForItsRetryAfter(): void
+    {
+        $this->fake->failNext('getValues', new \CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException('429', 60));
+        try {
+            $this->failingRepository()->settings();
+            self::fail('expected a rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException) {
+        }
+        $calls = count($this->fake->calls());
+
+        $this->clock->advance(20);
+        try {
+            $this->failingRepository()->settings();
+            self::fail('expected the remembered rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException $e) {
+            self::assertSame(40, $e->retryAfterSeconds());
+        }
+        self::assertSame($calls, count($this->fake->calls()), 'ChurchTools isn\'t asked within the window.');
+
+        $this->clock->advance(41);
+        self::assertSame(16, $this->failingRepository()->settings()->passwordLength);
+        self::assertGreaterThan($calls, count($this->fake->calls()), 'After the window ChurchTools is asked again.');
+    }
+
+    public function testAnOutageIsRememberedForTenSeconds(): void
+    {
+        $this->fake->failNext('getValues', new \CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException('503'));
+        foreach ([0, 9] as $later) {
+            $this->clock->advance($later);
+            try {
+                $this->failingRepository()->publicKey();
+                self::fail('expected an outage');
+            } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException) {
+            }
+        }
+        self::assertSame(1, $this->fake->countCalls(['getValues']), 'ChurchTools was asked once.');
+        $calls = count($this->fake->calls());
+
+        $this->clock->advance(2);
+        try {
+            $this->failingRepository()->publicKey();
+        } catch (\CtPassStore\Application\Exception\ConfigurationException) {
+            // The fake has no key; what counts is that ChurchTools was asked again.
+        }
+        self::assertGreaterThan($calls, count($this->fake->calls()));
+    }
+
+    public function testOtherFailuresAreNotRemembered(): void
+    {
+        $this->fake->clearValues($this->categories[KvSchema::SETTINGS_CATEGORY]);
+        for ($i = 0; $i < 2; $i++) {
+            try {
+                (new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $this->cache(), $this->clock))->settings();
+                self::fail('expected a configuration error');
+            } catch (\CtPassStore\Application\Exception\ConfigurationException) {
+            }
+        }
+        self::assertSame(2, $this->settingsReads());
+    }
 }
