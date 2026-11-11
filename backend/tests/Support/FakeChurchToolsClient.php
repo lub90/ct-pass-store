@@ -53,6 +53,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<int, list<\Throwable>> failures of getValues() per category */
     private array $readFailures = [];
 
+    /** @var array<int, \Throwable> category ID => failure for the first read after the next createValue() there */
+    private array $readFailuresAfterCreate = [];
+
     /** @var array{id: string, secret: string}|null */
     private ?array $oauthClient = null;
 
@@ -206,6 +209,15 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
+     * Lets the first getValues() of this category **after the next createValue() there** throw; earlier reads succeed.
+     * Used to fail a read-back (catalog TS-06).
+     */
+    public function failReadAfterNextCreate(int $categoryId, \Throwable $exception): void
+    {
+        $this->readFailuresAfterCreate[$categoryId] = $exception;
+    }
+
+    /**
      * Runs `$hook` once, right before the next call of `$method` takes effect. Used to interleave a second request
      * with a first one, e.g. between its read and its write (catalog TR-02).
      *
@@ -335,6 +347,10 @@ final class FakeChurchToolsClient implements ChurchToolsClient
 
         $id = $this->nextId++;
         $this->values[$categoryId][$id] = ['id' => $id, 'dataCategoryId' => $categoryId, 'value' => $value];
+        if (isset($this->readFailuresAfterCreate[$categoryId])) {
+            $this->readFailures[$categoryId][] = $this->readFailuresAfterCreate[$categoryId];
+            unset($this->readFailuresAfterCreate[$categoryId]);
+        }
 
         return $id;
     }

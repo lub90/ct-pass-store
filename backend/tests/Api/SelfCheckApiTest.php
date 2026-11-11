@@ -316,13 +316,38 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-06 */
     public function testDeletedEvenWhenReadBackFails(): void
     {
-        $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('ChurchTools is down.'));
-        // The first read of the password store is the leftover scan; let the second (the read-back) fail.
-        $this->churchTools->failNextRead($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('ChurchTools is down.'));
+        $this->seedEntry(self::USER, 'cmVhbA==');
+        $before = $this->storedEntries();
+        $this->churchTools->failReadAfterNextCreate($this->categoryIds[KvSchema::PASSWORD_CATEGORY], new UnavailableException('ChurchTools is down.'));
 
         $response = $this->request('GET', '/v1/test?write=1', self::ADMIN);
 
         self::assertSame(207, $response->getStatusCode(), (string) $response->getBody());
+        $check = $this->checks($response)['Write round trip'];
+        self::assertSame('fail', $check['status']);
+        self::assertStringContainsString('write round trip failed', $check['message']);
+        self::assertSame(1, $this->churchTools->countCalls(['createValue']));
+        self::assertSame(1, $this->churchTools->countCalls(['deleteValue']));
+        self::assertSame([], $this->selfTestValues());
+        self::assertSame($before, $this->storedEntries());
+    }
+
+    /** TS-06, TS-07 */
+    public function testFailedDeleteIsReportedAndTheNextRunRemovesIt(): void
+    {
+        $this->churchTools->failNext('deleteValue', new UnavailableException('ChurchTools is down.'));
+
+        $response = $this->request('GET', '/v1/test?write=1', self::ADMIN);
+
+        self::assertSame(207, $response->getStatusCode(), (string) $response->getBody());
+        $check = $this->checks($response)['Write round trip'];
+        self::assertSame('fail', $check['status']);
+        self::assertStringContainsString('The test value could not be deleted again', $check['message']);
+        self::assertCount(1, $this->selfTestValues());
+
+        $next = $this->request('GET', '/v1/test?write=1', self::ADMIN);
+
+        self::assertSame(200, $next->getStatusCode(), (string) $next->getBody());
         self::assertSame([], $this->selfTestValues());
     }
 
