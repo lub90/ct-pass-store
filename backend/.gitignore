@@ -44,3 +44,6 @@ Desktop.ini
 
 # Caches and security stores of the running backend
 /cache/
+
+# Written by the build (bin/version.php)
+/version.txt

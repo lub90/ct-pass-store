@@ -706,7 +706,7 @@ tester has; it's documented in `backend/docs/testing.md`.
 
 - [ ] **DP-01** (! · U) The deploy check fails if the deploy folder contains a real `credentials.php`, `phpunit.xml`,
   fixtures, tests or an instance URL — 6.6
-- [ ] **DP-02** (N · U) The version string is `x.y.z`, `x.y.z+<sha>` or `x.y.z+<sha>-dirty` as appropriate — 6.5
+- [x] **DP-02** (N · U) The version string is `x.y.z`, `x.y.z+<sha>` or `x.y.z+<sha>-dirty` as appropriate — 6.5
 - [ ] **DP-03** (N · U) The release check fails if tag, version and dated CHANGELOG section disagree — 6.6
 
 ## 16. Migration of the existing end-to-end tests

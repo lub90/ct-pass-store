@@ -10,6 +10,7 @@ parameters:
     paths:
         - src
         - public
+        - bin
         - tests
     tmpDir: .phpstan.cache
     excludePaths:

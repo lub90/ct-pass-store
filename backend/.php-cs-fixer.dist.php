@@ -6,7 +6,7 @@ declare(strict_types=1);
 // Check with `composer cs`, fix with `composer cs:fix`.
 
 $finder = (new PhpCsFixer\Finder())
-    ->in([__DIR__ . '/src', __DIR__ . '/public', __DIR__ . '/tests', __DIR__ . '/config'])
+    ->in([__DIR__ . '/src', __DIR__ . '/public', __DIR__ . '/bin', __DIR__ . '/tests', __DIR__ . '/config'])
     ->notPath('credentials.php')
     ->append([__FILE__]);
 
