@@ -500,15 +500,15 @@ normal case names it ("→ PV-05").
 
 ## 11. Logging (spec 6.4)
 
-- [ ] **LG-01** (! · A) For each endpoint, success and error: the log contains **no** password (primary, secondary,
+- [x] **LG-01** (! · A) For each endpoint, success and error: the log contains **no** password (primary, secondary,
   generated), token, authorization code, client secret, `JWT_SECRET` or ciphertext. The test runs all API tests with a
   capturing logger and searches for the known secret values. — 6.3, 6.4
-- [ ] **LG-02** (N · A) Denied access is logged as `warning` with person ID and IP address — 6.4
-- [ ] **LG-03** (N · A) Logins, changes and deletions are logged as `info` — 6.4
-- [ ] **LG-04** (N · U) The log level from the configuration is applied — 6.4
+- [x] **LG-02** (N · A) Denied access is logged as `warning` with person ID and IP address — 6.4
+- [x] **LG-03** (N · A) Logins, changes and deletions are logged as `info` — 6.4
+- [x] **LG-04** (N · U) The log level from the configuration is applied — 6.4
 - [x] **LG-05** (N · U) An invalid `LOG_LEVEL` (`verbose`, `INFO `, empty) → `misconfigured` — 3.1
-- [ ] **LG-06** (N · U) Logs rotate daily and keep 14 files; older files are deleted — 6.4
-- [ ] **LG-07** (N · U) Every `error` entry carries the backend version in its context — 6.4
+- [x] **LG-06** (N · U) Logs rotate daily and keep 14 files; older files are deleted — 6.4
+- [x] **LG-07** (N · U) Every `error` entry carries the backend version in its context — 6.4
 
 ## 12. Cache (spec 6.1)
 

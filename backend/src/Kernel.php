@@ -41,6 +41,7 @@ use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Logging\AddVersionToErrors;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
 use CtPassStore\Infrastructure\SelfCheck\CacheFolderCheck;
 use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
@@ -57,7 +58,7 @@ use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use CtPassStore\Infrastructure\Version;
-use Monolog\Handler\StreamHandler;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
@@ -102,6 +103,7 @@ final class Kernel
             new GetPassword($guard, $passwords),
             new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $logger),
             new DeletePassword($guard, $passwords),
+            $logger,
         );
         // The log folder is `logs/` next to the cache folder, as `public/index.php` lays them out (spec 3.1).
         $selfCheck = new SelfCheckController($settings, new SelfCheck([
@@ -171,18 +173,22 @@ final class Kernel
             return self::misconfigured($e->getMessage());
         }
 
-        return self::create($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), self::logger($logFile, $config->logLevel));
+        return self::create($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), self::logger($logFile, $config->logLevel, Version::current(dirname(__DIR__))));
     }
 
     /**
-     * The production logger. Control characters (newlines included) in messages and context values are escaped as
-     * `\xNN`, so input that reaches the log can't forge additional log lines (spec 6.4).
+     * The production logger: one file per day, `app-YYYY-MM-DD.log` for `app.log`, the newest 14 kept (spec 6.4).
+     * Control characters (newlines included) in messages and context values are escaped as `\xNN`, so input that
+     * reaches the log can't forge additional log lines. Records of level `error` and above carry the backend version.
+     *
+     * Monolog runs the processor pushed last first: the version is added first and then escaped with everything else.
      */
-    public static function logger(string $logFile, string $level): Logger
+    public static function logger(string $logFile, string $level, string $version): Logger
     {
         $logger = new Logger('ct-pass-store');
-        $logger->pushHandler(new StreamHandler($logFile, Logger::toMonologLevel($level)));
+        $logger->pushHandler(new RotatingFileHandler($logFile, 14, Logger::toMonologLevel($level)));
         $logger->pushProcessor(new EscapeControlCharacters());
+        $logger->pushProcessor(new AddVersionToErrors($version));
 
         return $logger;
     }

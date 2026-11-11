@@ -55,6 +55,7 @@ abstract class ApiTestCase extends TestCase
     protected const OAUTH_CLIENT_ID = 'oauth-client-id';
     protected const OAUTH_CLIENT_SECRET = 'oauth-client-SECRET-4711';
     protected const JWT_SECRET = 'api-test-jwt-secret-with-at-least-32-bytes';
+    protected const VERSION = '0.1.0+test';
     protected const CLIENT_IP = '203.0.113.7';
 
     /** @var array<int, string> */
@@ -376,13 +377,15 @@ abstract class ApiTestCase extends TestCase
         $logger->pushHandler($this->log);
         // The production processor, so log assertions see what logs/app.log would contain.
         $logger->pushProcessor(new \CtPassStore\Infrastructure\Logging\EscapeControlCharacters());
+        // Pushed last, so it runs first and the version is escaped like any other context value (as in Kernel::logger()).
+        $logger->pushProcessor(new \CtPassStore\Infrastructure\Logging\AddVersionToErrors(self::VERSION));
 
         return Kernel::create(
             new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
             $this->churchTools,
             $logger,
             $this->clock,
-            '0.1.0+test',
+            self::VERSION,
         );
     }
 }

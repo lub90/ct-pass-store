@@ -97,7 +97,7 @@ final class EntryGuard
 
     private function deny(Principal $principal, PersonId $target): never
     {
-        $this->logger->warning(ucfirst($principal->describe()) . " tried to access the entry of person {$target} without permission.");
+        // The address is added where the request is known: EntriesController logs this denial (spec 6.4).
         throw new AccessDeniedException("You aren't allowed to access the entry of person {$target}.");
     }
 }

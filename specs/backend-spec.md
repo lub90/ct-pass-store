@@ -915,8 +915,8 @@ The security stores (`jti` replay cache, rate-limit counters;
 ### 6.4 Logging
 
 - PSR-3 logger (Monolog) writing to `logs/app.log`.
-- Configurable level (`LOG_LEVEL`, default `info`, 3.1). **⏳ 4.3** Log rotation (e.g. Monolog's
-  `RotatingFileHandler`, keeping 14 days).
+- Configurable level (`LOG_LEVEL`, default `info`, 3.1). The log rotates daily (Monolog's
+  `RotatingFileHandler`: `logs/app-YYYY-MM-DD.log`), keeping 14 files.
 - **What gets logged:**
 
   | Level | Events |
@@ -926,7 +926,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   | `error` | Upstream errors, configuration problems |
 
 - Values written to the log are escaped, so control characters or newlines in input can't forge log lines.
-- **⏳ 4.5** The backend version is part of the context of every `error` entry (PHP has no single startup moment).
+- The backend version is part of the context of every `error` entry (PHP has no single startup moment).
 - IP addresses and person IDs are personal data. They're logged only to detect abuse, and deleted with the rotated log
   files after 14 days. Document this for admins.
 
