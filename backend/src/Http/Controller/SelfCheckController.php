@@ -4,106 +4,46 @@ declare(strict_types=1);
 
 namespace CtPassStore\Http\Controller;
 
+use CtPassStore\Application\Port\SettingsRepository;
+use CtPassStore\Application\SelfCheck\SelfCheck;
 use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Http\Middleware\AuthMiddleware;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
-use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
-use Throwable;
 
 /**
- * `GET /test`. Phase 4 (plan item 4.2) extends the checks and restricts access to admins.
+ * `GET /v1/test`: the admin self-check (spec 4.8). Only admins; the check happens before anything runs.
  */
 final class SelfCheckController
 {
     public function __construct(
-        private readonly KvSettingsRepository $settings,
-        private readonly string $credentialsPath,
+        private readonly SettingsRepository $settings,
+        private readonly SelfCheck $selfCheck,
+        private readonly string $version,
     ) {}
 
     public function get(Request $request, Response $response): Response
     {
-        // Machine clients never run the self-check (spec 4.8). Restricting it to admins follows in plan item 4.2.
-        if (!$request->getAttribute(AuthMiddleware::PRINCIPAL) instanceof PersonPrincipal) {
-            throw new ProblemException(ProblemType::Forbidden, 'Only users can run the self-check.');
+        $principal = $request->getAttribute(AuthMiddleware::PRINCIPAL);
+        if (!$principal instanceof PersonPrincipal || !$this->settings->settings()->isAdmin($principal->id)) {
+            throw new ProblemException(ProblemType::Forbidden, 'Only admins can run the self-check.');
         }
 
-        $allPassed = true;
-
-        $tests = [];
-
-        try {
-            $credentialsPath = $this->credentialsPath;
-
-            if (!file_exists($credentialsPath)) {
-                throw new \RuntimeException('credentials.php file does not exist.');
-            }
-
-            $perms = fileperms($credentialsPath);
-
-            // Check if file is readable only by owner (0600 or stricter)
-            $isStrict = ($perms & 0x1FF) <= 0o600;
-
-            if (!$isStrict) {
-                $allPassed = false;
-                throw new \RuntimeException(sprintf(
-                    'credentials.php file permissions too loose: %o. Expected 0600 or stricter.',
-                    $perms & 0x1FF
-                ));
-            }
-
-            $tests[] = [
-                'name' => 'credentials.php file permission check',
-                'status' => 'ok',
-                'message' => 'credentials.php file has secure permissions (0600 or stricter).',
-            ];
-        } catch (Throwable $e) {
-            $allPassed = false;
-            $tests[] = [
-                'name' => 'credentials.php file permission check',
-                'status' => 'fail',
-                'message' => $e->getMessage(),
-            ];
-        }
-
-        $checks = [
-            'Extension settings' => fn() => $this->settings->settings(),
-            'Public key' => fn() => $this->settings->publicKey(),
-        ];
-
-        foreach ($checks as $name => $check) {
-            try {
-                $check();
-                $tests[] = [
-                    'name' => $name,
-                    'status' => 'ok',
-                    'message' => "$name can be loaded.",
-                ];
-            } catch (Throwable $e) {
-                $allPassed = false;
-                $tests[] = [
-                    'name' => $name,
-                    'status' => 'fail',
-                    'message' => $e->getMessage(),
-                ];
-            }
-        }
-
-        $summary = $allPassed
+        $result = $this->selfCheck->run();
+        $summary = $result['passed']
             ? 'All backend self-tests passed successfully.'
             : 'Backend self-test completed with failures.';
 
-        $statusCode = $allPassed ? 200 : 207;
-
         $response->getBody()->write(json_encode([
+            'version' => $this->version,
             'summary' => $summary,
-            'tests' => $tests,
-        ], JSON_PRETTY_PRINT));
+            'tests' => $result['tests'],
+        ], JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
 
         return $response
             ->withHeader('Content-Type', 'application/json')
-            ->withStatus($statusCode);
+            ->withStatus($result['passed'] ? 200 : 207);
     }
 }

@@ -15,12 +15,6 @@ final class ArchitectureTest extends TestCase
 {
     private const SRC = __DIR__ . '/../../../src/';
 
-    /** Known exceptions, each with the plan item that removes it. */
-    private const ALLOWED = [
-        // Plan 4.2 rebuilds the self-check on ports.
-        'Http/Controller/SelfCheckController.php' => ['CtPassStore\Infrastructure\Kv\KvSettingsRepository'],
-    ];
-
     /**
      * The one pattern for references to other parts of src/: imports, fully qualified names in code and docblocks,
      * and the composition root `Kernel`, which has no namespace below it.
@@ -66,9 +60,7 @@ final class ArchitectureTest extends TestCase
             preg_match_all(self::pattern($forbidden), (string) file_get_contents($file->getPathname()), $matches);
             foreach (array_unique($matches[0]) as $reference) {
                 $reference = ltrim($reference, '\\');
-                if (!in_array($reference, self::ALLOWED[$path] ?? [], true)) {
-                    $violations[] = "$path → $reference";
-                }
+                $violations[] = "$path → $reference";
             }
         }
 
@@ -95,16 +87,6 @@ final class ArchitectureTest extends TestCase
 
         foreach (['use CtPassStore\Domain\PersonId;', 'use CtPassStore\Application\Login;', 'CtPassStore\KernelPanic'] as $line) {
             self::assertSame(0, preg_match($pattern, $line), $line);
-        }
-    }
-
-    public function testEveryExceptionIsStillNeeded(): void
-    {
-        foreach (self::ALLOWED as $path => $references) {
-            $source = (string) file_get_contents(self::SRC . $path);
-            foreach ($references as $reference) {
-                self::assertStringContainsString($reference, $source, "$path no longer needs its exception; remove it from ALLOWED.");
-            }
         }
     }
 }

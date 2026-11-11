@@ -76,12 +76,17 @@ abstract class ApiTestCase extends TestCase
     /** @var array<string, int> */
     protected array $categoryIds;
 
-    private string $credentialsPath;
+    protected string $credentialsPath;
 
     /** The REMOTE_ADDR of the requests; a test may change it to play another address. */
     protected string $clientIp = self::CLIENT_IP;
 
-    /** A fresh, empty cache folder per test. */
+    /** A fresh temporary folder per test holding `cache/` and `logs/`. */
+    private string $baseDir;
+
+    protected string $logDir;
+
+    /** A fresh, empty cache folder per test (not created before the first request needs it). */
     protected string $cacheDir;
 
     protected function setUp(): void
@@ -101,7 +106,11 @@ abstract class ApiTestCase extends TestCase
             $this->churchTools->addLogin($name, $this->primaryPasswordOf($personId), $personId);
         }
 
-        $this->cacheDir = sys_get_temp_dir() . '/ctps-cache-' . bin2hex(random_bytes(6));
+        // `cache/` and `logs/` side by side, as in the deployment (the self-check looks for logs/ next to cache/).
+        $this->baseDir = sys_get_temp_dir() . '/ctps-' . bin2hex(random_bytes(6));
+        $this->cacheDir = $this->baseDir . '/cache';
+        $this->logDir = $this->baseDir . '/logs';
+        mkdir($this->logDir, 0o700, true);
         $this->setSettings([]);
         $this->setPublicKey((string) file_get_contents(__DIR__ . '/../keys/publicKey1.pem'));
 
@@ -120,6 +129,9 @@ abstract class ApiTestCase extends TestCase
         }
         @chmod($this->cacheDir, 0o700);
         @rmdir($this->cacheDir);
+        @chmod($this->logDir, 0o700);
+        @rmdir($this->logDir);
+        @rmdir($this->baseDir);
     }
 
     /**
@@ -358,6 +370,7 @@ abstract class ApiTestCase extends TestCase
             $this->churchTools,
             $logger,
             $this->clock,
+            '0.1.0+test',
         );
     }
 }

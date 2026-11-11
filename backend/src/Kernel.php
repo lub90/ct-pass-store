@@ -13,6 +13,7 @@ use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\GetPassword;
 use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
+use CtPassStore\Application\SelfCheck\SelfCheck;
 use CtPassStore\Application\SetPassword;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PasswordPolicy;
@@ -38,10 +39,17 @@ use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
+use CtPassStore\Infrastructure\SelfCheck\CacheFolderCheck;
+use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
+use CtPassStore\Infrastructure\SelfCheck\LogFolderCheck;
+use CtPassStore\Infrastructure\SelfCheck\OAuthConfigurationCheck;
+use CtPassStore\Infrastructure\SelfCheck\PublicKeyCheck;
+use CtPassStore\Infrastructure\SelfCheck\SettingsCheck;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
 use CtPassStore\Infrastructure\Time\SystemClock;
+use CtPassStore\Infrastructure\Version;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Psr\Http\Message\ResponseInterface;
@@ -64,9 +72,10 @@ final class Kernel
     /**
      * @return App<null>
      */
-    public static function create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): App
+    public static function create(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null, ?string $version = null): App
     {
         $clock ??= new SystemClock();
+        $version ??= Version::current(dirname(__DIR__));
         $codec = new FirebaseTokenCodec();
         $tokens = new UserTokens($config->jwtSecret, $clock, $codec);
         // One folder (spec 6.1): the fail-open cache for settings, public key and IDs (`cache-*`), and the fail-closed
@@ -87,7 +96,15 @@ final class Kernel
             new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $logger),
             new DeletePassword($guard, $passwords),
         );
-        $selfCheck = new SelfCheckController($settings, $config->credentialsPath);
+        // The log folder is `logs/` next to the cache folder, as `public/index.php` lays them out (spec 3.1).
+        $selfCheck = new SelfCheckController($settings, new SelfCheck([
+            new CredentialsFileCheck($config->credentialsPath),
+            new LogFolderCheck(dirname($config->cacheDir) . '/logs'),
+            new CacheFolderCheck($config->cacheDir, $securityStore),
+            new OAuthConfigurationCheck($config),
+            new SettingsCheck($settings),
+            new PublicKeyCheck($settings),
+        ], $logger), $version);
         $login = new AuthController(new Login(
             $config->instanceOrigin(),
             new ChurchToolsIdentityProvider($churchTools, $config->oauthClientId, $config->oauthClientSecret, $logger),
