@@ -250,20 +250,31 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       (`application/x-www-form-urlencoded`), body `func=setPersonPassword&id=<personId>&password=<new password>`
       (the UI also sends `browsertabId`, probably not needed), with the admin's session cookie and the `CSRF-Token`
       header (from `GET /api/csrftoken`, see `ct-extension-info.md`). Answer: `200 {"status":"success","data":null}`.
-      The extension runs on the instance's own origin with the admin's session, so it can make this call. Still to
-      check before the setup part of 5.1 starts:
-      - which right the admin needs (probably "administer persons" or a churchdb password right), and what the answer
-        is without it;
-      - whether the call follows the instance's password rules and how a rejected password is reported (AJAX answers
-        `status` other than `success` instead of an HTTP error);
-      - whether it invalidates the person's login token, like a password change does (needed for re-arm).
+      The extension runs on the instance's own origin with the admin's session, so it can make this call.
+      **Measured 2026-11-11** on the test instance:
+      - It needs the churchcore right **"simulate persons"** ("Personen simulieren, Passwort ändern und Zugang
+        sperren"). Without it, ChurchTools answers HTTP `200` with `{"status":"fail","data":"Keine ausreichende
+        Berechtigung. …"}`, so the wizard must check `status`, not the HTTP status.
+      - Without the `CSRF-Token` header: `401 CSRF-Token is invalid`. `browsertabId` isn't needed.
+      - **No password rules are applied**: the password `a` was accepted. The wizard generates a long random password
+        itself.
+      - It invalidates the person's login token at once (`401`); the next `GET /api/persons/{id}/logintoken` as that
+        person returns a new, working token. So re-arm works by setting a new password.
       It's a legacy API that ChurchTools may remove; the wizard puts it behind one function, so it can be swapped.
     - **Getting the service user's token without losing the admin's session (open, blocking for 5.1):** a browser holds
-      only one ChurchTools session (`ct-extension-info.md`). The plan in 5.1 (log in as the service user with
-      `POST /api/login`, then `GET /api/persons/{id}/logintoken`) would most likely replace the admin's session in the
-      middle of the wizard. To find out: whether an admin may call `GET /api/persons/{id}/logintoken` for **another**
-      person, or whether `POST /api/login` with `credentials: "omit"` returns something usable without touching the
-      admin's cookie.
+      only one ChurchTools session (`ct-extension-info.md`). **Measured 2026-11-11** on the test instance:
+      - An admin (with every right) can't read another person's token: `GET /api/persons/{id}/logintoken` answers
+        `403 Forbidden to see Login Token for Person[…]`.
+      - Simulating the person doesn't help: `POST /api/simulate` works, but `GET` and `DELETE …/logintoken` then answer
+        `403 Cannot get login token in simulation`. `DELETE /api/simulate` restores the admin's session.
+      - `POST /api/login` as another person in the same cookie jar replaces the admin's session (`whoami` changes from
+        the admin to that person). Its answer contains no token, so a login with `credentials: "omit"` gives the
+        extension nothing usable.
+      - A login in a fresh session followed by `GET /api/persons/{id}/logintoken` as that person works (as in the
+        contract test helpers).
+
+      So only something outside the admin's browser can fetch the token, e.g. the backend during `POST /v1/setup`
+      (proposal pending, 2026-11-11).
     - **Creating a person** (measured 2026-11-10): `POST /api/persons` needs `departmentIds`, `campusId`, `statusId`
       and, on instances that require it, `privacyPolicyAgreementTypeId`, `privacyPolicyAgreementWhoId` and
       `privacyPolicyAgreementDate`. The wizard reads the valid values from `GET /api/person/masterdata`.
