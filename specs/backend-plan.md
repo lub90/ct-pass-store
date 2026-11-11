@@ -283,7 +283,7 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       (username) and one created with only `email` could each log in right after `setPersonPassword`, with that value as
       `username` in `POST /api/login`; `GET /api/persons/{id}/logintoken` in that session returned a working token.
       No confirmation, invitation or other step was needed before the first login. **The wizard uses `cmsUserId`**
-      (e.g. `ctpassstore-backend`): the service user needs no email address, so ChurchTools never mails it, and the
+      (`ctpassstore-api`, see below): the service user needs no email address, so ChurchTools never mails it, and the
       name says what the person is for.
     - **Creating a person** (measured 2026-11-10, refined 2026-11-11): `POST /api/persons` needs `departmentIds`,
       `campusId`, `statusId` and, on instances that require it, `privacyPolicyAgreementTypeId`,
@@ -291,10 +291,14 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       from `GET /api/person/masterdata`. **The privacy values don't:** neither `/api/person/masterdata` nor
       `/api/masterdata/person` lists them. Only the `400` validation answer names the valid IDs
       (`errors[].args.validOptions`, on the test instance types `1, 2, 3, 4` and who `1, 2, 10000`), without their
-      meaning. To decide in the 5.1 design: what the wizard fills in for a service account (it isn't a real person
-      agreeing to anything), e.g. ask the admin once, with the instance's labels if another endpoint has them.
-      `DELETE /api/persons/{id}` removes a person completely (`204`, then `404`), so the wizard can clean up after a
+      meaning. **Decided 2026-11-11:** the wizard fills in only what ChurchTools needs to create the person. No privacy
+      concern arises, because the service user isn't a real person. So it first creates the person without the
+      privacy fields; if the `400` names them, it retries once with the first value of each `validOptions` and
+      today's date. It doesn't ask the admin. `DELETE /api/persons/{id}` removes a person completely (`204`, then `404`), so the wizard can clean up after a
       failed setup.
+    - **Name of the service user** (decided 2026-11-11): recognizable as an API account, not a person: first name
+      `CtPassStore`, last name `API` (shown as "CtPassStore API"), login name (`cmsUserId`) `ctpassstore-api`, no
+      email address. If `ctpassstore-api` is taken, the wizard appends `-2`, `-3`, …
     - ~~Licensing and data protection of the service user~~: checked 2026-11-10, an additional person has no
       licensing or data-protection side effects.
 
