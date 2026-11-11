@@ -150,7 +150,7 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
   - Shared hosting (spec 6.1, "Locking" and "Bounded size"): document that the cache folder must be on a file system
     where `flock` works; confirm that every security record prunes expired items on write; test that the number of
     files stays bounded under many distinct callers.
-- [ ] **4.1a ChurchTools call budget for unauthenticated requests** (spec 6.2, review finding 2026-11-08)
+- [x] **4.1a ChurchTools call budget for unauthenticated requests** (spec 6.2, review finding 2026-11-08)
   - Today a forged machine token costs 3 ChurchTools calls (settings before `kid` can be checked) and any
     `POST /v1/auth/token` costs 1. A few requests per second from anyone can exhaust the shared 600/min per IP, so
     every user and every WiFi login gets `503`.

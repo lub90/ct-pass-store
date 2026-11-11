@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 // Checks a release before it is built (spec 6.6, catalog DP-03): the tag is `v` plus the VERSION file, and CHANGELOG.md
 // has a section `## [<version>] - <YYYY-MM-DD>` with a real date. Prints that section (the release notes) on success,
-// one line per problem otherwise; exits 0 or 1.
+// one line per problem on stderr otherwise; exits 0 or 1.
 // Usage: php bin/release-check.php <tag> [backend folder]
 
 if (PHP_SAPI !== 'cli') {
@@ -63,7 +63,7 @@ if ($tag === '' && !isset($argv[1])) {
 
 [$problems, $notes] = checkRelease($tag, rtrim($argv[2] ?? dirname(__DIR__), '/'));
 foreach ($problems as $problem) {
-    echo $problem, "\n";
+    fwrite(STDERR, $problem . "\n");
 }
 if ($problems === []) {
     echo $notes;
