@@ -186,8 +186,10 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
     through the extension's wizard. User friendliness for church members belongs to the extension (phase 5), not to
     the backend.
   - **Decided 2026-11-11 (D6), replacing the setup code, the PHP wizard page and the copied bundle of 2026-11-10:**
-    - The **extension's setup wizard** (5.1) does everything on the ChurchTools side and then sends the service token
-      and the OAuth client ID and secret to `POST /v1/setup`. The instance comes from the `Origin` header.
+    - The **extension's setup wizard** (5.1) does everything on the ChurchTools side and then sends the service user's
+      login name and random password and the OAuth client ID and secret to `POST /v1/setup`. The instance comes from
+      the `Origin` header. The backend logs in from the server and fetches the service user's token itself (changed
+      2026-11-11, spec 4.10, D6); it never receives admin credentials.
     - **No setup code.** Setup mode exists while `credentials.php` doesn't; the first valid setup wins. Accepted
       risk: someone can block the setup, but never take it over unnoticed, because the extension does the binding
       check (spec 6.3, D6).
@@ -211,11 +213,13 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       wizard again), HTTPS and certificate errors, a web root that ignores `.htaccess`, a `config/` folder that PHP
       can't write. Writing `credentials.php` by hand stays documented as the manual path.
   - **Replacing secrets later** (decided 2026-11-11, replaces `setup.sh --rearm`): delete `config/credentials.php` over
-    FTP and run the extension's wizard again. It creates a new service token and OAuth client; the backend generates a
-    new `JWT_SECRET`.
+    FTP and run the extension's wizard again. It sets a new password for the service user (which invalidates the old
+    token) and creates a new OAuth client; the backend fetches the new token and generates a new `JWT_SECRET`.
   - **Tests:**
     - Kernel modes: missing, unreadable, broken and valid `credentials.php`.
-    - The setup endpoint against the ChurchTools fake: every check that can fail; nothing written after a failure;
+    - The setup endpoint against the ChurchTools fake: every check that can fail (including a wrong password and a
+      login that asks for a second factor); nothing written after a failure; the password never appears in the log
+      or the answer;
       `Origin` turned into `CT_API_URL` and `CORS`; the request-forgery rules (`http`, IP literal, private address,
       redirect).
     - Writing: the written file loads through `BackendConfig::fromArray`; values with quotes or `?>` can't inject
@@ -273,8 +277,11 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       - A login in a fresh session followed by `GET /api/persons/{id}/logintoken` as that person works (as in the
         contract test helpers).
 
-      So only something outside the admin's browser can fetch the token, e.g. the backend during `POST /v1/setup`
-      (proposal pending, 2026-11-11).
+      **Decided 2026-11-11:** the backend fetches the token during `POST /v1/setup` from the service user's login name
+      and password (spec 4.10, D6).
+    - **Login name of the service user (open, for 5.1):** the backend logs in with it (`POST /api/login`). To check
+      which field `POST /api/persons` must set so that the new person can log in (e.g. the email address or a
+      username), and whether a new person needs anything else before the first login.
     - **Creating a person** (measured 2026-11-10): `POST /api/persons` needs `departmentIds`, `campusId`, `statusId`
       and, on instances that require it, `privacyPolicyAgreementTypeId`, `privacyPolicyAgreementWhoId` and
       `privacyPolicyAgreementDate`. The wizard reads the valid values from `GET /api/person/masterdata`.
@@ -328,27 +335,28 @@ These live outside the backend, but the new API is only usable once they're done
 
       The backend's admin role still comes from the `adminUsers` list in the settings until Q22 (roles via groups) is
       decided; the wizard says so and doesn't silently mix the two.
-    - **Service user:** create the person, set a random password with the legacy `setPersonPassword` call (4.6, found
-      2026-11-11), add it to the service-user group, and fetch its token. How to fetch the token without replacing the
-      admin's session is open (4.6); logging in as that person with `POST /api/login` and fetching
-      `GET /api/persons/{id}/logintoken` works in the contract test helpers, but they don't share a browser session
-      with an admin. The password isn't shown or stored. **Never** call `PUT /persons/{id}/password` for this: it
-      changes the logged-in admin's password (see the open points in 4.6).
+    - **Service user:** create the person with a login name, set a long random password with the legacy
+      `setPersonPassword` call (needs "simulate persons" and a CSRF token; check `status`, not the HTTP status; 4.6,
+      measured 2026-11-11), and add it to the service-user group. The wizard **doesn't** fetch the token and never logs
+      in as that person: that would replace the admin's session. It sends login name and password to
+      `POST /v1/setup`, and the backend fetches the token. The password isn't shown or stored. **Never** call
+      `PUT /persons/{id}/password` for this: it changes the logged-in admin's password (see the open points in 4.6).
     - **OAuth application:** create it (`POST /api/oauthclients`) and grant the users' group the login right.
     - **Order:** ask for the backend URL and run the pre-check (`GET /v1/setup`) **before** creating anything in
       ChurchTools. A host that doesn't work, or `409`, stops the wizard with a clear message, and nothing is left
       half-created. Name the browser-side failures, never just "network error": no valid HTTPS (certificate), a URL
       that doesn't answer as CtPassStore (web root or `.htaccess` ignored), `500 misconfigured` (a broken
       `credentials.php` exists).
-    - **Configure the backend:** after the ChurchTools side, send `POST /v1/setup` with the service token and the OAuth
-      client ID and secret. They stay only in memory and are never shown. On `422` or a network error, offer "retry"
-      with the same values; if the tab was closed in between, delete the OAuth client (by `identifier`), create a new
-      one and fetch a new token.
+    - **Configure the backend:** after the ChurchTools side, send `POST /v1/setup` with the service user's login name
+      and password and the OAuth client ID and secret. They stay only in memory and are never shown. On `422` or a
+      network error, offer "retry" with the same values; if the tab was closed in between, delete the OAuth client
+      (by `identifier`), create a new one and set a new password for the service user.
     - **Binding check** (spec D6): compare `instanceUrl` and `oauthClientId` of the `201` with the wizard's own values,
       then log in once through OAuth against the backend. `409`, values that don't match or a failed login give a red
       warning: "someone else configured this backend; delete `config/credentials.php` over FTP and repeat".
     - Only then save `backendUrl` in the settings.
-    - **Re-arm** is the same flow after the admin deleted `credentials.php`.
+    - **Re-arm** is the same flow after the admin deleted `credentials.php`: the existing service user gets a new
+      password (which invalidates its old token), and the backend fetches the new token.
   - An admin UI for machine clients.
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)

@@ -564,8 +564,14 @@ no shell, no `setup.sh`, no copying secrets. The extension side is in the plan (
    The checks: the PHP version and the extensions the backend needs; `config/` writable by PHP; `cache/` and `logs/`
    exist and are writable, or can be created; `flock` works in `cache/` (6.1). It calls nothing outside the server.
    The extension runs it **before** it creates anything in ChurchTools.
-4. **`POST /v1/setup`** takes the body `{"ctApiToken": "...", "oauthClientId": "...", "oauthClientSecret": "..."}`. The
-   general body rules apply (4.1: 16 KB, JSON, `Content-Type`).
+4. **`POST /v1/setup`** takes the body
+   `{"serviceLogin": "...", "servicePassword": "...", "oauthClientId": "...", "oauthClientSecret": "..."}`. The general
+   body rules apply (4.1: 16 KB, JSON, `Content-Type`).
+   - `serviceLogin` and `servicePassword` are the service user's login name and the random password the extension's
+     wizard set for it. The backend fetches the service user's login token itself, because the wizard can't do it
+     without replacing the admin's session (measured 2026-11-11, see the plan, 4.6).
+   - The backend uses the password only for that: it isn't stored, logged or returned, and it's discarded after the
+     request. The backend never receives admin credentials.
    - The instance comes from the request's **`Origin` header**, not from the body: `CT_API_URL = <Origin>/api`,
      `CORS = [<Origin>]`. A browser can only connect the backend to the instance whose page runs the wizard.
      This relies on ChurchTools serving its API under `/api` at the root of the instance, which holds for hosted
@@ -579,7 +585,11 @@ no shell, no `setup.sh`, no copying secrets. The extension side is in the plan (
       (3.1).
    2. The checks of `GET /v1/setup`.
    3. ChurchTools, with the new values:
-      - `whoami` with `ctApiToken` succeeds;
+      - `POST /api/login` with `serviceLogin` and `servicePassword`, in a session of its own, answers `status` =
+        `success`. `totp` or `twoFactorSetup` (the instance requires a second factor for this person) fail with a
+        `message` saying so;
+      - `GET /api/persons/{personId}/logintoken` in that session returns the token (`personId` from the login
+        answer); `whoami` with that token returns the same person;
       - the module lookup succeeds (`view` on the extension, measured 2026-11-10);
       - the OAuth client is accepted: exchanging a made-up code answers `invalid_grant` (measured 2026-11-10);
       - the service user's rights pass the rights check of 4.8: no administrative rights, and enough rights for the
@@ -609,9 +619,10 @@ no shell, no `setup.sh`, no copying secrets. The extension side is in the plan (
    - `instanceUrl` and `oauthClientId` are what the backend is now connected to. The extension compares them with its
      own values (the binding check, D6).
    - `tests` are the checks of 4.8 (without `?write=1`), run once with the new file.
+   - Neither the token nor the password is part of the answer.
 9. **Logging:** a successful setup is logged as `info` with the instance URL and the IP address; a failed one as
    `warning` with the failed check names and the IP address. Before `logs/` exists, PHP's `error_log` is used. No
-   secret is ever logged.
+   secret is ever logged, in particular not `servicePassword` or the fetched token.
 
 ## 5. Units
 
@@ -901,12 +912,12 @@ The security stores (`jti` replay cache, rate-limit counters;
   | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one |
 
   **⏳ 4.6** The first three can also be replaced together: delete `config/credentials.php` over FTP and run the
-  extension's setup wizard again (4.10). It creates a new service token and OAuth client; the backend generates a new
-  `JWT_SECRET`.
+  extension's setup wizard again (4.10). It sets a new random password for the service user (which invalidates the old
+  token) and creates a new OAuth client; the backend fetches the new token and generates a new `JWT_SECRET`.
 - **⏳ 4.6** **Setup mode is open to the first caller** (4.10, D6). Between the upload and the setup, anyone who finds the
   backend's URL can configure it. Accepted (ruling 2026-11-11), because:
-  - They can only connect it to an instance where they have a working service token and an OAuth client, which in
-    practice means their own instance. A member of the real instance can't create an OAuth client there.
+  - They can only connect it to an instance where they have a working login and an OAuth client, which in practice
+    means their own instance. A member of the real instance can't create an OAuth client there.
   - The real admin always notices: the wizard gets `409 already-configured` or values that don't match, and its own
     OAuth login against the backend fails. The fix is to delete `credentials.php` over FTP.
   - No passwords exist yet at that point. The worst case is a blocked setup, not a data leak.
@@ -1126,6 +1137,12 @@ backend. Without a code, installing is "upload by FTP, click in the extension".
 
 `409`, values that don't match, or a failed login give the admin a clear warning with the fix (delete
 `credentials.php` over FTP and repeat). The remaining risk is a blocked setup (6.3).
+
+**The backend fetches the service user's token** (decided 2026-11-11). The wizard sends the service user's login name
+and a random password instead of a token. Measured on the test instance: an admin can't read another person's token
+(`403`), not even while simulating that person, and logging in as the service user in the admin's browser replaces the
+admin's session. The backend logs in from the server, in its own session. It never receives admin credentials: an
+admin's own login token would be a permanent credential for the whole instance.
 
 **Alternatives considered:**
 
