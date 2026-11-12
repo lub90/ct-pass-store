@@ -24,6 +24,8 @@ enum Reason: string
     case CustomPasswordNotAllowed = 'custom-password-not-allowed';
     case PasswordRejected = 'password-rejected';
     case OAuthCodeInvalid = 'oauth-code-invalid';
+    case CleanupRunning = 'cleanup-running';
+    case CleanupTooSoon = 'cleanup-too-soon';
 
     // The backend's setup is broken. All of these are "misconfigured" for the client; the reason tells the admin more.
     case SettingsInvalid = 'settings-invalid';

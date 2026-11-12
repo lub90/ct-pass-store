@@ -6,6 +6,8 @@ namespace CtPassStore\Tests\Unit\Http;
 
 use CtPassStore\Application\Exception\AccessDeniedException;
 use CtPassStore\Application\Exception\ApplicationException;
+use CtPassStore\Application\Exception\CleanupRunningException;
+use CtPassStore\Application\Exception\CleanupTooSoonException;
 use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
 use CtPassStore\Application\Exception\EntryNotFoundException;
 use CtPassStore\Application\Exception\InvalidPrimaryPasswordException;
@@ -73,6 +75,8 @@ final class ApplicationExceptionMappingTest extends TestCase
         yield 'no service access' => [new NoServiceAccessException('view'), 403, 'no-service-access'];
         yield 'invalid redirect uri' => [new InvalidRedirectUriException('uri'), 400, 'invalid-body'];
         yield 'too many attempts' => [new TooManyAttemptsException('wait', 120), 429, 'too-many-attempts'];
+        yield 'cleanup running' => [new CleanupRunningException('busy'), 409, 'cleanup-running'];
+        yield 'cleanup too soon' => [new CleanupTooSoonException('wait', 60), 429, 'cleanup-too-soon'];
     }
 
     /**

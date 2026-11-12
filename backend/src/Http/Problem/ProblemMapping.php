@@ -28,6 +28,8 @@ final class ProblemMapping
             Reason::CustomPasswordNotAllowed => ProblemType::CustomPasswordNotAllowed,
             Reason::PasswordRejected => ProblemType::PasswordInvalid,
             Reason::OAuthCodeInvalid => ProblemType::OauthCodeInvalid,
+            Reason::CleanupRunning => ProblemType::CleanupRunning,
+            Reason::CleanupTooSoon => ProblemType::CleanupTooSoon,
             Reason::SettingsInvalid, Reason::ExtensionNotInstalled, Reason::ServiceUserRejected,
             Reason::OAuthClientRejected, Reason::StoreUnusable, Reason::StoreTampered => ProblemType::Misconfigured,
             Reason::UpstreamUnavailable => ProblemType::UpstreamUnavailable,
@@ -51,7 +53,8 @@ final class ProblemMapping
             Reason::OAuthCodeInvalid => 'ChurchTools didn\'t accept the authorization code. Start the login again.',
             Reason::InvalidRequest, Reason::InvalidToken, Reason::TokenExpired, Reason::NoServiceAccess,
             Reason::AccessDenied, Reason::EntryNotFound, Reason::PersonNotFound, Reason::PrimaryPasswordRequired, Reason::InvalidPrimaryPassword,
-            Reason::TooManyAttempts, Reason::CustomPasswordNotAllowed, Reason::PasswordRejected, Reason::SettingsInvalid,
+            Reason::TooManyAttempts, Reason::CustomPasswordNotAllowed, Reason::PasswordRejected, Reason::CleanupRunning,
+            Reason::CleanupTooSoon, Reason::SettingsInvalid,
             Reason::StoreUnusable, Reason::StoreTampered => self::type($reason)->title() . '.',
         };
     }

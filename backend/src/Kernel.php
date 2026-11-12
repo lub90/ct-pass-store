@@ -7,6 +7,7 @@ namespace CtPassStore;
 use CtPassStore\Application\Auth\Authenticator;
 use CtPassStore\Application\Auth\MachineTokens;
 use CtPassStore\Application\Auth\UserTokens;
+use CtPassStore\Application\Cleanup\CleanupCooldown;
 use CtPassStore\Application\Cleanup\CleanupLock;
 use CtPassStore\Application\Cleanup\CleanupOrphans;
 use CtPassStore\Application\DeletePassword;
@@ -23,6 +24,7 @@ use CtPassStore\Cli\CleanupCommand;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Http\Controller\AuthController;
+use CtPassStore\Http\Controller\CleanupController;
 use CtPassStore\Http\Controller\EntriesController;
 use CtPassStore\Http\Controller\SelfCheckController;
 use CtPassStore\Http\Middleware\AuthMiddleware;
@@ -62,6 +64,7 @@ use CtPassStore\Infrastructure\SelfCheck\PublicKeyCheck;
 use CtPassStore\Infrastructure\SelfCheck\ServiceUserRightsCheck;
 use CtPassStore\Infrastructure\SelfCheck\SettingsCheck;
 use CtPassStore\Infrastructure\SelfCheck\WriteRoundTripCheck;
+use CtPassStore\Infrastructure\Store\FileCooldownStore;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
@@ -144,8 +147,19 @@ final class Kernel
         $authenticator = new Authenticator($codec, $tokens, new MachineTokens($settings, new FileReplayCache($securityStore), $clock, $codec));
 
         // Every path lives under /v1 (Q20); the old paths without prefix are unknown routes (404).
-        // The only route without an access token (spec 4.1):
+        // The only routes without a backend access token (spec 4.1):
         $app->post('/v1/auth/token', [$login, 'token']);
+        // The web cron checks its own token, CLEANUP_TOKEN, and accepts nothing else (cleanup design 5.1).
+        $cleanup = new CleanupController(
+            $config->cleanupTokenIfUsable(),
+            $shared['cleanup'],
+            $shared['lock'],
+            new CleanupCooldown(new FileCooldownStore($securityStore, $clock)),
+            $addressLimiter,
+            $clock,
+            $logger,
+        );
+        $app->post('/v1/cleanup', [$cleanup, 'run']);
 
         // Authentication runs per route, after routing, so unknown routes and wrong methods get 404/405 first.
         $app->group('/v1', function (RouteCollectorProxyInterface $group) use ($entries, $selfCheck): void {

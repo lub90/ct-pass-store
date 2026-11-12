@@ -800,3 +800,22 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-18** (! · U) a held `cache/cleanup.lock` makes the run exit 2 with `Another cleanup is running.`; the lock is released after a run — cleanup design 6.3
 - [x] **GP-19** (! · U) `bin/cleanup.php`: unknown argument exits 2 with the usage, missing `credentials.php` exits 2 with `Configuration error:`, and `.htaccess` denies `bin/`, `cache/` and `setup/` — cleanup design 4
 - [x] **GP-20** (! · U) an unexpected error in the CLI is logged by class only, prints `Aborted with an unexpected error; see the log.` and exits 2; an unopenable lock file exits 2 with its own message (not "Another cleanup is running.") — cleanup design 4
+
+### Web cron (design 5)
+
+- [x] **WC-01** (! · A) without `CLEANUP_TOKEN`, and with a 42-character one, `POST /v1/cleanup` answers `404` with the same headers and body as an unknown route — cleanup design 5.1
+- [x] **WC-02** (! · A) a missing, malformed or wrong bearer token gives `401 invalid-token`, runs nothing and logs no token — cleanup design 5.2
+- [x] **WC-03** (! · A) enough wrong tokens from one address give `429 too-many-attempts` (rejected-token limit of spec 6.3) — cleanup design 5.2
+- [x] **WC-04** (! · A) an admin's backend token and a machine token are not accepted (`401`) — cleanup design 5.1
+- [x] **WC-05** (! · A) a `token` query parameter is refused with `400 invalid-body`, even together with the right header — cleanup design 5.1
+- [x] **WC-06** (! · A) `apply` other than absent or `1` (`0`, `true`, empty, an array) is refused with `400 invalid-body` and runs nothing — cleanup design 5.1
+- [x] **WC-07** (! · A) the dry run answers `200` with the body of design 5.3 (`applied: false`, `deleted: 0`) and writes nothing — cleanup design 5.3
+- [x] **WC-08** (! · A) `?apply=1` deletes the entries of gone persons only and reports the counts — cleanup design 5.3
+- [x] **WC-09** (! · A) the body contains counts only, none of the person IDs involved (gone, gone admin, active) — cleanup design 5.2
+- [x] **WC-10** (! · A) a second call within 600 s gets `429 cleanup-too-soon` with `Retry-After` and makes no ChurchTools call; after 600 s it runs — cleanup design 5.2
+- [x] **WC-11** (! · A) a run that fails (`502`) still starts the cooldown: the next call gets `429` and makes no ChurchTools call — cleanup design 5.3
+- [x] **WC-12** (! · A) a held `cache/cleanup.lock` gives `409 cleanup-running`; that call started the cooldown, so the next one gets `429` — cleanup design 5.3, 6.3
+- [x] **WC-13** (N · A) a run that passes the 20-second deadline answers `200` with `complete: false` — cleanup design 5.3
+- [x] **WC-14** (! · A) a lock file that can't be opened gives `500 internal-error` without the path in the body, and the lock is released after every run — cleanup design 6.3
+- [x] **WC-15** (N · A) other methods than `POST` get `405` with `Allow: POST`, whether the endpoint is on or off — cleanup design 5.1
+- [x] **WC-16** (! · A) a tampered cooldown record fails closed with `500 misconfigured` and runs nothing — cleanup design 5.2
