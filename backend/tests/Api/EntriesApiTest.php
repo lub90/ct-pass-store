@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Http\Problem\ProblemType;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -94,6 +95,60 @@ final class EntriesApiTest extends ApiTestCase
 
         self::assertSame(200, $response->getStatusCode());
         self::assertSame('b3RoZXI=', $this->json($response)['secondaryPwd']);
+    }
+
+    public function testMachineClientReadingAGonePersonGets404(): void
+    {
+        $this->churchTools->addPerson(50);
+        $this->churchTools->removePerson(50);
+        $this->seedEntry(50);
+
+        $response = $this->request('GET', '/v1/entries/50', self::READER_CLIENT);
+
+        $body = $this->assertProblem(ProblemType::PersonNotFound, $response);
+        self::assertSame("Person 50 doesn't exist in ChurchTools or is archived.", $body['detail']);
+        self::assertArrayNotHasKey('secondaryPwd', $body);
+        self::assertTrue($this->log->hasInfoThatContains("Machine client ct-radius asked for person 50, who doesn't exist or is archived."));
+    }
+
+    public function testAdminReadingAnArchivedPersonGets404(): void
+    {
+        $this->churchTools->addPerson(51, archived: true);
+        $this->seedEntry(51);
+
+        $response = $this->request('GET', '/v1/entries/51', self::ADMIN);
+
+        $this->assertProblem(ProblemType::PersonNotFound, $response);
+    }
+
+    public function testReadingOwnEntryMakesNoLookup(): void
+    {
+        $this->seedEntry(self::USER);
+
+        $response = $this->request('GET', '/v1/entries/' . self::USER, self::USER);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(0, $this->churchTools->countCalls(['personStatus']));
+    }
+
+    public function testUnauthorizedReadIs403WithoutLookup(): void
+    {
+        $this->churchTools->removePerson(self::OTHER);
+
+        $response = $this->request('GET', '/v1/entries/' . self::OTHER, self::USER);
+
+        $this->assertProblem(ProblemType::Forbidden, $response);
+        self::assertSame(0, $this->churchTools->countCalls(['personStatus']));
+    }
+
+    public function testRepeatedReadsWithin600SecondsMakeOneLookup(): void
+    {
+        $this->seedEntry(self::OTHER);
+
+        $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
+        $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
+
+        self::assertSame(1, $this->churchTools->countCalls(['personStatus']));
     }
 
     // ---------------------------------------------------------------- PUT
@@ -252,6 +307,66 @@ final class EntriesApiTest extends ApiTestCase
 
         $this->assertProblem(ProblemType::InvalidPrimaryPassword, $withTargetsPassword);
         self::assertSame(200, $withOwnPassword->getStatusCode());
+    }
+
+    // ---------------------------------------------------------------- PUT and gone persons
+
+    public function testAdminChangingADeletedPersonGets404AndStoresNothing(): void
+    {
+        $response = $this->request('PUT', '/v1/entries/60', self::ADMIN);
+
+        $body = $this->assertProblem(ProblemType::PersonNotFound, $response);
+        self::assertSame("Person 60 doesn't exist in ChurchTools or is archived.", $body['detail']);
+        self::assertSame([], $this->storedEntries());
+    }
+
+    public function testAdminChangingAnArchivedPersonGets404AndStoresNothing(): void
+    {
+        $this->churchTools->addPerson(61, archived: true);
+
+        $response = $this->request('PUT', '/v1/entries/61', self::ADMIN);
+
+        $this->assertProblem(ProblemType::PersonNotFound, $response);
+        self::assertSame([], $this->storedEntries());
+    }
+
+    public function testChangingOwnEntryMakesNoLookup(): void
+    {
+        $response = $this->request('PUT', '/v1/entries/' . self::USER, self::USER);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(0, $this->churchTools->countCalls(['personStatus']));
+    }
+
+    public function testRejectedCallersMakeNoLookup(): void
+    {
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
+
+        $unauthorized = $this->request('PUT', '/v1/entries/60', self::USER, ['primaryPwd' => $this->primaryPasswordOf(self::USER)]);
+        $wrongPassword = $this->request('PUT', '/v1/entries/60', self::ADMIN, ['primaryPwd' => 'wrong']);
+
+        $this->assertProblem(ProblemType::Forbidden, $unauthorized);
+        $this->assertProblem(ProblemType::InvalidPrimaryPassword, $wrongPassword);
+        self::assertSame(0, $this->churchTools->countCalls(['personStatus']));
+    }
+
+    public function testFailingLookupIs502AndStoresNothing(): void
+    {
+        $this->churchTools->failNext('personStatus', new UnavailableException('down'));
+
+        $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::ADMIN);
+
+        $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
+        self::assertSame([], $this->storedEntries());
+    }
+
+    public function testAdminChangingAnActivePersonStoresTheEntry(): void
+    {
+        $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::ADMIN);
+
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame(self::OTHER, $this->storedEntries()[0][KvSchema::ENTRY_PERSON_ID]);
+        self::assertSame(1, $this->churchTools->countCalls(['personStatus']));
     }
 
     // ---------------------------------------------------------------- DELETE

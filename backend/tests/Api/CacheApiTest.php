@@ -172,7 +172,7 @@ final class CacheApiTest extends ApiTestCase
     {
         $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN);
         $files = glob($this->cacheDir . '/cache-*') ?: [];
-        self::assertCount(2, $files, 'settings and ids');
+        self::assertCount(3, $files, 'settings, ids and persons');
         foreach ($files as $file) {
             file_put_contents($file, '{"format": 1, "keyId"');
         }

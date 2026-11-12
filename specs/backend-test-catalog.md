@@ -417,6 +417,10 @@ normal case names it ("→ PV-05").
 - [x] **EG-02** (N · A) No entry → `404 entry-not-found` — 4.5
 - [x] **EG-03** (! · A) The response never contains plaintext, only the stored ciphertext — 4.5
 - [x] **EG-04** (S · A) Duplicates → `200` with the newest — 4.5
+- [x] **EG-05** (! · A) A machine client reads a deleted or archived person → `404 person-not-found` with detail `Person {id} doesn't exist in ChurchTools or is archived.`, no entry returned — cleanup design 3.6
+- [x] **EG-06** (N · A) Own entry: no lookup in ChurchTools — cleanup design 3.6
+- [x] **EG-07** (! · A) Unauthorized caller → `403` (never "gone"), no lookup — cleanup design 3.6
+- [x] **EG-08** (S · A) Repeated reads of an active person within 600 s make one lookup — cleanup design 3.6
 
 ### `PUT /v1/entries/{id}` (4.6)
 
@@ -439,6 +443,12 @@ normal case names it ("→ PV-05").
   password is the one read afterwards, and a `warning` is logged — 4.6.5
 - [x] **EP-11** (N · A) Counterparts of EP-02 for each violation of the policy (PV-03a, PV-05, PV-13–16): each gives
   `400 password-invalid` with the matching `violations`, and nothing is stored — 4.6.3
+- [x] **EP-14** (! · A) An admin changes a deleted person → `404 person-not-found`, nothing stored — cleanup design 3.6
+- [x] **EP-15** (! · A) The same for an archived person — cleanup design 3.6
+- [x] **EP-16** (N · A) Own entry: no lookup — cleanup design 3.6
+- [x] **EP-17** (! · A) Unauthorized caller or wrong primary password → `403`, no lookup — cleanup design 3.6
+- [x] **EP-18** (! · A) The lookup fails → `502`/`503`, nothing stored — cleanup design 3.6
+- [x] **EP-19** (N · A) An admin changes an active other person → stored — cleanup design 3.6
 
 ### `DELETE /v1/entries/{id}` (4.7)
 

@@ -19,6 +19,7 @@ final class InputApiTest extends ApiTestCase
 
     public function testLargeValidIdIsAccepted(): void
     {
+        $this->churchTools->addPerson(PHP_INT_MAX);
         $response = $this->request('GET', '/v1/entries/' . PHP_INT_MAX, self::ADMIN);
 
         $this->assertProblem(ProblemType::EntryNotFound, $response);

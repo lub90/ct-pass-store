@@ -28,6 +28,7 @@ enum ProblemType: string
     case InvalidPrimaryPassword = 'invalid-primary-password';
     case NotFound = 'not-found';
     case EntryNotFound = 'entry-not-found';
+    case PersonNotFound = 'person-not-found';
     case MethodNotAllowed = 'method-not-allowed';
     case PayloadTooLarge = 'payload-too-large';
     case UnsupportedMediaType = 'unsupported-media-type';
@@ -50,7 +51,7 @@ enum ProblemType: string
             self::CustomPasswordNotAllowed, self::PasswordInvalid => 400,
             self::MissingToken, self::InvalidToken, self::TokenExpired => 401,
             self::NoServiceAccess, self::Forbidden, self::InvalidPrimaryPassword => 403,
-            self::NotFound, self::EntryNotFound => 404,
+            self::NotFound, self::EntryNotFound, self::PersonNotFound => 404,
             self::MethodNotAllowed => 405,
             self::PayloadTooLarge => 413,
             self::UnsupportedMediaType => 415,
@@ -79,6 +80,7 @@ enum ProblemType: string
             self::InvalidPrimaryPassword => 'Wrong primary password',
             self::NotFound => 'Unknown endpoint',
             self::EntryNotFound => 'No password entry',
+            self::PersonNotFound => 'Person not found',
             self::MethodNotAllowed => 'Method not allowed',
             self::PayloadTooLarge => 'Request body too large',
             self::UnsupportedMediaType => 'Unsupported content type',
