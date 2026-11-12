@@ -46,7 +46,7 @@ data.
 | **Admin user** | A person listed in the `adminUsers` setting. May read, set and delete **any** entry. |
 | **Machine client** | An external system such as ct-radius that reads encrypted passwords without a human user. It authenticates with JWTs it signs itself (D5, 4.3). |
 | **Extension** | The ChurchTools extension. Logs the user in via OAuth and calls the backend on their behalf. |
-| **Service user** | The ChurchTools account the backend itself uses (`CT_API_TOKEN`). It's the only account allowed to write to `passwordStore`, and it should have no other rights (see 4.8). |
+| **Service user** | The ChurchTools account the backend itself uses (`CT_API_TOKEN`). It's the only account allowed to write to `passwordStore`. It **may read persons** (to tell deleted and archived persons from active ones, D7), and it should have no other rights (see 4.8). |
 | **ChurchTools** | OAuth authorization server, permission source and storage (KV store). |
 
 Data lives in three KV categories of the `ctpassstore` module:
@@ -75,6 +75,7 @@ Data lives in three KV categories of the `ctpassstore` module:
 | `OAUTH_CLIENT_SECRET` | yes | Its client secret |
 | `JWT_SECRET` | yes | Random secret (at least 32 bytes) for signing the backend's own access tokens (see 4.4) |
 | `LOG_LEVEL` | no | Minimum log level (`debug`, `info`, `notice`, `warning`, `error`), default `info`. Any other value is `misconfigured` (Q18). |
+| `CLEANUP_TOKEN` | no | Turns on the web-cron endpoint `POST /v1/cleanup` (4.12). A random string of at least 43 characters, e.g. `php -r 'echo bin2hex(random_bytes(32)), "\n";'` (64 characters). Not a string → `misconfigured`. Missing or shorter than 43 characters: the endpoint doesn't exist, and `/v1/test` says why. |
 
 - The file must be readable by PHP but not by other users. The exact mode depends on the hosting:
   - PHP runs as the hosting user (PHP-FPM, suPHP; most shared hosts): `600`.
@@ -158,8 +159,10 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
 - **Format:** Requests and responses are JSON (`Content-Type: application/json`), except `204` responses, which have no
   body. Errors use `application/problem+json` (4.9).
 - **Paths (Q20):** every endpoint lives under `/v1/`: `POST /v1/auth/token`, `GET|PUT|DELETE /v1/entries/{id}`,
-  `GET /v1/test`. The old paths without prefix answer `404 not-found`.
-- **Authentication:** Every endpoint except `POST /v1/auth/token` and `OPTIONS` requires a bearer token (4.3).
+  `GET /v1/test`, and `POST /v1/cleanup` (4.12, only when `CLEANUP_TOKEN` is set). The old paths without prefix answer
+  `404 not-found`.
+- **Authentication:** Every endpoint except `POST /v1/auth/token`, `POST /v1/cleanup` and `OPTIONS` requires a bearer
+  token (4.3). `POST /v1/cleanup` accepts only its own token, `CLEANUP_TOKEN` (4.12).
 - **Errors** follow RFC 9457 "Problem Details" (D2, see 4.9). This includes `404`, `405` and `500`.
 - **Unknown routes** return `404` with type `not-found`.
 - **Wrong HTTP methods** on known routes return `405` with type `method-not-allowed` and an `Allow` header.
@@ -398,6 +401,17 @@ Returns the encrypted secondary password of person `{id}`.
   a wrong backend URL) is an error, not "no password".
 - No primary password is needed.
 - The response contains only ciphertext. Nobody can obtain a plaintext password through `GET`.
+- **Existence check (D7).** If the caller isn't a person reading their **own** entry (every machine client, and every
+  person reading another person's entry), the backend first asks ChurchTools whether person `{id}` exists and isn't
+  archived. If not, the answer is `404 person-not-found` (detail: "Person 56 doesn't exist in ChurchTools or is
+  archived.") and nothing is read.
+  - The order is authorization → existence check → read. A caller who may not read the entry gets `403` before any
+    lookup, so they learn nothing about which persons exist.
+  - "Exists" is cached for 10 minutes, "gone" never (6.1). A deleted or archived person's password therefore stops
+    working within 10 minutes, whether or not the cleanup (4.11) has run.
+  - A failed lookup gives the usual upstream problems (`502 upstream-unavailable`, `502 upstream-invalid`,
+    `503 upstream-rate-limited`); a service user without the persons right gives `500 misconfigured`.
+  - For ct-radius, `person-not-found` means "reject the login", like `entry-not-found`.
 
 ### 4.6 `PUT /v1/entries/{id}`
 
@@ -440,6 +454,10 @@ Sets or replaces the secondary password of person `{id}`.
 
 - Afterwards, exactly **one** entry exists for `{id}` (see 5.3).
 - Setting the same password again is allowed.
+- **Existence check (D7).** Between steps 2 and 3, unless the caller is a person changing their **own** entry, the
+  backend checks as in 4.5 that person `{id}` exists and isn't archived; otherwise `404 person-not-found` and nothing is
+  stored. So an admin can't create an entry for a person who doesn't exist. Authorization and the primary password come
+  first: an admin with a wrong primary password gets `403` without a lookup.
 
 ### 4.7 `DELETE /v1/entries/{id}`
 
@@ -451,6 +469,7 @@ Deletes the entry of person `{id}`.
   `PUT`. The body has no other fields.
 - **All** entries for `{id}` are deleted, including duplicates.
 - Response `204`, also when no entry existed (idempotent).
+- There is **no** existence check: an admin must still be able to delete the entry of a person who is gone.
 
 ### 4.8 `GET /v1/test` (self-check)
 
@@ -472,6 +491,18 @@ Deletes the entry of person `{id}`.
   - the service user has **no more rights than needed**. The check fails if the service user has
     administrative rights such as `administer settings`, `administer persons` or `administer custom modules`, or
     write access to extension categories other than `passwordStore`.
+  - the service user **can read persons** (D7): `churchdb` `view`, `view alldata` for **every** department of the
+    instance (from `GET /person/masterdata`), `view archive` and `view hidden persons`. Anything but exactly `true`
+    (or, for `view alldata`, a list of integers containing the department) counts as missing. The check fails with
+    "The service user can't read persons (missing: …); the cleanup job and the existence checks need it (see
+    docs/setup.md).", naming the missing parts (e.g. `churchdb view archive`, `churchdb view alldata for department 3`).
+    The administrative rights stay forbidden. The service user also needs `view custom category` on the
+    extension's categories; without it ChurchTools lists no category and the check can't find `passwordStore`.
+  - every person in `adminUsers` exists and isn't archived (`AdminUsersCheck`). It fails with "adminUsers contains
+    person 56, who is deleted or archived; remove them in the extension settings."; a failed lookup fails it with a
+    generic message and the details go to the log.
+  - `CLEANUP_TOKEN` (`CleanupTokenCheck`): not set → ok, "The web-cron endpoint is off."; set with fewer than 43
+    characters → fail, and the endpoint stays off (4.12); otherwise ok. The token is never printed.
   - only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
     (Q11). The test value uses the **reserved `personId` `0`** (5.3.11), which can never belong to a real person (4.1).
     Before writing, the self-test removes test values left over from an earlier run (e.g. after a timeout); after
@@ -499,7 +530,7 @@ Deletes the entry of person `{id}`.
 | `title` | Short, fixed summary of the type |
 | `status` | The HTTP status, repeated |
 | `detail` | Explanation of this specific occurrence. For configuration problems it names exactly what's wrong and how to fix it. |
-| Extension members | Only where useful: `violations` (list of rule codes) for `password-invalid`; `retryAfter` (seconds, the same value as the `Retry-After` header) for `upstream-rate-limited` and `too-many-attempts`; **⏳ 4.6** `tests` (the check list of 4.10) for `setup-check-failed` |
+| Extension members | Only where useful: `violations` (list of rule codes) for `password-invalid`; `retryAfter` (seconds, the same value as the `Retry-After` header) for `upstream-rate-limited`, `too-many-attempts` and `cleanup-too-soon`; **⏳ 4.6** `tests` (the check list of 4.10) for `setup-check-failed` |
 
 **Problem types:**
 
@@ -513,19 +544,22 @@ Deletes the entry of person `{id}`.
 | 400 | `custom-password-not-allowed` | Custom password sent while disabled |
 | 400 | `password-invalid` | Custom password fails the policy (`violations` lists the rules) |
 | 401 | `missing-token` | No `Authorization` header |
-| 401 | `invalid-token` | Wrong scheme, bad signature or claims |
+| 401 | `invalid-token` | Wrong scheme, bad signature or claims; on `POST /v1/cleanup` a missing or wrong `CLEANUP_TOKEN` (4.12) |
 | 401 | `token-expired` | Backend access token expired; log in again |
 | 403 | `no-service-access` | No extension `view` permission (at login) |
 | 403 | `forbidden` | Not allowed to act on this entry |
 | 403 | `invalid-primary-password` | Wrong primary password (Q6) |
 | 404 | `not-found` | Unknown route |
 | 404 | `entry-not-found` | No entry for this person (`GET` only) |
+| 404 | `person-not-found` | The person doesn't exist in ChurchTools or is archived (`GET` and `PUT` of `/v1/entries/{id}`, 4.5, 4.6) |
 | 405 | `method-not-allowed` | Known route, wrong method |
+| 409 | `cleanup-running` | `POST /v1/cleanup` while another cleanup runs (4.12) |
 | 409 | `already-configured` | **⏳ 4.6** `/v1/setup` called while `credentials.php` exists (4.10) |
 | 413 | `payload-too-large` | Body larger than 16 KB |
 | 415 | `unsupported-media-type` | Non-empty body without `Content-Type: application/json` |
 | 422 | `setup-check-failed` | **⏳ 4.6** A check of `POST /v1/setup` failed; `tests` lists all checks (4.10) |
 | 429 | `too-many-attempts` | Too many primary-password attempts, or too many logins or rejected tokens from one address (see 6.3); with `Retry-After` |
+| 429 | `cleanup-too-soon` | `POST /v1/cleanup` less than 600 seconds after the last start (4.12); with `Retry-After` |
 | 500 | `misconfigured` | Configuration, settings, OAuth setup or service-user rights are missing or wrong. `detail` says exactly what. |
 | 500 | `internal-error` | Anything unexpected. Generic `detail`; details only go to the log. |
 | 502 | `upstream-unavailable` | ChurchTools unreachable, timed out or answered `5xx` |
@@ -624,6 +658,119 @@ no shell, no `setup.sh`, no copying secrets. The extension side is in the plan (
    `warning` with the failed check names and the IP address. Before `logs/` exists, PHP's `error_log` is used. No
    secret is ever logged, in particular not `servicePassword` or the fetched token.
 
+### 4.11 Cleanup job (`bin/cleanup.php`)
+
+Password entries remain in `passwordStore` after their person has left ChurchTools. The cleanup deletes the entries of
+persons who are **deleted or archived** (D7). It is the scheduled counterpart of the existence checks of 4.5 and 4.6,
+which stop such a password from working within 10 minutes. This section is the trigger for server cron; 4.12 is the
+trigger for web-cron services. Both run the same use case (5.8).
+
+```
+php bin/cleanup.php            # dry run: reports, deletes nothing
+php bin/cleanup.php --apply    # deletes the entries of gone persons
+```
+
+1. **Dry run by default.** Only `--apply` deletes. Any other argument prints `Usage: php bin/cleanup.php [--apply]` on
+   stderr and ends with exit code 2. Outside the CLI the script answers `404` and stops, like `bin/check-deploy.php`.
+2. **Order of steps:**
+   1. Load `config/credentials.php`. Missing or broken → `Configuration error: …` on stderr, exit 2.
+   2. Take the lock (5.8.8). The lock file can't be opened → `Cannot open the lock file cache/cleanup.lock; check that
+      cache/ exists and is writable by this user.`, exit 2. The lock is held → `Another cleanup is running.`, exit 2.
+   3. Run `CleanupOrphans` (5.8.6) without a deadline. The service user can't read persons →
+      `The service user can't read persons (missing: …); see docs/setup.md.`, exit 2. Another failure →
+      `Aborted, nothing was deleted: <message>`, exit 2. An unexpected error → `Aborted with an unexpected error; see the
+      log.`, exit 2 (the log has the class only).
+   4. Print the report and exit with the code of rule 4.
+3. **Output.** Person IDs only, never names or other personal data.
+   - stdout, one line per gone person, then a summary:
+
+     ```
+     deleted entry of person 56
+     would delete entry of person 57 (dry run)
+     checked 143 persons, deleted 1 entry
+     ```
+
+     In a dry run the summary reads `checked 143 persons, would delete 2 entries (dry run)`.
+   - stderr, so cron mails it to the admin:
+
+     ```
+     adminUsers contains person 12, who is deleted or archived; remove them in the extension settings
+     could not delete the entry of person 58: <error>; the next run retries it
+     ```
+
+   - Every printed line is also logged (6.4): the stdout lines at `info`, a gone admin or a failed delete at `warning`,
+     every abort at `error`.
+4. **Exit codes:**
+
+   | Code | Meaning |
+   | --- | --- |
+   | 0 | Done: nothing to do, or everything was deleted (in a dry run: would have been). |
+   | 1 | Done with findings: `adminUsers` contains gone persons, or a delete failed. |
+   | 2 | Aborted before deleting anything: wrong arguments, configuration, lock held or unavailable, missing persons right, failed lookup, unexpected error. |
+
+5. **Cron line**, in `backend/docs/setup.md`: `0 3 * * * php /path/to/backend/bin/cleanup.php --apply`. It must run as
+   the same operating-system user as PHP; otherwise the script creates `logs/` and `cache/` files (mode `600`) that
+   the web app can't write, and requests fail.
+6. The CLI ignores the web cooldown (4.12). `setup/setup.sh` ships `bin/cleanup.php` and no other script of `bin/`.
+
+### 4.12 Web cron: `POST /v1/cleanup`
+
+For hosts without server cron, a web-cron service (e.g. cron-job.org) can start the cleanup of 4.11.
+
+```
+POST /v1/cleanup            dry run
+POST /v1/cleanup?apply=1    deletes
+Authorization: Bearer <CLEANUP_TOKEN>
+```
+
+1. **Off unless configured.** Without a usable `CLEANUP_TOKEN` (3.1: set, at least 43 characters) the route **isn't
+   registered**, so every method on this path answers like an unknown path (`404 not-found`).
+2. **A separate credential.** `CLEANUP_TOKEN` opens only this endpoint, and this endpoint accepts nothing else (no
+   backend token, no machine token). The route lies outside the authentication of 4.3; the controller compares the header
+   itself in constant time (`hash_equals`). Exactly one `Authorization: Bearer <token>` header is accepted.
+3. **Only `POST`;** other methods get `405` as everywhere. Link previews, crawlers and prefetchers never send `POST`.
+4. **Query:** a `token` parameter is refused with `400 invalid-body` ("send the token in the Authorization header"), so the
+   secret doesn't end up in URLs and access logs. `apply` accepts only `1`; any other value is `400 invalid-body`. These
+   checks come first and need no token.
+5. **Order of checks:** query → token → address limit (wrong tokens only) → cooldown → lock → run.
+   - Missing or wrong token → `401 invalid-token`. It counts against the per-address limit for rejected tokens (6.3);
+     a blocked address with a wrong token gets `429 too-many-attempts`.
+   - **The limit throttles noise; it is not the protection.** It only slows wrong tokens, and it does not slow the
+     guessing of the right one. A request with the right token never touches the limiter, so a blocked address with the
+     right token still gets `200`. This is deliberate: a shared cron-service address can't be locked out by someone else's
+     wrong tokens. The security rests on the 256-bit random token, which is why the setup docs tell admins to generate it
+     with the documented command and not to choose one.
+   - **Cooldown:** a run may start at most once per **600 seconds**. An earlier call gets `429 cleanup-too-soon` with
+     `Retry-After`. The start time is kept in a security store (6.1, fail closed) and is set **before** the lock check,
+     so a call that finds the lock held (`409`) or that fails also starts the period.
+   - **Lock** (5.8.8): a call during a run gets `409 cleanup-running`. A lock file that can't be opened is a generic
+     `500 internal-error`.
+6. **Run:** `CleanupOrphans` (5.8.6) with a deadline of **20 seconds** after the request came in (5.8.4). `200`:
+
+   ```json
+   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
+   ```
+
+   | Field | Meaning |
+   | --- | --- |
+   | `applied` | `false` for a dry run |
+   | `complete` | `false` if persons were left unchecked because the deadline passed; the next run continues |
+   | `checked` | Persons with entries that were looked at |
+   | `gone` | Gone persons found (a dry run: that would be deleted) |
+   | `deleted` | Entries actually deleted; always `0` in a dry run |
+   | `failedDeletes` | Deletes that failed; the next run retries them |
+   | `goneAdmins` | Persons in `adminUsers` who are gone |
+
+   Gone admins and failed deletes still give `200`; the admin sees them in `/v1/test` and the log.
+7. **The response holds counts only,** no person IDs. The IDs go to the backend log; gone admins also show in `/v1/test`.
+8. **Aborts before deleting:** a service user without the persons right → `500 misconfigured`; ChurchTools problems →
+   `502`/`503` as usual. Nothing was deleted. Web-cron services usually alert on these.
+9. **What a stolen token can do:** start the same harmless cleanup, at most once per 10 minutes. It deletes only persons
+   that ChurchTools confirmed one by one as deleted or archived, and gives no access to entries, settings or anything else.
+   It can also starve `?apply=1` runs by sending dry runs within the cooldown, so the setup docs say to rotate
+   `CLEANUP_TOKEN` if it may have leaked.
+10. **Logs:** a missing or wrong token is a `warning` with the address; a refused run (lock) is `info`.
+
 ## 5. Units
 
 These sections describe behavior per unit. Each numbered rule should map to at least one unit test.
@@ -705,6 +852,9 @@ This covers the lookup and write logic in `KvPasswordRepository`.
     for persons ignore them **silently** (no warning): they're never returned, overwritten or deleted on behalf of a
     person, and they don't count as duplicates. Only the self-test reads, writes and deletes them. A leftover test value
     therefore disturbs nothing.
+12. **`personIds()`:** returns every person ID that has at least one entry, each once, ascending. IDs are normalized
+    (rule 1), broken values are skipped and logged (rule 7), and the reserved person ID `0` is never returned (rule 11).
+    The cleanup (5.8) uses it.
 
 ### 5.4 Settings (`KvSettingsRepository`)
 
@@ -753,6 +903,7 @@ ChurchTools communication goes through it.
    - `getModuleByKey(key)`, `getCategories(moduleId)`, `getValues(moduleId, categoryId)`, `createValue(…)`,
      `updateValue(…)`, `deleteValue(…)` (service user)
    - for the self-check: the service user's own `globalPermissions`
+   - persons (service user, D7, D8): `personStatus(id)`, `activePersonIds(ids)` and `personDepartmentIds()` (rules 11 and 12)
 
    Services depend on the interface only, so unit tests can use a fake implementation.
 2. **Authentication:** user calls send the user's OAuth token as `Bearer`. KV calls send the service user's token as
@@ -782,6 +933,25 @@ ChurchTools communication goes through it.
    the backend uses are read.
 10. **CSRF:** REST write requests with a login token work without a CSRF token (measured 2026-11). The client is built so that
    fetching one from `GET /api/csrftoken` can be added in one place if ChurchTools starts requiring it.
+11. **`personStatus(int $personId): PersonStatus`** is `GET /persons/{id}` with the service user's credential:
+
+    | ChurchTools answer | Result |
+    | --- | --- |
+    | `404` | `Gone` (a deleted person and a never-used ID look the same) |
+    | `200`, `data.isArchived` is `true` | `Archived` |
+    | `200`, `data.isArchived` is `false` | `Active` |
+    | `403` | `ServiceCredentialRejectedException` (`misconfigured`): the service user lacks the persons right. **Never** read as "gone". |
+    | Anything else (`401`, `429`, `5xx`, timeout, no `data`, `isArchived` missing or not a boolean) | The exception of rule 7 |
+
+12. **`activePersonIds(list<int> $personIds): list<int>`** is `GET /persons?ids[]=…&limit=<n>` with the service user's
+    credential, at most **100** IDs per call (`limit` equals the number of IDs; ChurchTools' default page size is 10).
+    More than 100 → `\InvalidArgumentException` (callers chunk).
+    - It returns the IDs of the returned persons whose `isArchived` is exactly `false`. Missing, deleted, archived and
+      invisible persons simply aren't in the result; the method never says why.
+    - The answer is checked like the KV values (5.3.9): `meta.pagination.total` must equal the number of returned
+      persons, and every returned ID must have been asked for. Otherwise `InvalidResponseException`.
+    - **`personDepartmentIds()`** is `GET /person/masterdata`, the IDs in `data.departments[]`; the persons right (4.8)
+      needs `view alldata` for each of them.
 
 ### 5.7 Middleware
 
@@ -791,6 +961,55 @@ ChurchTools communication goes through it.
    stack trace and returns only a generic `detail` for `internal-error`.
 3. **Auth middleware:** implements 4.3 and attaches the authenticated principal (person or machine client, typed) to
    the request.
+
+### 5.8 Gone persons and cleanup (`PersonDirectory`, `GonePersons`, `GoneAdmins`, `CleanupOrphans`)
+
+1. **`PersonDirectory`** (port): `exists(PersonId): bool` (true only for an active person; the authoritative single
+   lookup), `confirmedActive(list<PersonId>): list<PersonId>` (may leave out active persons, never includes others) and
+   `assertReadable()` (throws `PersonsNotReadableException`, reason `ServiceUserRejected` → `500 misconfigured`, if the
+   service user lacks the persons right). The application knows only "exists or not"; archiving stays behind the port.
+2. **`ChurchToolsPersonDirectory`** implements it on the client (5.6): `exists()` is true only for `Active`;
+   `confirmedActive()` chunks into calls of 100; `assertReadable()` checks the service user's permissions and the
+   department list (4.8) and names the missing parts: `The service user can't read persons (missing: …); see docs/setup.md.`
+3. **`CachedPersonDirectory`** wraps another directory for the existence checks of 4.5 and 4.6 (not for the cleanup).
+   `exists()` answers true from the cache if the person was confirmed within the last **600 seconds**; otherwise it asks
+   the inner directory and caches a true answer. **False is never cached.** The other two methods pass through. The
+   cache is one record (`persons-active`) in the signed file cache (6.1, fail open): a map from person ID to expiry, with
+   expired IDs dropped on every write. A broken record is a miss. Concurrent writers may lose an update, which costs one
+   more lookup.
+4. **`GonePersons::find(list<PersonId>, ?DateTimeImmutable $deadline): GoneResult`** is the only code that decides who is
+   gone (D8):
+   1. `confirmedActive()` on all of them (the batch pre-filter).
+   2. For every person not confirmed, one after another and never in parallel (parallel calls ran into connection
+      timeouts at ChurchTools): `exists()`. False → gone.
+   3. If the deadline has passed (by the `Clock` port) before a single lookup starts, the remaining persons go to
+      `unchecked` instead. The pre-filter isn't bounded by the deadline.
+
+   `GoneResult` has `gone` and `unchecked`. Any failure propagates.
+5. **`GoneAdmins::find(Settings): list<PersonId>`** is `GonePersons::find(adminUsers)->gone`, in `adminUsers` order. The
+   cleanup and `AdminUsersCheck` (4.8) use it. `adminUsers` is only **reported**, never changed: the service user only
+   reads the settings, and write access would let a leaked service token make anyone an admin. A gone person can't log in
+   to ChurchTools, so a gone admin can do nothing.
+6. **`CleanupOrphans::run(bool $apply, ?DateTimeImmutable $deadline): CleanupReport`:**
+   1. `assertReadable()`.
+   2. Read the person IDs with entries (5.3.12) and the settings.
+   3. `GonePersons::find()` and `GoneAdmins::find()`.
+   4. **Only after steps 1–3 succeeded,** and only with `$apply`: delete the entries of the gone persons with the
+      repository's `delete()` (5.3.5, which also removes duplicates and broken entries). Persons in `unchecked` are left
+      for the next run; since deleted entries leave the store, every run makes progress.
+   5. Return the report: persons checked, gone IDs, unchecked IDs, failed deletes, gone admins. The exit code of 4.11 is
+      1 if there are failed deletes or gone admins, else 0.
+
+   If any lookup fails, the use case throws and **nothing is deleted**. A delete that fails in step 4 is logged
+   (`warning`) and recorded; the run continues with the other persons, and the next run retries. Deletions and the summary
+   are logged at `info`.
+7. The cleanup uses the **uncached** directory: it must never act on a cached answer.
+8. **`CleanupLock`:** an exclusive, non-blocking `flock` on `cache/cleanup.lock` keeps two runs (CLI or web) from
+   overlapping. The folder `cache/` is created if missing. "Cannot open the lock file" (`CleanupLockUnavailableException`)
+   is different from "lock held" (`tryAcquire()` returns false). The operating system drops the lock when the process ends.
+9. **`CleanupCooldown`:** `start()` records the start of a web run in the security store under the name `cleanup:web-cron`
+   and throws `CleanupTooSoonException` (`429 cleanup-too-soon`, with the seconds left) if the last start is less than 600
+   seconds ago.
 
 ## 6. Non-functional requirements
 
@@ -807,7 +1026,8 @@ The security stores (`jti` replay cache, rate-limit counters;
   | Data | Proposed TTL | Effect |
   | --- | --- | --- |
   | Module ID, category IDs | 1 hour | These only change on reinstall |
-  | Settings, public key | 5 minutes | Admin changes (admins, machine clients and their keys, the public key) take up to 5 minutes to apply. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
+  | Persons confirmed active | 10 minutes | A deleted or archived person is locked out of `GET` and `PUT` of their entry within 10 minutes (D7, 5.8.3). Only "exists" is cached, never "gone". |
+| Settings, public key | 5 minutes | Admin changes (admins, machine clients and their keys, the public key) take up to 5 minutes to apply. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
 
 - `passwordStore` values are **never** cached. Reads must always see the latest write.
 - **Cache backend:** a file cache outside the web root. No APCu, to keep the backend lean (Q3).
@@ -893,6 +1113,9 @@ The security stores (`jti` replay cache, rate-limit counters;
   - Limits are generous and windows short, so a parish behind one NAT address isn't locked out by one person's
     mistakes (Q26): at most **30** `POST /v1/auth/token` requests and **60** rejected tokens per address and
     minute, kept in **256** buckets. A block lasts until the window has passed.
+  - A wrong or missing `CLEANUP_TOKEN` on `POST /v1/cleanup` counts in the same rejected-token bucket as a forged
+    backend token. The right `CLEANUP_TOKEN` never touches the limit, so it always passes, also from a blocked address
+    (4.12).
   - A global cap of **100** logins per minute across all addresses keeps logins below half of ChurchTools' budget,
     however many addresses an attacker has (ruling 2026-11-10, confirmed 2026-11-11). A refused login counts in
     neither the address bucket nor the global record. While a flood lasts, logins from everyone are refused; existing sessions (15-minute tokens)
@@ -911,6 +1134,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   | OAuth client secret | `credentials.php` | ChurchTools can't rotate it: delete and recreate the OAuth application, update `credentials.php` and the users' login right |
   | `JWT_SECRET` | `credentials.php` | Replace it; all backend tokens become invalid and users log in again silently |
   | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one |
+  | `CLEANUP_TOKEN` | `credentials.php` and the web-cron service | Generate a new one, put it in both places. Rotate it if it may have leaked (4.12). |
 
   **⏳ 4.6** The first three can also be replaced together: delete `config/credentials.php` over FTP and run the
   extension's setup wizard again (4.10). It sets a new random password for the service user (which invalidates the old
@@ -933,8 +1157,8 @@ The security stores (`jti` replay cache, rate-limit counters;
 
   | Level | Events |
   | --- | --- |
-  | `warning` | Denied access, with person ID and IP address |
-  | `info` | Logins, password changes and deletions, with person IDs |
+  | `warning` | Denied access, with person ID and IP address; a wrong `CLEANUP_TOKEN`; a gone admin or a failed delete in the cleanup |
+  | `info` | Logins, password changes and deletions, with person IDs; cleanup deletions and summaries |
   | `error` | Upstream errors, configuration problems |
 
 - Values written to the log are escaped, so control characters or newlines in input can't forge log lines.
@@ -997,8 +1221,10 @@ The security stores (`jti` replay cache, rate-limit counters;
 
 | # | Question | Proposal |
 | --- | --- | --- |
-| Q16 | Cleanup job for entries of deleted persons: how is it triggered? | A CLI script for cron, plus an admin-only endpoint for hosts without cron |
 | Q22 | Should admin and read access be granted via ChurchTools groups instead of person-ID lists in the settings? | Later. The consent includes group memberships, and the `api` scope can read them, so it's possible. |
+
+**Answered 2026-11-12:** Q16 (cleanup of entries of deleted and archived persons: a CLI script for server cron, 4.11, and a
+web-cron endpoint protected by its own token, 4.12; plus the read check of 4.5 and 4.6; D7, D8).
 
 **Answered 2026-11-10 by accepting the proposal:** Q26 (per-address limit: 30 logins and 60 rejected tokens per
 address and minute, 256 buckets, see 6.3).
@@ -1160,6 +1386,44 @@ redirects, short timeouts. What remains is that, until the setup is done, anyone
 requests to public HTTPS hosts. Accepted: it gives them nothing they couldn't do from their own machine, and it ends
 with the setup.
 
+### D7. The service user reads persons; deleted and archived persons are gone
+
+**Decided 2026-11-12** (cleanup design C1, C2). The service user gets the persons right (4.8): `churchdb` `view`,
+`view alldata` for every department, `view archive` and `view hidden persons`. Deleted **and archived** persons count as
+gone: archiving means the person has left, and their secondary password should stop working. If an archived person is
+restored, they or an admin set a new password.
+
+**Why:** without the right, the backend can't tell "deleted" from "not visible". Measured on the test instance with a
+dedicated service user: a deleted or never-used ID answers `404`; a person the service user may not see answers `403`;
+with `view` and `view alldata` an active person answers `200` with `isArchived: false`; an archived person answers `200`
+only with `view archive`. So `403` and `404` can be told apart, and `403` is a configuration error, never "gone".
+`view hidden persons` couldn't be measured (setting a person to hidden needs a right the test admin lacks), but without
+it a hidden person would answer `403`, so it's required as a precaution. None of these is an administrative right.
+
+**Alternatives considered:**
+
+| Option | Why not |
+| --- | --- |
+| A separate admin token in `credentials.php` for the cleanup | A much more powerful credential on the server. |
+| Only delete when ChurchTools says `404`, ignore archived persons | An archived person's old password would keep working (e.g. for RADIUS). |
+| Remove gone persons from `adminUsers` | Write access to the settings would let a leaked service token make anyone an admin (5.8.5). |
+
+**Cost:** existing installations must grant the service user the right, otherwise `/v1/test` fails and every read of
+another person's entry fails with `500 misconfigured` (RADIUS logins included).
+
+### D8. Batch pre-filter, single confirmation
+
+**Decided 2026-11-12** (cleanup design C5, C9). A batch query (`GET /persons?ids[]=…`) only ever *confirms* persons as
+active. Every person it doesn't confirm is looked up on its own (`GET /persons/{id}`), and only that answer can make a
+person gone (5.8.4).
+
+**Why:** a single lookup takes about 230 ms (measured), so 300 persons would take 70 seconds, too long for a web call. A
+batch of 100 takes about 0.5 s. A batch can't tell "deleted" from "filtered" or "invisible", so it never decides
+"gone": an unclear answer never deletes anything. The web run stops starting single lookups after 20 seconds (4.12) and
+the next run continues; the CLI has no deadline.
+
+**Cost:** two code paths in the client, kept in line by shared contract cases against a real instance (6.6).
+
 ## 9. Later (not part of the first release)
 
 - **Possible second step: ct-radius talks only to the backend.** A lookup endpoint for machine clients (e.g.
@@ -1176,7 +1440,6 @@ with the setup.
   If the new KV store offers ownership or per-entry permissions ("users may only write their own entry"), lookups by
   key, and read access for a dedicated account, the extension could encrypt in the browser (it already ships an RSA
   library) and write directly, and ct-radius could read directly. The backend would then no longer be needed.
-- Cleanup of entries belonging to deleted ChurchTools persons (❓ Q16).
 - Roles via ChurchTools groups (❓ Q22).
 - Backup and restore of extension data (an extension feature, not a backend feature).
 
@@ -1197,6 +1460,7 @@ redesign fixed. The rules above are authoritative; this section only says what w
 | `404` on `GET` | Same answer for "no entry" and "wrong URL" | `entry-not-found` versus `not-found` (4.5) |
 | Invalid custom password | `400` with a message only | `400 password-invalid` with `violations` (5.1.6) |
 | `/test` | Anyone with a valid token | Admins only (Q11); machine clients refused |
+| Deleted and archived persons | Their entries stayed and their passwords kept working | `GET` and `PUT` of another person's entry answer `404 person-not-found` (4.5, 4.6); the cleanup deletes the entries (4.11, 4.12). **Existing installations must grant the service user the persons right (D7),** otherwise `/v1/test` fails and every read of another person's entry fails. |
 | Configuration | `credentials.php` with `CT_API_URL`, `CT_API_TOKEN`, `CORS` | Also `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET`, `JWT_SECRET` (required) and `LOG_LEVEL` (3.1) |
 
 **Bugs and weaknesses the redesign fixed:**
