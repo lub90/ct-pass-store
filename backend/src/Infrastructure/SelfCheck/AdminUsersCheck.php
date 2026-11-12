@@ -32,7 +32,9 @@ final class AdminUsersCheck implements Check
         try {
             $gone = $this->goneAdmins->find($this->settings->settings());
         } catch (Failure $e) {
-            $this->logger->error('The admin users could not be checked.', ['exception' => $e::class]);
+            // Failure messages on this path are log-safe: ChurchTools ones name method, path and status, the settings
+            // ones name keys and categories. None carries a token.
+            $this->logger->error('The admin users could not be checked: ' . $e->getMessage(), ['exception' => $e::class]);
 
             return CheckOutcome::fail('The persons in adminUsers can\'t be checked right now; see the log.');
         }

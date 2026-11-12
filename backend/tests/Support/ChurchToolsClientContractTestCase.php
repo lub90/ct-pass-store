@@ -13,12 +13,14 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 use CtPassStore\Infrastructure\ChurchTools\PersonStatus;
 use CtPassStore\Infrastructure\ChurchTools\ServiceUserPersonsRight;
+use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
+use CtPassStore\Infrastructure\SelfCheck\ServiceUserRightsCheck;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The contract between the backend and ChurchTools (catalog CT-06, CT-06a, CT-01, CT-03, CC-10, CC-11, ST-16,
- * PP-10, CT-09 to CT-11).
+ * PP-10, CT-09 to CT-12).
  *
  * The same cases run against the real ChurchTools (end-to-end layer) and against the fake (unit layer), so the fake
  * that the API tests rely on can't drift from real ChurchTools.
@@ -375,5 +377,16 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         $missing = ServiceUserPersonsRight::missingIn($this->client()->serviceUserGlobalPermissions(), $this->client()->personDepartmentIds());
 
         self::assertSame([], $missing);
+    }
+
+    /**
+     * CT-12: the minimal service user passes the whole rights check of `/v1/test`, including the `churchdb` deny-list.
+     * Its message names rights only.
+     */
+    public function testServiceUserPassesTheWholeRightsCheck(): void
+    {
+        $outcome = (new ServiceUserRightsCheck($this->client(), new ExtensionData($this->client())))->run();
+
+        self::assertTrue($outcome->ok, $outcome->message);
     }
 }

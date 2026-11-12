@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Infrastructure\Kv;
 
+use CtPassStore\Application\Failure\Failure;
+use CtPassStore\Application\Port\BulkDeleteResult;
 use CtPassStore\Application\Port\PasswordRepository;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
@@ -104,15 +106,53 @@ final class KvPasswordRepository implements PasswordRepository
      */
     public function delete(PersonId $person): void
     {
-        $personId = $person->value;
+        $this->deleteValues($person->value, array_map(static fn(array $entry): int => $entry['id'], $this->entriesOf($person->value)));
+    }
 
-        foreach ($this->entriesOf($personId) as $entry) {
+    /**
+     * Removes every entry of each person, from one listing of the category (cleanup design 3.5). Entries written after
+     * the listing aren't touched.
+     */
+    public function deleteEntriesOf(array $persons, \Closure $mayStart): BulkDeleteResult
+    {
+        if ($persons === []) {
+            return new BulkDeleteResult([], [], []);
+        }
+
+        $valueIds = [];
+        foreach ($this->allEntries() as $entry) {
+            $valueIds[$entry['owner']][] = $entry['id'];
+        }
+
+        $deleted = [];
+        $failed = [];
+        foreach ($persons as $index => $person) {
+            if (!$mayStart()) {
+                return new BulkDeleteResult($deleted, $failed, array_slice($persons, $index));
+            }
             try {
-                $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $entry['id']);
-                $this->logger->info("Deleted password entry {$entry['id']} of person $personId.");
+                $this->deleteValues($person->value, $valueIds[$person->value] ?? []);
+                $deleted[] = $person;
+            } catch (Failure $e) {
+                $failed[$person->value] = $e->getMessage();
+            }
+        }
+
+        return new BulkDeleteResult($deleted, $failed, []);
+    }
+
+    /**
+     * @param list<int> $valueIds the person's values, all of them
+     */
+    private function deleteValues(int $personId, array $valueIds): void
+    {
+        foreach ($valueIds as $valueId) {
+            try {
+                $this->extension->delete(KvSchema::PASSWORD_CATEGORY, $valueId);
+                $this->logger->info("Deleted password entry $valueId of person $personId.");
             } catch (NotFoundException) {
                 // Already removed by a concurrent request (spec 5.3.6): that's what a delete wants.
-                $this->logger->info("Password entry {$entry['id']} of person $personId was already deleted.");
+                $this->logger->info("Password entry $valueId of person $personId was already deleted.");
             }
         }
     }

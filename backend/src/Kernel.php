@@ -205,7 +205,7 @@ final class Kernel
         $goneAdmins = new GoneAdmins($gonePersons);
 
         return [
-            'cleanup' => new CleanupOrphans($passwords, $settings, $persons, $gonePersons, $goneAdmins, $logger),
+            'cleanup' => new CleanupOrphans($passwords, $settings, $persons, $gonePersons, $goneAdmins, $clock, $logger),
             'lock' => new CleanupLock($config->cacheDir . '/cleanup.lock'),
             'cache' => $cache,
             'extensionData' => $extensionData,

@@ -15,8 +15,16 @@ use CtPassStore\Infrastructure\Kv\KvSchema;
 
 /**
  * The service user has no more rights than needed (spec 4.8; the keys were measured on a test instance on 2026-11-10):
- * none of the administrative rights of `churchcore`, and write access in `ctpassstore` to `passwordStore` only.
- * It also needs the persons right ({@see ServiceUserPersonsRight}). A right that isn't in the expected form counts as granted (fail closed). Messages name rights, never the person.
+ * none of the administrative rights of `churchcore`, write access in `ctpassstore` to `passwordStore` only, and in
+ * `churchdb` nothing that writes, creates, deletes, exports or administers, and no person security level above 1.
+ * It also needs the persons right ({@see ServiceUserPersonsRight}).
+ *
+ * Both directions fail closed. For the excess rights, anything unexpected counts as **granted**: a flag or list that
+ * isn't exactly `false` or `[]`, or a category list that isn't a list of IDs within `passwordStore`. For the persons
+ * right, anything unexpected counts as **missing**. Messages name rights, never the person.
+ *
+ * The `churchdb` part is a deny-list on purpose (cleanup design 9.1): ChurchTools gives every user default read values
+ * there (e.g. `security level view own data`, `view group`), which an allow-list would reject.
  */
 final class ServiceUserRightsCheck implements Check
 {
@@ -25,6 +33,31 @@ final class ServiceUserRightsCheck implements Check
     private const WRITE_TO_CATEGORIES = ['create custom data', 'edit custom data', 'delete custom data'];
 
     private const CATEGORY_LISTS = ['edit custom category', 'delete custom category'];
+
+    /** The `churchdb` rights that write, create, delete, export or administer; each must be exactly `false` or `[]`. */
+    private const CHURCHDB_EXCESS = [
+        'create person',
+        'write access',
+        'delete persons',
+        'edit person visibility',
+        'push/pull archive',
+        'export data',
+        'edit bulkletter',
+        'create print labels',
+        'send sms',
+        'edit relations',
+        'administer global filters',
+        'edit masterdata',
+        'edit group',
+        'delete group',
+        'create groups of grouptype',
+        'edit groups of grouptype',
+        'delete groups of grouptype',
+        'edit group memberships of grouptype',
+        'edit group memberships of group',
+        'administer groups',
+        'edit group memberships',
+    ];
 
     public function __construct(
         private readonly ChurchToolsClient $client,
@@ -52,6 +85,16 @@ final class ServiceUserRightsCheck implements Check
             if (($core[$right] ?? false) !== false) {
                 $excess[] = $right;
             }
+        }
+        $churchdb = $permissions->of('churchdb') ?? [];
+        foreach (self::CHURCHDB_EXCESS as $right) {
+            if (array_key_exists($right, $churchdb) && $churchdb[$right] !== false && $churchdb[$right] !== []) {
+                $excess[] = 'churchdb ' . $right;
+            }
+        }
+        $levels = $churchdb['security level person'] ?? [];
+        if (!is_array($levels) || !array_is_list($levels) || array_filter($levels, static fn(mixed $level): bool => $level !== 1) !== []) {
+            $excess[] = 'churchdb security level person above 1';
         }
         $extension = $permissions->of(KvSchema::EXTENSION_KEY) ?? [];
         if (($extension['create custom category'] ?? false) !== false) {

@@ -259,7 +259,8 @@ final class CleanupApiTest extends ApiTestCase
     {
         $this->seedEntry(self::GONE);
         $this->seedEntry(self::ALSO_GONE);
-        $this->churchTools->beforeNext('personStatus', fn() => $this->clock->advance(21));
+        // Past the halfway point of the 20-second budget: no further lookup starts, but the delete still does.
+        $this->churchTools->beforeNext('personStatus', fn() => $this->clock->advance(11));
 
         $response = $this->cleanup('?apply=1');
 
