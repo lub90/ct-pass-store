@@ -6,6 +6,7 @@ namespace CtPassStore\Tests\Support;
 
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
@@ -73,6 +74,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
 
     /** @var array<int, bool> whether a person is archived, by person ID */
     private array $persons = [];
+
+    /** @var array<int, true> persons for whom something in front of ChurchTools answers 404 */
+    private array $foreign404 = [];
 
     /** @var list<int> */
     private array $personDepartments = [1];
@@ -142,6 +146,15 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     public function removePerson(int $personId): void
     {
         unset($this->persons[$personId]);
+    }
+
+    /**
+     * Something in front of ChurchTools (proxy, firewall, maintenance page) answers the person's lookup with a 404
+     * that isn't ChurchTools' error for the person. The real client then throws instead of answering `Gone`.
+     */
+    public function answerForeign404For(int $personId): void
+    {
+        $this->foreign404[$personId] = true;
     }
 
     /**
@@ -350,6 +363,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     {
         $this->record(__FUNCTION__, [$personId]);
 
+        if (isset($this->foreign404[$personId])) {
+            throw new InvalidResponseException('GET persons/{id}: ChurchTools answered 404, but not with its error for this person.');
+        }
         if (!isset($this->persons[$personId])) {
             return PersonStatus::Gone;
         }

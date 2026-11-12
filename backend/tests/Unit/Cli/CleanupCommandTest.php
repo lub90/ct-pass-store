@@ -278,6 +278,21 @@ final class CleanupCommandTest extends TestCase
         rmdir($this->cacheDir . '/new');
     }
 
+    /** GP-26 */
+    public function testLockFileIsCreatedWithMode600(): void
+    {
+        $previous = umask(0o022);
+        try {
+            $lock = new CleanupLock($this->cacheDir . '/cleanup.lock');
+            self::assertTrue($lock->tryAcquire());
+            clearstatcache();
+            self::assertSame(0o600, fileperms($this->cacheDir . '/cleanup.lock') & 0o777);
+            $lock->release();
+        } finally {
+            umask($previous);
+        }
+    }
+
     public function testLogLevels(): void
     {
         $this->seedMixed();

@@ -15,7 +15,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
 
 /**
- * Catalog GP-04.
+ * Catalog GP-04, GP-25.
  */
 final class CachedPersonDirectoryTest extends TestCase
 {
@@ -109,6 +109,22 @@ final class CachedPersonDirectoryTest extends TestCase
 
         self::assertTrue($this->directory->exists(new PersonId(10)));
         self::assertSame(2, $this->fake->countCalls(['personStatus']));
+    }
+
+    /** GP-25: a signed record that claims a far-future expiry (bug or older version) can't keep a gone person alive. */
+    public function testAnExpiryBeyondTheTtlIsAMiss(): void
+    {
+        $now = $this->clock->timestamp();
+        /** @var array<string, mixed> $record */
+        $record = json_decode(sprintf('{"10": %d, "11": %d}', $now + 86_400, $now + CachedPersonDirectory::TTL_SECONDS), true, 4, JSON_THROW_ON_ERROR);
+        $this->cache->put('persons-active', $record, CachedPersonDirectory::TTL_SECONDS);
+
+        self::assertFalse($this->directory->exists(new PersonId(10)), 'person 10 is gone in ChurchTools');
+        self::assertSame(1, $this->fake->countCalls(['personStatus']));
+
+        $this->fake->addPerson(11);
+        self::assertTrue($this->directory->exists(new PersonId(11)));
+        self::assertSame(1, $this->fake->countCalls(['personStatus']), 'an expiry exactly TTL ahead is still trusted');
     }
 
     public function testConfirmedActiveAndAssertReadablePassThrough(): void

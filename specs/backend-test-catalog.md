@@ -142,6 +142,7 @@ normal case names it ("→ PV-05").
   exist → `500 misconfigured` naming it — 5.3.10
 - [x] **ST-23** (S · U) `personIds()` returns every person with an entry once, ascending: values for `9`, `"5"`, `5`, the
   reserved `0` and a broken one give `[5, 9]` — cleanup design 3.3
+- [x] **ST-24** (! · U) `deleteEntriesOf()`: removes every entry (duplicates, string IDs, broken ones) of each listed person from **one** listing of the category, never another person's or a self-test value; a person whose delete fails is reported with its message and the others continue; an entry already gone counts as deleted; once `mayStart` answers false, no further person is started (a started one is finished) and the rest is returned as not started; an empty list makes no call — cleanup design 3.5
 
 ## 4. Settings and configuration (spec 3)
 
@@ -207,7 +208,7 @@ normal case names it ("→ PV-05").
   HTTPS test server, or in the contract layer) — 5.6.6
 - [x] **CC-16** (E · U) `Retry-After` parsing: seconds (`120`), an HTTP date, a missing header and garbage (`soon`) give
   120, the date's offset, 60 and 60 respectively, never less than 60 — 5.6.7
-- [x] **CC-17** (N · U) Guzzle `personStatus()`: `404` → `Gone`, `isArchived` `true`/`false` → `Archived`/`Active`; a
+- [x] **CC-17** (N · U) Guzzle `personStatus()`: ChurchTools' `404` for the person (CC-20) → `Gone`, `isArchived` `true`/`false` → `Archived`/`Active`; a
   missing or non-boolean `isArchived` (`"false"`, `0`) → `upstream-invalid`; `403` → `ServiceCredentialRejectedException`,
   never `Gone` — cleanup design 3.1
 - [x] **CC-18** (N · U) Guzzle `activePersonIds()`: sends `GET …/api/persons?ids[]=7&ids[]=8&limit=2`; a returned
@@ -217,6 +218,12 @@ normal case names it ("→ PV-05").
 - [x] **CC-19** (! · U) `ServiceUserPersonsRight`: granted gives `[]`; each of `view`, `view archive`,
   `view hidden persons` and a department in `view alldata` missing on its own gives its exact text; `"true"`, `1`, `null`
   or an absent key count as missing, as does a `view alldata` that isn't a list of integers — cleanup design 9.1
+- [x] **CC-20** (! · U) Guzzle `personStatus()`: a `404` is `Gone` only if it is ChurchTools' JSON error for that
+  person (JSON content type, an object whose `message` is exactly `Person [<id>] not found.`). An HTML `404` (proxy,
+  WAF, maintenance page), a JSON `404` naming another ID, one without `message` or with a non-JSON content type →
+  `upstream-invalid`, never `Gone` — cleanup design 3.1, 9.1
+- [x] **CC-21** (! · U) Guzzle `personStatus()`: a `200` whose `data.id` isn't the requested ID (another ID, missing, a
+  string) → `upstream-invalid` — cleanup design 3.1
 - [ ] **CC-14** (N · C) Counterpart of CC-10: an invalid service token gets `401`, and a missing permission `403`, as the
   error mapping assumes — 5.6.6
 
@@ -423,7 +430,8 @@ normal case names it ("→ PV-05").
 - [x] **EG-05** (! · A) A machine client reads a deleted or archived person → `404 person-not-found` with detail `Person {id} doesn't exist in ChurchTools or is archived.`, no entry returned — cleanup design 3.6
 - [x] **EG-06** (N · A) Own entry: no lookup in ChurchTools — cleanup design 3.6
 - [x] **EG-07** (! · A) Unauthorized caller → `403` (never "gone"), no lookup — cleanup design 3.6
-- [x] **EG-08** (S · A) Repeated reads of an active person within 600 s make one lookup — cleanup design 3.6
+- [x] **EG-08** (S · A) Repeated reads of an active person within 600 s both answer `200` and make one lookup — cleanup design 3.6
+- [x] **EG-09** (! · A) The lookup gets a `404` that isn't ChurchTools' error for the person (CC-20) → `502 upstream-invalid`, never `person-not-found` — cleanup design 3.6, 9.1
 
 ### `PUT /v1/entries/{id}` (4.6)
 
@@ -452,6 +460,7 @@ normal case names it ("→ PV-05").
 - [x] **EP-17** (! · A) Unauthorized caller or wrong primary password → `403`, no lookup — cleanup design 3.6
 - [x] **EP-18** (! · A) The lookup fails → `502`/`503`, nothing stored — cleanup design 3.6
 - [x] **EP-19** (N · A) An admin changes an active other person → stored — cleanup design 3.6
+- [x] **EP-20** (! · A) The same as EG-09 for `PUT`: `502 upstream-invalid`, nothing stored — cleanup design 3.6, 9.1
 
 ### `DELETE /v1/entries/{id}` (4.7)
 
@@ -488,9 +497,10 @@ normal case names it ("→ PV-05").
 - [x] **TS-09** (N · A) A gone (archived or unknown) admin in `adminUsers` → "Admin users" `fail` naming person IDs
   only, singular and plural wording; all active → `ok` — cleanup design 3.7
 - [x] **TS-10** (E · A) The admin lookup fails → "Admin users" `fail` with a generic message, no exception detail in
-  the response, the class in the log — cleanup design 3.7
+  the response; the class and the (log-safe) message in the log, never a token — cleanup design 3.7
 - [x] **TS-11** (! · A) "Web cron token": absent → `ok` (off); shorter than 43 → `fail`, token not printed; usable →
   `ok` (on) — cleanup design 3.7, 5.1
+- [x] **TS-12** (! · U) "Service user rights" keeps `churchdb` narrow: each writing, creating, deleting, exporting or administering `churchdb` right (`create person`, `write access`, … `edit group memberships`, design 9.1) that isn't exactly `false` or `[]` (`true`, `[3]`, `"false"`, `null`, `0`) is listed as excess; `security level person` with a value above 1 is excess, `[1]` and the default read values of the minimal user are not — spec 4.8, cleanup design 9.1
 
 ## 9. Error format (spec 4.9)
 
@@ -736,6 +746,7 @@ tester has; it's documented in `backend/docs/testing.md`.
   one; the instance's departments are listed as integers — cleanup design 3.1, 9.1
 - [x] **CT-11** (! · C) The service user holds exactly the narrow persons right (`ServiceUserPersonsRight` finds
   nothing missing), and that suffices to see the archived person (`Archived`, not `403`) — cleanup design 9.1
+- [x] **CT-12** (! · C) The real minimal service user passes the whole "Service user rights" check of `/v1/test` (`ok`), including the `churchdb` deny-list of TS-12 — spec 4.8, cleanup design 9.1
 - [x] **CT-08** (S · C) Updating a value that was deleted gives `404` and doesn't bring the value back. TR-02b relies on
   it — 5.3.6
 - [x] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing
@@ -800,6 +811,12 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-18** (! · U) a held `cache/cleanup.lock` makes the run exit 2 with `Another cleanup is running.`; the lock is released after a run — cleanup design 6.3
 - [x] **GP-19** (! · U) `bin/cleanup.php`: unknown argument exits 2 with the usage, missing `credentials.php` exits 2 with `Configuration error:`, and `.htaccess` denies `bin/`, `cache/` and `setup/` — cleanup design 4
 - [x] **GP-20** (! · U) an unexpected error in the CLI is logged by class only, prints `Aborted with an unexpected error; see the log.` and exits 2; an unopenable lock file exits 2 with its own message (not "Another cleanup is running.") — cleanup design 4
+- [x] **GP-21** (! · U) a single lookup gets a `404` that isn't ChurchTools' error for the person (CC-20) → the run aborts and nothing is deleted — cleanup design 3.5, 9.1
+- [x] **GP-22** (! · U) the main lookups succeed and find a gone person, then the lookup of `adminUsers` fails (its single lookup or its batch) → the failure propagates and nothing is deleted — cleanup design 3.5
+- [x] **GP-23** (N · U) `run(true)` with N gone persons lists the `passwordStore` category once for all deletes (plus once for `personIds()`) — cleanup design 3.5
+- [x] **GP-24** (! · U) the deadline passes during the deletes → no further delete starts, the person being deleted is finished, the rest goes to `unchecked` (`isComplete()` false, not counted as deleted) and the next run deletes them — cleanup design 3.5, 5.3
+- [x] **GP-25** (! · U) `CachedPersonDirectory` trusts a cached expiry only if it lies within the next 600 s: a record whose expiry is far in the future is a miss and leads to a lookup — cleanup design 3.2
+- [x] **GP-26** (! · U) `cache/cleanup.lock` is created with mode `600`, also under a permissive umask — cleanup design 6.3
 
 ### Web cron (design 5)
 

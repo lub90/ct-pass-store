@@ -335,20 +335,25 @@ final class SelfCheckApiTest extends ApiTestCase
     }
 
     /** TS-10 */
-    public function testAdminLookupFailureFailsGenericallyAndLogsTheClass(): void
+    public function testAdminLookupFailureFailsGenericallyAndLogsClassAndMessage(): void
     {
-        $this->churchTools->failNext('activePersonIds', new UnavailableException('GET persons: secret-detail'));
+        $this->churchTools->failNext('activePersonIds', new UnavailableException('GET persons?ids[]=1&limit=1: ChurchTools answered 503.'));
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
         $this->assertOnlyFails('Admin users', $response);
         self::assertSame("The persons in adminUsers can't be checked right now; see the log.", $this->checks($response)['Admin users']['message']);
-        self::assertStringNotContainsString('secret-detail', (string) $response->getBody());
+        self::assertStringNotContainsString('answered 503', (string) $response->getBody());
 
         $errors = array_values(array_filter($this->log->getRecords(), static fn($r): bool => $r['level_name'] === 'ERROR'));
         self::assertCount(1, $errors);
         self::assertSame(UnavailableException::class, $errors[0]['context']['exception']);
-        self::assertStringNotContainsString('secret-detail', json_encode($errors[0]['context'], JSON_THROW_ON_ERROR) . $errors[0]['message']);
+        self::assertSame('The admin users could not be checked: GET persons?ids[]=1&limit=1: ChurchTools answered 503.', $errors[0]['message']);
+        // The log never gets a token: not the service user's, not the caller's.
+        $logged = json_encode($this->log->getRecords(), JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString('service-token', $logged);
+        self::assertStringNotContainsString('Bearer', $logged);
+        self::assertStringNotContainsString('Login ', $logged);
     }
 
     /** TS-11 */

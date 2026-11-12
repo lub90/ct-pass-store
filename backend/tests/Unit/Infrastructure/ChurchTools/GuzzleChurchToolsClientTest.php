@@ -862,11 +862,77 @@ final class GuzzleChurchToolsClientTest extends TestCase
     public function testPersonStatusIsGoneOn404(): void
     {
         $client = $this->client();
-        $this->respond(404, ['message' => 'Person [7] not found.']);
+        // The shape measured on the test instance (design 9.1).
+        $this->respond(404, [
+            'message' => 'Person [7] not found.',
+            'translatedMessage' => 'Person [7] nicht gefunden.',
+            'messageKey' => 'error.notfound',
+            'args' => ['model' => 'Person', 'id' => '7'],
+            'errors' => [],
+        ], ['Content-Type' => 'application/json; charset=utf-8']);
 
         self::assertSame(PersonStatus::Gone, $client->personStatus(7));
         self::assertSame('https://example.church.tools/api/persons/7', (string) $this->lastRequest()->getUri());
         self::assertSame('Login ' . self::SERVICE_TOKEN, $this->lastRequest()->getHeaderLine('Authorization'));
+    }
+
+    /**
+     * CC-20: only ChurchTools' own JSON error for this person is "gone"; anything else on 404 fails closed.
+     *
+     * @return iterable<string, array{string, array<string, string>}>
+     */
+    public static function foreign404(): iterable
+    {
+        $json = ['Content-Type' => 'application/json'];
+        yield 'HTML page' => ['<html><body><h1>404 Not Found</h1></body></html>', ['Content-Type' => 'text/html']];
+        yield 'maintenance page with a JSON-looking body' => ['{"message":"Person [7] not found."}', ['Content-Type' => 'text/html']];
+        yield 'no content type' => ['{"message":"Person [7] not found."}', ['Content-Type' => '']];
+        yield 'another ID' => ['{"message":"Person [8] not found."}', $json];
+        yield 'an ID that only starts the same' => ['{"message":"Person [70] not found."}', $json];
+        yield 'another model' => ['{"message":"Group [7] not found."}', $json];
+        yield 'without message' => ['{"messageKey":"error.notfound"}', $json];
+        yield 'message not a string' => ['{"message":["Person [7] not found."]}', $json];
+        yield 'empty body' => ['', $json];
+        yield 'a JSON list' => ['["Person [7] not found."]', $json];
+        yield 'broken JSON' => ['{"message":"Person [7] not found."', $json];
+    }
+
+    /**
+     * @param array<string, string> $headers
+     */
+    #[DataProvider('foreign404')]
+    public function testPersonStatusOnAForeign404IsInvalidNeverGone(string $body, array $headers): void
+    {
+        $client = $this->client();
+        $this->mock->append(new Response(404, $headers, $body));
+
+        $this->expectException(InvalidResponseException::class);
+        $client->personStatus(7);
+    }
+
+    /**
+     * CC-21
+     *
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function personDataOfAnotherId(): iterable
+    {
+        yield 'another ID' => [['id' => 8, 'isArchived' => false]];
+        yield 'id missing' => [['isArchived' => false]];
+        yield 'id as a string' => [['id' => '7', 'isArchived' => false]];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[DataProvider('personDataOfAnotherId')]
+    public function testPersonStatusOfAnotherPersonIsInvalid(array $data): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => $data]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->personStatus(7);
     }
 
     public function testPersonStatusFollowsIsArchived(): void

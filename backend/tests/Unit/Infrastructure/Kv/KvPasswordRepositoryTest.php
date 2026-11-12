@@ -16,7 +16,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Catalog section 3: ST-01 to ST-11, ST-14, ST-15, ST-17, ST-20 to ST-23.
+ * Catalog section 3: ST-01 to ST-11, ST-14, ST-15, ST-17, ST-20 to ST-24.
  */
 final class KvPasswordRepositoryTest extends TestCase
 {
@@ -378,6 +378,116 @@ final class KvPasswordRepositoryTest extends TestCase
     public function testDeleteWithoutEntryDoesNothing(): void
     {
         $this->store->delete(new PersonId(5));
+
+        self::assertSame(0, $this->fake->writeCount());
+    }
+
+    // ---------------------------------------------------------------- delete several persons (ST-24)
+
+    /**
+     * @param list<int> $ids
+     * @return list<PersonId>
+     */
+    private static function persons(array $ids): array
+    {
+        return array_map(static fn(int $id): PersonId => new PersonId($id), $ids);
+    }
+
+    /**
+     * @param list<PersonId> $persons
+     * @return list<int>
+     */
+    private static function ids(array $persons): array
+    {
+        return array_map(static fn(PersonId $p): int => $p->value, $persons);
+    }
+
+    public function testDeleteEntriesOfListsTheCategoryOnceForAllPersons(): void
+    {
+        $this->seed(5);
+        $this->seed('5');
+        $this->seed(5, '');
+        $this->seed(6);
+        $this->seed(7);
+        $this->seed(8);
+        $this->seed(0, 'dGVzdA==');
+
+        $result = $this->store->deleteEntriesOf(self::persons([5, 7, 8, 9]), static fn(): bool => true);
+
+        self::assertSame(1, $this->fake->countCalls(['getValues']));
+        self::assertSame([5, 7, 8, 9], self::ids($result->deleted));
+        self::assertSame([], $result->failed);
+        self::assertSame([], $result->notStarted);
+        self::assertSame([6, 0], array_map(static fn(array $e): mixed => $e[KvSchema::ENTRY_PERSON_ID], $this->stored()));
+        self::assertSame(5, $this->fake->countCalls(['deleteValue']));
+    }
+
+    public function testDeleteEntriesOfReportsAFailedPersonAndContinues(): void
+    {
+        $this->seed(5);
+        $this->seed(6);
+        $this->seed(7);
+        $this->fake->beforeNext('deleteValue', static function (): void {});
+        $this->fake->beforeNext('deleteValue', fn() => $this->fake->failNext('deleteValue', new UnavailableException('DELETE: unreachable.')));
+
+        $result = $this->store->deleteEntriesOf(self::persons([5, 6, 7]), static fn(): bool => true);
+
+        self::assertSame([5, 7], self::ids($result->deleted));
+        self::assertSame([6 => 'DELETE: unreachable.'], $result->failed);
+        self::assertSame([6], array_map(static fn(array $e): mixed => $e[KvSchema::ENTRY_PERSON_ID], $this->stored()));
+    }
+
+    public function testDeleteEntriesOfCountsAnEntryDeletedMeanwhileAsDeleted(): void
+    {
+        $id = $this->seed(5);
+        $this->fake->beforeNext('deleteValue', fn() => $this->fake->clearValues($this->category));
+
+        $result = $this->store->deleteEntriesOf(self::persons([5]), static fn(): bool => true);
+
+        self::assertSame([5], self::ids($result->deleted));
+        self::assertSame([], $result->failed);
+        self::assertTrue($this->log->hasInfoThatContains("Password entry $id of person 5 was already deleted."));
+    }
+
+    public function testDeleteEntriesOfStartsNoPersonOnceMayStartSaysNo(): void
+    {
+        $this->seed(5);
+        $this->seed(5);
+        $this->seed(6);
+        $this->seed(7);
+        $asked = 0;
+        // Yes for person 5, no from then on: both entries of 5 go, 6 and 7 stay untouched.
+        $mayStart = static function () use (&$asked): bool {
+            return ++$asked === 1;
+        };
+
+        $result = $this->store->deleteEntriesOf(self::persons([5, 6, 7]), $mayStart);
+
+        self::assertSame([5], self::ids($result->deleted));
+        self::assertSame([6, 7], self::ids($result->notStarted));
+        self::assertSame([], $result->failed);
+        self::assertSame([6, 7], array_map(static fn(array $e): mixed => $e[KvSchema::ENTRY_PERSON_ID], $this->stored()));
+        self::assertSame(2, $asked);
+    }
+
+    public function testDeleteEntriesOfWithoutPersonsMakesNoCall(): void
+    {
+        $result = $this->store->deleteEntriesOf([], static fn(): bool => true);
+
+        self::assertSame([], $this->fake->calls());
+        self::assertSame([], $result->deleted);
+    }
+
+    public function testDeleteEntriesOfPropagatesAFailedListingAndDeletesNothing(): void
+    {
+        $this->seed(5);
+        $this->fake->failNextRead($this->category, new UnavailableException('GET: unreachable.'));
+
+        try {
+            $this->store->deleteEntriesOf(self::persons([5]), static fn(): bool => true);
+            self::fail('Expected an exception.');
+        } catch (UnavailableException) {
+        }
 
         self::assertSame(0, $this->fake->writeCount());
     }

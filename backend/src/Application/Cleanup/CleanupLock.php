@@ -32,6 +32,8 @@ final class CleanupLock
         if ($handle === false) {
             throw new CleanupLockUnavailableException("Can't open the lock file {$this->lockFile}.");
         }
+        // Like the other files in cache/: readable by the owner only, whatever the umask.
+        @chmod($this->lockFile, 0o600);
         if (!flock($handle, LOCK_EX | LOCK_NB)) {
             fclose($handle);
 

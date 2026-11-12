@@ -166,13 +166,22 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
     public function personStatus(int $personId): PersonStatus
     {
         $what = 'GET persons/{id}';
-        try {
-            $result = $this->send('GET', 'persons/' . $this->positive($personId), $this->serviceUser, true);
-        } catch (NotFoundException) {
+        $result = $this->send('GET', 'persons/' . $this->positive($personId), $this->serviceUser, true, returnStatuses: [404]);
+        if ($result['response']->getStatusCode() === 404) {
+            // Gone deletes entries for good, so only ChurchTools' own answer for this very person counts (design 9.1).
+            // A 404 from a proxy, a firewall or a maintenance page must never look like a deleted person.
+            if (!$this->isPersonNotFound($result['response'], $personId)) {
+                throw new InvalidResponseException($what . ': ChurchTools answered 404, but not with its error for this person.');
+            }
+
             return PersonStatus::Gone;
         }
 
-        $isArchived = $this->expectObject($this->data($result), $what)['isArchived'] ?? null;
+        $data = $this->expectObject($this->data($result), $what);
+        if (($data['id'] ?? null) !== $personId) {
+            throw new InvalidResponseException($what . ': the response is about another person.');
+        }
+        $isArchived = $data['isArchived'] ?? null;
         if (!is_bool($isArchived)) {
             throw new InvalidResponseException($what . ': isArchived is missing or not a boolean.');
         }
@@ -302,9 +311,10 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
      *
      * @param array<string, mixed>|null $json
      * @param list<int> $notFoundStatuses statuses that mean "not found" for this call
+     * @param list<int> $returnStatuses statuses the caller handles itself; they're returned instead of thrown
      * @return array{response: ResponseInterface, what: string}
      */
-    private function send(string $method, string $path, Credential $credential, bool $isServiceUser, ?array $json = null, array $notFoundStatuses = [404]): array
+    private function send(string $method, string $path, Credential $credential, bool $isServiceUser, ?array $json = null, array $notFoundStatuses = [404], array $returnStatuses = []): array
     {
         $options = [
             RequestOptions::HEADERS => [
@@ -319,6 +329,9 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
 
         $what = $method . ' ' . $path;
         $response = $this->request($method, $path, $options);
+        if (in_array($response->getStatusCode(), $returnStatuses, true)) {
+            return ['response' => $response, 'what' => $what];
+        }
         if (in_array($response->getStatusCode(), $notFoundStatuses, true)) {
             throw new NotFoundException(sprintf('%s: ChurchTools answered %d.', $what, $response->getStatusCode()));
         }
@@ -397,6 +410,25 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
         }
 
         return max(self::MIN_RETRY_AFTER_SECONDS, $seconds ?? 0);
+    }
+
+    /**
+     * Whether a 404 is ChurchTools' JSON error for the person, as measured (design 9.1):
+     * `{"message": "Person [2855] not found.", "messageKey": "error.notfound", …}` with a JSON content type.
+     */
+    private function isPersonNotFound(ResponseInterface $response, int $personId): bool
+    {
+        $mediaType = strtolower(trim(explode(';', $response->getHeaderLine('Content-Type'))[0]));
+        if ($mediaType !== 'application/json') {
+            return false;
+        }
+        try {
+            $body = json_decode((string) $response->getBody(), true, 64, JSON_THROW_ON_ERROR);
+        } catch (\JsonException) {
+            return false;
+        }
+
+        return is_array($body) && !array_is_list($body) && ($body['message'] ?? null) === sprintf('Person [%d] not found.', $personId);
     }
 
     /**

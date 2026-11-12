@@ -121,6 +121,18 @@ final class EntriesApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::PersonNotFound, $response);
     }
 
+    /** EG-09 */
+    public function testAForeign404OnTheLookupIs502NotPersonNotFound(): void
+    {
+        $this->seedEntry(self::OTHER);
+        $this->churchTools->answerForeign404For(self::OTHER);
+
+        $response = $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
+
+        $this->assertProblem(ProblemType::UpstreamInvalid, $response);
+        self::assertSame(502, $response->getStatusCode());
+    }
+
     public function testReadingOwnEntryMakesNoLookup(): void
     {
         $this->seedEntry(self::USER);
@@ -141,13 +153,16 @@ final class EntriesApiTest extends ApiTestCase
         self::assertSame(0, $this->churchTools->countCalls(['personStatus']));
     }
 
+    /** EG-08 */
     public function testRepeatedReadsWithin600SecondsMakeOneLookup(): void
     {
         $this->seedEntry(self::OTHER);
 
-        $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
-        $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
+        $first = $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
+        $second = $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT);
 
+        self::assertSame(200, $first->getStatusCode());
+        self::assertSame(200, $second->getStatusCode());
         self::assertSame(1, $this->churchTools->countCalls(['personStatus']));
     }
 
@@ -357,6 +372,18 @@ final class EntriesApiTest extends ApiTestCase
         $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::ADMIN);
 
         $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
+        self::assertSame([], $this->storedEntries());
+    }
+
+    /** EP-20 */
+    public function testAForeign404OnTheLookupIs502AndStoresNothing(): void
+    {
+        $this->churchTools->answerForeign404For(self::OTHER);
+
+        $response = $this->request('PUT', '/v1/entries/' . self::OTHER, self::ADMIN);
+
+        $this->assertProblem(ProblemType::UpstreamInvalid, $response);
+        self::assertSame(502, $response->getStatusCode());
         self::assertSame([], $this->storedEntries());
     }
 

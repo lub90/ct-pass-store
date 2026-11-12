@@ -60,13 +60,16 @@ final class CachedPersonDirectory implements PersonDirectory
     }
 
     /**
+     * Only an expiry within the next TTL is trusted: a record claiming more (a bug, a changed TTL) can't keep a gone
+     * person alive longer than promised.
+     *
      * @return array<int, int> person ID => expiry time, only entries still valid at $now
      */
     private function liveEntries(int $now): array
     {
         $live = [];
         foreach ($this->cache->get(self::RECORD) ?? [] as $id => $expires) {
-            if (is_int($expires) && $expires > $now) {
+            if (is_int($expires) && $expires > $now && $expires <= $now + self::TTL_SECONDS) {
                 $live[(int) $id] = $expires;
             }
         }

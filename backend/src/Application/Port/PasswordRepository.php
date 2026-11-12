@@ -27,6 +27,17 @@ interface PasswordRepository
     public function delete(PersonId $person): void;
 
     /**
+     * Removes every entry of each person, working from **one** listing of the store (cleanup design 3.5). The persons
+     * are handled one after another; `$mayStart` is asked before each, and once it answers false, no further person is
+     * started (a started one is finished). A person whose delete fails is reported and the others continue. If the
+     * listing fails, the exception propagates and nothing is deleted.
+     *
+     * @param list<PersonId> $persons
+     * @param \Closure(): bool $mayStart
+     */
+    public function deleteEntriesOf(array $persons, \Closure $mayStart): BulkDeleteResult;
+
+    /**
      * Every person who has at least one entry, each once, ascending.
      *
      * @return list<PersonId>

@@ -8,8 +8,8 @@ use CtPassStore\Application\Exception\EntryNotFoundException;
 use CtPassStore\Application\Exception\PersonNotFoundException;
 use CtPassStore\Application\Port\PasswordRepository;
 use CtPassStore\Application\Port\PersonDirectory;
+use CtPassStore\Domain\AccessPolicy;
 use CtPassStore\Domain\PersonId;
-use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Domain\Principal;
 use Psr\Log\LoggerInterface;
 
@@ -31,7 +31,7 @@ final class GetPassword
     public function execute(Principal $principal, PersonId $target): string
     {
         $this->guard->authorizeRead($principal, $target);
-        if (!($principal instanceof PersonPrincipal && $principal->id->value === $target->value) && !$this->persons->exists($target)) {
+        if (!AccessPolicy::isOwner($principal, $target) && !$this->persons->exists($target)) {
             $this->logger->info(ucfirst($principal->describe()) . " asked for person {$target}, who doesn't exist or is archived.");
             throw new PersonNotFoundException("Person {$target} doesn't exist in ChurchTools or is archived.");
         }
