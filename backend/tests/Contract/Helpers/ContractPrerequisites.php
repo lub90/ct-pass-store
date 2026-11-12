@@ -12,7 +12,7 @@ final class ContractPrerequisites
 {
     private const ENV_VARIABLES = ['CT_API_URL', 'CT_API_TOKEN'];
 
-    private const FIXTURES = ['normal_users.json'];
+    private const FIXTURES = ['normal_users.json', 'person_status.json'];
 
     public static function assertMet(): void
     {

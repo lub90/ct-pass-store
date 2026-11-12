@@ -202,6 +202,16 @@ normal case names it ("→ PV-05").
   HTTPS test server, or in the contract layer) — 5.6.6
 - [x] **CC-16** (E · U) `Retry-After` parsing: seconds (`120`), an HTTP date, a missing header and garbage (`soon`) give
   120, the date's offset, 60 and 60 respectively, never less than 60 — 5.6.7
+- [x] **CC-17** (N · U) Guzzle `personStatus()`: `404` → `Gone`, `isArchived` `true`/`false` → `Archived`/`Active`; a
+  missing or non-boolean `isArchived` (`"false"`, `0`) → `upstream-invalid`; `403` → `ServiceCredentialRejectedException`,
+  never `Gone` — cleanup design 3.1
+- [x] **CC-18** (N · U) Guzzle `activePersonIds()`: sends `GET …/api/persons?ids[]=7&ids[]=8&limit=2`; a returned
+  archived person (or one without a boolean flag) is left out; a truncated answer (`total` 3, two returned), a missing
+  `total` and an unasked ID → `upstream-invalid`; 101 IDs → `\InvalidArgumentException`; an empty list → `[]` without
+  a call; `personDepartmentIds()` reads `data.departments[].id` and rejects non-integer IDs — cleanup design 3.1
+- [x] **CC-19** (! · U) `ServiceUserPersonsRight`: granted gives `[]`; each of `view`, `view archive`,
+  `view hidden persons` and a department in `view alldata` missing on its own gives its exact text; `"true"`, `1`, `null`
+  or an absent key count as missing, as does a `view alldata` that isn't a list of integers — cleanup design 9.1
 - [ ] **CC-14** (N · C) Counterpart of CC-10: an invalid service token gets `401`, and a missing permission `403`, as the
   error mapping assumes — 5.6.6
 
@@ -693,9 +703,15 @@ tester has; it's documented in `backend/docs/testing.md`.
 - [ ] **CT-05** (E · C) The KV value limit is real: 10,000 characters are accepted, 10,001 rejected with the status the
   client maps — 5.3.8
 - [x] **CT-06** (! · C) **The fake stays honest, real side:** the client contract cases (CC-10, CC-11, CC-14, ST-16,
-  CT-01, CT-03–05, PP-10, AX-12) are one shared test class, run against the real client — 6.6
+  CT-01, CT-03–05, CT-09–11, PP-10, AX-12) are one shared test class, run against the real client — 6.6
 - [x] **CT-06a** (! · U) **The fake stays honest, fake side:** the same shared test class runs against the fake in the
   unit layer, so the fake can't drift from real ChurchTools — 6.6
+- [x] **CT-09** (N · C) Single person lookups as the service user: active → `Active`, archived → `Archived`, deleted
+  and a never-used ID (`2147483647`) → `Gone` — cleanup design 3.1, 9.1
+- [x] **CT-10** (N · C) The batch of the active, the archived, the deleted and an unused ID confirms exactly the active
+  one; the instance's departments are listed as integers — cleanup design 3.1, 9.1
+- [x] **CT-11** (! · C) The service user holds exactly the narrow persons right (`ServiceUserPersonsRight` finds
+  nothing missing), and that suffices to see the archived person (`Archived`, not `403`) — cleanup design 9.1
 - [x] **CT-08** (S · C) Updating a value that was deleted gives `404` and doesn't bring the value back. TR-02b relies on
   it — 5.3.6
 - [x] **CT-07** (N · U) The contract suite run without its configuration aborts with a message naming what's missing

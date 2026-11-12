@@ -56,4 +56,12 @@ final class ChurchToolsClientContractTest extends ChurchToolsClientContractTestC
 
         return ['username' => (string) $user['username'], 'password' => (string) $user['pwd'], 'personId' => (int) $user['id']];
     }
+
+    protected function personIds(): array
+    {
+        $ids = json_decode((string) file_get_contents(__DIR__ . '/fixtures/person_status.json'), true, 8, JSON_THROW_ON_ERROR);
+        self::assertIsArray($ids);
+
+        return ['active' => (int) $ids['active'], 'archived' => (int) $ids['archived'], 'deleted' => (int) $ids['deleted']];
+    }
 }
