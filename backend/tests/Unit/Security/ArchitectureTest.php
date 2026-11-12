@@ -40,6 +40,7 @@ final class ArchitectureTest extends TestCase
         yield 'Application' => ['Application', ['Infrastructure', 'Http', 'Config', 'Kernel']];
         yield 'Infrastructure' => ['Infrastructure', ['Http', 'Kernel']];
         yield 'Http' => ['Http', ['Infrastructure', 'Kernel']];
+        yield 'Cli' => ['Cli', ['Infrastructure', 'Http', 'Kernel']];
     }
 
     /**

@@ -7,6 +7,8 @@ namespace CtPassStore;
 use CtPassStore\Application\Auth\Authenticator;
 use CtPassStore\Application\Auth\MachineTokens;
 use CtPassStore\Application\Auth\UserTokens;
+use CtPassStore\Application\Cleanup\CleanupLock;
+use CtPassStore\Application\Cleanup\CleanupOrphans;
 use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
 use CtPassStore\Application\Exception\ConfigurationException;
@@ -17,6 +19,7 @@ use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\SelfCheck\SelfCheck;
 use CtPassStore\Application\SetPassword;
+use CtPassStore\Cli\CleanupCommand;
 use CtPassStore\Config\BackendConfig;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Http\Controller\AuthController;
@@ -106,6 +109,7 @@ final class Kernel
         $app = AppFactory::create();
 
         $persons = new CachedPersonDirectory(new ChurchToolsPersonDirectory($churchTools), $cache, $clock);
+        $goneAdmins = new GoneAdmins(new GonePersons(new ChurchToolsPersonDirectory($churchTools), $clock));
 
         $entries = new EntriesController(
             new GetPassword($guard, $passwords, $persons, $logger),
@@ -124,7 +128,7 @@ final class Kernel
             new PasswordStoreReadCheck($extensionData),
             new ServiceUserRightsCheck($churchTools, $extensionData),
             new OAuthClientCheck($churchTools, $config),
-            new AdminUsersCheck($settings, new GoneAdmins(new GonePersons(new ChurchToolsPersonDirectory($churchTools), $clock)), $logger),
+            new AdminUsersCheck($settings, $goneAdmins, $logger),
             new CleanupTokenCheck($config),
         ], $logger, [
             new WriteRoundTripCheck($passwords, new RsaPasswordCipher($settings)),
@@ -161,6 +165,56 @@ final class Kernel
         $app->add(new SecurityHeadersMiddleware());
 
         return $app;
+    }
+
+    /**
+     * The cleanup and its lock, for `bin/cleanup.php` and the web-cron endpoint (cleanup design 3.5, 6.3). The person
+     * lookups are never cached: a cached "active" would hide a person who was deleted minutes ago.
+     *
+     * @return array{cleanup: CleanupOrphans, lock: CleanupLock}
+     */
+    public static function cleanupServices(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): array
+    {
+        $clock ??= new SystemClock();
+        $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
+        $extensionData = new ExtensionData($churchTools, cache: $cache);
+        $persons = new ChurchToolsPersonDirectory($churchTools);
+        $gonePersons = new GonePersons($persons, $clock);
+
+        return [
+            'cleanup' => new CleanupOrphans(
+                new KvPasswordRepository($extensionData, $logger),
+                new KvSettingsRepository($extensionData, $logger, $cache, $clock),
+                $persons,
+                $gonePersons,
+                new GoneAdmins($gonePersons),
+                $logger,
+            ),
+            'lock' => new CleanupLock($config->cacheDir . '/cleanup.lock'),
+        ];
+    }
+
+    /**
+     * `bin/cleanup.php`: loads `credentials.php`, runs {@see CleanupCommand} on STDOUT and STDERR and returns the exit code.
+     *
+     * @param list<string> $arguments
+     */
+    public static function runCleanup(string $credentialsPath, string $cacheDir, string $logFile, array $arguments): int
+    {
+        try {
+            if (!is_readable($credentialsPath)) {
+                throw new ConfigurationException('config/credentials.php is missing or not readable by PHP.');
+            }
+            $config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath, $cacheDir);
+        } catch (ConfigurationException $e) {
+            fwrite(STDERR, 'Configuration error: ' . $e->getMessage() . "\n");
+
+            return 2;
+        }
+        $logger = self::logger($logFile, $config->logLevel, Version::current(dirname(__DIR__)));
+        $services = self::cleanupServices($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), $logger);
+
+        return (new CleanupCommand($services['cleanup'], $services['lock'], $logger))->run($arguments, STDOUT, STDERR);
     }
 
     /**
