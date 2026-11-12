@@ -51,6 +51,9 @@ trap 'rm -rf "$BUILD_DIR"' EXIT
 echo "Copying sources to a temporary build folder..."
 cp "$BACKEND_DIR/composer.json" "$BACKEND_DIR/composer.lock" "$BACKEND_DIR/VERSION" "$BACKEND_DIR/.htaccess" "$BUILD_DIR"/
 cp -r "$BACKEND_DIR/public" "$BACKEND_DIR/src" "$BUILD_DIR"/
+# Only the cleanup script ships; the other bin/ scripts are development and release tools.
+mkdir "$BUILD_DIR/bin"
+cp "$BACKEND_DIR/bin/cleanup.php" "$BUILD_DIR/bin"/
 mkdir "$BUILD_DIR/config"
 cp "$BACKEND_DIR/config/credentials-example.php" "$BUILD_DIR/config"/
 
@@ -59,7 +62,7 @@ echo "Installing dependencies with Composer (without dev tools)..."
 
 # Step 5: assemble the target
 echo "Copying files to $TARGET_DIR..."
-cp -r "$BUILD_DIR/config" "$BUILD_DIR/public" "$BUILD_DIR/src" "$BUILD_DIR/vendor" "$TARGET_DIR"/
+cp -r "$BUILD_DIR/bin" "$BUILD_DIR/config" "$BUILD_DIR/public" "$BUILD_DIR/src" "$BUILD_DIR/vendor" "$TARGET_DIR"/
 cp "$BUILD_DIR/.htaccess" "$TARGET_DIR"/
 printf '%s\n' "$VERSION" > "$TARGET_DIR/version.txt"
 

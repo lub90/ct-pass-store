@@ -795,3 +795,7 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-13** (! · U) invalid settings throw `ConfigurationException` and nothing is deleted — cleanup design 3.5
 - [x] **GP-14** (! · U) a missing persons right throws `PersonsNotReadableException` before any person call — cleanup design 3.5
 - [x] **GP-15** (! · U) a passed deadline leaves the rest `unchecked` (`isComplete()` false); a second run without a deadline deletes them — cleanup design 3.5
+- [x] **GP-16** (! · U) `CleanupCommand`: exit codes 0 (clean), 1 (gone admin, failed delete) and 2 (failed lookup, missing right, held lock, unknown argument), the exact output lines, and output that names person IDs only — cleanup design 4
+- [x] **GP-17** (! · U) dry run is the default and deletes nothing; `--apply` deletes — cleanup design 4
+- [x] **GP-18** (! · U) a held `cache/cleanup.lock` makes the run exit 2 with `Another cleanup is running.`; the lock is released after a run — cleanup design 6.3
+- [x] **GP-19** (! · U) `bin/cleanup.php`: unknown argument exits 2 with the usage, missing `credentials.php` exits 2 with `Configuration error:`, and `.htaccess` denies `bin/`, `cache/` and `setup/` — cleanup design 4

@@ -8,7 +8,7 @@ RewriteRule (.*) public/$1 [L]
     RewriteEngine On
 
     # Block access to vendor, src, config, etc.
-    RewriteRule ^(vendor|src|config|logs|\.env) - [F,L]
+    RewriteRule ^(vendor|src|config|logs|bin|cache|setup|\.env) - [F,L]
 </IfModule>
 
 # Security: prevent directory listing
