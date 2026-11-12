@@ -168,8 +168,10 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
 
 - Header: „Passwörter verwalten“, „Setz oder lösch das Passwort einer anderen Person, z. B. wenn sie ihres vergessen
   hat.“
-- A `PersonPicker` (search with debounce through the admin's ChurchTools session). Without the right to search persons,
-  a banner names the missing right.
+- A `PersonPicker` that searches the **members of the users group** (16.1), loaded through the admin's ChurchTools
+  session with „view group“ on that group (16.2 A5). Only they can have a password, and admins don't need to see any
+  other person. Without the right, a banner names it. A person outside the users group who still has an entry isn't
+  found here; the cleanup and the rights check deal with that case.
 - The selected person shows avatar, name and status pill (as in 4.2) and the buttons „Neues Passwort“ and „Löschen“.
 - „Neues Passwort“ runs the flow of 4.2 (states 2 and 3, or the direct path) for that person, with two differences:
   - A **warning banner** above the flow: „Du legst gerade das Passwort für **{Name}** fest.“
@@ -606,11 +608,11 @@ On the test instance, recorded in `ct-extension-info.md` and as contract cases:
 4. Which endpoint and right the admin's `PersonPicker` needs (`GET /api/search` or `GET /api/persons?query=`), and what
    a person without the right gets.
 5. Reading a group's name and member count, and what a person without the right gets.
-6. Whether reading a person's or group's **full** set of rights (module, churchcore, churchdb) is possible through the
-   API, and whether all holders of one right (every group role, status and person with e.g. `edit custom data` on
-   `access`) can be listed. This decides how complete the check of 16.4 rule 4 can be.
-7. Whether reading a category's values needs both `view custom category` and `view custom data` (16.2 assumes yes).
-8. Which rights an admin needs to search persons and to read the admin group (refines 16.2 rows A5 and A6).
+6. ~~Reading all holders of a right~~ **measured 2026-11-12:** possible and complete through `getMasterData`
+   (16.4 rule 4).
+7. ~~Both category rights needed?~~ **measured 2026-11-12:** yes, to find a category by name (16.2 U2).
+8. ~~Rights for searching persons and reading the admin group~~ **measured 2026-11-12:** „view group“ on the users
+   group; the admin group is readable by membership (16.2 A4, A5).
 
 ## 15. Reference: infoscreen patterns
 
@@ -651,13 +653,13 @@ why it's needed. Nothing else is granted.
 | # | Role | Right | On | Why |
 | --- | --- | --- | --- | --- |
 | U1 | users | `view` (module) | – | The backend lets in only persons with `ctpassstore.view` (backend spec 4.4). |
-| U2 | users | `view custom category`, `view custom data` | `settings` | The password page needs the policy, `backendUrl`, `oauthClientId` and the texts. |
+| U2 | users | `view custom category`, `view custom data` | `settings` | The password page needs the policy, `backendUrl`, `oauthClientId` and the texts. Both are needed: without `view custom category` the category can't be found by name (measured 2026-11-12). |
 | U3 | users | „Bei Drittsystem via ChurchTools-Benutzerkonto einloggen“ (churchcore) | the backend's OAuth client | OAuth login (backend spec 3.3). |
 | A1 | admins | U1–U3 | | Admins use their own password page too. |
-| A2 | admins | `view custom category`, `view custom data` | `access`, `encryptionSettings` | Settings pages; backup. |
+| A2 | admins | `view custom category`, `view custom data` | `settings` (via A1), `access`, `encryptionSettings` | Settings pages; backup. |
 | A3 | admins | `create custom data`, `edit custom data`, `delete custom data` | `settings`, `access` | Saving the settings; removing duplicates (6.2). |
-| A4 | admins | the right to read the admin group (name, member count) | the admin group | „Zugriff“ page (4.7). Measured in 14.8. |
-| A5 | admins | the right to search persons | – | `PersonPicker` on „Passwörter verwalten“ (4.3). Measured in 14.8. |
+| A4 | admins | none: members can read their own group | the admin group | „Zugriff“ page (4.7) shows its name and member count. Measured 2026-11-12. |
+| A5 | admins | `churchgroup` „view group“ | the users group | `PersonPicker` on „Passwörter verwalten“ (4.3) and the member count on „Zugriff“. It shows exactly the users group's members, and makes them findable; `view alldata` would show every person's data. Measured 2026-11-12. |
 | S1 | service | `view` (module) | – | The module lookup (backend spec 4.10). |
 | S2 | service | `view custom category`, `view custom data` | `settings`, `access`, `encryptionSettings`, `passwordStore` | The backend reads policy, groups, machine clients, the public key and the entries. |
 | S3 | service | `create custom data`, `edit custom data`, `delete custom data` | `passwordStore` | Only the backend writes entries (backend spec 2). |
@@ -686,9 +688,11 @@ per group and role, with the traffic-light levels ok / warn / fail:
 3. **Too many other rights:** a group **created by the setup** has rights outside the table → **warn**. Existing groups
    the church assigned keep their other rights; the check ignores them, except for `service`, where administrative
    rights are **fail**.
-4. **Others with access:** any group, status or person outside the mapped groups that can write `settings`, `access`
-   or `passwordStore`, or read `access` → **warn**, naming them. How complete this can be depends on 14.6; if it can't
-   list all holders, the check says what it couldn't verify instead of reporting ok.
+4. **Others with access:** any group role, group-type role, status or person outside the mapped groups that can write
+   `settings`, `access` or `passwordStore`, or read `access` → **warn**, naming them. The list is complete: it comes
+   from the rights master data (`getMasterData`, `ct-extension-info.md` section 6), which lists every holder; system
+   admins get no module rights implicitly. If the master data can't be loaded, the check says it couldn't verify this
+   instead of reporting ok.
 5. **Mapping problems:** a mapped group is missing, deleted or inactive → **fail**.
 
 It runs on „Einrichtung“ (full list) and feeds the status pills of „Zugriff“ and the settings overview. Repairing:
