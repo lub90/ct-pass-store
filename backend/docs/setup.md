@@ -37,6 +37,11 @@ administrative. `/v1/test` fails when the service user has more rights than need
 rights in the table: for the persons right it names the missing parts, e.g.
 `The service user can't read persons (missing: churchdb view archive)`.
 
+Give the four persons rights in a **dedicated role** that holds no other persons rights, and assign only that role (and
+the role with the extension rights) to the service user. In `churchdb` the service user may only read: `/v1/test` also
+fails if it may create, change, delete, archive or export persons, edit groups or group memberships, send SMS, or has a
+person security level above 1. ChurchTools' default read values (e.g. "security level view own data") are fine.
+
 **Upgrading an existing installation:** grant the persons rights before you update the backend. Without them
 `/v1/test` fails, and every read of another person's entry (RADIUS logins included) fails with `500 misconfigured`. If
 you add a department to ChurchTools later, give the service user `view alldata` for it too.
@@ -179,7 +184,9 @@ Cron line, every night at 03:00:
 The cron job **must run as the same operating-system user as PHP**. Otherwise the script creates files in `logs/` and
 `cache/` (mode `600`) that the web app can't write, and requests start to fail.
 
-Output names person IDs only. Warnings go to stderr, so cron mails them to you. Exit codes:
+Output names person IDs only. Warnings go to stderr, so cron mails them to you. Cron mails stdout and stderr, so the
+IDs of gone persons also end up in your mailbox, outside the 14-day log retention (see "Logs and personal data"):
+delete those mails accordingly, or redirect stdout to `/dev/null` to get mail only for warnings. Exit codes:
 
 | Code | Meaning |
 | --- | --- |
@@ -224,7 +231,7 @@ The answer is `200` with counts only (no person IDs; those are in `logs/`):
 | `checked` | Persons with entries that were looked at |
 | `gone` | Gone persons found |
 | `deleted` | Entries deleted (always `0` in a dry run) |
-| `failedDeletes` | Deletes that failed; the next call retries them |
+| `failedDeletes` | Deletes that failed; the next run (after the 600-second cooldown) retries them |
 | `goneAdmins` | Persons in `adminUsers` who are gone (see `/v1/test`) |
 
 Problems the service may report: `401 invalid-token` (wrong or missing token), `429 cleanup-too-soon` (a run starts at
@@ -251,7 +258,7 @@ copy the logs elsewhere for longer than 14 days. Passwords, tokens, codes and ci
 
 | Secret | Where | How to rotate |
 | --- | --- | --- |
-| Service user's login token | `credentials.php` | Change the service user's password in ChurchTools (this invalidates the token at once), fetch the new login token, update `credentials.php`. |
+| Service user's login token | `credentials.php` | Change the service user's password in ChurchTools (this invalidates the token at once), fetch the new login token, update `credentials.php`. `CT_API_TOKEN` can read the basic data of **every person** (persons rights of step 1), so rotate it at once if it may have leaked. |
 | OAuth client secret | `credentials.php` | ChurchTools cannot rotate it: delete and recreate the OAuth application, update `credentials.php` and the users' login right. |
 | `JWT_SECRET` | `credentials.php` | Replace it. All backend tokens become invalid and users log in again silently. |
 | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one. |
