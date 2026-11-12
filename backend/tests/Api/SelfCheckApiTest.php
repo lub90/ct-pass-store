@@ -14,10 +14,21 @@ use CtPassStore\Infrastructure\Kv\KvSchema;
  */
 final class SelfCheckApiTest extends ApiTestCase
 {
+    private const PERSONS_RIGHT = ['churchdb' => ['view' => true, 'view alldata' => [1], 'view archive' => true, 'view hidden persons' => true]];
+
     protected function setUp(): void
     {
         parent::setUp();
         $this->churchTools->setOAuthClient(self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET);
+    }
+
+    /**
+     * Asserts 207 with this check failing; others may fail as a consequence (no persons right also stops the admin lookup).
+     */
+    private function assertFails(string $name, \Psr\Http\Message\ResponseInterface $response): void
+    {
+        self::assertSame(207, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('fail', $this->checks($response)[$name]['status']);
     }
 
     /**
@@ -53,7 +64,7 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('0.1.0+test', $body['version']);
         self::assertIsString($body['summary']);
         self::assertSame(
-            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client'],
+            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Admin users', 'Web cron token'],
             array_keys($this->checks($response)),
         );
         foreach ($this->checks($response) as $name => $test) {
@@ -222,7 +233,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-03 */
     public function testAServiceUserWithAdministrativeRightsFails(): void
     {
-        $this->churchTools->setServiceUserPermissions(['churchcore' => ['administer settings' => true]]);
+        $this->churchTools->setServiceUserPermissions(self::PERSONS_RIGHT + ['churchcore' => ['administer settings' => true]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
@@ -233,9 +244,139 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-03 */
     public function testAServiceUserWithWriteAccessBeyondThePasswordStoreFails(): void
     {
-        $this->churchTools->setServiceUserPermissions([KvSchema::EXTENSION_KEY => ['edit custom data' => [$this->categoryIds[KvSchema::SETTINGS_CATEGORY]]]]);
+        $this->churchTools->setServiceUserPermissions(self::PERSONS_RIGHT + [KvSchema::EXTENSION_KEY => ['edit custom data' => [$this->categoryIds[KvSchema::SETTINGS_CATEGORY]]]]);
 
         $this->assertOnlyFails('Service user rights', $this->request('GET', '/v1/test', self::ADMIN));
+    }
+
+    /** TS-08 */
+    public function testMissingPersonsRightFailsAndNamesTheParts(): void
+    {
+        $this->churchTools->setServiceUserPermissions([]);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertFails('Service user rights', $response);
+        self::assertSame(
+            "The service user can't read persons (missing: churchdb view, churchdb view archive, churchdb view hidden persons, churchdb view alldata for department 1); the cleanup job and the existence checks need it (see docs/setup.md).",
+            $this->checks($response)['Service user rights']['message'],
+        );
+    }
+
+    /** TS-08 */
+    public function testMissingPersonsRightAndAdministrativeRightsAreReportedTogether(): void
+    {
+        $this->churchTools->setServiceUserPermissions(['churchcore' => ['administer settings' => true]]);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertFails('Service user rights', $response);
+        $message = $this->checks($response)['Service user rights']['message'];
+        self::assertStringContainsString("can't read persons (missing: churchdb view,", $message);
+        self::assertStringContainsString('more rights than needed: administer settings', $message);
+    }
+
+    /** TS-08 */
+    public function testPersonsRightIsMissingForADepartmentWithoutViewAlldata(): void
+    {
+        $this->churchTools->setPersonDepartments([1, 2]);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertFails('Service user rights', $response);
+        self::assertStringContainsString('(missing: churchdb view alldata for department 2)', $this->checks($response)['Service user rights']['message']);
+    }
+
+    /** TS-08 */
+    public function testRightsOkMessage(): void
+    {
+        self::assertSame(
+            'The service user has no administrative rights, writes to passwordStore only and can read persons.',
+            $this->checks($this->request('GET', '/v1/test', self::ADMIN))['Service user rights']['message'],
+        );
+    }
+
+    /** TS-08 */
+    public function testDepartmentsThatCannotBeReadFailTheRightsCheck(): void
+    {
+        $this->churchTools->failNext('personDepartmentIds', new UnavailableException('GET departments: ChurchTools is unreachable.'));
+
+        $this->assertOnlyFails('Service user rights', $this->request('GET', '/v1/test', self::ADMIN));
+    }
+
+    /** TS-09 */
+    public function testGoneAdminIsReportedByIdOnly(): void
+    {
+        $this->setSettings(['adminUsers' => [self::ADMIN, 56]]);
+        $this->churchTools->addPerson(56, archived: true);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertOnlyFails('Admin users', $response);
+        self::assertSame('adminUsers contains person 56, who is deleted or archived; remove them in the extension settings.', $this->checks($response)['Admin users']['message']);
+    }
+
+    /** TS-09 */
+    public function testSeveralGoneAdminsAreListed(): void
+    {
+        $this->setSettings(['adminUsers' => [self::ADMIN, 56, 57]]);
+        $this->churchTools->addPerson(56, archived: true);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertOnlyFails('Admin users', $response);
+        self::assertSame('adminUsers contains persons 56, 57, who are deleted or archived; remove them in the extension settings.', $this->checks($response)['Admin users']['message']);
+    }
+
+    /** TS-09 */
+    public function testAdminUsersOkMessage(): void
+    {
+        self::assertSame('Every person in adminUsers exists.', $this->checks($this->request('GET', '/v1/test', self::ADMIN))['Admin users']['message']);
+    }
+
+    /** TS-10 */
+    public function testAdminLookupFailureFailsGenericallyAndLogsTheClass(): void
+    {
+        $this->churchTools->failNext('activePersonIds', new UnavailableException('GET persons: secret-detail'));
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertOnlyFails('Admin users', $response);
+        self::assertSame("The persons in adminUsers can't be checked right now; see the log.", $this->checks($response)['Admin users']['message']);
+        self::assertStringNotContainsString('secret-detail', (string) $response->getBody());
+    }
+
+    /** TS-11 */
+    public function testCleanupTokenAbsentMeansTheEndpointIsOff(): void
+    {
+        $check = $this->checks($this->request('GET', '/v1/test', self::ADMIN))['Web cron token'];
+
+        self::assertSame('ok', $check['status']);
+        self::assertSame('The web-cron endpoint is off.', $check['message']);
+    }
+
+    /** TS-11 */
+    public function testShortCleanupTokenFailsWithoutPrintingIt(): void
+    {
+        $this->cleanupToken = 'short-token-value';
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $this->assertOnlyFails('Web cron token', $response);
+        self::assertSame('CLEANUP_TOKEN must have at least 43 characters; the web-cron endpoint stays off until it\'s fixed.', $this->checks($response)['Web cron token']['message']);
+        self::assertStringNotContainsString('short-token-value', (string) $response->getBody());
+    }
+
+    /** TS-11 */
+    public function testUsableCleanupTokenMeansTheEndpointIsOn(): void
+    {
+        $this->cleanupToken = str_repeat('c', 64);
+
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame('The web-cron endpoint is on.', $this->checks($response)['Web cron token']['message']);
+        self::assertStringNotContainsString(str_repeat('c', 64), (string) $response->getBody());
     }
 
     /** TS-02 */

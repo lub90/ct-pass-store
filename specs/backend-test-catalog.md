@@ -152,6 +152,9 @@ normal case names it ("→ PV-05").
 - [x] **CF-03** (! · U) `JWT_SECRET` shorter than 32 bytes → `misconfigured`; exactly 32 bytes is accepted — 3.1
 - [x] **CF-05** (S · A) The `CORS` key itself is broken → every request, also `OPTIONS`, gets `500 misconfigured`
   without CORS headers — 3.1
+- [x] **CF-06** (E · U) `CLEANUP_TOKEN`: absent or `''` → null; a short string is kept (the endpoint stays off, the
+  configuration is still valid); 43 characters are usable; a non-string → `misconfigured` naming the key — cleanup
+  design 5.1
 - [x] **CF-04** (! · U) Wrong types and formats: `CT_API_URL` not a URL, with `http://`, with a query string or with
   credentials in it; `CORS` not a list or containing non-origins (`*`, a path); keys with wrong types → `misconfigured`
   naming the key — 3.1
@@ -479,6 +482,15 @@ normal case names it ("→ PV-05").
   `?write=1` nothing is written — 4.8, 5.3.11
 - [x] **TS-07** (S · A) A test value left over from an earlier run (e.g. after a timeout) is removed by the next
   `?write=1` run, and until then disturbs neither reads nor writes for persons (with ST-22) — 4.8, 5.3.11
+- [x] **TS-08** (! · A) Service user without the persons right → "Service user rights" `fail`, message lists the missing
+  parts (also a department without `view alldata`); together with administrative rights both are in one message; a
+  failure to read the departments fails the check — cleanup design 3.7
+- [x] **TS-09** (N · A) A gone (archived or unknown) admin in `adminUsers` → "Admin users" `fail` naming person IDs
+  only, singular and plural wording; all active → `ok` — cleanup design 3.7
+- [x] **TS-10** (E · A) The admin lookup fails → "Admin users" `fail` with a generic message, no exception detail in
+  the response, the class in the log — cleanup design 3.7
+- [x] **TS-11** (! · A) "Web cron token": absent → `ok` (off); shorter than 43 → `fail`, token not printed; usable →
+  `ok` (on) — cleanup design 3.7, 5.1
 
 ## 9. Error format (spec 4.9)
 

@@ -375,6 +375,9 @@ abstract class ApiTestCase extends TestCase
         return $plaintext;
     }
 
+    /** The `CLEANUP_TOKEN` of the backend under test; null leaves the web-cron endpoint off. */
+    protected ?string $cleanupToken = null;
+
     /**
      * @return \Slim\App<null>
      */
@@ -388,7 +391,7 @@ abstract class ApiTestCase extends TestCase
         $logger->pushProcessor(new \CtPassStore\Infrastructure\Logging\AddVersionToErrors(self::VERSION));
 
         return Kernel::create(
-            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET),
+            new BackendConfig('https://example.church.tools/api', 'service-token', [self::ORIGIN], $this->credentialsPath, $this->cacheDir, self::OAUTH_CLIENT_ID, self::OAUTH_CLIENT_SECRET, self::JWT_SECRET, cleanupToken: $this->cleanupToken),
             $this->churchTools,
             $logger,
             $this->clock,

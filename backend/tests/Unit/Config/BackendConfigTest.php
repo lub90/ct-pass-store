@@ -115,6 +115,45 @@ final class BackendConfigTest extends TestCase
         self::assertSame(str_repeat('y', 32), BackendConfig::fromArray(['JWT_SECRET' => str_repeat('y', 32)] + self::valid(), 'x', '/cache')->jwtSecret);
     }
 
+    /** CF-06 */
+    public function testCleanupTokenIsOptional(): void
+    {
+        foreach ([[], ['CLEANUP_TOKEN' => '']] as $extra) {
+            $config = BackendConfig::fromArray($extra + self::valid(), 'x', '/cache');
+            self::assertNull($config->cleanupToken);
+            self::assertNull($config->cleanupTokenIfUsable());
+        }
+    }
+
+    /** CF-06 */
+    public function testShortCleanupTokenIsKeptButNotUsable(): void
+    {
+        $config = BackendConfig::fromArray(['CLEANUP_TOKEN' => str_repeat('a', 42)] + self::valid(), 'x', '/cache');
+
+        self::assertSame(str_repeat('a', 42), $config->cleanupToken);
+        self::assertNull($config->cleanupTokenIfUsable());
+    }
+
+    /** CF-06 */
+    public function testCleanupTokenOf43CharactersIsUsable(): void
+    {
+        $config = BackendConfig::fromArray(['CLEANUP_TOKEN' => str_repeat('a', 43)] + self::valid(), 'x', '/cache');
+
+        self::assertSame(str_repeat('a', 43), $config->cleanupTokenIfUsable());
+    }
+
+    /** CF-06 */
+    public function testNonStringCleanupTokenIsRejectedWithoutItsValue(): void
+    {
+        try {
+            BackendConfig::fromArray(['CLEANUP_TOKEN' => 12345678] + self::valid(), 'x', '/cache');
+            self::fail('Expected a ConfigurationException.');
+        } catch (ConfigurationException $e) {
+            self::assertStringContainsString('CLEANUP_TOKEN', $e->getMessage());
+            self::assertStringNotContainsString('12345678', $e->getMessage());
+        }
+    }
+
     public function testCredentialsMustBeAnArray(): void
     {
         $this->expectException(ConfigurationException::class);
