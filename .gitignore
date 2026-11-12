@@ -2,3 +2,6 @@
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# Brainstorming mockups of the superpowers plugin
+.superpowers/
