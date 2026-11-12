@@ -26,7 +26,7 @@ Other checks:
 You need:
 
 - a **ChurchTools test instance** with the CtPassStore extension
-- one **fixture** with a test user
+- two **fixtures**: a test user and three test persons
 - the backend's **`config/credentials.php`** for that instance
 - a local **`phpunit.xml`**
 
@@ -51,6 +51,16 @@ user, and delete them again; they never change settings or keys.
 
 The first user is used for the login contract cases and as the owner of the test entry. `LiveEntriesTest` skips if that
 user already has an entry.
+
+`tests/Contract/fixtures/person_status.json` with three test persons on the instance, an active one, an archived one
+and a deleted one (their `GET /persons/{id}` answers `200`, `200` and `404`):
+
+```json
+{"active": 2849, "archived": 2852, "deleted": 2855}
+```
+
+The service user whose token is in `phpunit.xml` needs the persons right: `churchdb` `view`, `view alldata` for every
+department, `view archive` and `view hidden persons`. Without it the person cases fail with a `403`.
 
 ### Configuration
 

@@ -163,6 +163,75 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
         return new LoginResult($personId, $loginStatus);
     }
 
+    public function personStatus(int $personId): PersonStatus
+    {
+        $what = 'GET persons/{id}';
+        try {
+            $result = $this->send('GET', 'persons/' . $this->positive($personId), $this->serviceUser, true);
+        } catch (NotFoundException) {
+            return PersonStatus::Gone;
+        }
+
+        $isArchived = $this->expectObject($this->data($result), $what)['isArchived'] ?? null;
+        if (!is_bool($isArchived)) {
+            throw new InvalidResponseException($what . ': isArchived is missing or not a boolean.');
+        }
+
+        return $isArchived ? PersonStatus::Archived : PersonStatus::Active;
+    }
+
+    public function activePersonIds(array $personIds): array
+    {
+        if (count($personIds) > self::MAX_BATCH) {
+            throw new \InvalidArgumentException('At most ' . self::MAX_BATCH . ' person IDs per call.');
+        }
+        if ($personIds === []) {
+            return [];
+        }
+
+        // Built by hand: Guzzle's `query` option would send `ids[0]=…`.
+        $query = implode('&', array_map(fn(int $id): string => 'ids[]=' . $this->positive($id), $personIds)) . '&limit=' . count($personIds);
+        $what = 'GET persons (batch)';
+        $result = $this->send('GET', 'persons?' . $query, $this->serviceUser, true);
+        $body = $this->decode($result['response'], $what);
+        $persons = $this->expectList($body['data'] ?? null, $what);
+
+        $total = $body['meta']['pagination']['total'] ?? null;
+        if (!is_int($total) || $total !== count($persons)) {
+            throw new InvalidResponseException($what . ': meta.pagination.total is missing or doesn\'t match the number of persons.');
+        }
+
+        $active = [];
+        foreach ($persons as $person) {
+            $id = $person['id'] ?? null;
+            if (!is_int($id) || !in_array($id, $personIds, true)) {
+                throw new InvalidResponseException($what . ': a returned person wasn\'t asked for.');
+            }
+            if (($person['isArchived'] ?? null) === false) {
+                $active[] = $id;
+            }
+        }
+
+        return $active;
+    }
+
+    public function personDepartmentIds(): array
+    {
+        $what = 'GET person/masterdata';
+        $data = $this->expectObject($this->data($this->send('GET', 'person/masterdata', $this->serviceUser, true)), $what);
+
+        $ids = [];
+        foreach ($this->expectList($data['departments'] ?? null, $what) as $department) {
+            $id = $department['id'] ?? null;
+            if (!is_int($id)) {
+                throw new InvalidResponseException($what . ': a department has no integer id.');
+            }
+            $ids[] = $id;
+        }
+
+        return $ids;
+    }
+
     public function getModuleByKey(string $key): array
     {
         if (preg_match(self::MODULE_KEY_PATTERN, $key) !== 1) {

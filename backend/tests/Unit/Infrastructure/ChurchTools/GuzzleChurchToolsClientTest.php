@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Unit\Infrastructure\ChurchTools;
 
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
@@ -17,6 +18,7 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedEx
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\ChurchTools\PersonStatus;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Handler\MockHandler;
@@ -30,7 +32,7 @@ use PHPUnit\Framework\TestCase;
 use Psr\Http\Message\RequestInterface;
 
 /**
- * Catalog section 5 (CC-01 to CC-16) and ST-12.
+ * Catalog section 5 (CC-01 to CC-18) and ST-12.
  */
 final class GuzzleChurchToolsClientTest extends TestCase
 {
@@ -854,6 +856,188 @@ final class GuzzleChurchToolsClientTest extends TestCase
     }
 
     // ---------------------------------------------------------------- CC-16 Retry-After
+
+    // ---------------------------------------------------------------- CC-17 personStatus, CC-18 batch
+
+    public function testPersonStatusIsGoneOn404(): void
+    {
+        $client = $this->client();
+        $this->respond(404, ['message' => 'Person [7] not found.']);
+
+        self::assertSame(PersonStatus::Gone, $client->personStatus(7));
+        self::assertSame('https://example.church.tools/api/persons/7', (string) $this->lastRequest()->getUri());
+        self::assertSame('Login ' . self::SERVICE_TOKEN, $this->lastRequest()->getHeaderLine('Authorization'));
+    }
+
+    public function testPersonStatusFollowsIsArchived(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => ['id' => 7, 'isArchived' => true]]);
+        $this->respond(200, ['data' => ['id' => 7, 'isArchived' => false]]);
+
+        self::assertSame(PersonStatus::Archived, $client->personStatus(7));
+        self::assertSame(PersonStatus::Active, $client->personStatus(7));
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function badPersonData(): iterable
+    {
+        yield 'isArchived missing' => [['id' => 7]];
+        yield 'isArchived as a string' => [['id' => 7, 'isArchived' => 'false']];
+        yield 'isArchived as an int' => [['id' => 7, 'isArchived' => 0]];
+    }
+
+    /**
+     * @param array<string, mixed> $data
+     */
+    #[DataProvider('badPersonData')]
+    public function testPersonStatusWithoutABooleanIsArchivedIsInvalid(array $data): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => $data]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->personStatus(7);
+    }
+
+    public function testPersonStatus403IsAServiceCredentialProblemNeverGone(): void
+    {
+        $client = $this->client();
+        $this->respond(403, ['message' => 'Forbidden to see Person[7]']);
+
+        $this->expectException(ServiceCredentialRejectedException::class);
+        $client->personStatus(7);
+    }
+
+    public function testBatchSendsTheIdsAndALimitInTheQueryString(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 7, 'isArchived' => false], ['id' => 8, 'isArchived' => false]], 'meta' => ['pagination' => ['total' => 2]]]);
+
+        self::assertSame([7, 8], $client->activePersonIds([7, 8]));
+
+        $uri = $this->lastRequest()->getUri();
+        self::assertSame('/api/persons', $uri->getPath());
+        self::assertSame('ids[]=7&ids[]=8&limit=2', urldecode($uri->getQuery()));
+        self::assertSame('Login ' . self::SERVICE_TOKEN, $this->lastRequest()->getHeaderLine('Authorization'));
+    }
+
+    public function testBatchOfNothingMakesNoCall(): void
+    {
+        $client = $this->client();
+
+        self::assertSame([], $client->activePersonIds([]));
+        self::assertSame([], $this->history);
+    }
+
+    public function testBatchOfMoreThanTheMaximumIsRejected(): void
+    {
+        $client = $this->client();
+
+        $this->expectException(\InvalidArgumentException::class);
+        $client->activePersonIds(range(1, ChurchToolsClient::MAX_BATCH + 1));
+    }
+
+    public function testBatchOfExactlyTheMaximumIsSent(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [], 'meta' => ['pagination' => ['total' => 0]]]);
+
+        self::assertSame([], $client->activePersonIds(range(1, ChurchToolsClient::MAX_BATCH)));
+        self::assertStringEndsWith('&limit=100', urldecode($this->lastRequest()->getUri()->getQuery()));
+    }
+
+    public function testBatchLeavesOutArchivedPersons(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 7, 'isArchived' => false], ['id' => 8, 'isArchived' => true]], 'meta' => ['pagination' => ['total' => 2]]]);
+
+        self::assertSame([7], $client->activePersonIds([7, 8]));
+    }
+
+    public function testBatchLeavesOutPersonsWithoutTheArchivedFlag(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 7], ['id' => 8, 'isArchived' => 'false']], 'meta' => ['pagination' => ['total' => 2]]]);
+
+        self::assertSame([], $client->activePersonIds([7, 8]));
+    }
+
+    public function testMissingPersonsAreSimplyNotReturned(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 8, 'isArchived' => false]], 'meta' => ['pagination' => ['total' => 1]]]);
+
+        self::assertSame([8], $client->activePersonIds([7, 8]));
+    }
+
+    public function testTruncatedBatchIsInvalid(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 7, 'isArchived' => false], ['id' => 8, 'isArchived' => false]], 'meta' => ['pagination' => ['total' => 3]]]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->activePersonIds([7, 8, 9]);
+    }
+
+    public function testBatchWithoutPaginationTotalIsInvalid(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 7, 'isArchived' => false]]]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->activePersonIds([7]);
+    }
+
+    public function testUnaskedIdInBatchIsInvalid(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [['id' => 99, 'isArchived' => false]], 'meta' => ['pagination' => ['total' => 1]]]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->activePersonIds([7]);
+    }
+
+    public function testBatch403IsAServiceCredentialProblem(): void
+    {
+        $client = $this->client();
+        $this->respond(403);
+
+        $this->expectException(ServiceCredentialRejectedException::class);
+        $client->activePersonIds([7]);
+    }
+
+    public function testDepartmentIdsAreReadFromTheMasterdata(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => ['departments' => [['id' => 1, 'name' => 'A'], ['id' => 4, 'name' => 'B']]]]);
+
+        self::assertSame([1, 4], $client->personDepartmentIds());
+        self::assertSame('https://example.church.tools/api/person/masterdata', (string) $this->lastRequest()->getUri());
+    }
+
+    /**
+     * @return iterable<string, array{mixed}>
+     */
+    public static function badDepartments(): iterable
+    {
+        yield 'no departments' => [['groups' => []]];
+        yield 'not a list' => [['departments' => ['a' => ['id' => 1]]]];
+        yield 'id as a string' => [['departments' => [['id' => '1']]]];
+        yield 'entry without id' => [['departments' => [['name' => 'A']]]];
+    }
+
+    #[DataProvider('badDepartments')]
+    public function testDepartmentsWithoutIntegerIdsAreInvalid(mixed $data): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => $data]);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->personDepartmentIds();
+    }
 
     /**
      * @return iterable<string, array{string|null, int}>

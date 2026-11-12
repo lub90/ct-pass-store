@@ -11,12 +11,14 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
+use CtPassStore\Infrastructure\ChurchTools\PersonStatus;
+use CtPassStore\Infrastructure\ChurchTools\ServiceUserPersonsRight;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\TestCase;
 
 /**
  * The contract between the backend and ChurchTools (catalog CT-06, CT-06a, CT-01, CT-03, CC-10, CC-11, ST-16,
- * PP-10).
+ * PP-10, CT-09 to CT-11).
  *
  * The same cases run against the real ChurchTools (end-to-end layer) and against the fake (unit layer), so the fake
  * that the API tests rely on can't drift from real ChurchTools.
@@ -44,6 +46,13 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
      * @return array{id: string, secret: string, redirectUri: string}|null
      */
     abstract protected function oauthClient(): ?array;
+
+    /**
+     * Three persons the service user may see: an active one, an archived one and a deleted one (design 9.1).
+     *
+     * @return array{active: int, archived: int, deleted: int}
+     */
+    abstract protected function personIds(): array;
 
     /** @var list<int> value IDs to delete after the test */
     private array $created = [];
@@ -312,5 +321,59 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         $user = $this->loginUser();
 
         self::assertNull($this->client()->verifyLogin($user['username'], $user['password'] . '-wrong'));
+    }
+
+    // ---------------------------------------------------------------- persons
+
+    private const UNUSED_PERSON_ID = 2147483647;
+
+    /** CT-09 */
+    public function testActivePersonIsActive(): void
+    {
+        self::assertSame(PersonStatus::Active, $this->client()->personStatus($this->personIds()['active']));
+    }
+
+    /** CT-09, CT-11 */
+    public function testArchivedPersonIsArchived(): void
+    {
+        self::assertSame(PersonStatus::Archived, $this->client()->personStatus($this->personIds()['archived']));
+    }
+
+    /** CT-09 */
+    public function testDeletedPersonIsGone(): void
+    {
+        self::assertSame(PersonStatus::Gone, $this->client()->personStatus($this->personIds()['deleted']));
+    }
+
+    /** CT-09 */
+    public function testUnusedIdIsGone(): void
+    {
+        self::assertSame(PersonStatus::Gone, $this->client()->personStatus(self::UNUSED_PERSON_ID));
+    }
+
+    /** CT-10 */
+    public function testBatchConfirmsOnlyTheActivePerson(): void
+    {
+        $ids = $this->personIds();
+
+        self::assertSame(
+            [$ids['active']],
+            $this->client()->activePersonIds([$ids['active'], $ids['archived'], $ids['deleted'], self::UNUSED_PERSON_ID]),
+        );
+    }
+
+    /** CT-10 */
+    public function testDepartmentsAreListed(): void
+    {
+        // The client rejects a department without an integer ID, so a non-empty result is a list of ints.
+        self::assertNotEmpty($this->client()->personDepartmentIds());
+    }
+
+    /** CT-11: the service user's persons right is the narrow one of design 9.1, and it suffices for archived persons. */
+    public function testServiceUserHasTheNarrowPersonsRight(): void
+    {
+        $missing = ServiceUserPersonsRight::missingIn($this->client()->serviceUserGlobalPermissions(), $this->client()->personDepartmentIds());
+
+        self::assertSame([], $missing);
     }
 }

@@ -10,8 +10,11 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\LoginResult;
 use CtPassStore\Infrastructure\ChurchTools\Permissions;
+use CtPassStore\Infrastructure\ChurchTools\PersonStatus;
+use CtPassStore\Infrastructure\ChurchTools\ServiceUserPersonsRight;
 use CtPassStore\Infrastructure\ChurchTools\WhoAmI;
 
 /**
@@ -68,6 +71,12 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var array<string, mixed> */
     private array $servicePermissions = [];
 
+    /** @var array<int, bool> whether a person is archived, by person ID */
+    private array $persons = [];
+
+    /** @var list<int> */
+    private array $personDepartments = [1];
+
     // ---------------------------------------------------------------- setup helpers
 
     /**
@@ -117,6 +126,24 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     public function setServiceUserPermissions(array $permissions): void
     {
         $this->servicePermissions = $permissions;
+    }
+
+    /**
+     * A person that exists in ChurchTools. Every other ID is unknown (deleted or never used).
+     */
+    public function addPerson(int $personId, bool $archived = false): void
+    {
+        $this->persons[$personId] = $archived;
+    }
+
+    /**
+     * The departments of the instance (`person/masterdata`); `[1]` by default.
+     *
+     * @param list<int> $ids
+     */
+    public function setPersonDepartments(array $ids): void
+    {
+        $this->personDepartments = $ids;
     }
 
     /**
@@ -311,6 +338,40 @@ final class FakeChurchToolsClient implements ChurchToolsClient
         return new LoginResult($login['personId'], $login['status']);
     }
 
+    public function personStatus(int $personId): PersonStatus
+    {
+        $this->record(__FUNCTION__, [$personId]);
+
+        if (!isset($this->persons[$personId])) {
+            return PersonStatus::Gone;
+        }
+        $this->assertPersonsRight('GET persons/' . $personId);
+
+        return $this->persons[$personId] ? PersonStatus::Archived : PersonStatus::Active;
+    }
+
+    public function activePersonIds(array $personIds): array
+    {
+        $this->record(__FUNCTION__, [$personIds]);
+        if (count($personIds) > self::MAX_BATCH) {
+            throw new \InvalidArgumentException('At most ' . self::MAX_BATCH . ' person IDs per call.');
+        }
+
+        // Without the right, ChurchTools leaves out every person the service user can't see.
+        if (!$this->hasPersonsRight()) {
+            return [];
+        }
+
+        return array_values(array_filter($personIds, fn(int $id): bool => isset($this->persons[$id]) && $this->persons[$id] === false));
+    }
+
+    public function personDepartmentIds(): array
+    {
+        $this->record(__FUNCTION__, []);
+
+        return $this->personDepartments;
+    }
+
     public function getModuleByKey(string $key): array
     {
         $this->record(__FUNCTION__, [$key]);
@@ -394,6 +455,18 @@ final class FakeChurchToolsClient implements ChurchToolsClient
 
         if (($this->failures[$method] ?? []) !== []) {
             throw array_shift($this->failures[$method]);
+        }
+    }
+
+    private function hasPersonsRight(): bool
+    {
+        return ServiceUserPersonsRight::isGrantedIn(new Permissions($this->servicePermissions), $this->personDepartments);
+    }
+
+    private function assertPersonsRight(string $what): void
+    {
+        if (!$this->hasPersonsRight()) {
+            throw new ServiceCredentialRejectedException($what . ': ChurchTools answered 403.');
         }
     }
 

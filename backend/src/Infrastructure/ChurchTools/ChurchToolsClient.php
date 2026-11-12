@@ -17,6 +17,9 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
  */
 interface ChurchToolsClient
 {
+    /** The most person IDs {@see activePersonIds()} accepts in one call. */
+    public const MAX_BATCH = 100;
+
     /**
      * Exchanges an OAuth authorization code (with PKCE) for a ChurchTools access token (spec 4.4.2). The token is
      * returned as is; checking it is the caller's job.
@@ -57,6 +60,30 @@ interface ChurchToolsClient
      * @return LoginResult|null the result if ChurchTools accepted the credentials, null if it rejected them
      */
     public function verifyLogin(string $username, #[\SensitiveParameter] string $password): ?LoginResult;
+
+    /**
+     * `GET /persons/{id}` as the service user: `404` is `Gone`; `403` is never "gone" but a
+     * {@see Exception\ServiceCredentialRejectedException} (the service user lacks the persons right).
+     */
+    public function personStatus(int $personId): PersonStatus;
+
+    /**
+     * `GET /persons?ids[]=…&limit=n` as the service user: the IDs among `$personIds` that exist, are visible and aren't
+     * archived. Persons that are missing just aren't in the result; the method never says why. The answer is checked
+     * (`meta.pagination.total`, only asked IDs), else {@see Exception\InvalidResponseException}.
+     *
+     * @param list<int> $personIds at most {@see MAX_BATCH}
+     * @return list<int>
+     * @throws \InvalidArgumentException for more than {@see MAX_BATCH} IDs
+     */
+    public function activePersonIds(array $personIds): array;
+
+    /**
+     * `GET /person/masterdata` as the service user: the IDs of all departments (`data.departments[].id`).
+     *
+     * @return list<int>
+     */
+    public function personDepartmentIds(): array;
 
     /**
      * `GET /custommodules/{key}`.
