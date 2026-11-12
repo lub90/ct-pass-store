@@ -31,6 +31,7 @@
   "scripts": {
     "test": "phpunit -c phpunit.xml.dist --testsuite Unit,Api",
     "test:contract": "phpunit -c phpunit.xml --testsuite Contract",
+    "test:load": "phpunit -c phpunit.xml tests/Load",
     "stan": "phpstan analyse --memory-limit=1G",
     "cs": "php-cs-fixer check --diff",
     "cs:fix": "php-cs-fixer fix",
@@ -50,6 +51,7 @@
   "scripts-descriptions": {
     "test": "Run the unit and API tests (no network access needed)",
     "test:contract": "Run the contract tests against a ChurchTools test instance (needs a local phpunit.xml, see docs/testing.md)",
+    "test:load": "Run the load test against a ChurchTools TEST instance, never production (needs a local phpunit.xml, see docs/testing.md)",
     "stan": "Run PHPStan",
     "cs": "Check the code style",
     "cs:fix": "Fix the code style",

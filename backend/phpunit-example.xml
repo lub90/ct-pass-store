@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     Local configuration for the end-to-end tests. Copy it to phpunit.xml (gitignored) and fill in your
-    test instance. Run with `composer test:e2e`. See docs/testing.md.
+    test instance. Run with `composer test:contract` or `composer test:load`, only against a TEST instance. See docs/testing.md.
 -->
 <phpunit bootstrap="vendor/autoload.php"
          cacheDirectory=".phpunit.cache"
@@ -16,6 +16,9 @@
         </testsuite>
         <testsuite name="Contract">
             <directory>tests/Contract</directory>
+        </testsuite>
+        <testsuite name="Load">
+            <directory>tests/Load</directory>
         </testsuite>
     </testsuites>
 

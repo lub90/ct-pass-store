@@ -7,6 +7,7 @@ The backend has three test layers (see `specs/backend-spec.md`, section 6.6):
 | Unit tests | `Unit` | nothing | `composer test` |
 | API tests (the whole app with a fake ChurchTools) | `Api` | nothing | `composer test` |
 | Contract tests | `Contract` | a ChurchTools test instance, one fixture, local config | `composer test:contract` |
+| Load test | `Load` | a ChurchTools test instance, the fixtures, local config, an admin token | `composer test:load` |
 
 `composer test` runs the unit and API tests with the shared configuration `phpunit.xml.dist`. They need no network
 access and also run in the CI. `composer check` runs code style, PHPStan and these tests together, like the CI.
@@ -20,6 +21,14 @@ Other checks:
 - `composer cs` / `composer cs:fix`: check or fix the code style (PHP-CS-Fixer)
 - `composer stan`: static analysis (PHPStan). The baseline `phpstan-baseline.neon` is empty; keep it that way.
 
+
+## Tests against a real ChurchTools instance (Contract and Load)
+
+> **Only ever run `Contract` and `Load` against a dedicated TEST instance, never against a production instance.** They
+> write to the instance: they create and delete entries, and the load test also creates, archives and deletes persons
+> and runs the cleanup job.
+
+Neither suite is part of `composer test` or `composer check`; both need your local `phpunit.xml`.
 
 ## Contract test setup
 
@@ -94,6 +103,46 @@ Notes on `LiveEntriesTest`:
 The real login needs a browser (OAuth). The contract tests therefore mint backend access tokens directly with
 `UserTokens` and the `JWT_SECRET` from `config/credentials.php`, with the same claims `POST /v1/auth/token` issues.
 Machine tokens are signed with a test key. This only works for test systems whose secrets you have.
+
+## Load test
+
+> **Only against a dedicated TEST instance, never production.** The load test creates 20 persons, writes up to 500
+> entries into `passwordStore`, archives and deletes persons, and runs the cleanup job, which deletes entries.
+
+```bash
+composer test:load
+```
+
+It measures the backend under realistic data sizes and writes the results to STDERR and to a JSON file
+(`LOAD_RESULTS_FILE`, default `ctps-load-results.json` in the temp folder). The results name person IDs only. The
+report of a run is in `specs/backend-load-test-*.md`.
+
+It needs everything the contract tests need, and:
+
+- `tests/Contract/fixtures/admin_users.json` with one admin user (`[{"id": 1, "username": "...", "pwd": "..."}]`)
+- `config/credentials.php` whose `CT_API_TOKEN` is an **admin** login token of the same instance as `phpunit.xml`. It
+  is used only to create, archive and delete the 20 load persons; the backend under test runs with the minimal
+  service user's token from `phpunit.xml`.
+- enough persons on the instance: it gives up to 480 existing persons without an entry one entry each
+
+What it does, strictly sequentially and paced below the ChurchTools rate limit (it waits out `429`s and records them):
+
+1. Records the values in `passwordStore` (the baseline). They're never changed.
+2. Creates 20 persons "CtPassStore Load 01…20" and gives each an entry, then existing persons (not the fixture users,
+   not the admins, not persons with an entry) entries in stages: 50, 200, 500 in total.
+3. At each stage, against a backend in a temporary sandbox (copies of `public/index.php` and `bin/cleanup.php`,
+   symlinked `vendor/`, its own `config/`, `cache/`, `logs/`, generated `credentials.php` with a random
+   `CLEANUP_TOKEN`): `GET /v1/entries/{id}` as admin for 50 persons with an empty persons cache and again cached,
+   `PUT` for 20 entries the run created, and `GET /v1/test`. For comparison, it also times the KV list and one person
+   lookup directly, and an unauthenticated request (PHP start-up only).
+4. Archives 10 load persons and deletes 10, runs the web cron (`POST /v1/cleanup`, dry run, then `?apply=1` until
+   `complete`, removing the sandbox's cooldown record between calls), then `bin/cleanup.php` (dry run, then a few
+   gone entries again, dry run and `--apply`), and checks that exactly the gone persons' entries were removed.
+5. Teardown, also after a failure: deletes the values it created, deletes the 20 persons, removes the sandbox and
+   checks that `passwordStore` equals the baseline. A failed check is printed loudly.
+
+If the fixture admin isn't in the instance's `adminUsers`, the run never changes the settings in ChurchTools. It puts
+the real settings plus that admin into the **sandbox's own** settings cache instead, and says so in the results.
 
 ## Manual OAuth check before each release
 
