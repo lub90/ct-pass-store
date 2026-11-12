@@ -17,13 +17,14 @@ use CtPassStore\Http\Problem\ProblemType;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Log\LoggerInterface;
-use Slim\Exception\HttpNotFoundException;
 
 /**
  * `POST /v1/cleanup`: the web cron (cleanup design 5). Outside the JWT authentication: it accepts only
  * `CLEANUP_TOKEN`, and that token opens nothing else.
  *
- * Order of the checks (design 5.3): endpoint on → query → token → address limit (rejected tokens only) → cooldown →
+ * Registered only when `CLEANUP_TOKEN` is usable; otherwise the path is unknown (`404`, design 5.1).
+ *
+ * Order of the checks (design 5.3): query → token → address limit (rejected tokens only) → cooldown →
  * lock → run. The response holds counts only; person IDs go to the log.
  */
 final class CleanupController
@@ -33,7 +34,7 @@ final class CleanupController
 
     public function __construct(
         #[\SensitiveParameter]
-        private readonly ?string $token,
+        private readonly string $token,
         private readonly CleanupOrphans $cleanup,
         private readonly CleanupLock $lock,
         private readonly CleanupCooldown $cooldown,
@@ -45,11 +46,6 @@ final class CleanupController
     public function run(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
     {
         $deadline = $this->clock->now()->modify('+' . self::DEADLINE_SECONDS . ' seconds');
-
-        // Off (no usable CLEANUP_TOKEN): exactly what an unknown route answers.
-        if ($this->token === null) {
-            throw new HttpNotFoundException($request);
-        }
 
         $query = $request->getQueryParams();
         if (array_key_exists('token', $query)) {
@@ -98,7 +94,7 @@ final class CleanupController
         $ip = (string) ($request->getServerParams()['REMOTE_ADDR'] ?? '');
         $headers = $request->getHeader('Authorization');
         $given = count($headers) === 1 && preg_match('/^bearer ([^\s,]+)\z/i', $headers[0], $match) === 1 ? $match[1] : '';
-        if ($this->token !== null && $given !== '' && hash_equals($this->token, $given)) {
+        if ($given !== '' && hash_equals($this->token, $given)) {
             return;
         }
 

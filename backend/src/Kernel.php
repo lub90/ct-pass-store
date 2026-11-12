@@ -149,17 +149,21 @@ final class Kernel
         // Every path lives under /v1 (Q20); the old paths without prefix are unknown routes (404).
         // The only routes without a backend access token (spec 4.1):
         $app->post('/v1/auth/token', [$login, 'token']);
-        // The web cron checks its own token, CLEANUP_TOKEN, and accepts nothing else (cleanup design 5.1).
-        $cleanup = new CleanupController(
-            $config->cleanupTokenIfUsable(),
-            $shared['cleanup'],
-            $shared['lock'],
-            new CleanupCooldown(new FileCooldownStore($securityStore, $clock)),
-            $addressLimiter,
-            $clock,
-            $logger,
-        );
-        $app->post('/v1/cleanup', [$cleanup, 'run']);
+        // The web cron checks its own token, CLEANUP_TOKEN, and accepts nothing else (cleanup design 5.1). Without a
+        // usable token the route doesn't exist, so every method answers exactly like an unknown path.
+        $cleanupToken = $config->cleanupTokenIfUsable();
+        if ($cleanupToken !== null) {
+            $cleanup = new CleanupController(
+                $cleanupToken,
+                $shared['cleanup'],
+                $shared['lock'],
+                new CleanupCooldown(new FileCooldownStore($securityStore, $clock)),
+                $addressLimiter,
+                $clock,
+                $logger,
+            );
+            $app->post('/v1/cleanup', [$cleanup, 'run']);
+        }
 
         // Authentication runs per route, after routing, so unknown routes and wrong methods get 404/405 first.
         $app->group('/v1', function (RouteCollectorProxyInterface $group) use ($entries, $selfCheck): void {
