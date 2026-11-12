@@ -11,14 +11,22 @@ All routes live under `/v1/` and need HTTPS. Bodies are JSON (`Content-Type: app
 | Route | Who | Purpose |
 | --- | --- | --- |
 | `POST /v1/auth/token` | anyone with an OAuth code | Exchanges a ChurchTools OAuth code for a backend token |
-| `GET /v1/entries/{id}` | the person, admins, machine clients with read permission | Returns the encrypted secondary password: `{"secondaryPwd": "..."}` |
-| `PUT /v1/entries/{id}` | the person, admins | Sets the password. Body (all optional): `primaryPwd`, `secondaryPwd`. `204` for a custom password; `200` with the generated one if `secondaryPwd` is omitted |
+| `GET /v1/entries/{id}` | the person, admins, machine clients with read permission | Returns the encrypted secondary password: `{"secondaryPwd": "..."}`. `404 person-not-found` if the person is deleted or archived |
+| `PUT /v1/entries/{id}` | the person, admins | Sets the password. Body (all optional): `primaryPwd`, `secondaryPwd`. `204` for a custom password; `200` with the generated one if `secondaryPwd` is omitted. `404 person-not-found` if the person is deleted or archived |
 | `DELETE /v1/entries/{id}` | the person, admins | Deletes the entry, `204` |
 | `GET /v1/test` | admins | Self-check, `200` or `207`; `?write=1` also tests writing to `passwordStore` |
+| `POST /v1/cleanup` | a web-cron service with `CLEANUP_TOKEN` | Deletes the entries of deleted and archived persons (`?apply=1`; a dry run without). Counts only in the answer. Off unless `CLEANUP_TOKEN` is set (spec 4.12) |
 
 `{id}` is the ChurchTools person ID. `PUT` and `DELETE` need the caller's own `primaryPwd` when
 `requirePasswordForPasswordChange` is set. Other paths answer `404 not-found`, other methods `405`.
 `/v1/setup` (first configuration over the extension) is planned (spec 4.10).
+
+### Cleanup of gone persons
+
+Entries of deleted and archived persons are removed by `php bin/cleanup.php [--apply]` (server cron; a dry run without
+`--apply`) or by a web-cron service calling `POST /v1/cleanup?apply=1` with the header
+`Authorization: Bearer <CLEANUP_TOKEN>`. Until then, `GET` and `PUT` already refuse such persons. The service user needs
+the persons right for this. See the [setup guide](./docs/setup.md#7-clean-up-entries-of-gone-persons-optional) and spec 4.11 and 4.12.
 
 ### Authentication
 

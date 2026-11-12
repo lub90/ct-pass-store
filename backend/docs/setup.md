@@ -17,10 +17,29 @@ rights in ChurchTools' rights management:
   fails).
 - **View custom category** and **view custom data** for `passwordStore`, `encryptionSettings` and `settings`.
 - **Create, edit and delete custom data** in `passwordStore` only.
+- **Read persons**, so the backend can tell a deleted or archived person from an active one (the read check and the
+  cleanup, see below).
+
+| Module | Right | For |
+| --- | --- | --- |
+| CtPassStore extension | View | Looking up the extension |
+| CtPassStore extension | View custom category | `passwordStore`, `encryptionSettings`, `settings` (without it ChurchTools lists no category) |
+| CtPassStore extension | View custom data | `passwordStore`, `encryptionSettings`, `settings` |
+| CtPassStore extension | Create, edit, delete custom data | `passwordStore` only |
+| Persons (`churchdb`) | "Personen" sehen (`view`) | Reading persons |
+| Persons (`churchdb`) | "Personen eines Bereiches sehen" (`view alldata`) | **Every** department of the instance |
+| Persons (`churchdb`) | "Personenarchiv sehen" (`view archive`) | Seeing archived persons |
+| Persons (`churchdb`) | "Auch versteckte Personen sehen" (`view hidden persons`) | Seeing hidden persons |
 
 Do **not** give it administrative rights such as `administer settings`, `administer persons` or
-`administer custom modules`, and no write access to any other extension category. `/v1/test` fails when the service
-user has more rights than needed.
+`administer custom modules`, and no write access to any other extension category. None of the persons rights above is
+administrative. `/v1/test` fails when the service user has more rights than needed, and also when it lacks one of the
+rights in the table: for the persons right it names the missing parts, e.g.
+`The service user can't read persons (missing: churchdb view archive)`.
+
+**Upgrading an existing installation:** grant the persons rights before you update the backend. Without them
+`/v1/test` fails, and every read of another person's entry (RADIUS logins included) fails with `500 misconfigured`. If
+you add a department to ChurchTools later, give the service user `view alldata` for it too.
 
 Then fetch its login token: log in as the service user, open the profile, **Permissions**, **Login token**, and copy
 the token. It goes into `credentials.php` as `CT_API_TOKEN`.
@@ -69,6 +88,7 @@ return [
     'OAUTH_CLIENT_SECRET' => 'CLIENT_SECRET_OF_THE_OAUTH_APPLICATION',
     'JWT_SECRET' => 'RANDOM_SECRET_OF_AT_LEAST_32_BYTES',
     // 'LOG_LEVEL' => 'info',
+    // 'CLEANUP_TOKEN' => 'RANDOM_TOKEN_OF_AT_LEAST_43_CHARACTERS',
 ];
 ```
 
@@ -79,6 +99,7 @@ return [
 | `CORS` | Allowed origins, a non-empty list like `https://host[:port]`, no path, no `*`. It must include your ChurchTools instance, or the extension cannot reach the backend. |
 | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | From the OAuth application (step 2). |
 | `JWT_SECRET` | Signs the backend's own access tokens. Generate it, at least 32 bytes: `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'` |
+| `CLEANUP_TOKEN` | Optional. Turns on the web-cron endpoint `POST /v1/cleanup` (step 7). At least 43 characters; generate it, do not choose it. |
 | `LOG_LEVEL` | Optional. `debug`, `info` (default), `notice`, `warning` or `error`. Anything else makes the backend answer `500 misconfigured`. |
 
 A missing or invalid key never fails silently: every request answers `500 misconfigured` and names the key (never its
@@ -131,6 +152,94 @@ If something fails the status is `207` and each failed check names what to fix. 
 creates, reads and deletes a test value in `passwordStore` (with the reserved person ID `0`) to prove that the
 service user may write.
 
+## 7. Clean up entries of gone persons (optional)
+
+Entries remain in `passwordStore` after a person has been deleted or archived in ChurchTools. Their password already
+stops working within 10 minutes (`GET` and `PUT` answer `404 person-not-found`), but the cleanup removes the entry
+itself. It needs the persons rights of step 1. It checks every person with an entry in ChurchTools, and it deletes an
+entry only after ChurchTools confirmed for that person that they are deleted or archived. An unclear answer never deletes
+anything. Persons in `adminUsers` who are gone are only reported; remove them in the extension settings.
+
+**Dry run or apply.** Without `--apply` (CLI) or `?apply=1` (web) the cleanup only reports what it would delete. Try a
+dry run first.
+
+### Server cron (CLI)
+
+```bash
+php /path/to/backend/bin/cleanup.php            # dry run
+php /path/to/backend/bin/cleanup.php --apply    # deletes
+```
+
+Cron line, every night at 03:00:
+
+```
+0 3 * * * php /path/to/backend/bin/cleanup.php --apply
+```
+
+The cron job **must run as the same operating-system user as PHP**. Otherwise the script creates files in `logs/` and
+`cache/` (mode `600`) that the web app can't write, and requests start to fail.
+
+Output names person IDs only. Warnings go to stderr, so cron mails them to you. Exit codes:
+
+| Code | Meaning |
+| --- | --- |
+| 0 | Done: nothing to do, or everything was deleted (in a dry run: would have been). |
+| 1 | Done, but `adminUsers` contains a gone person or a delete failed. |
+| 2 | Aborted, nothing was deleted: wrong argument, broken `credentials.php`, another cleanup is running, the lock file can't be opened, missing persons rights or a failed ChurchTools lookup. |
+
+### Web cron (no server cron)
+
+If your hosting has no cron, a web-cron service such as [cron-job.org](https://cron-job.org) can call the backend. The
+endpoint is **off** until you set `CLEANUP_TOKEN` in `credentials.php`.
+
+1. Generate the token. Do not choose one yourself: the security rests on its randomness.
+
+   ```bash
+   php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
+   ```
+
+2. Put it into `credentials.php` as `'CLEANUP_TOKEN' => '...'` (at least 43 characters; a shorter one keeps the endpoint
+   off and fails `/v1/test`).
+3. Create a job at the service:
+
+   | Setting | Value |
+   | --- | --- |
+   | URL | `https://<backend>/v1/cleanup?apply=1` |
+   | Method | `POST` |
+   | Header | `Authorization: Bearer <token>` |
+   | Schedule | every 10 minutes to once a day |
+
+   Leave out `?apply=1` for a dry run. Never put the token in the URL; the backend refuses it there.
+
+The answer is `200` with counts only (no person IDs; those are in `logs/`):
+
+```json
+{"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `applied` | `false` for a dry run |
+| `complete` | `false` if the 20-second budget ran out; the next call continues |
+| `checked` | Persons with entries that were looked at |
+| `gone` | Gone persons found |
+| `deleted` | Entries deleted (always `0` in a dry run) |
+| `failedDeletes` | Deletes that failed; the next call retries them |
+| `goneAdmins` | Persons in `adminUsers` who are gone (see `/v1/test`) |
+
+Problems the service may report: `401 invalid-token` (wrong or missing token), `429 cleanup-too-soon` (a run starts at
+most every 600 seconds; a call that hits a running cleanup or fails also starts the period), `409 cleanup-running`, and
+`500`/`502`/`503` if ChurchTools or the rights are the problem (see [problems.md](./problems.md)).
+
+**Security notes.**
+
+- The limit per address only throttles noise from wrong tokens. It does not slow down guessing of the right token, and a
+  call with the right token passes even from a blocked address (so a shared service address can't be locked out). That
+  is why the token must be random and long.
+- **Rotate `CLEANUP_TOKEN` if it may have leaked:** generate a new one and change it in `credentials.php` and at the
+  service. A holder of the token can start only the same harmless cleanup, but could keep your `?apply=1` runs from
+  running by sending dry runs inside the 10-minute cooldown.
+
 ## Logs and personal data
 
 The backend writes `logs/app.log`, rotated daily (`app-YYYY-MM-DD.log`); the **last 14 files** are kept and older
@@ -146,6 +255,7 @@ copy the logs elsewhere for longer than 14 days. Passwords, tokens, codes and ci
 | OAuth client secret | `credentials.php` | ChurchTools cannot rotate it: delete and recreate the OAuth application, update `credentials.php` and the users' login right. |
 | `JWT_SECRET` | `credentials.php` | Replace it. All backend tokens become invalid and users log in again silently. |
 | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one. |
+| `CLEANUP_TOKEN` | `credentials.php` and the web-cron service | Generate a new one (step 7) and change it in both places. Do it if it may have leaked. |
 
 ## Troubleshooting
 

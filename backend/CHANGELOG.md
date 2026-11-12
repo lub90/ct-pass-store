@@ -10,6 +10,9 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 
 ### Changed
 
+- **Breaking for existing installations:** the service user needs the persons right (`churchdb` `view`, `view alldata` for
+  every department, `view archive` and `view hidden persons`; see `docs/setup.md`). Without it `GET /v1/test` fails and
+  every read of another person's entry fails with `500 misconfigured`, RADIUS logins included.
 - All routes live under `/v1/`; the old paths `/entries/{id}` and `/test` answer `404 not-found`.
 - Users log in once with ChurchTools OAuth (`POST /v1/auth/token`) and get a 15-minute backend token. The backend no
   longer receives the permanent ChurchTools login token and makes no ChurchTools call per request.
@@ -24,6 +27,14 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 
 ### Added
 
+- Read check: `GET /v1/entries/{id}` of another person's entry answers `404 person-not-found` for a deleted or archived
+  person, so their password stops working within 10 minutes. "Exists" is cached for 10 minutes, "gone" is never cached.
+- `PUT /v1/entries/{id}` refuses deleted and archived persons with `404 person-not-found`.
+- Cleanup of gone persons: `php bin/cleanup.php [--apply]` for server cron (dry run by default, exit codes 0, 1, 2) and the
+  web-cron endpoint `POST /v1/cleanup[?apply=1]`, which is off unless `CLEANUP_TOKEN` is set in `credentials.php` and
+  runs at most once per 10 minutes. Gone persons in `adminUsers` are reported, never changed.
+- `GET /v1/test` checks the persons right, gone persons in `adminUsers` and the length of `CLEANUP_TOKEN`.
+- New problem types `person-not-found`, `cleanup-running` and `cleanup-too-soon`.
 - Cache for module and category IDs (1 hour), settings and the public key (5 minutes), with HMAC-protected files.
   Changes to admins and machine clients therefore take up to 5 minutes to apply.
 - Limits: 5 wrong primary passwords per person and 15 minutes; per address 30 logins and 60 rejected tokens per minute,

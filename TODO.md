@@ -108,9 +108,8 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Data Management
 
-- [ ] **Clean up entries of deleted users**
-  Nothing removes password entries (or `adminUsers`/`readAccessUsers` references) for people who no longer exist in ChurchTools.
-  - Add a cron job or similar scheduled task that finds these orphaned IDs and deletes them.
+- [x] **Clean up entries of deleted users**
+  Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). `adminUsers` is only reported, never changed.
 
 - [ ] **Backup & restore of the extension data**
   Updating the extension in ChurchTools deletes all of its data: settings, encryption settings and every stored password.

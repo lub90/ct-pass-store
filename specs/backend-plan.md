@@ -254,6 +254,14 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
       So the backend fetches the token during `POST /v1/setup` from the service user's login name and password
       (decided 2026-11-11, spec 4.10, D6).
 
+- [x] **4.7 Gone persons: read check, cleanup job and web cron** (spec 4.5, 4.6, 4.8, 4.11, 4.12, 5.8, D7, D8; Q16)
+  - `GET` and `PUT` of another person's entry answer `404 person-not-found` for deleted and archived persons ("exists"
+    is cached for 10 minutes). The service user needs the persons right; `/v1/test` checks it, gone `adminUsers` and
+    `CLEANUP_TOKEN`.
+  - The cleanup deletes the entries of gone persons: `php bin/cleanup.php [--apply]` for server cron, and
+    `POST /v1/cleanup[?apply=1]` with `CLEANUP_TOKEN` for web-cron services. Dry run by default.
+  - Design and measurements: [`backend-cleanup-design.md`](backend-cleanup-design.md).
+
 ## Phase 5 – Consumers (after the backend API is stable)
 
 These live outside the backend, but the new API is only usable once they're done.
@@ -378,16 +386,19 @@ These live outside the backend, but the new API is only usable once they're done
       - **Licensing and data protection of the service user** (checked 2026-11-10): an additional person has no
         licensing or data-protection side effects.
   - An admin UI for machine clients.
+  - The wizard grants the service user the persons right (spec 4.8: `churchdb` `view`, `view alldata` for every
+    department, `view archive`, `view hidden persons`) and may generate `CLEANUP_TOKEN` for the admin (spec 3.1, 4.12).
+  - The admin UI shows `person-not-found` (spec 4.5, 4.6).
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)
     and in the settings form (today: minimum 8, no maximum).
 - [ ] **5.2 ct-radius** (see the ct-radius section in [`TODO.md`](../TODO.md))
   - Ed25519 key generation and token signing, and the problem `type` check for `404`.
   - A timeout on the backend call, the backend URL, updated tests.
+  - Treat `person-not-found` as "reject the login", like `entry-not-found` (spec 4.5).
 
 ## Deliberately not in step 1
 
-- Cleanup job for deleted persons (Q16).
 - Roles via ChurchTools groups (Q22).
 - Person and group lookups for ct-radius (step 2).
 - APCu cache.
