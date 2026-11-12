@@ -31,7 +31,7 @@ Success means:
 | --- | --- | --- |
 | C1 | The **service user may read persons**. It gets the narrowest right that lets it see that a person exists and whether they're archived. The probe (section 8) finds the exact right. | Without it the backend can't tell "deleted" from "not visible". A separate admin token in `credentials.php` would put a much more powerful credential on the server. |
 | C2 | **Deleted and archived persons count as gone.** | Archiving means the person has left, and their secondary password should stop working. If an archived person is restored, they or an admin set a new password. |
-| C3 | **`adminUsers` is only reported**, never changed. | The service user only reads the settings. Write access to them would let a leaked service token make anyone an admin. A deleted person can't log in. Whether an archived one can is checked by the probe (section 8); the report tells the admins to remove such IDs either way. |
+| C3 | **`adminUsers` is only reported**, never changed. | The service user only reads the settings. Write access to them would let a leaked service token make anyone an admin. Deleted and archived persons can't log in to ChurchTools, so a gone admin can do nothing. |
 | C4 | **Only a CLI script**, no HTTP endpoint for hosts without cron. | It keeps the backend lean, in case ChurchTools' new KV store makes the backend unnecessary (spec 9). An endpoint can be added later. |
 | C5 | **One lookup per person**, `GET /persons/{id}`. | Every answer is unambiguous. A batch or "load all" query can't tell a missing person apart from a filtered or invisible one. `PUT` needs exactly this call too. |
 | C6 | **Dry run by default**; deleting needs `--apply`. | A wrong cron line or a manual test can't delete anything. |
@@ -298,8 +298,7 @@ depends on them:
 2. **Archived:** which field in the `GET /persons/{id}` answer marks an archived person, and what values it takes.
 3. **Deleted:** does a deleted person give `404`, like an ID that was never used? Does ChurchTools keep deleted persons
    in a trash for a while, and if so, what does the API answer during that time?
-4. **Login:** can an archived person still log in (`POST /login`, OAuth)? If yes, an archived admin keeps admin rights until removed from `adminUsers`; the report makes that visible.
-5. **Not visible:** what does a service user without the right get for an existing person (`403`, or `404`)? This
+4. **Not visible:** what does a service user without the right get for an existing person (`403`, or `404`)? This
    decides that the rights check in 4.2 step 3 is needed, and shows whether `personStatus()` must treat a
    `404` with caution.
 
