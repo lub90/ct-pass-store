@@ -73,13 +73,39 @@ final class CleanupScriptTest extends TestCase
 
     public function testHtaccessDeniesInternals(): void
     {
-        $htaccess = (string) file_get_contents(self::BACKEND . '/.htaccess');
-        self::assertSame(1, preg_match('/RewriteRule (\^\([^)]*\)) - \[F,L\]/', $htaccess, $m), 'Deny rule not found.');
-        $pattern = '~' . $m[1] . '~';
-
-        foreach (['bin/cleanup.php', 'cache/cleanup.lock', 'setup/setup.sh', 'vendor/autoload.php', 'src/Kernel.php', 'config/credentials.php', 'logs/app.log'] as $path) {
-            self::assertSame(1, preg_match($pattern, $path), "$path isn't denied.");
+        $lines = file(self::BACKEND . '/.htaccess', FILE_IGNORE_NEW_LINES) ?: [];
+        $deny = [];
+        $catchAll = null;
+        foreach ($lines as $number => $line) {
+            if (preg_match('/^RewriteRule (\S+) - \[F,L\]$/', $line, $m) === 1) {
+                $deny[] = '~' . $m[1] . '~';
+            }
+            if (str_starts_with($line, 'RewriteRule (.*) public/$1')) {
+                $catchAll = $number;
+            }
         }
-        self::assertSame(0, preg_match($pattern, 'public/index.php'));
+        self::assertCount(2, $deny, 'Deny rules not found.');
+        self::assertNotNull($catchAll, 'Catch-all rule not found.');
+        foreach ($lines as $number => $line) {
+            if (str_ends_with($line, '- [F,L]')) {
+                self::assertLessThan($catchAll, $number, 'The deny rules must come before the catch-all rewrite.');
+            }
+        }
+        $denied = static function (string $path) use ($deny): bool {
+            foreach ($deny as $pattern) {
+                if (preg_match($pattern, $path) === 1) {
+                    return true;
+                }
+            }
+
+            return false;
+        };
+
+        foreach (['bin', 'bin/cleanup.php', 'cache/cleanup.lock', 'setup/setup.sh', 'vendor/autoload.php', 'src/Kernel.php', 'config/credentials.php', 'logs/app.log', '.env'] as $path) {
+            self::assertTrue($denied($path), "$path isn't denied.");
+        }
+        foreach (['binary/x', 'cachefoo', 'setupX', 'public/index.php', 'v1/test'] as $path) {
+            self::assertFalse($denied($path), "$path is denied.");
+        }
     }
 }

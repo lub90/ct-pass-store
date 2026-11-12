@@ -249,6 +249,59 @@ final class CleanupCommandTest extends TestCase
         fclose($holder);
     }
 
+    public function testUnopenableLockFileExitsTwoWithItsOwnMessage(): void
+    {
+        $blocker = $this->cacheDir . '/not-a-folder';
+        touch($blocker);
+        $services = Kernel::cleanupServices(new BackendConfig('https://example.church.tools/api', 'service-token', [], $blocker . '/credentials.php', $blocker, 'client', 'secret', 'jwt-secret-for-the-cli-tests-0123456789'), $this->fake, new Logger('test', [$this->log]));
+        $command = new CleanupCommand($services['cleanup'], $services['lock'], new Logger('test', [$this->log]));
+        $out = fopen('php://memory', 'w+');
+        $err = fopen('php://memory', 'w+');
+        self::assertIsResource($out);
+        self::assertIsResource($err);
+
+        self::assertSame(2, $command->run(['--apply'], $out, $err));
+
+        rewind($err);
+        self::assertSame("Cannot open the lock file cache/cleanup.lock; check that cache/ exists and is writable by this user.\n", stream_get_contents($err));
+        self::assertSame(0, $this->fake->writeCount());
+    }
+
+    public function testMissingCacheFolderIsCreatedForTheLock(): void
+    {
+        $lock = new CleanupLock($this->cacheDir . '/new/cleanup.lock');
+
+        self::assertTrue($lock->tryAcquire());
+        self::assertFalse((new CleanupLock($this->cacheDir . '/new/cleanup.lock'))->tryAcquire());
+        $lock->release();
+        unlink($this->cacheDir . '/new/cleanup.lock');
+        rmdir($this->cacheDir . '/new');
+    }
+
+    public function testLogLevels(): void
+    {
+        $this->seedMixed();
+        $this->entry(10);
+        $this->fake->removePerson(10);
+        $this->fake->failNext('deleteValue', new UnavailableException('DELETE: unreachable.'));
+        $this->execute(['--apply']);
+
+        $levels = [];
+        foreach ($this->log->getRecords() as $record) {
+            $levels[(string) $record['message']] = $record['level'];
+            self::assertStringNotContainsString('service-token', (string) $record['message']);
+        }
+        self::assertTrue($this->log->hasInfoThatContains('deleted entry of person '));
+        self::assertTrue($this->log->hasInfoThatContains('checked '));
+        self::assertSame(Logger::WARNING, $levels['adminUsers contains person 10, who is deleted or archived; remove them in the extension settings']);
+        self::assertTrue($this->log->hasWarningThatContains('could not delete the entry of person '));
+
+        $this->log->clear();
+        $this->fake->failNext('activePersonIds', new UnavailableException('POST: unreachable.'));
+        $this->execute([]);
+        self::assertTrue($this->log->hasError('Aborted, nothing was deleted: POST: unreachable.'));
+    }
+
     public function testLockIsReleasedAfterARunAndAfterAnAbort(): void
     {
         $this->setAdmins([]);

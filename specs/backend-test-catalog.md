@@ -799,3 +799,4 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-17** (! · U) dry run is the default and deletes nothing; `--apply` deletes — cleanup design 4
 - [x] **GP-18** (! · U) a held `cache/cleanup.lock` makes the run exit 2 with `Another cleanup is running.`; the lock is released after a run — cleanup design 6.3
 - [x] **GP-19** (! · U) `bin/cleanup.php`: unknown argument exits 2 with the usage, missing `credentials.php` exits 2 with `Configuration error:`, and `.htaccess` denies `bin/`, `cache/` and `setup/` — cleanup design 4
+- [x] **GP-20** (! · U) an unexpected error in the CLI is logged by class only, prints `Aborted with an unexpected error; see the log.` and exits 2; an unopenable lock file exits 2 with its own message (not "Another cleanup is running.") — cleanup design 4
