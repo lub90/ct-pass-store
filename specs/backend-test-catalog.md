@@ -140,6 +140,8 @@ normal case names it ("→ PV-05").
   duplicates, and no warning is logged — 5.3.11
 - [x] **ST-19** (N · U) The module `ctpassstore` or the `passwordStore`/`settings`/`encryptionSettings` category doesn't
   exist → `500 misconfigured` naming it — 5.3.10
+- [x] **ST-23** (S · U) `personIds()` returns every person with an entry once, ascending: values for `9`, `"5"`, `5`, the
+  reserved `0` and a broken one give `[5, 9]` — cleanup design 3.3
 
 ## 4. Settings and configuration (spec 3)
 
@@ -744,3 +746,15 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 | `PersistenceChecker::assertUnchanged` (in every test) | Error responses don't change data | IN-08, AZ-07 | The fake records every write |
 | Fixture `validPwds_12.json` | Valid custom passwords | PV-01–06 | Moved into unit test data |
 | `sleep(1)` after every test | Avoid ChurchTools' rate limit | – | Dropped; only the few contract tests still need pauses |
+
+## 18. Gone persons (design 3–5)
+
+- [x] **GP-01** (N · U) `ChurchToolsPersonDirectory`: `exists()` is true for an active person, false for an archived
+  and an unknown one; a `RateLimitedException` propagates; `confirmedActive()` of 250 IDs makes 3 batch calls (100,
+  100, 50); `assertReadable()` passes with the persons right and throws `PersonsNotReadableException` naming the
+  missing parts without it — cleanup design 3.2
+- [x] **GP-02** (! · U) `GonePersons::find()`: persons the batch confirms get no single lookup; the others are looked
+  up one after another, and unknown and archived ones are gone; a failure of the batch or of a lookup propagates; once
+  the deadline has passed the rest is `unchecked`; an empty input makes no call — cleanup design 3.4
+- [x] **GP-03** (N · U) `GoneAdmins::find()` returns the gone persons among `adminUsers` in their order, and `[]` if
+  all are active — cleanup design 3.4

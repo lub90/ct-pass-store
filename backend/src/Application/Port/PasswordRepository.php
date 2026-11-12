@@ -25,4 +25,11 @@ interface PasswordRepository
      * Removes the person's entry; does nothing if there's none.
      */
     public function delete(PersonId $person): void;
+
+    /**
+     * Every person who has at least one entry, each once, ascending.
+     *
+     * @return list<PersonId>
+     */
+    public function personIds(): array;
 }
