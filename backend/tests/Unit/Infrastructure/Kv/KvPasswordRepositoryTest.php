@@ -16,7 +16,7 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Catalog section 3: ST-01 to ST-11, ST-14, ST-15, ST-17, ST-20 to ST-22.
+ * Catalog section 3: ST-01 to ST-11, ST-14, ST-15, ST-17, ST-20 to ST-23.
  */
 final class KvPasswordRepositoryTest extends TestCase
 {
@@ -274,6 +274,17 @@ final class KvPasswordRepositoryTest extends TestCase
 
         $this->store->save(new PersonId(5), 'bmV3ZXI=');
         self::assertCount(1, $this->stored(), 'The next write heals it.');
+    }
+
+    public function testPersonIdsAreUniqueSortedAndSkipZero(): void
+    {
+        $this->seed(9);
+        $this->seed('5');
+        $this->seed(5);
+        $this->seed(0);
+        $this->fake->seedValue($this->category, 'not json');
+
+        self::assertSame([5, 9], array_map(static fn(PersonId $p): int => $p->value, $this->store->personIds()));
     }
 
     public function testValuesOverTheKvLimitAreRefusedBeforeWriting(): void

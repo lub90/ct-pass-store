@@ -170,12 +170,52 @@ final class KvPasswordRepository implements PasswordRepository
     }
 
     /**
+     * Every person with an entry, each once, ascending. The reserved ID 0 is never included.
+     *
+     * @return list<PersonId>
+     */
+    public function personIds(): array
+    {
+        $owners = [];
+        foreach ($this->allEntries() as $entry) {
+            if ($entry['owner'] !== self::SELF_TEST_PERSON_ID) {
+                $owners[$entry['owner']] = true;
+            }
+        }
+        ksort($owners);
+
+        return array_map(static fn(int $id): PersonId => new PersonId($id), array_keys($owners));
+    }
+
+    /**
      * All entries of the person, sorted by value ID (oldest first). `ciphertext` is null for a corrupt entry
      * (valid person ID, but no usable password).
      *
      * @return list<array{id: int, ciphertext: string|null}>
      */
     private function entriesOf(int $personId): array
+    {
+        $entries = [];
+        foreach ($this->allEntries() as $entry) {
+            if ($entry['owner'] !== $personId) {
+                continue;
+            }
+            if ($entry['ciphertext'] === null) {
+                $this->logger->warning("Password entry {$entry['id']} of person $personId has no usable password.");
+            }
+            $entries[] = ['id' => $entry['id'], 'ciphertext' => $entry['ciphertext']];
+        }
+
+        return $entries;
+    }
+
+    /**
+     * Every readable value of the category, sorted by value ID (oldest first); the one place that decodes and
+     * normalizes values. Values without a valid value ID or person ID are skipped with a warning.
+     *
+     * @return list<array{id: int, owner: int, ciphertext: string|null}>
+     */
+    private function allEntries(): array
     {
         $entries = [];
         foreach ($this->extension->values(KvSchema::PASSWORD_CATEGORY) as $raw) {
@@ -191,16 +231,13 @@ final class KvPasswordRepository implements PasswordRepository
 
                 continue;
             }
-            if ($owner !== $personId) {
-                continue;
-            }
 
             $ciphertext = $decoded[KvSchema::ENTRY_CIPHERTEXT] ?? null;
-            if (!is_string($ciphertext) || $ciphertext === '') {
-                $this->logger->warning("Password entry $id of person $personId has no usable password.");
-                $ciphertext = null;
-            }
-            $entries[] = ['id' => $id, 'ciphertext' => $ciphertext];
+            $entries[] = [
+                'id' => $id,
+                'owner' => $owner,
+                'ciphertext' => is_string($ciphertext) && $ciphertext !== '' ? $ciphertext : null,
+            ];
         }
 
         usort($entries, static fn(array $a, array $b): int => $a['id'] <=> $b['id']);
