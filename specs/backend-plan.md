@@ -312,9 +312,11 @@ These live outside the backend, but the new API is only usable once they're done
         admin rights (spec 4.8; the self-check of 4.2 fails if it has more).
 
       **(changed 2026-11-12, extension spec E4, E5, section 11):** Q22 is decided. The admin role comes from a
-      ChurchTools group (`access.adminGroupId`), checked by the backend at login; `adminUsers` is gone. The extension
-      admins above are that group. `adminGroupId` and `machineClients` live in the new category `access`, which only
-      the admin group and the service user can read; users read only `settings`.
+      ChurchTools group (`access.groups.admins`), checked by the backend at login; `adminUsers` is gone. The extension
+      admins above are that group. The role groups and `machineClients` live in the new category `access`, which only
+      the admin group and the service user can read; users read only `settings`. **Which group gets which right, the
+      rights check and changing groups later (existing groups can be used) are in extension spec section 16; the
+      list above is superseded by its table.**
     - **Service user:** create the person with a login name, set a long random password with the legacy
       `setPersonPassword` call (needs "simulate persons" and a CSRF token; check `status`, not the HTTP status; see
       the API facts below), and add it to the service-user group. The wizard **doesn't** fetch the token and never logs

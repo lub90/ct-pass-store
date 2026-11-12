@@ -44,8 +44,8 @@
 | E1 | **Own design system instead of Vuetify** (`src/ui/`, a small `theme.css` plus about 12 components, icons from `@mdi/js`). | Native look, no collisions with ChurchTools' Tailwind, small bundle, no third-party churn across several extensions. Restyling Vuetify would mean maintaining overrides against its internals. |
 | E2 | **`src/ui/` is a strict boundary** and moves to `ct-extension-utils` once a second extension (ct-radius) uses it. | The library's API is shaped by two real users instead of guesses; no `subtree push` for every change while it's young. |
 | E3 | **Frame by role:** normal users get one centered card without navigation; admins get a sidebar (a dropdown on phones). | Most people only ever see their own password. |
-| E4 | **Category `access`** holds `adminGroupId` and `machineClients`; `settings` keeps only the policy, `backendUrl` and `texts`. | Users must read `settings`, but not who's an admin; changing the policy no longer implies controlling access. |
-| E5 | **Admin role from a ChurchTools group** (`adminGroupId`), checked by the backend at login; replaces `adminUsers` completely. | Membership is managed in ChurchTools, visible only as ChurchTools allows. Answers backend Q22 (new backend decision D7). |
+| E4 | **Category `access`** holds the role groups (`groups`) and `machineClients`; `settings` keeps only the policy, `backendUrl` and `texts`. | Users must read `settings`, but not who's an admin; changing the policy no longer implies controlling access. |
+| E5 | **Admin role from a ChurchTools group** (`groups.admins`), checked by the backend at login; replaces `adminUsers` completely. | Membership is managed in ChurchTools, visible only as ChurchTools allows. Answers backend Q22 (a new backend decision with the next free number; D7 and D8 are taken). |
 | E6 | **No `setupCompleted` category.** "Set up" means: valid `settings` with `backendUrl`, which the wizard writes last. Admins see the real health from `/v1/test`. | A flag can claim what it doesn't check; one category fewer to grant. |
 | E7 | **OAuth callback route** `/ccm/ctpassstore/auth/callback` is the only registered redirect URI; it forwards to the page remembered with `state`. | Login logic and app pages stay apart; one fixed URI instead of one per page. |
 | E8 | **Backend token in `sessionStorage`** (15 minutes, gone with the tab). | No redirect on every reload. A script on the ChurchTools page could read it, but it could already act through the ChurchTools session. |
@@ -54,6 +54,7 @@
 | E11 | **Migration runs inside the extension,** in its own module `src/migration/`, built with the setup wizard. | Updating an extension keeps its data (`ct-extension-info.md` section 2), so data can be migrated in place, with the wizard's own rights code. |
 | E12 | **No Pinia.** Local `ref`s and a few composables. | The app is small. |
 | E13 | **Versioning:** backend and extension share `MAJOR.MINOR` ([`versioning.md`](versioning.md)). | Compatibility is visible in the version number and checked at release and at runtime. |
+| E14 | **Rights model as one table** (section 16): each role maps to a ChurchTools group; the setup creates new groups or uses existing ones; the mapping can be changed later; a check compares the real rights with the table. | Least privilege that's verified, not just described; churches can reuse groups they already have. |
 
 ## 3. Roles and app states
 
@@ -65,6 +66,8 @@
 | **Admin** | Backend login answers `admin: true` (member of the admin group, E5) | Sidebar: „Mein Passwort“, „Passwörter verwalten“, „Einstellungen“, „Über“ |
 | **Settings editor** | ChurchTools rights: edit on `settings` and/or `access` | The settings pages they may change; missing rights are named |
 | **Setup-capable** | The ChurchTools rights the wizard needs (listed in the wizard spec) | The setup or migration wizard |
+
+Which ChurchTools rights each role's group gets, and why, is section 16.
 
 1. Admin and settings editor usually coincide (the wizard grants the admin group the category rights), but they're
    checked separately: one by the backend, one by ChurchTools.
@@ -219,9 +222,10 @@ sentences, at most 300 characters). An empty field means the default text, shown
 ### 4.7 Zugriff
 
 - A warning banner: „Wer hier etwas ändern kann, hat Zugriff auf alle Passwörter. Halt diesen Kreis sehr klein.“
-- **Admin group:** name and member count of `adminGroupId`, „Mitglieder verwaltest du in ChurchTools“, and a link
-  „In ChurchTools öffnen ↗“. Choosing another group is a `PersonPicker`-like group search; changing it asks for
-  confirmation. A missing or deleted group is shown as an error with the fix.
+- **Groups:** for the roles „Nutzer“ (users) and „Admins“, the mapped ChurchTools group with name, member count, a
+  status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
+  ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
+  The service user's group is shown on „Einrichtung“, not here.
 - **Machine clients:** a list with name, `id`, permissions („darf lesen“), number of keys, `createdAt`, and „Bearbeiten“
   / „Entfernen“. A green „+ Client hinzufügen“ button.
 - **Client form** (`/settings/access/clients/new` and `/:id`):
@@ -306,7 +310,7 @@ extension/src/
 | Category | Value (one per category, except `passwordStore`) | Read by | Written by |
 | --- | --- | --- | --- |
 | `settings` | `{ schema, revision, requirePasswordForPasswordChange, allowCustomPassword, passwordLength, backendUrl, oauthClientId, texts }` | users, admin group, service user | settings editors (admin group) |
-| `access` | `{ schema, revision, adminGroupId, machineClients }` | admin group, service user | admin group |
+| `access` | `{ schema, revision, groups, machineClients }` | admin group, service user | admin group |
 | `encryptionSettings` | `{ publicKey }` (unchanged) | service user, admin group | setup wizard |
 | `passwordStore` | `{ personId, secondaryPwd }` per person (unchanged, so ct-radius isn't affected) | service user | service user |
 
@@ -315,7 +319,9 @@ extension/src/
   extension needs it for `/oauth/authorize` (7.1). Without it, the state is `setup-needed`.
 - `texts`: `{ "de"?: { "title"?: string, "intro"?: string }, "en"?: {…} }`; title ≤ 60, intro ≤ 300 characters.
 - `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`).
-- `adminGroupId`: a positive integer, a ChurchTools group ID.
+- `groups`: `{ "users": {…}, "admins": {…}, "service": {…} }`, each `{ "groupId": <positive integer>,
+  "createdBySetup": <boolean> }`. `createdBySetup` decides what may be deleted later (16.5): the extension never
+  deletes a group it didn't create.
 - None of our fields is named like the KV metadata (`id`, `dataCategoryId`; `ct-extension-info.md` section 5). Inside
   `machineClients` the `id` is nested, so it doesn't clash.
 
@@ -482,22 +488,24 @@ to the default of section 4.6. They're plain text (escaped, never HTML).
 To be carried into [`backend-spec.md`](backend-spec.md), the test catalog and the backend code by the implementation
 plan. Section numbers refer to `backend-spec.md`.
 
-1. **Section 2, 3.2:** new category `access` with `adminGroupId` (a positive integer) and `machineClients` (moved from
+1. **Section 2, 3.2:** new category `access` with `groups` (6.1; the backend reads only `groups.admins.groupId`) and
+   `machineClients` (moved from
    `settings`). `settings` drops `adminUsers` and `machineClients`; it may contain `schema`, `revision`, `oauthClientId`
-   and `texts`, which the backend ignores. A missing or invalid `adminGroupId` means no admins (fail closed) and is reported by
+   and `texts`, which the backend ignores. A missing or invalid `groups.admins.groupId` means no admins (fail closed) and is reported by
    `/v1/test`; it never makes the backend unusable for users.
 2. **Section 4.4, 5.5:** at login, with the user's ChurchTools OAuth token, the backend checks whether the person is an
-   active member of `adminGroupId`. The answer becomes the token claim `admin` (boolean, required). The login answer
+   active member of `groups.admins.groupId`. The answer becomes the token claim `admin` (boolean, required). The login answer
    gains `"admin": true|false` and `"version": "x.y.z"`.
 3. **Section 4.3:** the admin role comes from the token claim `admin`, no longer from the settings. Removing someone
    from the group takes effect when their token expires (15 minutes), like revoking `view`.
-4. **Section 4.8:** `/v1/test` checks that the service user can read `access`, that `adminGroupId` is set and names an
+4. **Section 4.8:** `/v1/test` checks that the service user can read `access`, that `groups.admins.groupId` is set and names an
    existing group, and reports the machine clients from `access`. The checks that used `adminUsers` (e.g.
    `AdminUsersCheck`, gone admins of the cleanup design) move to the group or are dropped; the plan decides per check.
 5. **Section 3.3:** the redirect URI is `https://<instance>/ccm/ctpassstore/auth/callback`. The backend's check of
    `redirectUri` (scheme, host, port) is unchanged.
 6. **Section 6.5:** versioning by [`versioning.md`](versioning.md); tags `backend-v*.*.*`.
-7. **Section 7, 8:** Q22 answered by the new decision **D7** (admin role from a ChurchTools group, checked at login).
+7. **Section 7, 8:** Q22 answered by a new decision with the next free number (D7 and D8 are taken by the cleanup):
+   admin role from a ChurchTools group, checked at login.
 8. The machine-client permission matrix and everything else of 4.3 stay as they are (E9).
 
 ## 12. Boundary to setup, migration, backup and restore
@@ -511,6 +519,9 @@ This spec fixes only the interfaces:
    provisioning code; `migration/` doesn't import from `setup/`'s views or flow, only from its provisioning modules.
 4. Routes `/settings/backup` and `/settings/setup` are reserved.
 5. Who may run them: setup-capable people (3.1), and after setup only admins who are also setup-capable.
+6. The setup creates or assigns the role groups and grants their rights **exactly as section 16 says**. The
+   provisioning code (grant, revoke, create group) is built with the wizard; the rights check (16.4) and the group
+   change (16.5) use the same code and appear on „Zugriff“ and „Einrichtung“.
 
 ## 13. Tests and quality
 
@@ -555,6 +566,8 @@ Neither the unit nor the app layer needs network access.
 3. No class name in `ui/` or views matches a Tailwind utility (`collapse`, `hidden`, `flex`, …).
 4. `ui/` imports nothing from outside `ui/`.
 5. Every slug in `backend/docs/problems.md` has a mapping in `backend/problems.ts`.
+6. Every right in the rights table (16.2, as code in `setup/rights.ts`) appears in the user guide's rights table, and
+   the other way round (as infoscreen's `rights-doc.test.ts`).
 
 ### 13.5 Build check (`scripts/check-dist.js`, after every build)
 
@@ -593,6 +606,11 @@ On the test instance, recorded in `ct-extension-info.md` and as contract cases:
 4. Which endpoint and right the admin's `PersonPicker` needs (`GET /api/search` or `GET /api/persons?query=`), and what
    a person without the right gets.
 5. Reading a group's name and member count, and what a person without the right gets.
+6. Whether reading a person's or group's **full** set of rights (module, churchcore, churchdb) is possible through the
+   API, and whether all holders of one right (every group role, status and person with e.g. `edit custom data` on
+   `access`) can be listed. This decides how complete the check of 16.4 rule 4 can be.
+7. Whether reading a category's values needs both `view custom category` and `view custom data` (16.2 assumes yes).
+8. Which rights an admin needs to search persons and to read the admin group (refines 16.2 rows A5 and A6).
 
 ## 15. Reference: infoscreen patterns
 
@@ -605,3 +623,94 @@ the backend.
 **Not adopted:** its size and large single components (`SetupView.vue`); Pinia; module lookup by listing all modules
 (we use `GET /custommodules/{key}`); plan item numbers in code comments; the in-app changelog (we link to GitHub);
 hand-written i18n objects without a library (E10).
+
+## 16. Rights model
+
+### 16.1 Roles and groups
+
+Each role is a ChurchTools group, stored in `access.groups` (6.1):
+
+| Role key | Default group name (created by the setup) | Members |
+| --- | --- | --- |
+| `users` | „CtPassStore Nutzer“ | everyone who may have a secondary password |
+| `admins` | „CtPassStore Admins“ | the few people who manage other people's passwords and the settings |
+| `service` | „CtPassStore API“ | only the service user (backend plan 5.1) |
+
+1. Rights are granted to **every role of the group** (ChurchTools grants per group role). Membership in any role
+   counts.
+2. The person running the setup isn't a role. Their rights (setup-capable, 3.1) are listed in the wizard spec and are
+   never granted by the extension.
+3. Instead of a group, a church might want to grant the user rights by person status (e.g. all members). That's out of
+   scope; the user group can contain whoever the church wants.
+
+### 16.2 The rights table
+
+Module rights refer to the `ctpassstore` module and its categories (`ct-extension-info.md` section 6). Every row says
+why it's needed. Nothing else is granted.
+
+| # | Role | Right | On | Why |
+| --- | --- | --- | --- | --- |
+| U1 | users | `view` (module) | – | The backend lets in only persons with `ctpassstore.view` (backend spec 4.4). |
+| U2 | users | `view custom category`, `view custom data` | `settings` | The password page needs the policy, `backendUrl`, `oauthClientId` and the texts. |
+| U3 | users | „Bei Drittsystem via ChurchTools-Benutzerkonto einloggen“ (churchcore) | the backend's OAuth client | OAuth login (backend spec 3.3). |
+| A1 | admins | U1–U3 | | Admins use their own password page too. |
+| A2 | admins | `view custom category`, `view custom data` | `access`, `encryptionSettings` | Settings pages; backup. |
+| A3 | admins | `create custom data`, `edit custom data`, `delete custom data` | `settings`, `access` | Saving the settings; removing duplicates (6.2). |
+| A4 | admins | the right to read the admin group (name, member count) | the admin group | „Zugriff“ page (4.7). Measured in 14.8. |
+| A5 | admins | the right to search persons | – | `PersonPicker` on „Passwörter verwalten“ (4.3). Measured in 14.8. |
+| S1 | service | `view` (module) | – | The module lookup (backend spec 4.10). |
+| S2 | service | `view custom category`, `view custom data` | `settings`, `access`, `encryptionSettings`, `passwordStore` | The backend reads policy, groups, machine clients, the public key and the entries. |
+| S3 | service | `create custom data`, `edit custom data`, `delete custom data` | `passwordStore` | Only the backend writes entries (backend spec 2). |
+| S4 | service | `churchdb` `view`, `view alldata` (every department), `view archive`, `view hidden persons` | – | Existence checks and the cleanup of gone persons (backend spec 4.8, decision D7). |
+
+**Never granted to any role:** `create custom category`, `edit custom category`, `delete custom category`; any write
+right on `encryptionSettings` (only the setup writes it, with the setup-capable person's rights); any right on
+`passwordStore` for `users` or `admins`; administrative rights (`administer settings`, `administer persons`,
+`administer custom modules`) for `service`.
+
+### 16.3 Where the table lives
+
+- In code, once: `src/setup/rights.ts`, as data. The setup, the check and the group change read it.
+- In the user guide, as a table generated from or checked against the code (13.4.6).
+- The backend's own check of the service user (backend spec 4.8) must agree with rows S1–S4; a contract case runs both
+  against the test instance.
+
+### 16.4 Rights check
+
+`checkRights(table, loadedRights)` is a pure function; the loading code lives in `setup/` and `ct/`. It reports
+per group and role, with the traffic-light levels ok / warn / fail:
+
+1. **Missing:** a right of the table is missing → **fail**, naming the right and what stops working.
+2. **Too many extension rights:** a group has a `ctpassstore` right the table doesn't give its role → **warn** (for
+   `service`: **fail**, matching the backend).
+3. **Too many other rights:** a group **created by the setup** has rights outside the table → **warn**. Existing groups
+   the church assigned keep their other rights; the check ignores them, except for `service`, where administrative
+   rights are **fail**.
+4. **Others with access:** any group, status or person outside the mapped groups that can write `settings`, `access`
+   or `passwordStore`, or read `access` → **warn**, naming them. How complete this can be depends on 14.6; if it can't
+   list all holders, the check says what it couldn't verify instead of reporting ok.
+5. **Mapping problems:** a mapped group is missing, deleted or inactive → **fail**.
+
+It runs on „Einrichtung“ (full list) and feeds the status pills of „Zugriff“ and the settings overview. Repairing:
+„Fehlende Rechte ergänzen“ grants rule-1 rights. Removing rule-2 or rule-3 rights is offered per right, with a
+confirmation; rule-4 findings are only reported, never changed automatically.
+
+### 16.5 Changing a group later
+
+On „Zugriff“ (users, admins) or „Einrichtung“ (service), „Gruppe ändern“ lets the admin pick an **existing group** or
+**create a new one**. Before anything is written, a plan shows:
+
+1. the rights the new group gets (16.2);
+2. the extension rights and the OAuth login right that are removed from the old group (only those of 16.2; never
+   other rights);
+3. for an old group with `createdBySetup: true`: whether to delete it (default: keep);
+4. warnings:
+   - **admins:** if the person making the change isn't a member of the new group: „Du verlierst damit deine
+     Admin-Rechte.“ They must confirm by typing the group name.
+   - **users:** if the new group has fewer members than the old: the number of people who lose access.
+   - **service:** the service user is added to the new group first and removed from the old one last, so the backend
+     never loses its rights in between.
+
+Order of writes: grant on the new group → update `access.groups` → revoke on the old group → delete the old group
+(if chosen). An interruption leaves too many rights, never too few; the check (16.4) shows what's left and offers the
+repair. The setup uses the same plan and order for the first assignment, with "no old group".
