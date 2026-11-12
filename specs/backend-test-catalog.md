@@ -784,3 +784,14 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
   no call, after 600 s it does); "gone" is never cached; expired IDs are dropped when the record is written; a broken
   record is a miss; `confirmedActive()` and `assertReadable()` pass through without touching the cache — cleanup
   design 3.2, C8
+- [x] **GP-05** (! · U) `CleanupOrphans::run(false)` deletes nothing (no write) and reports the gone persons (unknown, archived) — cleanup design 3.5
+- [x] **GP-06** (! · U) `run(true)` deletes the entries of the gone persons only and logs each deletion — cleanup design 3.5
+- [x] **GP-07** (! · U) a failed batch lookup or a failed single lookup propagates and nothing is deleted — cleanup design 3.5
+- [x] **GP-08** (! · U) a `RateLimitedException` at the 3rd of 4 single lookups propagates and nothing is deleted — cleanup design 3.5
+- [x] **GP-09** (! · U) a failed delete is recorded and logged, the other persons are still deleted, `exitCode()` is 1 — cleanup design 3.5
+- [x] **GP-10** (! · U) a gone admin with an entry is deleted and reported in `goneAdmins`, `exitCode()` is 1 — cleanup design 3.5
+- [x] **GP-11** (N · U) person ID 0 (self-test) is ignored: no lookup, no delete — cleanup design 3.5
+- [x] **GP-12** (! · U) entries with string IDs and duplicates of a gone person are all removed — cleanup design 3.5
+- [x] **GP-13** (! · U) invalid settings throw `ConfigurationException` and nothing is deleted — cleanup design 3.5
+- [x] **GP-14** (! · U) a missing persons right throws `PersonsNotReadableException` before any person call — cleanup design 3.5
+- [x] **GP-15** (! · U) a passed deadline leaves the rest `unchecked` (`isComplete()` false); a second run without a deadline deletes them — cleanup design 3.5
