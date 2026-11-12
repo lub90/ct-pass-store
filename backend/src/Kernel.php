@@ -97,10 +97,12 @@ final class Kernel
         $tokens = new UserTokens($config->jwtSecret, $clock, $codec);
         // One folder (spec 6.1): the fail-open cache for settings, public key and IDs (`cache-*`), and the fail-closed
         // security stores (`sec-*`). Different purposes, so a record of one is never accepted by the other.
-        $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
-        $extensionData = new ExtensionData($churchTools, cache: $cache);
-        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock);
-        $passwords = new KvPasswordRepository($extensionData, $logger);
+        $shared = self::cleanupServices($config, $churchTools, $logger, $clock);
+        $cache = $shared['cache'];
+        $extensionData = $shared['extensionData'];
+        $settings = $shared['settings'];
+        $passwords = $shared['passwords'];
+        $goneAdmins = $shared['goneAdmins'];
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
         $addressLimiter = new FileAddressLimiter($securityStore, $clock, $config->jwtSecret);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
@@ -109,7 +111,6 @@ final class Kernel
         $app = AppFactory::create();
 
         $persons = new CachedPersonDirectory(new ChurchToolsPersonDirectory($churchTools), $cache, $clock);
-        $goneAdmins = new GoneAdmins(new GonePersons(new ChurchToolsPersonDirectory($churchTools), $clock));
 
         $entries = new EntriesController(
             new GetPassword($guard, $passwords, $persons, $logger),
@@ -168,53 +169,73 @@ final class Kernel
     }
 
     /**
-     * The cleanup and its lock, for `bin/cleanup.php` and the web-cron endpoint (cleanup design 3.5, 6.3). The person
-     * lookups are never cached: a cached "active" would hide a person who was deleted minutes ago.
+     * The wiring shared by the web app, `bin/cleanup.php` and the web-cron endpoint: cache, KV access, repositories and
+     * the cleanup with its lock (cleanup design 3.5, 6.3). The person lookups here are never cached: a cached "active"
+     * would hide a person who was deleted minutes ago. The web app puts its own cached directory in front of GET and PUT.
      *
-     * @return array{cleanup: CleanupOrphans, lock: CleanupLock}
+     * @return array{cleanup: CleanupOrphans, lock: CleanupLock, cache: SignedFileCache, extensionData: ExtensionData, settings: KvSettingsRepository, passwords: KvPasswordRepository, goneAdmins: GoneAdmins}
      */
     public static function cleanupServices(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): array
     {
         $clock ??= new SystemClock();
         $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
         $extensionData = new ExtensionData($churchTools, cache: $cache);
+        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock);
+        $passwords = new KvPasswordRepository($extensionData, $logger);
         $persons = new ChurchToolsPersonDirectory($churchTools);
         $gonePersons = new GonePersons($persons, $clock);
+        $goneAdmins = new GoneAdmins($gonePersons);
 
         return [
-            'cleanup' => new CleanupOrphans(
-                new KvPasswordRepository($extensionData, $logger),
-                new KvSettingsRepository($extensionData, $logger, $cache, $clock),
-                $persons,
-                $gonePersons,
-                new GoneAdmins($gonePersons),
-                $logger,
-            ),
+            'cleanup' => new CleanupOrphans($passwords, $settings, $persons, $gonePersons, $goneAdmins, $logger),
             'lock' => new CleanupLock($config->cacheDir . '/cleanup.lock'),
+            'cache' => $cache,
+            'extensionData' => $extensionData,
+            'settings' => $settings,
+            'passwords' => $passwords,
+            'goneAdmins' => $goneAdmins,
         ];
     }
 
     /**
-     * `bin/cleanup.php`: loads `credentials.php`, runs {@see CleanupCommand} on STDOUT and STDERR and returns the exit code.
+     * `bin/cleanup.php`: loads `credentials.php`, runs {@see CleanupCommand} and returns the exit code (0, 1 or 2).
+     * Anything unexpected is logged by class only and ends the run with 2.
      *
      * @param list<string> $arguments
+     * @param resource|null $out defaults to STDOUT
+     * @param resource|null $err defaults to STDERR
      */
-    public static function runCleanup(string $credentialsPath, string $cacheDir, string $logFile, array $arguments): int
+    public static function runCleanup(string $credentialsPath, string $cacheDir, string $logFile, array $arguments, ?ChurchToolsClient $churchTools = null, $out = null, $err = null): int
     {
+        $out ??= STDOUT;
+        $err ??= STDERR;
         try {
             if (!is_readable($credentialsPath)) {
                 throw new ConfigurationException('config/credentials.php is missing or not readable by PHP.');
             }
             $config = BackendConfig::fromArray(require $credentialsPath, $credentialsPath, $cacheDir);
         } catch (ConfigurationException $e) {
-            fwrite(STDERR, 'Configuration error: ' . $e->getMessage() . "\n");
+            fwrite($err, 'Configuration error: ' . $e->getMessage() . "\n");
 
             return 2;
         }
         $logger = self::logger($logFile, $config->logLevel, Version::current(dirname(__DIR__)));
-        $services = self::cleanupServices($config, new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken)), $logger);
+        try {
+            $churchTools ??= new GuzzleChurchToolsClient($config->apiUrl, Credential::loginToken($config->apiToken));
+            $services = self::cleanupServices($config, $churchTools, $logger);
 
-        return (new CleanupCommand($services['cleanup'], $services['lock'], $logger))->run($arguments, STDOUT, STDERR);
+            return (new CleanupCommand($services['cleanup'], $services['lock'], $logger))->run($arguments, $out, $err);
+        } catch (\Throwable $e) {
+            // The class only: the message of an unexpected error may carry a token or a name.
+            try {
+                $logger->error('Cleanup aborted with an unexpected error: ' . $e::class);
+            } catch (\Throwable) {
+                // The logger itself may be the problem.
+            }
+            fwrite($err, "Aborted with an unexpected error; see the log.\n");
+
+            return 2;
+        }
     }
 
     /**

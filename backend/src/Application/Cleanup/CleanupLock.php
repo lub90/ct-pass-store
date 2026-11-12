@@ -15,14 +15,22 @@ final class CleanupLock
 
     public function __construct(private readonly string $lockFile) {}
 
+    /**
+     * @return bool false if another cleanup holds the lock
+     * @throws CleanupLockUnavailableException if the lock file can't be opened
+     */
     public function tryAcquire(): bool
     {
         if ($this->handle !== null) {
             return false;
         }
+        $dir = dirname($this->lockFile);
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0o700, true);
+        }
         $handle = @fopen($this->lockFile, 'c');
         if ($handle === false) {
-            return false;
+            throw new CleanupLockUnavailableException("Can't open the lock file {$this->lockFile}.");
         }
         if (!flock($handle, LOCK_EX | LOCK_NB)) {
             fclose($handle);
