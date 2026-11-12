@@ -137,6 +137,14 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     }
 
     /**
+     * The person is deleted in ChurchTools from now on.
+     */
+    public function removePerson(int $personId): void
+    {
+        unset($this->persons[$personId]);
+    }
+
+    /**
      * The departments of the instance (`person/masterdata`); `[1]` by default.
      *
      * @param list<int> $ids

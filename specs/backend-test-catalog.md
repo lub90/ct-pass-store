@@ -758,3 +758,7 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
   the deadline has passed the rest is `unchecked`; an empty input makes no call — cleanup design 3.4
 - [x] **GP-03** (N · U) `GoneAdmins::find()` returns the gone persons among `adminUsers` in their order, and `[]` if
   all are active — cleanup design 3.4
+- [x] **GP-04** (N · U) `CachedPersonDirectory`: a person found active is cached for 600 s (a second `exists()` makes
+  no call, after 600 s it does); "gone" is never cached; expired IDs are dropped when the record is written; a broken
+  record is a miss; `confirmedActive()` and `assertReadable()` pass through without touching the cache — cleanup
+  design 3.2, C8
