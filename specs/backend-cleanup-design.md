@@ -55,12 +55,15 @@ The layers stay as they are. Everything is wired in `Kernel` (composition root).
 
 | ChurchTools answer | Result |
 | --- | --- |
-| `404` | `Gone` |
-| `200`, `data.isArchived` is `true` | `Archived` |
-| `200`, `data.isArchived` is `false` | `Active` |
-| anything else (`401`, `403`, `429`, `5xx`, timeout, no `data`, `isArchived` missing or not a boolean) | throws a `ChurchToolsException` subclass, as in spec 5.6 |
+| `404` that is ChurchTools' JSON error for this person (JSON content type, `message` exactly `Person [<id>] not found.`, section 9.1) | `Gone` |
+| any other `404` (HTML from a proxy, firewall or maintenance page; another ID; no `message`) | throws `InvalidResponseException` |
+| `200`, `data.id` is the requested ID, `data.isArchived` is `true` | `Archived` |
+| `200`, `data.id` is the requested ID, `data.isArchived` is `false` | `Active` |
+| anything else (`401`, `403`, `429`, `5xx`, timeout, no `data`, `data.id` another ID, `isArchived` missing or not a boolean) | throws a `ChurchToolsException` subclass, as in spec 5.6 |
 
-A `403` is **never** read as "gone". It means the service user lacks the right, and that is an error.
+A `403` is **never** read as "gone". It means the service user lacks the right, and that is an error. Nor is a `404`
+that doesn't come from ChurchTools: `Gone` leads to an irreversible delete, so only ChurchTools' own answer for the
+requested person counts.
 
 **`activePersonIds(list<int> $personIds): list<int>`**, `GET /persons?ids[]=…&ids[]=…&limit=<n>` with the service
 user's credential, at most **100** IDs per call (`limit` equal to the number of IDs; ChurchTools' default page size is
@@ -94,7 +97,8 @@ interface PersonDirectory
 - `CachedPersonDirectory` wraps another `PersonDirectory`. `exists()` answers true from the cache if the person was
   confirmed within the last **600 seconds**, else asks the inner directory and caches a true answer. False is never
   cached. The other two methods pass through. The cache is **one** record in the signed file cache (spec 6.1, fail
-  open), a map from person ID to expiry; expired IDs are dropped whenever the record is written. Its size is bounded by
+  open), a map from person ID to expiry; expired IDs are dropped whenever the record is written. An expiry further
+  than 600 seconds ahead isn't trusted (a miss), so no record can keep a gone person alive longer. Its size is bounded by
   the number of real persons read in the last 10 minutes, because only confirmed persons get in.
 - The application layer knows only "exists or not". It knows nothing about archiving.
 
@@ -126,9 +130,18 @@ who is gone:
 1. `assertReadable()`.
 2. Read the person IDs with entries (`personIds()`) and the settings.
 3. `GonePersons::find($personIds, $deadline)` and `GoneAdmins::find($settings)`.
-4. **Only after steps 1–3 succeeded**, and only with `$apply`: delete the entries of the gone persons with the
-   existing `PasswordRepository::delete()`. That method removes duplicates and broken entries of the person too.
+4. **Only after steps 1–3 succeeded**, and only with `$apply`: delete the entries of the gone persons with
+   `PasswordRepository::deleteEntriesOf()` (spec 5.3.13). It lists `passwordStore` **once** for all of them and removes
+   each person's entries from that listing, duplicates and broken entries included. A failed person is reported and
+   the others continue. With a deadline, no delete starts after it; the gone persons not started go to `unchecked`
+   (not to `gone`), so `complete` is false and the next run continues. So that a run whose lookups are slow still
+   deletes something, the single lookups of step 3 get only the **first half** of the time up to the deadline.
    Persons in `unchecked` are left for the next run; since deleted entries leave the store, every run makes progress.
+
+   **Accepted race (restore and reset):** the deletes work from the listing of this step. If a person is restored in
+   ChurchTools and sets a new password while the run is going on, the new password lands in the listed entry, which is
+   then deleted: the person loses it. The window is one run (seconds, at most the 20-second web budget); the person
+   sets the password again. Entries created after the listing are never touched.
 5. Return a `CleanupReport`: number of persons checked, the gone IDs (deleted, or to be deleted in a dry run), the
    `unchecked` IDs, the IDs whose delete failed, the gone admins.
 
@@ -258,14 +271,16 @@ Authorization: Bearer <CLEANUP_TOKEN>
 - The order of checks: route on → query (`token`, `apply`) → token → address limit (wrong tokens only) → cooldown →
   lock → run. The cooldown starts before the lock check, so a call that finds the lock held or that later fails also
   starts the 600 seconds, and a failing ChurchTools isn't hit every minute either.
-- The run uses `CleanupOrphans` with a deadline of **20 seconds** after the request started (C9).
+- The run uses `CleanupOrphans` with a deadline of **20 seconds** after the request started (C9). Single lookups only
+  start in the first 10 seconds; deletes start until the 20 seconds are over (3.5).
 - `200` with:
 
   ```json
   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
   ```
 
-  `complete` is false when persons were left `unchecked`; the next run continues. A dry run reports `"applied": false`
+  `complete` is false when persons were left `unchecked` (lookups or deletes cut off by the deadline); the next run
+  continues. A dry run reports `"applied": false`
   and `"deleted": 0`. Gone admins and failed deletes still give `200`; the admin sees them in `/v1/test` and the log.
 - Abort before deleting: the existing problem mappings (`500 misconfigured` for a missing persons right,
   `502`/`503` for ChurchTools, a generic `500` if the lock file can't be opened). Web-cron services usually alert on these.
@@ -295,7 +310,7 @@ command).
 ### 6.3 Lock
 
 An exclusive, non-blocking `flock` on `cache/cleanup.lock` keeps two runs from overlapping, CLI and web alike. `cache/`
-is created if missing. "Cannot open the lock file" is told apart from "lock held". The OS releases the lock when the
+is created if missing; the lock file gets mode `600`. "Cannot open the lock file" is told apart from "lock held". The OS releases the lock when the
 process ends. The CLI ignores the web cooldown.
 
 ## 7. Testing
@@ -405,6 +420,19 @@ Answers to the open questions:
 custom data` (2056–2058) for `passwordStore` only. Without `view custom category`, the category list is empty
 (`200 []`), so it's needed too; spec 4.8 doesn't forbid it. With these rights the whole client contract suite passes
 (17 cases, 2 skipped as with the admin token). The local `phpunit.xml` now uses this service user's token.
+
+**The `404` body** (measured 2026-11-12, deleted person and never-used ID alike): `Content-Type: application/json`,
+`{"message": "Person [2855] not found.", "translatedMessage": "…", "messageKey": "error.notfound",
+"args": {"model": "Person", "id": "2855"}, "errors": []}`. `personStatus()` takes a `404` as `Gone` only in this form,
+with the requested ID in `message` (3.1); the contract cases CT-09 run against it.
+
+**The minimal service user's `churchdb` permissions** (measured 2026-11-12) are the four granted rights plus
+ChurchTools' default values: `security level person` `[1]`, `security level view own data` `[1]`,
+`security level edit own data` `[2]`, `view group` `[11]`, and `false` or `[]` for every other key. The rights check
+(spec 4.8) therefore keeps `churchdb` narrow with a **deny-list** (ruling 2026-11-12): every right that writes, creates,
+deletes, exports or administers must be exactly `false` or `[]`, and `security level person` must contain nothing above
+1. An allow-list would reject the default read values. The contract case CT-12 shows the minimal user passes the whole
+check. `docs/setup.md` asks for the persons rights in a dedicated role with no other persons rights.
 
 ## 10. Placement in the spec
 
