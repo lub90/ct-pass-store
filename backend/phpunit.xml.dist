@@ -6,8 +6,11 @@
       - Unit:      single classes in isolation, no network
       - Api:       the complete app in-process with a fake ChurchTools client, no network
       - Contract:  against a real ChurchTools test instance (opt-in, needs a local phpunit.xml)
+      - Load:      load test against a real ChurchTools test instance (opt-in, needs a local phpunit.xml)
 
-    `composer test` runs Unit and Api. `composer test:contract` runs Contract with your local phpunit.xml,
+    Contract and Load write to the instance: run them only against a dedicated TEST instance, never production.
+
+    `composer test` runs Unit and Api. `composer test:contract` runs Contract and `composer test:load` runs Load with your local phpunit.xml,
     created from phpunit-example.xml.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -29,6 +32,9 @@
         </testsuite>
         <testsuite name="Contract">
             <directory>tests/Contract</directory>
+        </testsuite>
+        <testsuite name="Load">
+            <directory>tests/Load</directory>
         </testsuite>
     </testsuites>
 
