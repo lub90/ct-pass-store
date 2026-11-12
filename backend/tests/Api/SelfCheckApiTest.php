@@ -344,6 +344,11 @@ final class SelfCheckApiTest extends ApiTestCase
         $this->assertOnlyFails('Admin users', $response);
         self::assertSame("The persons in adminUsers can't be checked right now; see the log.", $this->checks($response)['Admin users']['message']);
         self::assertStringNotContainsString('secret-detail', (string) $response->getBody());
+
+        $errors = array_values(array_filter($this->log->getRecords(), static fn($r): bool => $r['level_name'] === 'ERROR'));
+        self::assertCount(1, $errors);
+        self::assertSame(UnavailableException::class, $errors[0]['context']['exception']);
+        self::assertStringNotContainsString('secret-detail', json_encode($errors[0]['context'], JSON_THROW_ON_ERROR) . $errors[0]['message']);
     }
 
     /** TS-11 */
