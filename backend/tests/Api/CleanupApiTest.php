@@ -49,13 +49,16 @@ final class CleanupApiTest extends ApiTestCase
     {
         foreach ([null, str_repeat('a', 42)] as $token) {
             $this->cleanupToken = $token;
-            $unknown = $this->request('POST', '/v1/nope', null, null, ['Authorization' => 'Bearer ' . self::TOKEN]);
-            foreach (['', '?apply=1', '?token=x'] as $query) {
-                $response = $this->cleanup($query, $token ?? self::TOKEN);
+            foreach (['POST', 'GET', 'PUT', 'DELETE', 'HEAD'] as $method) {
+                $unknown = $this->request($method, '/v1/nope', null, null, ['Authorization' => 'Bearer ' . self::TOKEN]);
+                foreach (['', '?apply=1', '?token=x'] as $query) {
+                    $response = $this->request($method, '/v1/cleanup' . $query, null, null, ['Authorization' => 'Bearer ' . ($token ?? self::TOKEN)]);
 
-                self::assertSame(404, $response->getStatusCode());
-                self::assertSame($unknown->getHeaders(), $response->getHeaders());
-                self::assertSame(str_replace('/v1/nope', '/v1/cleanup', (string) $unknown->getBody()), (string) $response->getBody());
+                    self::assertSame(404, $response->getStatusCode(), $method);
+                    self::assertSame($unknown->getStatusCode(), $response->getStatusCode(), $method);
+                    self::assertSame($unknown->getHeaders(), $response->getHeaders(), $method);
+                    self::assertSame(str_replace('/v1/nope', '/v1/cleanup', (string) $unknown->getBody()), (string) $response->getBody(), $method);
+                }
             }
         }
         self::assertSame(0, $this->callCount());
@@ -101,6 +104,10 @@ final class CleanupApiTest extends ApiTestCase
 
         $this->assertProblem(ProblemType::TooManyAttempts, $response);
         self::assertNotSame('', $response->getHeaderLine('Retry-After'));
+        // The right token isn't counted and passes even from the blocked address: a garbage sender behind the same
+        // egress address can't lock out the real cron.
+        self::assertSame(200, $this->cleanup()->getStatusCode());
+        $this->assertProblem(ProblemType::TooManyAttempts, $this->cleanup('', 'wrong-after'));
         // Another address isn't affected.
         $this->clientIp = '198.51.100.9';
         $this->assertProblem(ProblemType::InvalidToken, $this->cleanup('', 'wrong'));
@@ -292,15 +299,14 @@ final class CleanupApiTest extends ApiTestCase
     /** WC-15 */
     public function testOnlyPost(): void
     {
-        foreach ([self::TOKEN, null] as $token) {
-            $this->cleanupToken = $token;
-            foreach (['GET', 'PUT', 'DELETE'] as $method) {
-                $response = $this->request($method, '/v1/cleanup', null, null, ['Authorization' => 'Bearer ' . self::TOKEN]);
+        foreach (['GET', 'PUT', 'DELETE'] as $method) {
+            $response = $this->request($method, '/v1/cleanup', null, null, ['Authorization' => 'Bearer ' . self::TOKEN]);
 
-                $this->assertProblem(ProblemType::MethodNotAllowed, $response);
-                self::assertSame('POST', $response->getHeaderLine('Allow'));
-            }
+            $this->assertProblem(ProblemType::MethodNotAllowed, $response);
+            self::assertSame('POST', $response->getHeaderLine('Allow'));
         }
+        // HEAD is refused like on every route (spec 4.1); off, every method is 404 (WC-01).
+        self::assertSame(405, $this->request('HEAD', '/v1/cleanup')->getStatusCode());
     }
 
     /** WC-16 */
