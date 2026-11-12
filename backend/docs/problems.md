@@ -172,6 +172,16 @@ The endpoint exists but doesn't support this HTTP method. The `Allow` header lis
 
 **What to do:** Use one of the methods in `Allow`.
 
+## cleanup-running
+
+- **Status:** 409
+- **Title:** Cleanup already running
+
+`POST /v1/cleanup` was called while another cleanup is running, started by the web cron or by `bin/cleanup.php`. Only
+one cleanup runs at a time.
+
+**What to do:** Nothing; the running cleanup does the work. Call less often if this happens regularly.
+
 ## payload-too-large
 
 - **Status:** 413
@@ -198,6 +208,16 @@ A non-empty request body was sent without `Content-Type: application/json`.
 Too many wrong ChurchTools passwords in a short time, or too many logins or rejected tokens from one address (or too many logins in total) within a minute. The `Retry-After` header and the member `retryAfter` say how many seconds are left.
 
 **What to do:** Wait until the block ends.
+
+## cleanup-too-soon
+
+- **Status:** 429
+- **Title:** Cleanup ran recently
+
+`POST /v1/cleanup` starts a run at most once every 600 seconds, counted from the start of the last run, also one that
+failed. The `Retry-After` header and the member `retryAfter` say how many seconds are left.
+
+**What to do:** Let the web-cron service call at most every 10 minutes.
 
 ## misconfigured
 

@@ -30,9 +30,11 @@ enum ProblemType: string
     case EntryNotFound = 'entry-not-found';
     case PersonNotFound = 'person-not-found';
     case MethodNotAllowed = 'method-not-allowed';
+    case CleanupRunning = 'cleanup-running';
     case PayloadTooLarge = 'payload-too-large';
     case UnsupportedMediaType = 'unsupported-media-type';
     case TooManyAttempts = 'too-many-attempts';
+    case CleanupTooSoon = 'cleanup-too-soon';
     case Misconfigured = 'misconfigured';
     case InternalError = 'internal-error';
     case UpstreamUnavailable = 'upstream-unavailable';
@@ -53,9 +55,10 @@ enum ProblemType: string
             self::NoServiceAccess, self::Forbidden, self::InvalidPrimaryPassword => 403,
             self::NotFound, self::EntryNotFound, self::PersonNotFound => 404,
             self::MethodNotAllowed => 405,
+            self::CleanupRunning => 409,
             self::PayloadTooLarge => 413,
             self::UnsupportedMediaType => 415,
-            self::TooManyAttempts => 429,
+            self::TooManyAttempts, self::CleanupTooSoon => 429,
             self::Misconfigured, self::InternalError => 500,
             self::UpstreamUnavailable, self::UpstreamInvalid => 502,
             self::UpstreamRateLimited => 503,
@@ -84,7 +87,9 @@ enum ProblemType: string
             self::MethodNotAllowed => 'Method not allowed',
             self::PayloadTooLarge => 'Request body too large',
             self::UnsupportedMediaType => 'Unsupported content type',
+            self::CleanupRunning => 'Cleanup already running',
             self::TooManyAttempts => 'Too many attempts',
+            self::CleanupTooSoon => 'Cleanup ran recently',
             self::Misconfigured => 'Backend misconfigured',
             self::InternalError => 'Internal error',
             self::UpstreamUnavailable => 'ChurchTools unavailable',
