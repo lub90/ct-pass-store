@@ -11,6 +11,8 @@ use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
 use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\GetPassword;
+use CtPassStore\Application\GoneAdmins;
+use CtPassStore\Application\GonePersons;
 use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\SelfCheck\SelfCheck;
@@ -45,7 +47,9 @@ use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Logging\AddVersionToErrors;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
+use CtPassStore\Infrastructure\SelfCheck\AdminUsersCheck;
 use CtPassStore\Infrastructure\SelfCheck\CacheFolderCheck;
+use CtPassStore\Infrastructure\SelfCheck\CleanupTokenCheck;
 use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
 use CtPassStore\Infrastructure\SelfCheck\LogFolderCheck;
 use CtPassStore\Infrastructure\SelfCheck\OAuthClientCheck;
@@ -120,6 +124,8 @@ final class Kernel
             new PasswordStoreReadCheck($extensionData),
             new ServiceUserRightsCheck($churchTools, $extensionData),
             new OAuthClientCheck($churchTools, $config),
+            new AdminUsersCheck($settings, new GoneAdmins(new GonePersons(new ChurchToolsPersonDirectory($churchTools), $clock)), $logger),
+            new CleanupTokenCheck($config),
         ], $logger, [
             new WriteRoundTripCheck($passwords, new RsaPasswordCipher($settings)),
         ]), $version);

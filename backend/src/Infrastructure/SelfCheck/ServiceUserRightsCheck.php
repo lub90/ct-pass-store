@@ -9,13 +9,14 @@ use CtPassStore\Application\SelfCheck\Check;
 use CtPassStore\Application\SelfCheck\CheckOutcome;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\Exception\ChurchToolsException;
+use CtPassStore\Infrastructure\ChurchTools\ServiceUserPersonsRight;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 
 /**
  * The service user has no more rights than needed (spec 4.8; the keys were measured on a test instance on 2026-11-10):
  * none of the administrative rights of `churchcore`, and write access in `ctpassstore` to `passwordStore` only.
- * A right that isn't in the expected form counts as granted (fail closed). Messages name rights, never the person.
+ * It also needs the persons right ({@see ServiceUserPersonsRight}). A right that isn't in the expected form counts as granted (fail closed). Messages name rights, never the person.
  */
 final class ServiceUserRightsCheck implements Check
 {
@@ -40,6 +41,7 @@ final class ServiceUserRightsCheck implements Check
         try {
             $permissions = $this->client->serviceUserGlobalPermissions();
             $passwordStore = $this->data->categoryIdOf(KvSchema::PASSWORD_CATEGORY);
+            $missingPersonsRight = ServiceUserPersonsRight::missingIn($permissions, $this->client->personDepartmentIds());
         } catch (ApplicationException|ChurchToolsException $e) {
             return CheckOutcome::fail('The service user\'s rights can\'t be read: ' . $e->getMessage());
         }
@@ -67,10 +69,17 @@ final class ServiceUserRightsCheck implements Check
             }
         }
 
+        $problems = [];
+        if ($missingPersonsRight !== []) {
+            $problems[] = 'The service user can\'t read persons (missing: ' . implode(', ', $missingPersonsRight) . '); the cleanup job and the existence checks need it (see docs/setup.md).';
+        }
         if ($excess !== []) {
-            return CheckOutcome::fail('The service user has more rights than needed: ' . implode(', ', $excess) . '. Remove them from its role in ChurchTools.');
+            $problems[] = 'The service user has more rights than needed: ' . implode(', ', $excess) . '. Remove them from its role in ChurchTools.';
+        }
+        if ($problems !== []) {
+            return CheckOutcome::fail(implode(' ', $problems));
         }
 
-        return CheckOutcome::ok('The service user has no administrative rights and writes to passwordStore only.');
+        return CheckOutcome::ok('The service user has no administrative rights, writes to passwordStore only and can read persons.');
     }
 }

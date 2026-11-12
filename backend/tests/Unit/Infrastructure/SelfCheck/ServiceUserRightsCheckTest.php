@@ -15,6 +15,8 @@ use PHPUnit\Framework\TestCase;
  */
 final class ServiceUserRightsCheckTest extends TestCase
 {
+    private const PERSONS_RIGHT = ['churchdb' => ['view' => true, 'view alldata' => [1], 'view archive' => true, 'view hidden persons' => true]];
+
     private FakeChurchToolsClient $fake;
 
     private int $settings;
@@ -56,7 +58,7 @@ final class ServiceUserRightsCheckTest extends TestCase
      */
     private function check(array $permissions): \CtPassStore\Application\SelfCheck\CheckOutcome
     {
-        $this->fake->setServiceUserPermissions($permissions);
+        $this->fake->setServiceUserPermissions($permissions + self::PERSONS_RIGHT);
 
         return (new ServiceUserRightsCheck($this->fake, new ExtensionData($this->fake)))->run();
     }
@@ -76,7 +78,18 @@ final class ServiceUserRightsCheckTest extends TestCase
         self::assertTrue($this->check($this->minimal())->ok);
     }
 
-    public function testNoRightsAtAllPass(): void
+    public function testNoRightsAtAllFailOnlyForThePersonsRight(): void
+    {
+        $this->fake->setServiceUserPermissions([]);
+
+        $result = (new ServiceUserRightsCheck($this->fake, new ExtensionData($this->fake)))->run();
+
+        self::assertFalse($result->ok);
+        self::assertStringContainsString("can't read persons (missing: churchdb view,", $result->message);
+        self::assertStringNotContainsString('more rights than needed', $result->message);
+    }
+
+    public function testNoExtraRightsPass(): void
     {
         self::assertTrue($this->check([])->ok);
     }

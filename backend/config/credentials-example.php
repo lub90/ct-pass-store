@@ -18,6 +18,10 @@ return [
     // At least 32 bytes. Generate one with: php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'
     'JWT_SECRET' => 'RANDOM_SECRET_OF_AT_LEAST_32_BYTES',
 
+    // Optional: turns on the web-cron endpoint for the cleanup job (docs/setup.md). At least 43 characters.
+    // Generate one with: php -r 'echo bin2hex(random_bytes(32)), "\n";'
+    // 'CLEANUP_TOKEN' => 'RANDOM_TOKEN_OF_AT_LEAST_43_CHARACTERS',
+
     // Optional: debug, info (default), notice, warning or error.
     // 'LOG_LEVEL' => 'info',
 ];

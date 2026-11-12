@@ -15,6 +15,7 @@ final class BackendConfig
 {
     public const LOG_LEVELS = ['debug', 'info', 'notice', 'warning', 'error'];
     public const MIN_JWT_SECRET_BYTES = 32;
+    public const MIN_CLEANUP_TOKEN_LENGTH = 43;
 
     /**
      * @param list<string> $corsOrigins
@@ -32,7 +33,17 @@ final class BackendConfig
         #[\SensitiveParameter]
         public readonly string $jwtSecret,
         public readonly string $logLevel = 'info',
+        #[\SensitiveParameter]
+        public readonly ?string $cleanupToken = null,
     ) {}
+
+    /**
+     * The token of the web-cron endpoint, or null if there is none or it is too short to be safe; the endpoint is off then.
+     */
+    public function cleanupTokenIfUsable(): ?string
+    {
+        return $this->cleanupToken !== null && strlen($this->cleanupToken) >= self::MIN_CLEANUP_TOKEN_LENGTH ? $this->cleanupToken : null;
+    }
 
     /**
      * The ChurchTools instance as `https://host[:port]`, taken from CT_API_URL. Login redirect URIs must point there.
@@ -68,6 +79,7 @@ final class BackendConfig
             self::token($credentials['OAUTH_CLIENT_SECRET'] ?? null, 'OAUTH_CLIENT_SECRET'),
             self::jwtSecret($credentials['JWT_SECRET'] ?? null),
             self::logLevel($credentials['LOG_LEVEL'] ?? null),
+            self::cleanupToken($credentials['CLEANUP_TOKEN'] ?? null),
         );
     }
 
@@ -96,6 +108,18 @@ final class BackendConfig
         }
         if (preg_match('/\s/', $value) === 1) {
             throw new ConfigurationException("$key in credentials.php must not contain whitespace.");
+        }
+
+        return $value;
+    }
+
+    private static function cleanupToken(mixed $value): ?string
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+        if (!is_string($value)) {
+            throw new ConfigurationException('CLEANUP_TOKEN in credentials.php must be a string.');
         }
 
         return $value;
