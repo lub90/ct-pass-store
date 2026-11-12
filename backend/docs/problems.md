@@ -149,9 +149,19 @@ There's no endpoint at this path. A wrong backend URL in the settings or in a cl
 - **Status:** 404
 - **Title:** No password entry
 
-The person has no secondary password stored. This is the only `404` that means "no password".
+The person has no secondary password stored. The person exists; `person-not-found` is the `404` for persons that don't.
 
 **What to do:** Set a password first.
+
+## person-not-found
+
+- **Status:** 404
+- **Title:** Person not found
+
+The person doesn't exist in ChurchTools or is archived. Deleted and archived persons have no usable password, so the
+backend neither returns nor sets one, even if an entry is still stored.
+
+**What to do:** Check the person ID. Deleted and archived persons have no password.
 
 ## method-not-allowed
 

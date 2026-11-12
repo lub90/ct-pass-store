@@ -17,6 +17,7 @@ enum Reason: string
     case NoServiceAccess = 'no-service-access';
     case AccessDenied = 'access-denied';
     case EntryNotFound = 'entry-not-found';
+    case PersonNotFound = 'person-not-found';
     case PrimaryPasswordRequired = 'primary-password-required';
     case InvalidPrimaryPassword = 'invalid-primary-password';
     case TooManyAttempts = 'too-many-attempts';

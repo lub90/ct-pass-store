@@ -97,6 +97,12 @@ abstract class ApiTestCase extends TestCase
         foreach ([self::READER_CLIENT, self::NO_RIGHTS_CLIENT] as $client) {
             $this->machineKeys[$client] = sodium_crypto_sign_secretkey(sodium_crypto_sign_keypair());
         }
+        $this->churchTools->setServiceUserPermissions(['churchdb' => [
+            'view' => true,
+            'view alldata' => [1],
+            'view archive' => true,
+            'view hidden persons' => true,
+        ]]);
         $this->categoryIds = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
@@ -105,6 +111,7 @@ abstract class ApiTestCase extends TestCase
 
         foreach (self::NAMES as $personId => $name) {
             $this->churchTools->addLogin($name, $this->primaryPasswordOf($personId), $personId);
+            $this->churchTools->addPerson($personId);
         }
 
         // `cache/` and `logs/` side by side, as in the deployment (the self-check looks for logs/ next to cache/).

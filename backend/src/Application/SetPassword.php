@@ -6,11 +6,14 @@ namespace CtPassStore\Application;
 
 use CtPassStore\Application\Exception\CustomPasswordNotAllowedException;
 use CtPassStore\Application\Exception\PasswordRejectedException;
+use CtPassStore\Application\Exception\PersonNotFoundException;
 use CtPassStore\Application\Port\PasswordCipher;
 use CtPassStore\Application\Port\PasswordRepository;
+use CtPassStore\Application\Port\PersonDirectory;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\PasswordPolicy;
 use CtPassStore\Domain\PersonId;
+use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Domain\Principal;
 use Psr\Log\LoggerInterface;
 
@@ -25,6 +28,7 @@ final class SetPassword
         private readonly PasswordPolicy $policy,
         private readonly PasswordCipher $cipher,
         private readonly PasswordRepository $passwords,
+        private readonly PersonDirectory $persons,
         private readonly LoggerInterface $logger,
     ) {}
 
@@ -41,6 +45,10 @@ final class SetPassword
         ?string $primaryPassword,
     ): ?string {
         $this->guard->authorizeChange($principal, $target, $primaryPassword);
+        if (!($principal instanceof PersonPrincipal && $principal->id->value === $target->value) && !$this->persons->exists($target)) {
+            $this->logger->info(ucfirst($principal->describe()) . " asked for person {$target}, who doesn't exist or is archived.");
+            throw new PersonNotFoundException("Person {$target} doesn't exist in ChurchTools or is archived.");
+        }
         $settings = $this->settings->settings();
 
         if ($custom !== null) {

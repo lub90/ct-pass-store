@@ -21,6 +21,7 @@ final class ProblemMapping
             Reason::NoServiceAccess => ProblemType::NoServiceAccess,
             Reason::AccessDenied => ProblemType::Forbidden,
             Reason::EntryNotFound => ProblemType::EntryNotFound,
+            Reason::PersonNotFound => ProblemType::PersonNotFound,
             Reason::PrimaryPasswordRequired => ProblemType::PrimaryPasswordRequired,
             Reason::InvalidPrimaryPassword => ProblemType::InvalidPrimaryPassword,
             Reason::TooManyAttempts => ProblemType::TooManyAttempts,
@@ -49,7 +50,7 @@ final class ProblemMapping
             Reason::UpstreamInvalid => 'ChurchTools answered something the backend can\'t use.',
             Reason::OAuthCodeInvalid => 'ChurchTools didn\'t accept the authorization code. Start the login again.',
             Reason::InvalidRequest, Reason::InvalidToken, Reason::TokenExpired, Reason::NoServiceAccess,
-            Reason::AccessDenied, Reason::EntryNotFound, Reason::PrimaryPasswordRequired, Reason::InvalidPrimaryPassword,
+            Reason::AccessDenied, Reason::EntryNotFound, Reason::PersonNotFound, Reason::PrimaryPasswordRequired, Reason::InvalidPrimaryPassword,
             Reason::TooManyAttempts, Reason::CustomPasswordNotAllowed, Reason::PasswordRejected, Reason::SettingsInvalid,
             Reason::StoreUnusable, Reason::StoreTampered => self::type($reason)->title() . '.',
         };

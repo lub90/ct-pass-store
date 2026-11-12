@@ -32,9 +32,11 @@ use CtPassStore\Infrastructure\Auth\FileAddressLimiter;
 use CtPassStore\Infrastructure\Auth\FileAttemptLimiter;
 use CtPassStore\Infrastructure\Auth\FileReplayCache;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
+use CtPassStore\Infrastructure\ChurchTools\CachedPersonDirectory;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsClient;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsIdentityProvider;
 use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPasswordVerifier;
+use CtPassStore\Infrastructure\ChurchTools\ChurchToolsPersonDirectory;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
@@ -99,9 +101,11 @@ final class Kernel
         /** @var App<null> $app */
         $app = AppFactory::create();
 
+        $persons = new CachedPersonDirectory(new ChurchToolsPersonDirectory($churchTools), $cache, $clock);
+
         $entries = new EntriesController(
-            new GetPassword($guard, $passwords),
-            new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $logger),
+            new GetPassword($guard, $passwords, $persons, $logger),
+            new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $persons, $logger),
             new DeletePassword($guard, $passwords),
             $logger,
         );
