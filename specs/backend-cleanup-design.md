@@ -36,7 +36,7 @@ Success means:
 
 | # | Decision | Reason |
 | --- | --- | --- |
-| C1 | The **service user may read persons**. It gets the narrowest right that lets it see that a person exists and whether they're archived. Task 1 of the plan finds the exact right. | Without it the backend can't tell "deleted" from "not visible". A separate admin token in `credentials.php` would put a much more powerful credential on the server. |
+| C1 | The **service user may read persons**: `churchdb` `view`, `view alldata` for every department, `view archive` and `view hidden persons` (measured, section 9.1). | Without it the backend can't tell "deleted" from "not visible". A separate admin token in `credentials.php` would put a much more powerful credential on the server. |
 | C2 | **Deleted and archived persons count as gone.** | Archiving means the person has left, and their secondary password should stop working. If an archived person is restored, they or an admin set a new password. |
 | C3 | **`adminUsers` is only reported**, never changed. | The service user only reads the settings. Write access to them would let a leaked service token make anyone an admin. Deleted and archived persons can't log in to ChurchTools, so a gone admin can do nothing. |
 | C4 | **Two triggers: a CLI script and a web-cron endpoint.** The endpoint is off unless `CLEANUP_TOKEN` is set, and it's protected as in section 5. | Most hosts of the target audience have no server cron. A web-cron service (e.g. cron-job.org) can send a `POST` with a header. |
@@ -158,7 +158,7 @@ skip a person, which is safe, but the uncached directory keeps that reasoning ou
 ### 3.7 Changed: self-check (`GET /v1/test`)
 
 - **`ServiceUserRightsCheck`:** it **requires** the persons right from C1 and fails without it: "The service user can't
-  read persons; the cleanup job and the existence checks need it (see docs/setup.md)." All other rules stay; in
+  read persons (missing: …); the cleanup job and the existence checks need it (see docs/setup.md)." All other rules stay; in
   particular, `administer persons` and every other administrative right still fail the check.
 - **New `AdminUsersCheck`:** uses `GoneAdmins`. It fails if the list isn't empty: "adminUsers contains person 56, who
   is deleted or archived; remove them in the extension settings." A failed lookup fails the check with a generic
@@ -187,7 +187,7 @@ Any other argument: usage message on stderr, exit 2. Outside the CLI the script 
 
 1. Load the configuration. A missing or broken `credentials.php` → message on stderr, exit 2.
 2. Take the lock (6.3). Already held → "Another cleanup is running." on stderr, exit 2.
-3. Run `CleanupOrphans` without a deadline. Missing persons right → "The service user can't read persons; see
+3. Run `CleanupOrphans` without a deadline. Missing persons right → "The service user can't read persons (missing: …); see
    docs/setup.md." on stderr, exit 2. A failed lookup → a message naming the error on stderr, exit 2. Nothing was
    deleted.
 4. Print the report and exit with the code from 4.4.
@@ -366,16 +366,41 @@ dedicated service user.
 | Timing | Single lookup ~230 ms; batch of 100 ~550 ms; batch of 200 ~490 ms. |
 | Archived filter | `?isArchived=true` is **ignored** (it returns ordinary persons). The test instance seems to have no archived persons, so whether the batch includes archived persons is **open**. |
 
-**Still open, for Task 1 of the plan** (with a dedicated service user and one archived and one deleted test person):
+### 9.1 With a dedicated service user (plan Task 1, 2026-11-12)
 
-1. The narrowest right that lets the service user read any person with `GET /persons/{id}` and the batch query,
-   archived persons included, and how it looks in `GET /permissions/global`.
-2. Whether the batch query returns archived persons (with `isArchived: true`) or leaves them out. Either is safe
-   (C5), but the contract case pins which.
-3. What a service user **without** the right gets for an existing person: `403` (good) or `404`. If it's `404`,
-   "deleted" and "invisible" look the same, and the cleanup must rely on the rights check (`assertReadable()`) before
-   every run. That check is built in either way; the probe decides whether it's the only protection, and the human
-   partner is asked before going on.
+Set up on the test instance: test persons "CtPassStore Probe Active" (2849), "… Archived" (2852, archived with
+`POST /api/persons/{id}/archive` → `204`) and "… Deleted" (2855, `DELETE /api/persons/{id}` → `204`, then `404`), and
+a service user "CtPassStore API Probe" (2858, `cmsUserId` `ctpassstore-api-probe`). The IDs are in the private
+fixture `tests/Contract/fixtures/person_status.json`. Rights are granted per person with
+`PUT /api/permissions/person/{id}` and `{"authId": n, "dataId": [ids]}` (`dataId` must be a list); the auth IDs come
+from the legacy catalog (`churchauth/ajax`, `getMasterData`).
+
+| Rights of the service user | Active person | Archived person | Deleted / never used | Batch of all of them |
+| --- | --- | --- | --- | --- |
+| none | `403 Forbidden to see Person[…]` | `403` | `404 Person […] not found.` | only persons visible otherwise (here person 1, through a shared group) |
+| `view` (101) | `403` | `403` | `404` | same |
+| + `view alldata` (102) for department 1 | `200`, `isArchived: false` | `403` | `404` | + the active person |
+| + `view archive` (116) | `200` | `200`, `isArchived: true` | `404` | + the archived person, with `isArchived: true` |
+
+Answers to the open questions:
+
+1. **The right:** module `churchdb`: `view` = `true`, `view alldata` containing **every** department ID of the
+   instance (`GET /api/person/masterdata` → `data.departments[].id`, readable by the service user), `view archive` =
+   `true`, and `view hidden persons` = `true`. The last one couldn't be measured (setting a person to hidden needs
+   "edit person visibility", which the admin doesn't have), but without it a hidden person would answer `403`, which
+   would turn into `500 misconfigured` on every read of their entry, so it's required as a precaution. The default
+   `security level person` (`[1]`) suffices to read `isArchived`. None of these is an administrative right.
+2. **Archived persons in the batch:** returned, with `isArchived: true`, once the service user has `view archive`.
+3. **Invisible vs. deleted:** `403` vs. `404`. They can be told apart, so the design holds. A `403` from
+   `personStatus()` is a configuration error (`ServiceCredentialRejectedException`), never "gone". A person in a
+   department the service user can't see gives `403`, so the cleanup aborts and the self-check names the missing
+   departments.
+
+**The service user's extension rights** for the contract tests (spec 4.8): `ctpassstore` `view` (2050),
+`view custom category` (2051) and `view custom data` (2055) for all four categories, and `create`/`edit`/`delete
+custom data` (2056–2058) for `passwordStore` only. Without `view custom category`, the category list is empty
+(`200 []`), so it's needed too; spec 4.8 doesn't forbid it. With these rights the whole client contract suite passes
+(17 cases, 2 skipped as with the admin token). The local `phpunit.xml` now uses this service user's token.
 
 ## 10. Placement in the spec
 

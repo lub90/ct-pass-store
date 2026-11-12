@@ -57,7 +57,7 @@ commit that proves it.
 
 ---
 
-### Task 1: Probe the open questions (design 9)
+### Task 1: Probe the open questions (design 9) — DONE 2026-11-12, findings in design 9.1
 
 Interactive; needs the human partner. **No product code.** The admin-token findings are already in design 9.
 
@@ -110,11 +110,22 @@ git commit -m "Plan: persons probe with a dedicated service user (gone persons)"
   - `ChurchToolsClient::activePersonIds(list<int> $personIds): list<int>` (design 3.1; `MAX_BATCH = 100` as a public
     constant on the interface). Build the query string by hand (`ids[]=1&ids[]=2&limit=2`): Guzzle's `query` option
     would encode `ids[0]=`.
-  - `final class ServiceUserPersonsRight { public static function isGrantedIn(Permissions $permissions): bool; public const DESCRIPTION = '<name from Task 1>'; }`,
-    fail closed like `Permissions`.
-  - Fake: `addPerson(int $personId, bool $archived = false): void`. Both new methods record their call. Without
-    `ServiceUserPersonsRight` in the fake's service permissions they throw what Task 1 measured
-    (`403` → `ServiceCredentialRejectedException`). The batch behaves for archived persons as Task 1 measured.
+  - `ChurchToolsClient::personDepartmentIds(): list<int>`: `GET person/masterdata` as the service user →
+    `data.departments[].id` (each an int, else `InvalidResponseException`).
+  - `final class ServiceUserPersonsRight` (design 9.1), fail closed like `Permissions`:
+    - `public static function missingIn(Permissions $permissions, list<int> $departmentIds): list<string>`: the
+      missing parts, as `churchdb view`, `churchdb view archive`, `churchdb view hidden persons`, and
+      `churchdb view alldata for department {id}` per missing department; `[]` when granted. Anything but exactly
+      `true` (flags) or a list of ints (`view alldata`) counts as missing.
+    - `public static function isGrantedIn(Permissions $permissions, list<int> $departmentIds): bool` =
+      `missingIn(...) === []`.
+    - `public const DESCRIPTION = 'Personen: "Personen" sehen, "Personen eines Bereiches sehen" for every department, "Personenarchiv sehen" and "Auch versteckte Personen sehen"';`
+  - Fake: `addPerson(int $personId, bool $archived = false): void`, `setPersonDepartments(list<int> $ids)` (default
+    `[1]`). All three new methods record their call. Without the right (per `ServiceUserPersonsRight::isGrantedIn()`
+    on the fake's service permissions and departments), `personStatus()` of an existing person throws
+    `ServiceCredentialRejectedException` (real ChurchTools: `403`), while an unknown ID is still `Gone` (real: `404`),
+    and the batch leaves out every person (real: only otherwise visible persons). With the right, the batch returns
+    archived persons with `isArchived: true` (design 9.1).
   - Contract base: `abstract protected function personIds(): array` → `array{active: int, archived: int, deleted: int}`.
 
 Catalog: **CC-17** (Guzzle `personStatus` mapping), **CC-18** (Guzzle batch: query string, limit, validation) in
@@ -124,7 +135,9 @@ section 14, and add them to the CT-06 list.
 - [ ] **Step 1: Write the failing tests**
   - Contract base: `testActivePersonIsActive`, `testArchivedPersonIsArchived`, `testDeletedPersonIsGone`,
     `testUnusedIdIsGone` (`2147483647`), `testBatchConfirmsOnlyTheActivePerson` (the three fixture IDs plus
-    `2147483647` → exactly `[active]`), `testServiceUserHasTheNarrowPersonsRight`.
+    `2147483647` → exactly `[active]`), `testDepartmentsAreListed` (non-empty list of ints),
+    `testServiceUserHasTheNarrowPersonsRight` (`missingIn(serviceUserGlobalPermissions(), personDepartmentIds())`
+    is `[]`).
   - Fake contract test: persons 12 (active), 34 (archived); `personIds()` → `12, 34, 56`.
   - Real contract test: `personIds()` from `fixtures/person_status.json`.
   - Guzzle unit tests: `404` → `Gone`; `isArchived` `true`/`false`; `isArchived` missing or `"false"` →
@@ -132,12 +145,16 @@ section 14, and add them to the CT-06 list.
     `GET …/api/persons?ids[]=7&ids[]=8&limit=2`; `testTruncatedBatchIsInvalid` (`total` 3, two returned);
     `testUnaskedIdInBatchIsInvalid`; a returned person with `isArchived: true` is left out; 101 IDs →
     `\InvalidArgumentException`; an empty list → `[]` without a call.
-- [ ] **Step 2:** Run `composer test -- --filter 'Person|Batch'`. Expected: FAIL.
+  - `ServiceUserPersonsRightTest` (unit): granted; each of the four parts missing on its own → its exact text;
+    a department missing from `view alldata`; `view` as `"true"` or `1` counts as missing.
+- [ ] **Step 2:** Run `composer test -- --filter 'Person|Batch|Department'`. Expected: FAIL.
 - [ ] **Step 3:** Implement. `personStatus()`: `send('GET', "persons/{$this->positive($personId)}", $this->serviceUser, true)`,
   catch `NotFoundException` → `Gone`.
 - [ ] **Step 4:** Run `composer check`. Expected: PASS.
-- [ ] **Step 5:** Run `composer test:contract -- --filter 'Person|Batch'` with the human partner's config. Expected:
-  PASS. A failure means the fake or the mapping is wrong; fix before committing.
+- [ ] **Step 5:** Run `composer test:contract -- --filter 'Person|Batch|Department'`. The local `phpunit.xml` and
+  `tests/Contract/fixtures/person_status.json` are already set up (Task 1). Expected: PASS. A failure means the fake or
+  the mapping is wrong; fix before committing. Then run the whole `composer test:contract` once: every earlier case
+  must still pass with the new service user.
 - [ ] **Step 6:** Document the fixture in `docs/testing.md`, tick the catalog, commit.
 
 ```bash
@@ -166,7 +183,9 @@ git commit -am "Backend: personStatus() and activePersonIds() with contract case
   - `PersonDirectory` as in design 3.2: `exists(PersonId $person): bool`;
     `confirmedActive(list<PersonId> $persons): list<PersonId>`; `assertReadable(): void`.
   - `PersonsNotReadableException extends ApplicationException`, `REASON = Reason::ServiceUserRejected`, message
-    `The service user can't read persons; see docs/setup.md.`
+    `The service user can't read persons (missing: {parts}); see docs/setup.md.`, thrown by `assertReadable()` when
+    `ServiceUserPersonsRight::missingIn(serviceUserGlobalPermissions(), personDepartmentIds())` isn't empty
+    (`{parts}` joined with `, `).
   - `PasswordRepository::personIds(): list<PersonId>` (design 3.3).
   - `GonePersons::__construct(PersonDirectory $persons, Clock $clock)`;
     `find(list<PersonId> $persons, ?\DateTimeImmutable $deadline = null): GoneResult`.
@@ -301,7 +320,8 @@ git commit -am "Backend: GET and PUT refuse deleted and archived persons (gone p
   - `credentials-example.php`: a commented-out `CLEANUP_TOKEN` line with the generation command from design 5.1.
 
 Messages (verbatim):
-- rights, right missing: `The service user can't read persons; the cleanup job and the existence checks need it (see docs/setup.md).`
+- rights, right missing: `The service user can't read persons (missing: {parts}); the cleanup job and the existence checks need it (see docs/setup.md).`
+  (`{parts}` from `ServiceUserPersonsRight::missingIn()`, joined with `, `.)
   With administrative rights too, both in one message.
 - rights, ok: `The service user has no administrative rights, writes to passwordStore only and can read persons.`
 - admins, fail: `adminUsers contains person 56, who is deleted or archived; remove them in the extension settings.`
@@ -423,7 +443,7 @@ missing `credentials.php`, `.htaccess`) in section 18.
   - `CleanupCommandTest` (in-process, `php://memory` streams): `testEmptyStoreExitsZero` (stdout
     `checked 0 persons, deleted 0 entries`, no person call), `testDryRunIsTheDefault`,
     `testApplyDeletesAndExitsZero`, `testGoneAdminExitsOne`, `testFailedDeleteExitsOne`, `testFailedLookupExitsTwo`,
-    `testMissingRightExitsTwo`, `testHeldLockExitsTwo` (the test holds `flock` on the file),
+    `testMissingRightExitsTwo` (stderr starts with `The service user can't read persons (missing: `), `testHeldLockExitsTwo` (the test holds `flock` on the file),
     `testUnknownArgumentExitsTwo`, `testOutputNamesIdsOnly` (every line matches one of the formats above).
   - `CleanupScriptTest` (`PhpProcess`): missing credentials → exit 2, `Configuration error:`; `--force` → exit 2 with
     usage; `testHtaccessDeniesInternals` (`preg_match` the deny pattern against `bin/cleanup.php`,
