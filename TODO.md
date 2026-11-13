@@ -73,7 +73,7 @@ Open issues and planned improvements, roughly ordered by severity.
   - Add a permission self-check to the setup wizard and/or the `/test` endpoint.
   - Better: assign the permissions ourselves. ChurchTools now lets us create groups and set role permissions through the API, so the setup wizard can provision the groups and rights automatically instead of relying on the admin to do it by hand. It should then re-check them and warn if a group has more rights than intended.
 
-- [ ] **Extension: keep the test instance URL out of the release build**
+- [x] **Extension: keep the test instance URL out of the release build**
   [`extension/src/main.ts`](extension/src/main.ts) uses `window.settings?.base_url ?? import.meta.env.VITE_BASE_URL` (a pattern taken from the boilerplate). Vite inlines the `VITE_` value, so the URL of the development instance ends up in `dist/` and in the release ZIP. The dev password isn't in the bundle, but only because the code that reads it is removed as dead code.
   - Use the fallback only in development (`import.meta.env.DEV`), or replace it with a dev proxy that holds URL and credentials in non-`VITE_` variables.
   - Add a post-build check (like `check-dist.js` in the infoscreen project) that fails when `*.church.tools` or the dev username appears in `dist/`.
@@ -156,8 +156,8 @@ Open issues and planned improvements, roughly ordered by severity.
 - [x] `PasswordValidator::generateRandom()` shuffles with `str_shuffle`, which isn't cryptographically secure. The characters themselves come from `random_int`, so this is minor, but a CSPRNG-based shuffle would be better. (Plan 2.4: `Random\Randomizer` with the secure engine, now in `PasswordPolicy`.)
 - [x] The class name is spelled two ways: `ChurchtoolsAuthVerifier` and `ChurchToolsAuthVerifier`. (Now `ChurchToolsPasswordVerifier`.)
 - [ ] Translate the remaining German code comments to English.
-- [ ] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
-- [ ] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).
+- [x] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
+- [x] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).
 
 ## Documentation
 

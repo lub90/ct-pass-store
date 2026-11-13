@@ -1,9 +1,5 @@
 <template>
-  <Root>
-    <router-view />
-  </Root>
+    <div class="cps">
+        <RouterView />
+    </div>
 </template>
-
-<script setup lang="ts">
-import Root from './layouts/Root.vue';
-</script>

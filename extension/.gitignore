@@ -24,3 +24,7 @@ dist-ssr
 *.sln
 *.sw?
 releases
+coverage/
+test-results/
+playwright-report/
+tests/contract/fixtures/
