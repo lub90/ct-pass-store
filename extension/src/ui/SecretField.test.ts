@@ -69,4 +69,18 @@ describe('SecretField', () => {
         expect(w.find('label').attributes('for')).toBe(w.find('input').attributes('id'));
         expect(w.find('input').attributes('readonly')).toBeDefined();
     });
+
+    it('links help and error to the input and merges a passed aria-describedby', () => {
+        const w = mount(SecretField, { props: { ...props, help: 'Help', error: 'Bad' }, attrs: { 'aria-describedby': 'ext', name: 'pw' } });
+        const input = w.find('input');
+        const ids = input.attributes('aria-describedby')!.split(' ');
+        expect(ids).toHaveLength(3);
+        expect(w.find(`#${ids[0]}`).text()).toBe('Help');
+        expect(w.find(`#${ids[1]}`).text()).toBe('Bad');
+        expect(w.find(`#${ids[1]}`).attributes('role')).toBe('alert');
+        expect(ids[2]).toBe('ext');
+        expect(input.attributes('aria-invalid')).toBe('true');
+        expect(input.attributes('name')).toBe('pw');
+        expect(w.element.getAttribute('aria-describedby')).toBeNull();
+    });
 });

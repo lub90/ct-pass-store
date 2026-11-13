@@ -1,5 +1,8 @@
 <script setup lang="ts">
-/** An on/off switch: a native button with `role="switch"`, so Space and Enter work without extra code. */
+/**
+ * An on/off switch: a native button with `role="switch"`, so Space and Enter work without extra code. The whole row is
+ * a `<label>`: a click on the text activates the button (and focuses it), which gives the touch hit area.
+ */
 import { useId } from 'vue';
 
 const model = defineModel<boolean>({ required: true });
@@ -9,7 +12,7 @@ const uid = useId();
 </script>
 
 <template>
-    <div class="cps-toggle">
+    <label class="cps-toggle">
         <button
             type="button"
             role="switch"
@@ -28,7 +31,6 @@ const uid = useId();
             <span
                 :id="`${uid}-label`"
                 class="cps-toggle__label"
-                @click="model = !model"
             >{{ label }}</span>
             <p
                 v-if="help"
@@ -38,11 +40,12 @@ const uid = useId();
                 {{ help }}
             </p>
         </div>
-    </div>
+    </label>
 </template>
 
 <style scoped>
 .cps-toggle {
+    cursor: pointer;
     display: flex;
     align-items: flex-start;
     gap: var(--cps-space-3);
@@ -86,16 +89,14 @@ const uid = useId();
 .cps-toggle__text {
     min-width: 0;
 }
-.cps-toggle__label {
-    cursor: pointer;
-}
+
 .cps-toggle__help {
     margin: 0;
     font-size: var(--cps-size-sm);
     color: var(--cps-text-muted);
 }
 @media (pointer: coarse) {
-    /* The switch stays small to look right; the row around it is a 44 px target. */
+    /* The switch stays small to look right; the label row around it (text included) is the 44 px target. */
     .cps-toggle {
         min-height: 44px;
         align-items: center;

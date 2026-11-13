@@ -13,7 +13,8 @@ const Group = defineComponent({
 });
 
 describe('ChoiceCard', () => {
-    it('renders radios of one group (the browser moves the selection with the arrow keys)', () => {
+    // Real arrow-key behavior is proven in the browser tests (Task 19); here: structure and model wiring.
+    it('renders native radios of one group so arrow keys work in browsers', () => {
         const w = mount(Group);
         const radios = w.findAll('input[type="radio"]');
         expect(radios.map((r) => r.attributes('name'))).toEqual(['g', 'g']);
@@ -26,6 +27,7 @@ describe('ChoiceCard', () => {
         await w.findAll('input')[1]!.setValue(true);
         const radios = w.findAll('input');
         expect((radios[1]!.element as HTMLInputElement).checked).toBe(true);
+        expect((radios[0]!.element as HTMLInputElement).checked).toBe(false);
         const single = mount(ChoiceCard, { props: { modelValue: 'a', value: 'b', name: 'g', label: 'B' } });
         await single.find('input').setValue(true);
         expect(single.emitted('update:modelValue')![0]).toEqual(['b']);

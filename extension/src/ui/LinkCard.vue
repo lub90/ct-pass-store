@@ -32,7 +32,10 @@ const isRouter = typeof resolved !== 'string';
         class="cps-linkcard cps-linkcard--disabled"
         aria-disabled="true"
     >
-        <span class="cps-linkcard__icon"><Icon :name="icon" :size="22" /></span>
+        <span class="cps-linkcard__icon"><Icon
+            :name="icon"
+            :size="22"
+        /></span>
         <span class="cps-linkcard__body">
             <span class="cps-linkcard__title">{{ title }}</span>
             <span class="cps-linkcard__text">{{ text }}</span>
@@ -45,7 +48,10 @@ const isRouter = typeof resolved !== 'string';
         v-bind="isRouter ? { to } : { href: to }"
         class="cps-linkcard"
     >
-        <span class="cps-linkcard__icon"><Icon :name="icon" :size="22" /></span>
+        <span class="cps-linkcard__icon"><Icon
+            :name="icon"
+            :size="22"
+        /></span>
         <span class="cps-linkcard__body">
             <span class="cps-linkcard__title">{{ title }}</span>
             <span class="cps-linkcard__text">{{ text }}</span>
@@ -53,7 +59,9 @@ const isRouter = typeof resolved !== 'string';
         <Pill
             v-if="pill"
             :kind="pillKind ?? 'neutral'"
-        >{{ pill }}</Pill>
+        >
+            {{ pill }}
+        </Pill>
         <Icon
             class="cps-linkcard__chevron"
             name="chevronRight"
