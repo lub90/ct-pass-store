@@ -13,8 +13,11 @@ German instance, a German host). On such a host a password read takes about 0.1�
 home or mobile internet connection, the same read took 1–2.5 s in tests.
 
 **Turn on OPcache if your host offers it.** Without it, PHP compiles the backend's files on every request, which adds
-roughly 30–40 ms. On shared hosting it's usually a switch or a `php.ini` setting (`opcache.enable=1`) in the PHP
-settings of the hosting control panel.
+roughly 30–40 ms. Some hosts have a switch for it in the PHP settings of the hosting control panel. Others read a
+`php.ini` from the folder of the running script (common with PHP as CGI/FastCGI): there, copy
+`config/php.ini-example` to `public/php.ini` and follow the steps in the file. It explains how to check that OPcache
+runs and what to do if the host rejects the file. `public/.htaccess` keeps that `php.ini` from being served. Hosts
+with PHP-FPM or `mod_php` ignore a folder `php.ini`.
 
 ## 1. Create the service user
 

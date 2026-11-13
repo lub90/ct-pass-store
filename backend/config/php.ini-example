@@ -1,0 +1,29 @@
+; OPcache for the ct-pass-store backend (optional)
+;
+; Only for hosts that read a php.ini from the folder of the running script (many shared hosts with PHP as
+; CGI/FastCGI). Hosts with PHP-FPM or mod_php ignore this file; there, use the hosting control panel instead.
+;
+; How to use it:
+;   1. Copy this file to public/php.ini (the folder that holds index.php; a php.ini elsewhere has no effect).
+;   2. Check it: put a file with <?php phpinfo(); into public/, open it, and look for "Zend OPcache" with
+;      "Opcode Caching: Up and Running". Then delete that file again.
+;   3. Check that the backend still answers (GET /v1/test). Some hosts REPLACE their whole configuration with a
+;      folder php.ini instead of merging it. If the backend breaks, remove public/php.ini again.
+;
+; If your host already loads OPcache, PHP logs "Cannot load Zend OPcache - it was already loaded". Then remove the
+; zend_extension line.
+;
+; public/.htaccess keeps this file from being served.
+
+zend_extension=opcache.so
+opcache.enable=1
+
+; Memory for compiled scripts (MB), interned strings (MB), and the number of files. The backend has about 900 PHP
+; files including vendor/ (a production install).
+opcache.memory_consumption=64
+opcache.interned_strings_buffer=8
+opcache.max_accelerated_files=4000
+
+; Keep checking for changed files, so uploaded updates take effect within a few seconds.
+opcache.validate_timestamps=1
+opcache.revalidate_freq=2

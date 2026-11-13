@@ -55,7 +55,7 @@ cp -r "$BACKEND_DIR/public" "$BACKEND_DIR/src" "$BUILD_DIR"/
 mkdir "$BUILD_DIR/bin"
 cp "$BACKEND_DIR/bin/cleanup.php" "$BUILD_DIR/bin"/
 mkdir "$BUILD_DIR/config"
-cp "$BACKEND_DIR/config/credentials-example.php" "$BUILD_DIR/config"/
+cp "$BACKEND_DIR/config/credentials-example.php" "$BACKEND_DIR/config/php.ini-example" "$BUILD_DIR/config"/
 
 echo "Installing dependencies with Composer (without dev tools)..."
 (cd "$BUILD_DIR" && composer install --no-dev --optimize-autoloader --no-interaction)

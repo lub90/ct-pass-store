@@ -42,6 +42,8 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.
 - Daily rotated logs (14 files), the version in every error log entry, `setup/setup.sh` with permissions and a check of
   the deploy folder (`bin/check-deploy.php`), and a release workflow with `bin/release-check.php`.
+- Optional OPcache template `config/php.ini-example` for hosts that read a `php.ini` per folder; `public/.htaccess`
+  denies `php.ini`.
 
 ### Fixed
 

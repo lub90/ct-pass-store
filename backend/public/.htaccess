@@ -8,6 +8,9 @@ SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 RewriteCond %{HTTPS} off
 RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
+# Never serve an optional php.ini (see config/php.ini-example). Hidden files like .user.ini are denied in ../.htaccess.
+RewriteRule ^php\.ini$ - [F,L,NC]
+
 # Slim routing
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
