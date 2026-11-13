@@ -81,6 +81,9 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     /** @var list<int> */
     private array $personDepartments = [1];
 
+    /** @var array<int, list<array{groupId: int, status: string}>> group memberships by person ID */
+    private array $memberships = [];
+
     // ---------------------------------------------------------------- setup helpers
 
     /**
@@ -130,6 +133,15 @@ final class FakeChurchToolsClient implements ChurchToolsClient
     public function setServiceUserPermissions(array $permissions): void
     {
         $this->servicePermissions = $permissions;
+    }
+
+    /**
+     * A group membership of a person, as `GET /persons/{id}/groups` lists it; `$status` is ChurchTools' status
+     * (`active`, `waiting`, `requested`, `to_delete`).
+     */
+    public function addGroupMembership(int $personId, int $groupId, string $status = 'active'): void
+    {
+        $this->memberships[$personId][] = ['groupId' => $groupId, 'status' => $status];
     }
 
     /**
@@ -338,6 +350,26 @@ final class FakeChurchToolsClient implements ChurchToolsClient
         $this->record(__FUNCTION__, [$user->scheme()]);
 
         return new Permissions($this->permissions[$user->authorizationHeader()] ?? throw new NotAuthenticatedException('GET permissions/global: ChurchTools answered 401.'));
+    }
+
+    public function activeGroupIds(Credential $user, int $personId): array
+    {
+        $this->record(__FUNCTION__, [$user->scheme(), $personId]);
+        if ($personId < 1) {
+            throw new \InvalidArgumentException('IDs must be positive.');
+        }
+        if (!isset($this->people[$user->authorizationHeader()])) {
+            throw new NotAuthenticatedException('GET persons/{id}/groups: ChurchTools answered 401.');
+        }
+
+        $ids = [];
+        foreach ($this->memberships[$personId] ?? [] as $membership) {
+            if ($membership['status'] === 'active') {
+                $ids[] = $membership['groupId'];
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 
     public function serviceUserGlobalPermissions(): Permissions

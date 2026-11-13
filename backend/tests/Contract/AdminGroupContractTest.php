@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Contract;
 
+use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use CtPassStore\Tests\Contract\Helpers\OAuthCodeFetcher;
 use GuzzleHttp\Client;
@@ -250,6 +252,14 @@ final class AdminGroupContractTest extends TestCase
         sort($expectedIds);
         sort($actual);
         self::assertSame($expectedIds, $actual, 'The OAuth token sees the same active memberships as the session.');
+
+        // The client method returns the same groups as integers.
+        $viaClient = (new GuzzleChurchToolsClient((string) getenv('CT_API_URL'), Credential::loginToken((string) getenv('CT_API_TOKEN'))))
+            ->activeGroupIds(Credential::bearerToken($token), self::$user['id']);
+        $expectedInts = array_map('intval', $expectedIds);
+        sort($expectedInts);
+        sort($viaClient);
+        self::assertSame($expectedInts, $viaClient, 'activeGroupIds() with the OAuth token.');
     }
 
     private function exchange(): string

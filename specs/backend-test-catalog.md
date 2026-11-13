@@ -843,7 +843,7 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 Cases for the admin role from a ChurchTools group, the `access` category and the release check. They replace the
 `adminUsers` cases marked removed above (AZ-04, AZ-05, SE-03, TS-09, TS-10, GP-03, GP-10, GP-22).
 
-- [ ] **AG-01** (! · U) Group ID matching: `"12"` matches 12; `"012"`, `"12 "`, `"1e1"`, `12.0`, `null` don't — 4.4 step 4
+- [x] **AG-01** (! · U) Group ID matching: `"12"` matches 12; `"012"`, `"12 "`, `"1e1"`, `12.0`, `null` don't — 4.4 step 4
 - [ ] **AG-02** (! · A) Admin only with an `active` membership in exactly the configured group; `waiting`, `requested`,
   `to_delete`, another group, or no `groups.admins` → `admin: false` — 4.4 step 4
 - [ ] **AG-03** (N · A) Login answer: `admin` and `version` present; `version` equals `Version::current()` — 4.4

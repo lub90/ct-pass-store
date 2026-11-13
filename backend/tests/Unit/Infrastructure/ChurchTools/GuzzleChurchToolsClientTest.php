@@ -242,6 +242,95 @@ final class GuzzleChurchToolsClientTest extends TestCase
         $client->getCategories(7);
     }
 
+    // ---------------------------------------------------------------- activeGroupIds
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function membership(mixed $groupId, string $status): array
+    {
+        return ['group' => ['domainIdentifier' => $groupId], 'groupMemberStatus' => $status];
+    }
+
+    public function testActiveGroupIdsKeepOnlyActiveMembershipsAndUseTheUsersToken(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [
+            self::membership('12', 'active'),
+            self::membership('13', 'waiting'),
+            self::membership('14', 'requested'),
+            self::membership('15', 'to_delete'),
+            self::membership('12', 'active'),
+        ]]);
+
+        self::assertSame([12], $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5));
+        $request = $this->lastRequest();
+        self::assertSame('Bearer ' . self::USER_TOKEN, $request->getHeaderLine('Authorization'));
+        self::assertSame('1', $request->getHeaderLine('X-OnlyAuthenticated'));
+        self::assertSame('/api/persons/5/groups', $request->getUri()->getPath());
+    }
+
+    public function testActiveGroupIdsFollowAllPages(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [self::membership('1', 'active')], 'meta' => ['pagination' => ['lastPage' => 2]]]);
+        $this->respond(200, ['data' => [self::membership('2', 'active')], 'meta' => ['pagination' => ['lastPage' => 2]]]);
+
+        self::assertSame([1, 2], $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5));
+        self::assertCount(2, $this->history);
+    }
+
+    /**
+     * @return iterable<string, array{int, class-string<ChurchToolsException>}>
+     */
+    public static function groupFailures(): iterable
+    {
+        yield '401' => [401, NotAuthenticatedException::class];
+        yield '403' => [403, NotPermittedException::class];
+        yield '404' => [404, NotFoundException::class];
+        yield '429' => [429, RateLimitedException::class];
+        yield '500' => [500, UnavailableException::class];
+    }
+
+    /**
+     * @param class-string<ChurchToolsException> $exception
+     */
+    #[DataProvider('groupFailures')]
+    public function testActiveGroupIdsMapFailures(int $status, string $exception): void
+    {
+        $client = $this->client();
+        $this->respond($status, []);
+
+        $this->expectException($exception);
+        $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5);
+    }
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function malformedGroupAnswers(): iterable
+    {
+        yield 'no status' => [['data' => [['group' => ['domainIdentifier' => '1']]]]];
+        yield 'active without group' => [['data' => [['groupMemberStatus' => 'active']]]];
+        yield 'active with bad ID' => [['data' => [self::membership('012', 'active')]]];
+        yield 'active with decimal-point ID' => [['data' => [self::membership('1.0', 'active')]]];
+        yield 'data not a list' => [['data' => ['id' => 1]]];
+        yield 'bad lastPage' => [['data' => [], 'meta' => ['pagination' => ['lastPage' => 'x']]]];
+    }
+
+    /**
+     * @param array<string, mixed> $body
+     */
+    #[DataProvider('malformedGroupAnswers')]
+    public function testActiveGroupIdsRejectMalformedAnswers(array $body): void
+    {
+        $client = $this->client();
+        $this->respond(200, $body);
+
+        $this->expectException(InvalidResponseException::class);
+        $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5);
+    }
+
     // ---------------------------------------------------------------- ST-12 meta.count
 
     public function testValuesAreReturnedWhenMetaCountMatches(): void
