@@ -93,6 +93,9 @@ composer test:contract
 
 Notes on `LiveEntriesTest`:
 
+- PHP's built-in server sets no `HTTPS` variable, so the backend would answer `400 https-required`.
+  `BackendSandboxManager` therefore starts it with a router script that sets `HTTPS=on`, as a TLS front end would.
+
 - Without the matching private key it compares ciphertexts with what ChurchTools stored. To also decrypt, add
   `<env name="CT_TEST_PRIVATE_KEY_FILE" value="/path/to/private.pem"/>` to your local `phpunit.xml`.
 - `testParallelPutsHeal` prints how long the parallel PUTs took compared with a single one. A run in which ChurchTools
@@ -112,6 +115,8 @@ Machine tokens are signed with a test key. This only works for test systems whos
 ```bash
 composer test:load
 ```
+
+A full run takes about 15 minutes; `composer test:load` turns off Composer's 300-second process timeout for it.
 
 It measures the backend under realistic data sizes and writes the results to STDERR and to a JSON file
 (`LOAD_RESULTS_FILE`, default `ctps-load-results.json` in the temp folder). The results name person IDs only. The

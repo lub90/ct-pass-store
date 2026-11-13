@@ -31,7 +31,10 @@
   "scripts": {
     "test": "phpunit -c phpunit.xml.dist --testsuite Unit,Api",
     "test:contract": "phpunit -c phpunit.xml --testsuite Contract",
-    "test:load": "phpunit -c phpunit.xml tests/Load",
+    "test:load": [
+      "Composer\\Config::disableProcessTimeout",
+      "phpunit -c phpunit.xml tests/Load"
+    ],
     "stan": "phpstan analyse --memory-limit=1G",
     "cs": "php-cs-fixer check --diff",
     "cs:fix": "php-cs-fixer fix",
