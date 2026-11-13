@@ -95,6 +95,9 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
             const members = await s.groupMembers(s.knownGroupId);
             expect(members.some((m) => m.id === s.knownPersonId)).toBe(true);
             expect(members.every((m) => m.name.length > 0)).toBe(true);
+            // Only active, non-archived members are listed (a `waiting` member or an archived person is not), and
+            // the count is that list's length, never an `information` key of the group.
+            expect(group.memberCount).toBe(members.length);
         });
 
         it('another group gives CtForbiddenError', async () => {

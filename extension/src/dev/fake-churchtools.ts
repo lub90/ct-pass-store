@@ -13,7 +13,7 @@ export interface FakeCtSeed {
     moduleId: number;
     /** `null` = nobody logged in. */
     currentPersonId: number | null;
-    persons: { id: number; firstName: string; lastName: string }[];
+    persons: { id: number; firstName: string; lastName: string; archived?: boolean }[];
     groups: FakeGroup[];
     categories: CtCategory[];
     values: CtValue[];
@@ -25,7 +25,10 @@ export interface FakeCtSeed {
 export interface FakeGroup {
     id: number;
     name: string;
+    /** Active members. */
     memberIds: number[];
+    /** Members with another status (`waiting`, `requested`, `to_delete`): listed by ChurchTools, not counted here. */
+    inactiveMemberIds?: number[];
 }
 
 export interface FakeControls {
@@ -40,7 +43,7 @@ export interface FakeControls {
 export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
     let current = seed.currentPersonId;
     let permissions = seed.permissions;
-    let groups = seed.groups.map((g) => ({ ...g, memberIds: [...g.memberIds] }));
+    let groups: FakeGroup[] = seed.groups.map((g) => ({ ...g, memberIds: [...g.memberIds], inactiveMemberIds: [...(g.inactiveMemberIds ?? [])] }));
     let viewGroups = [...(seed.viewGroupIds ?? [])];
     const values = seed.values.map((v) => ({ ...v }));
     let nextValueId = Math.max(0, ...values.map((v) => v.id)) + 1;
@@ -50,6 +53,11 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
         const p = seed.persons.find((x) => x.id === id);
         return p ? `${p.firstName} ${p.lastName}`.trim() : '';
     };
+    // Like the real layer: active, non-archived members only.
+    const listedMembers = (g: FakeGroup): PersonOption[] =>
+        g.memberIds
+            .filter((id) => seed.persons.find((p) => p.id === id)?.archived !== true)
+            .map((id) => ({ id, name: nameOf(id) }));
     const canSeeGroup = (g: FakeGroup) => viewGroups.includes(g.id) || (current !== null && g.memberIds.includes(current));
     const readableGroup = (id: number): FakeGroup => {
         const g = groups.find((x) => x.id === id);
@@ -138,12 +146,12 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
         },
         async groupMembers(groupId): Promise<PersonOption[]> {
             step();
-            return readableGroup(groupId).memberIds.map((id) => ({ id, name: nameOf(id) }));
+            return listedMembers(readableGroup(groupId));
         },
         async group(groupId) {
             step();
             const g = readableGroup(groupId);
-            return { id: g.id, name: g.name, memberCount: g.memberIds.length };
+            return { id: g.id, name: g.name, memberCount: listedMembers(g).length };
         },
         async person(id): Promise<PersonOption> {
             step();

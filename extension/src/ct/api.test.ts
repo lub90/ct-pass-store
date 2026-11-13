@@ -8,6 +8,7 @@ interface Seen {
     url: string;
     headers: Record<string, unknown>;
     data: unknown;
+    params?: Record<string, unknown>;
 }
 type Reply = { status: number; data?: unknown; headers?: Record<string, string> };
 
@@ -16,8 +17,8 @@ function setup(reply: (seen: Seen) => Reply) {
     const client = createClient('https://example.invalid/');
     const seen: Seen[] = [];
     const ax = (client as unknown as { ax: { defaults: { adapter: unknown } } }).ax;
-    ax.defaults.adapter = async (config: { method: string; baseURL?: string; url: string; headers: Record<string, unknown>; data?: unknown }) => {
-        const entry = { method: config.method, url: config.url, headers: { ...config.headers }, data: config.data };
+    ax.defaults.adapter = async (config: { method: string; baseURL?: string; url: string; headers: Record<string, unknown>; data?: unknown; params?: Record<string, unknown> }) => {
+        const entry = { method: config.method, url: config.url, headers: { ...config.headers }, data: config.data, params: config.params };
         seen.push(entry);
         const r = reply(entry);
         const response = { status: r.status, statusText: '', data: r.data ?? {}, headers: r.headers ?? {}, config, request: {} };
@@ -78,5 +79,54 @@ describe('createCtApi with the real client', () => {
         expect(p['view custom category']).toEqual([4, 10]);
         expect(p['edit custom data']).toEqual([]);
         expect(p['create custom category']).toBe(false);
+    });
+
+    const member = (personId: number, status: string, over: Record<string, unknown> = {}) => ({
+        personId,
+        groupMemberStatus: status,
+        person: {
+            title: `P${personId} Name`,
+            domainType: 'person',
+            domainIdentifier: String(personId),
+            domainAttributes: { firstName: `P${personId}`, lastName: 'Name', isArchived: false, ...over },
+        },
+    });
+
+    it('reads all pages of members and keeps only active, non-archived ones', async () => {
+        const { api, seen } = setup((s) => {
+            if (s.url.endsWith('/members')) {
+                const page = Number(s.params?.page);
+                return {
+                    status: 200,
+                    data:
+                        page === 1
+                            ? { data: [member(1, 'active'), member(2, 'waiting')], meta: { pagination: { lastPage: 2, total: 4 } } }
+                            : { data: [member(3, 'active', { isArchived: true }), member(4, 'active')], meta: { pagination: { lastPage: 2, total: 4 } } },
+                };
+            }
+            return { status: 200, data: { data: { id: 9, name: 'Team', information: { memberCount: 99 } } } };
+        });
+        expect((await api.groupMembers(9)).map((m) => m.id)).toEqual([1, 4]);
+        expect(seen.filter((s) => s.url.endsWith('/members')).map((s) => s.params?.page)).toEqual([1, 2]);
+        // The count comes from the filtered list, not from `information`.
+        expect(await api.group(9)).toEqual({ id: 9, name: 'Team', memberCount: 2 });
+    });
+
+    it('maps the measured member payload to picker options', async () => {
+        const { api } = setup(() => ({
+            status: 200,
+            data: {
+                data: [
+                    member(7, 'active'),
+                    { personId: 8, groupMemberStatus: 'active', person: { domainAttributes: { firstName: 'Zoe', lastName: 'Zed' } } },
+                    { personId: 0, groupMemberStatus: 'active', person: { title: 'Bad' } },
+                ],
+                meta: { pagination: { lastPage: 1, total: 3 } },
+            },
+        }));
+        expect(await api.groupMembers(1)).toEqual([
+            { id: 7, name: 'P7 Name' },
+            { id: 8, name: 'Zoe Zed' },
+        ]);
     });
 });

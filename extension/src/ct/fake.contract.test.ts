@@ -24,9 +24,11 @@ const seed = (over: Partial<FakeCtSeed> = {}): FakeCtSeed => ({
         { id: 1, firstName: 'Anna', lastName: 'Admin' },
         { id: 2, firstName: 'Ben', lastName: 'Member' },
         { id: 3, firstName: 'Cora', lastName: 'Other' },
+        { id: 4, firstName: 'Dan', lastName: 'Waiting' },
+        { id: 5, firstName: 'Eva', lastName: 'Archived', archived: true },
     ],
     groups: [
-        { id: 10, name: 'Team', memberIds: [1, 2] },
+        { id: 10, name: 'Team', memberIds: [1, 2, 5], inactiveMemberIds: [4] },
         { id: 11, name: 'Others', memberIds: [3] },
     ],
     categories: [{ id: 5, name: 'Settings', shorty: 'settings' }],
@@ -46,6 +48,12 @@ defineCtContract('in-memory fake', async () => ({
 }));
 
 describe('fake controls', () => {
+    it('lists and counts only active, non-archived members', async () => {
+        const fake = createFakeChurchTools(seed());
+        expect((await fake.groupMembers(10)).map((m) => m.id)).toEqual([1, 2]);
+        expect((await fake.group(10)).memberCount).toBe(2);
+    });
+
     it('failNext fails exactly one call with the mapped error', async () => {
         const fake = createFakeChurchTools(seed());
         fake.failNext(403);

@@ -85,6 +85,25 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
     const categoryPath = (moduleId: number) => `/custommodules/${moduleId}/customdatacategories`;
     const valuesPath = (moduleId: number, categoryId: number) => `${categoryPath(moduleId)}/${categoryId}/customdatavalues`;
 
+    /**
+     * Only members with `groupMemberStatus === 'active'` (ChurchTools also has `waiting`, `requested`, `to_delete`)
+     * who aren't archived. Paged: the default limit is 10, so all pages are read.
+     */
+    async function activeMembers(groupId: number): Promise<PersonOption[]> {
+        const members = await guarded(() => client.getAllPages<Json>(`/groups/${groupId}/members`), 'view group');
+        const result: PersonOption[] = [];
+        for (const m of members) {
+            const person = (m.person ?? {}) as Json;
+            const attrs = (person.domainAttributes ?? {}) as Json;
+            if (m.groupMemberStatus !== 'active' || attrs.isArchived === true) continue;
+            // `personId` is a number here; `domainIdentifier` is a string (as in persons/{id}/groups).
+            const id = Number(m.personId ?? person.domainIdentifier);
+            if (!Number.isFinite(id) || id <= 0) continue;
+            result.push({ id, name: text(person.title) || fullName(attrs.firstName, attrs.lastName) });
+        }
+        return result;
+    }
+
     return {
         async whoami() {
             const me = await guarded(() => client.get<Json>('/whoami'));
@@ -151,22 +170,14 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async groupMembers(groupId) {
-            const members = await guarded(() => client.getAllPages<Json>(`/groups/${groupId}/members`), 'view group');
-            return members.map((m) => {
-                const person = (m.person ?? {}) as Json;
-                const attrs = (person.domainAttributes ?? {}) as Json;
-                return {
-                    // `domainIdentifier` is a string, also here (see persons/{id}/groups).
-                    id: Number(m.personId ?? person.domainIdentifier),
-                    name: text(person.title) || fullName(attrs.firstName, attrs.lastName),
-                };
-            });
+            return activeMembers(groupId);
         },
 
         async group(groupId) {
+            // `GET /groups/{id}` has no member count (`information.memberCount` doesn't exist, `memberStatistics` is
+            // null), so it is the length of the filtered member list. That list needs the same right as the group.
             const g = await guarded(() => client.get<Json>(`/groups/${groupId}`), 'view group');
-            const info = (g.information ?? {}) as Json;
-            return { id: Number(g.id), name: text(g.name), memberCount: Number(info.memberCount ?? 0) };
+            return { id: Number(g.id), name: text(g.name), memberCount: (await activeMembers(groupId)).length };
         },
 
         async person(id) {
