@@ -857,9 +857,9 @@ Cases for the admin role from a ChurchTools group, the `access` category and the
 - [ ] **AG-08** (N · A) `/v1/test` check "access": ok; fails for unreadable `access`, invalid `groupId` — 4.8
 - [ ] **AG-09** (N · U) `settings` with `schema`, `revision`, `oauthClientId`, `texts`, `adminUsers`, `machineClients`
   parses as before; none of them changes `Settings` — 3.2
-- [ ] **AG-10** (! · C) Contract: with a user's OAuth token, `GET /api/persons/{id}/groups` lists the user's own active
+- [x] **AG-10** (! · C) Contract: with a user's OAuth token, `GET /api/persons/{id}/groups` lists the user's own active
   memberships (measures extension spec 14.3) — 4.4 step 4
-- [ ] **AG-11** (N · C) Contract: an OAuth client with redirect URI `…/ccm/ctpassstore/auth/callback` is accepted, and
+- [x] **AG-11** (N · C) Contract: an OAuth client with redirect URI `…/ccm/ctpassstore/auth/callback` is accepted, and
   the authorize step redirects there with `code` and `state` (measures extension spec 14.1) — 3.3
 - [ ] **AG-12** (N · U) Release check: tag `backend-vX.Y.Z`; `MAJOR.MINOR` differing from `extension/package.json`
   fails — 6.5, `versioning.md`

@@ -178,6 +178,23 @@ seeing their password or login token. Observed behavior:
   (e.g. about 10 minutes for authorization codes) probably apply.
 - **Redirect into an extension:** the registered redirect URI can be the extension's page (`/ccm/<key>/`). ChurchTools
   serves the extension for any sub-path, and the query parameters (`code`, `state`) survive client-side routing.
+- **Deep redirect URI and consent (measured 2026-11-13, contract test `AdminGroupContractTest`):**
+  - `POST /api/oauthclients` accepts the `redirectUri` string `https://<instance>/ccm/ctpassstore/auth/callback` (`200`;
+    the answer holds `data.identifier`, `data.clientSecret` and `redirectUri` as a list) and `DELETE
+    /api/oauthclients/{identifier}` removes it.
+  - `GET /oauth/authorize` with a session cookie answers `200` with the consent page on the first use of a client
+    (a Vue page, not a form: the authorize query sits in `window.grantPermissionData.queryParams`). Its approve button
+    submits `POST /oauth/authorize_granted?<the same query>` with the form fields `grant_access=1` and `CSRF-Token`
+    (from `GET /api/csrftoken`); that answers `302` with `Location: <redirect URI>?code=…&state=…`. A second
+    `GET /oauth/authorize` then answers `302` to the same URI directly. `state` comes back exactly as sent.
+  - A user without the right "login to external system" for that client gets `500` with the page text „Du bist nicht
+    berechtigt dich bei „<client>“ einzuloggen.“ instead of a consent page (a normal test user, for a client created
+    on the fly). A user with the right (the admin test user) gets through.
+  - `POST /oauth/access_token` with the code, the `code_verifier`, `client_id`, `client_secret` and `redirect_uri` as
+    form fields answers `200` with an `access_token`.
+  - **Groups with the OAuth token:** `GET /api/persons/{id}/groups` with `Authorization: Bearer <token>` (and
+    `X-OnlyAuthenticated: 1`) answers `200`. The active memberships are the same as with a session login;
+    `group.domainIdentifier` is a string and `groupMemberStatus` is `active` for them.
 
 ## 5. The key-value store (custom data)
 

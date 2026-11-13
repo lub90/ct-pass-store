@@ -603,10 +603,12 @@ Neither the unit nor the app layer needs network access.
 
 On the test instance, recorded in `ct-extension-info.md` and as contract cases:
 
-1. ChurchTools accepts `https://<instance>/ccm/ctpassstore/auth/callback` as an OAuth redirect URI and redirects there.
+1. ~~ChurchTools accepts `https://<instance>/ccm/ctpassstore/auth/callback` as an OAuth redirect URI and redirects
+   there.~~ **measured 2026-11-13:** yes; contract case AG-11.
 2. ChurchTools serves the extension's `index.html` for that deep path (history routing under `/ccm/<key>/`).
-3. With a user's OAuth token (`scope=api`), `GET /api/persons/{id}/groups` lists the person's groups including the
-   admin group, and shows whether the membership is active.
+3. ~~With a user's OAuth token (`scope=api`), `GET /api/persons/{id}/groups` lists the person's groups including the
+   admin group, and shows whether the membership is active.~~ **measured 2026-11-13:** yes, `200`, the same active
+   memberships as with a session, `group.domainIdentifier` a string; contract case AG-10.
 4. Which endpoint and right the admin's `PersonPicker` needs (`GET /api/search` or `GET /api/persons?query=`), and what
    a person without the right gets.
 5. Reading a group's name and member count, and what a person without the right gets.
