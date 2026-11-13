@@ -9,8 +9,9 @@ use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Catalog DP-03 (spec 6.6): `bin/release-check.php <tag>` fails unless the tag is `v` plus the VERSION file and
- * CHANGELOG.md has a section `## [<version>] - <YYYY-MM-DD>` with a real date; on success it prints that section.
+ * Catalog DP-03 (spec 6.6): `bin/release-check.php <tag>` fails unless the tag is `backend-v` plus the VERSION file,
+ * CHANGELOG.md has a section `## [<version>] - <YYYY-MM-DD>` with a real date and MAJOR.MINOR equals that of
+ * extension/package.json (AG-12, versioning.md); on success it prints that section.
  */
 final class ReleaseCheckTest extends TestCase
 {
@@ -32,25 +33,33 @@ final class ReleaseCheckTest extends TestCase
         - Old.
         MD;
 
+    private string $root;
     private string $folder;
 
     protected function setUp(): void
     {
-        $this->folder = sys_get_temp_dir() . '/ctps-release-' . bin2hex(random_bytes(6));
-        mkdir($this->folder, 0o700);
+        $this->root = sys_get_temp_dir() . '/ctps-release-' . bin2hex(random_bytes(6));
+        $this->folder = $this->root . '/backend';
+        mkdir($this->folder, 0o700, true);
+        mkdir($this->root . '/extension', 0o700);
+        file_put_contents($this->root . '/extension/package.json', '{"name": "ext", "version": "0.1.4"}');
         file_put_contents($this->folder . '/VERSION', "0.1.0\n");
         file_put_contents($this->folder . '/CHANGELOG.md', self::CHANGELOG . "\n");
     }
 
     protected function tearDown(): void
     {
-        array_map('unlink', glob($this->folder . '/*') ?: []);
+        foreach (['/backend/*', '/extension/*'] as $pattern) {
+            array_map('unlink', glob($this->root . $pattern) ?: []);
+        }
         rmdir($this->folder);
+        rmdir($this->root . '/extension');
+        rmdir($this->root);
     }
 
     public function testMatchingTagVersionAndSectionPassAndPrintTheSection(): void
     {
-        $result = $this->check('v0.1.0');
+        $result = $this->check('backend-v0.1.0');
 
         self::assertSame(0, $result['exit'], $result['output']);
         self::assertStringContainsString('The /v1 API.', $result['output']);
@@ -63,9 +72,11 @@ final class ReleaseCheckTest extends TestCase
      */
     public static function wrongTags(): iterable
     {
-        yield 'other version' => ['v0.2.0'];
-        yield 'no v prefix' => ['0.1.0'];
-        yield 'suffix' => ['v0.1.0-rc1'];
+        yield 'other version' => ['backend-v0.2.0'];
+        yield 'no prefix' => ['0.1.0'];
+        yield 'old tag pattern' => ['v0.1.0'];
+        yield 'extension tag' => ['extension-v0.1.0'];
+        yield 'suffix' => ['backend-v0.1.0-rc1'];
         yield 'empty' => [''];
     }
 
@@ -81,8 +92,9 @@ final class ReleaseCheckTest extends TestCase
     public function testAMissingSectionFails(): void
     {
         file_put_contents($this->folder . '/VERSION', "0.3.0\n");
+        file_put_contents($this->root . '/extension/package.json', '{"version": "0.3.0"}');
 
-        $result = $this->check('v0.3.0');
+        $result = $this->check('backend-v0.3.0');
 
         self::assertSame(1, $result['exit'], $result['output']);
         self::assertStringContainsString('CHANGELOG', $result['output']);
@@ -105,10 +117,40 @@ final class ReleaseCheckTest extends TestCase
     {
         file_put_contents($this->folder . '/CHANGELOG.md', "# Changelog\n\n## [0.1.0] - $date\n\n- Something.\n");
 
-        $result = $this->check('v0.1.0');
+        $result = $this->check('backend-v0.1.0');
 
         self::assertSame(1, $result['exit'], $result['output']);
         self::assertStringContainsString('date', $result['output']);
+    }
+
+    public function testADifferentExtensionMinorFails(): void
+    {
+        file_put_contents($this->root . '/extension/package.json', '{"version": "0.2.0"}');
+
+        $result = $this->check('backend-v0.1.0');
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString("MAJOR.MINOR 0.1 differs from the extension's 0.2 (versioning.md)", $result['output']);
+    }
+
+    public function testADifferentExtensionPatchPasses(): void
+    {
+        file_put_contents($this->root . '/extension/package.json', '{"version": "0.1.9"}');
+
+        self::assertSame(0, $this->check('backend-v0.1.0')['exit']);
+    }
+
+    public function testAMissingOrBrokenExtensionPackageJsonFails(): void
+    {
+        unlink($this->root . '/extension/package.json');
+        $missing = $this->check('backend-v0.1.0');
+        file_put_contents($this->root . '/extension/package.json', '{"name": "x"}');
+        $noVersion = $this->check('backend-v0.1.0');
+
+        self::assertSame(1, $missing['exit'], $missing['output']);
+        self::assertStringContainsString('extension/package.json', $missing['output']);
+        self::assertSame(1, $noVersion['exit'], $noVersion['output']);
+        self::assertStringContainsString('extension/package.json', $noVersion['output']);
     }
 
     public function testAMissingTagArgumentFails(): void

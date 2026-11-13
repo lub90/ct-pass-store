@@ -13,10 +13,10 @@ final class Version
 {
     private const PATTERN = '/^\d+\.\d+\.\d+(\+[0-9a-f]{7,40}(-dirty)?)?$/';
 
-    /** Pure formatting: the bare version only for a clean checkout of exactly the tag v<base>. */
+    /** Pure formatting: the bare version only for a clean checkout of exactly the tag backend-v<base>. */
     public static function format(string $base, ?string $exactTag, string $sha, bool $dirty): string
     {
-        if ($exactTag === 'v' . $base && !$dirty) {
+        if ($exactTag === 'backend-v' . $base && !$dirty) {
             return $base;
         }
 
