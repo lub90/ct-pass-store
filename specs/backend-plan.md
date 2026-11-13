@@ -267,14 +267,18 @@ Decided: Q11, Q14, Q17, Q18 (spec section 7).
 These live outside the backend, but the new API is only usable once they're done.
 
 - [ ] **5.1 Extension**
+  - **Spec:** [`extension-spec.md`](extension-spec.md) (agreed 2026-11-12): new design system instead of Vuetify,
+    architecture, rights model with the category `access` and the admin group, languages, tests. Where it differs
+    from the items below, the spec wins; the differences are marked **(changed 2026-11-12)**.
   - The OAuth login flow (`state`/PKCE in `sessionStorage`, `POST /auth/token`, a silent re-login on `token-expired`).
   - **Re-login without losing input.** The backend token stays at 15 minutes (spec 4.4, Q21); the extension makes its
     expiry invisible. No backend change is needed.
     - **Page load:** a normal full-page redirect to `/oauth/authorize`. Nothing can be lost yet.
     - **During a session:** re-login in a popup, so the page and any form stay untouched. After the first consent,
       ChurchTools redirects without a visible step (it ignores `prompt=login`), so the window only flashes briefly.
-    - **Callback:** the extension page itself is the redirect URI, so no second URI is registered and the backend's
-      `redirectUri` check (spec 4.4) stays as it is. Loaded with `code` and `state` in a window with `window.opener`,
+    - **Callback** **(changed 2026-11-12, extension spec E7):** the redirect URI is the route
+      `/ccm/ctpassstore/auth/callback`, the only one registered; the backend's `redirectUri` check (spec 4.4) stays as
+      it is, because it doesn't look at the path. Loaded with `code` and `state` in a window with `window.opener`,
       it passes both to the opener with `postMessage` (target origin = its own origin) and closes itself.
     - **`state` and PKCE verifier** of a popup login live in the opener's memory, because `sessionStorage` isn't shared
       between the opener and the popup. The opener checks `event.origin` against its own origin and `state` against the
@@ -307,8 +311,12 @@ These live outside the backend, but the new API is only usable once they're done
       - **Service user:** read access to the extension's categories and write access to `passwordStore` only, no
         admin rights (spec 4.8; the self-check of 4.2 fails if it has more).
 
-      The backend's admin role still comes from the `adminUsers` list in the settings until Q22 (roles via groups) is
-      decided; the wizard says so and doesn't silently mix the two.
+      **(changed 2026-11-12, extension spec E4, E5, section 11):** Q22 is decided. The admin role comes from a
+      ChurchTools group (`access.groups.admins`), checked by the backend at login; `adminUsers` is gone. The extension
+      admins above are that group. The role groups and `machineClients` live in the new category `access`, which only
+      the admin group and the service user can read; users read only `settings`. **Which group gets which right, the
+      rights check and changing groups later (existing groups can be used) are in extension spec section 16; the
+      list above is superseded by its table.**
     - **Service user:** create the person with a login name, set a long random password with the legacy
       `setPersonPassword` call (needs "simulate persons" and a CSRF token; check `status`, not the HTTP status; see
       the API facts below), and add it to the service-user group. The wizard **doesn't** fetch the token and never logs
@@ -392,6 +400,32 @@ These live outside the backend, but the new API is only usable once they're done
   - Stop fetching `/persons/{id}/logintoken`.
   - Align the settings with the backend's validation: `passwordLength` 12–64 in the JSON schema (`AppConfig.ts`)
     and in the settings form (today: minimum 8, no maximum).
+  - **Wizards for setup, migration, backup and restore** (decided in the extension brainstorm, 2026-11-12). They get
+    their own spec together with 4.6; [`extension-spec.md`](extension-spec.md) section 12 fixes their boundary.
+    - **One spec, built together with 4.6:** setup wizard, migration wizard, backup and restore.
+    - **Who may run them:** before setup and during migration, the ChurchTools rights the wizard needs decide (the
+      wizard spec lists them); everyone else sees a waiting text. After setup, „Sicherung“ and „Einrichtung“ appear
+      only to admins (admin group) who also have those rights.
+    - **Setup state** without a `setupCompleted` flag: `settings` with `backendUrl` and `oauthClientId` means set up;
+      the wizard writes `backendUrl` last (extension spec E6). The old category `setupCompleted` is deleted.
+    - **Migration runs inside the extension** (updating an extension keeps its data, `ct-extension-info.md` section 2),
+      in its own module `src/migration/`, separate from the setup flow. It uses only the shared building blocks
+      (`ct/`, `store/`, `model/`, the provisioning code). An admin who opens the new version on old data gets „Daten
+      aktualisieren“ (update data):
+      1. download a backup of every category first;
+      2. transform `settings` (drop `adminUsers`, `readAccessUsers`, `machineClients`; raise `passwordLength` to at
+         least 12; add `schema`, `revision`, `texts`);
+      3. create the category `access` and the admin group, and add the persons of the old `adminUsers` to it;
+      4. move `machineClients` to `access`;
+      5. delete the category `setupCompleted`;
+      6. adjust the rights for the new categories (the setup wizard's provisioning code);
+      7. create the OAuth application and configure the backend as in a new setup (the old backend used login tokens).
+    - **Passwords shorter than the new minimum:** the migration doesn't decrypt anything and never gets the private
+      key. Stored passwords keep working; the migration says nothing about their length and points to the CHANGELOG,
+      which explains that the minimum is now 12 and that users may want to set a new password.
+    - **Old layout detection:** `isOldLayout()` from `extension/src/model/` (extension spec 6.3).
+    - **Backup and restore:** a file with every category. Reading and writing `passwordStore` needs rights only the
+      service user has; the wizard spec decides how (for example through a backend endpoint).
 - [ ] **5.2 ct-radius** (see the ct-radius section in [`TODO.md`](../TODO.md))
   - Ed25519 key generation and token signing, and the problem `type` check for `404`.
   - A timeout on the backend call, the backend URL, updated tests.
