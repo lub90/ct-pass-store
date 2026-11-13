@@ -1,6 +1,6 @@
 <template>
     <main>
-        <h1>CtPassStore</h1>
+        <h1>{{ $t('app.name') }}</h1>
         <p>{{ APP_VERSION }}</p>
     </main>
 </template>
