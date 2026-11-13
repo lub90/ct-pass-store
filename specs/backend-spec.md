@@ -773,7 +773,7 @@ Authorization: Bearer <CLEANUP_TOKEN>
 6. **Run:** `CleanupOrphans` (5.8.6) with a deadline of **20 seconds** after the request came in (5.8.4). `200`:
 
    ```json
-   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
+   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0}
    ```
 
    | Field | Meaning |
