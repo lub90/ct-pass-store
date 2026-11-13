@@ -4,26 +4,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { appVersion } from './scripts/app-version.ts';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
-/** `x.y.z` on an `extension-v<x.y.z>` tag, otherwise `x.y.z+sha` (plus `-dirty` with uncommitted changes). */
-function appVersion(): string {
+function gitVersion(): string {
     const base = (JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as { version: string }).version;
-    const git = (args: string) => execSync(`git ${args}`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    try {
-        let tagged = false;
-        try {
-            tagged = git("describe --exact-match --tags --match 'extension-v*' HEAD") === `extension-v${base}`;
-        } catch {
-            // HEAD carries no extension tag
-        }
-        const dirty = git('status --porcelain') !== '';
-        if (tagged && !dirty) return base;
-        return `${base}+${git('rev-parse --short HEAD')}${dirty ? '-dirty' : ''}`;
-    } catch {
-        return base; // no git available
-    }
+    return appVersion(base, (args) =>
+        execSync(`git ${args}`, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(),
+    );
 }
 
 /** Writes the licence texts of all bundled npm packages to THIRD-PARTY-LICENSES.txt. */
@@ -70,7 +59,7 @@ export default defineConfig(({ mode }) => {
     return {
         base: '/ccm/ctpassstore/',
         plugins: [vue(), thirdPartyLicenses()],
-        define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+        define: { __APP_VERSION__: JSON.stringify(gitVersion()) },
         resolve: { alias: { '@': path.join(root, 'src') } },
         server: { proxy },
         build: {

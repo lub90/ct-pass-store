@@ -37,6 +37,25 @@ describe('checkDist', () => {
         expect(failures.join('\n')).toMatch(/exactly one JavaScript bundle/);
     });
 
+    it('counts an .mjs file as a second bundle', () => {
+        const failures = checkDist(makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'chunk.mjs'), '1;')));
+        expect(failures.join('\n')).toMatch(/exactly one JavaScript bundle/);
+    });
+
+    it('fails for an instance host inside a sourcemap', () => {
+        const failures = checkDist(
+            makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js.map'), '{"sourcesContent":["https://gemeinde.church.tools"]}')),
+        );
+        expect(failures.join('\n')).toMatch(/gemeinde\.church\.tools in assets\/index-abc\.js\.map|"gemeinde\.church\.tools" in assets/);
+    });
+
+    it('fails for an instance host inside the licence file', () => {
+        const failures = checkDist(
+            makeDist((d) => fs.appendFileSync(path.join(d, 'THIRD-PARTY-LICENSES.txt'), 'see https://gemeinde.church.tools')),
+        );
+        expect(failures.join('\n')).toMatch(/gemeinde\.church\.tools" in THIRD-PARTY-LICENSES\.txt/);
+    });
+
     it('fails for an inline script without src', () => {
         const failures = checkDist(
             makeDist((d) => fs.writeFileSync(path.join(d, 'index.html'), '<html><script>alert(1)</script></html>')),

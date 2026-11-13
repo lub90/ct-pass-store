@@ -9,7 +9,7 @@ export default defineConfig({
     resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
     test: {
         environment: 'jsdom',
-        include: ['src/**/*.test.ts', 'scripts/**/*.test.js'],
+        include: ['src/**/*.test.ts', 'scripts/**/*.test.{js,ts}'],
         passWithNoTests: true,
     },
 });

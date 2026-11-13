@@ -15,11 +15,13 @@ function walk(dir) {
 export function checkDist(dist) {
     const failures = [];
     const files = walk(dist);
-    const text = files.filter((f) => /\.(js|css|html)$/.test(f));
+    // Everything that is not a known binary type is scanned as text: sourcemaps, licence texts, JSON, SVG, ...
+    const binary = /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|eot|zip|gz|br|pdf)$/i;
+    const text = files.filter((f) => !binary.test(f));
     const rel = (f) => path.relative(dist, f);
 
     // 1. One bundle: a tab must never request a chunk an update has deleted.
-    const scripts = files.filter((f) => f.endsWith('.js'));
+    const scripts = files.filter((f) => /\.(js|mjs|cjs)$/.test(f));
     if (scripts.length !== 1) {
         failures.push(`expected exactly one JavaScript bundle, found ${scripts.length}: ${scripts.map(rel).join(', ')}`);
     }
