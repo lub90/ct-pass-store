@@ -17,6 +17,8 @@ parameters:
               - tests/Support/PhpProcess.php
               # asks git for the version at build time; command line only, argument array, no shell (spec 6.5)
               - bin/version.php
+              # builds a temporary git repository to run bin/version.php in
+              - tests/Unit/Deploy/VersionScriptTest.php
               - tests/Unit/Security/BannedCallsTest.php
         - function: ['putenv()', 'apache_setenv()', 'extract()']
           message: 'changes the environment or creates variables from data'
