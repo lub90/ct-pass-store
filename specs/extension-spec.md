@@ -45,7 +45,7 @@
 | E2 | **`src/ui/` is a strict boundary** and moves to `ct-extension-utils` once a second extension (ct-radius) uses it. | The library's API is shaped by two real users instead of guesses; no `subtree push` for every change while it's young. |
 | E3 | **Frame by role:** normal users get one centered card without navigation; admins get a sidebar (a dropdown on phones). | Most people only ever see their own password. |
 | E4 | **Category `access`** holds the role groups (`groups`) and `machineClients`; `settings` keeps only the policy, `backendUrl` and `texts`. | Users must read `settings`, but not who's an admin; changing the policy no longer implies controlling access. |
-| E5 | **Admin role from a ChurchTools group** (`groups.admins`), checked by the backend at login; replaces `adminUsers` completely. | Membership is managed in ChurchTools, visible only as ChurchTools allows. Answers backend Q22 (a new backend decision with the next free number; D7 and D8 are taken). |
+| E5 | **Admin role from a ChurchTools group** (`groups.admins`), checked by the backend at login; replaces `adminUsers` completely. | Membership is managed in ChurchTools, visible only as ChurchTools allows. Answers backend Q22 (backend decision D9). |
 | E6 | **No `setupCompleted` category.** "Set up" means: valid `settings` with `backendUrl`, which the wizard writes last. Admins see the real health from `/v1/test`. | A flag can claim what it doesn't check; one category fewer to grant. |
 | E7 | **OAuth callback route** `/ccm/ctpassstore/auth/callback` is the only registered redirect URI; it forwards to the page remembered with `state`. | Login logic and app pages stay apart; one fixed URI instead of one per page. |
 | E8 | **Backend token in `sessionStorage`** (15 minutes, gone with the tab). | No redirect on every reload. A script on the ChurchTools page could read it, but it could already act through the ChurchTools session. |
@@ -500,14 +500,16 @@ plan. Section numbers refer to `backend-spec.md`.
    gains `"admin": true|false` and `"version": "x.y.z"`.
 3. **Section 4.3:** the admin role comes from the token claim `admin`, no longer from the settings. Removing someone
    from the group takes effect when their token expires (15 minutes), like revoking `view`.
-4. **Section 4.8:** `/v1/test` checks that the service user can read `access`, that `groups.admins.groupId` is set and names an
-   existing group, and reports the machine clients from `access`. The checks that used `adminUsers` (e.g.
-   `AdminUsersCheck`, gone admins of the cleanup design) move to the group or are dropped; the plan decides per check.
+4. **Section 4.8:** `/v1/test` checks only that the service user can read `access` and that `groups.admins.groupId` is a
+   positive integer (check "access"). Whether the group exists is checked by the extension's rights check (16.4, rule 5),
+   so the service user gets no group right. The gone-admins checks (`GoneAdmins`, `AdminUsersCheck`, the cleanup
+   report's gone admins, CLI exit code 1 for gone admins) are dropped: membership lives in ChurchTools, and a deleted or
+   archived person can't log in.
 5. **Section 3.3:** the redirect URI is `https://<instance>/ccm/ctpassstore/auth/callback`. The backend's check of
    `redirectUri` (scheme, host, port) is unchanged.
 6. **Section 6.5:** versioning by [`versioning.md`](versioning.md); tags `backend-v*.*.*`.
-7. **Section 7, 8:** Q22 answered by a new decision with the next free number (D7 and D8 are taken by the cleanup):
-   admin role from a ChurchTools group, checked at login.
+7. **Section 7, 8:** Q22 answered by the new decision D9 (D7 and D8 are taken by the cleanup): admin role from a
+   ChurchTools group, checked at login.
 8. The machine-client permission matrix and everything else of 4.3 stay as they are (E9).
 
 ## 12. Boundary to setup, migration, backup and restore

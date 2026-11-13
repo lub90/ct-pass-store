@@ -3,7 +3,8 @@
 The test cases for the backend, derived from [`backend-spec.md`](backend-spec.md). Tests are written against this
 catalog and checked off when they exist and pass. A case found during implementation goes into the catalog first.
 
-**Notation:** `- [ ] **ID** (Category · Layer) Description — spec reference`
+**Notation:** `- [ ] **ID** (Category · Layer) Description — spec reference`. `- [-]` marks a case that was removed
+because the spec dropped the behavior; it stays in the list for the record and isn't run.
 
 | Category | Meaning |
 | --- | --- |
@@ -160,9 +161,9 @@ normal case names it ("→ PV-05").
   credentials in it; `CORS` not a list or containing non-origins (`*`, a path); keys with wrong types → `misconfigured`
   naming the key — 3.1
 - [x] **SE-01** (N · U) Valid settings are loaded and typed correctly — 3.2
-- [x] **SE-02** (E · U) Missing `adminUsers` and missing `machineClients` mean empty lists; a leftover `readAccessUsers`
-  grants nothing (Q23) — 5.4.4
-- [x] **SE-03** (! · U) `adminUsers` with non-numeric or negative entries (`"1; drop"`, `-1`, `0`, `1.5`, `null`) is a
+- [x] **SE-02** (E · U) Missing `access.machineClients` means an empty list; a leftover `readAccessUsers` grants nothing
+  (Q23). **Amended (AG, 2026-11-13):** `adminUsers` is no longer read (AG-09) — 5.4.4
+- [-] **SE-03** **Removed (AG, 2026-11-13):** Replaced by AG-04 and AG-09. (was) (! · U) `adminUsers` with non-numeric or negative entries (`"1; drop"`, `-1`, `0`, `1.5`, `null`) is a
   configuration error, not a cast to `0` or `1` — 3.2
 - [x] **SE-04** (! · U) `passwordLength`: 12 and 64 are accepted; 11, 65, missing, `0`, negative, a string or a float →
   `misconfigured`, never a silent fallback — 3.2
@@ -386,9 +387,9 @@ normal case names it ("→ PV-05").
 - [x] **AZ-12** (! · A) Principal confusion: a machine client with `id` `123` isn't person 123 (no "own" entry, no
   write on entry 123). A user token with `sub` `123` gets none of client `123`'s permissions — 4.3
 - [x] **AZ-03** (! · A) A machine client can't write or delete, even with `entries:read` — 4.3.4
-- [x] **AZ-04** (! · A) Removing a person from `adminUsers` takes away admin rights once the settings cache has expired,
+- [-] **AZ-04** **Removed (AG, 2026-11-13):** Replaced by AG-06. (was) (! · A) Removing a person from `adminUsers` takes away admin rights once the settings cache has expired,
   even with a still-valid token — 4.3
-- [x] **AZ-05** (N · A) Adding a person to `adminUsers` grants the rights without a new login — 4.3
+- [-] **AZ-05** **Removed (AG, 2026-11-13):** Replaced by AG-06. (was) (N · A) Adding a person to `adminUsers` grants the rights without a new login — 4.3
 - [x] **AZ-06a** (N · A) Requests rejected before authentication (missing token, unknown route, wrong method) make no
   ChurchTools call at all. (Regression: the public key used to be loaded on every request.) — 4.1, 6.1
 - [x] **AZ-06** (N · A) Authenticated requests make **no** ChurchTools calls for authentication (counted on the fake) —
@@ -494,9 +495,9 @@ normal case names it ("→ PV-05").
 - [x] **TS-08** (! · A) Service user without the persons right → "Service user rights" `fail`, message lists the missing
   parts (also a department without `view alldata`); together with administrative rights both are in one message; a
   failure to read the departments fails the check — cleanup design 3.7
-- [x] **TS-09** (N · A) A gone (archived or unknown) admin in `adminUsers` → "Admin users" `fail` naming person IDs
+- [-] **TS-09** **Removed (AG, 2026-11-13):** (was) (N · A) A gone (archived or unknown) admin in `adminUsers` → "Admin users" `fail` naming person IDs
   only, singular and plural wording; all active → `ok` — cleanup design 3.7
-- [x] **TS-10** (E · A) The admin lookup fails → "Admin users" `fail` with a generic message, no exception detail in
+- [-] **TS-10** **Removed (AG, 2026-11-13):** (was) (E · A) The admin lookup fails → "Admin users" `fail` with a generic message, no exception detail in
   the response; the class and the (log-safe) message in the log, never a token — cleanup design 3.7
 - [x] **TS-11** (! · A) "Web cron token": absent → `ok` (off); shorter than 43 → `fail`, token not printed; usable →
   `ok` (on) — cleanup design 3.7, 5.1
@@ -566,7 +567,7 @@ normal case names it ("→ PV-05").
   (MC-19); unwritable rate-limit counters reject primary-password checks (`500 misconfigured`), never skip the limit —
   6.1
 - [x] **CA-08** (! · U) Tampering with the settings cache: an entry with the current key identifier but a missing or
-  wrong HMAC (e.g. another webspace user wrote `adminUsers: [99]`) isn't trusted, is reloaded from ChurchTools, and an
+  wrong HMAC (e.g. another webspace user wrote a different admin group ID into `access`) isn't trusted, is reloaded from ChurchTools, and an
   `error` is logged. Cache files are created with mode `600` and the folder with `700` — 6.1
 - [x] **CA-10** (! · U) Tampering with a security store: a `jti` cache or rate-limit file with the current key identifier
   but a wrong or missing HMAC → the affected requests are rejected (`500 misconfigured`), never treated as "not seen"
@@ -789,7 +790,7 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-02** (! · U) `GonePersons::find()`: persons the batch confirms get no single lookup; the others are looked
   up one after another, and unknown and archived ones are gone; a failure of the batch or of a lookup propagates; once
   the deadline has passed the rest is `unchecked`; an empty input makes no call — cleanup design 3.4
-- [x] **GP-03** (N · U) `GoneAdmins::find()` returns the gone persons among `adminUsers` in their order, and `[]` if
+- [-] **GP-03** **Removed (AG, 2026-11-13):** (was) (N · U) `GoneAdmins::find()` returns the gone persons among `adminUsers` in their order, and `[]` if
   all are active — cleanup design 3.4
 - [x] **GP-04** (N · U) `CachedPersonDirectory`: a person found active is cached for 600 s (a second `exists()` makes
   no call, after 600 s it does); "gone" is never cached; expired IDs are dropped when the record is written; a broken
@@ -800,19 +801,19 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **GP-07** (! · U) a failed batch lookup or a failed single lookup propagates and nothing is deleted — cleanup design 3.5
 - [x] **GP-08** (! · U) a `RateLimitedException` at the 3rd of 4 single lookups propagates and nothing is deleted — cleanup design 3.5
 - [x] **GP-09** (! · U) a failed delete is recorded and logged, the other persons are still deleted, `exitCode()` is 1 — cleanup design 3.5
-- [x] **GP-10** (! · U) a gone admin with an entry is deleted and reported in `goneAdmins`, `exitCode()` is 1 — cleanup design 3.5
+- [-] **GP-10** **Removed (AG, 2026-11-13):** (was) (! · U) a gone admin with an entry is deleted and reported in `goneAdmins`, `exitCode()` is 1 — cleanup design 3.5
 - [x] **GP-11** (N · U) person ID 0 (self-test) is ignored: no lookup, no delete — cleanup design 3.5
 - [x] **GP-12** (! · U) entries with string IDs and duplicates of a gone person are all removed — cleanup design 3.5
 - [x] **GP-13** (! · U) invalid settings throw `ConfigurationException` and nothing is deleted — cleanup design 3.5
 - [x] **GP-14** (! · U) a missing persons right throws `PersonsNotReadableException` before any person call — cleanup design 3.5
 - [x] **GP-15** (! · U) a passed deadline leaves the rest `unchecked` (`isComplete()` false); a second run without a deadline deletes them — cleanup design 3.5
-- [x] **GP-16** (! · U) `CleanupCommand`: exit codes 0 (clean), 1 (gone admin, failed delete) and 2 (failed lookup, missing right, held lock, unknown argument), the exact output lines, and output that names person IDs only — cleanup design 4
+- [x] **GP-16** (! · U) `CleanupCommand`: exit codes 0 (clean), 1 (failed delete; **gone admin removed, AG, 2026-11-13**) and 2 (failed lookup, missing right, held lock, unknown argument), the exact output lines, and output that names person IDs only — cleanup design 4
 - [x] **GP-17** (! · U) dry run is the default and deletes nothing; `--apply` deletes — cleanup design 4
 - [x] **GP-18** (! · U) a held `cache/cleanup.lock` makes the run exit 2 with `Another cleanup is running.`; the lock is released after a run — cleanup design 6.3
 - [x] **GP-19** (! · U) `bin/cleanup.php`: unknown argument exits 2 with the usage, missing `credentials.php` exits 2 with `Configuration error:`, and `.htaccess` denies `bin/`, `cache/` and `setup/` — cleanup design 4
 - [x] **GP-20** (! · U) an unexpected error in the CLI is logged by class only, prints `Aborted with an unexpected error; see the log.` and exits 2; an unopenable lock file exits 2 with its own message (not "Another cleanup is running.") — cleanup design 4
 - [x] **GP-21** (! · U) a single lookup gets a `404` that isn't ChurchTools' error for the person (CC-20) → the run aborts and nothing is deleted — cleanup design 3.5, 9.1
-- [x] **GP-22** (! · U) the main lookups succeed and find a gone person, then the lookup of `adminUsers` fails (its single lookup or its batch) → the failure propagates and nothing is deleted — cleanup design 3.5
+- [-] **GP-22** **Removed (AG, 2026-11-13):** (was) (! · U) the main lookups succeed and find a gone person, then the lookup of `adminUsers` fails (its single lookup or its batch) → the failure propagates and nothing is deleted — cleanup design 3.5
 - [x] **GP-23** (N · U) `run(true)` with N gone persons lists the `passwordStore` category once for all deletes (plus once for `personIds()`) — cleanup design 3.5
 - [x] **GP-24** (! · U) the deadline passes during the deletes → no further delete starts, the person being deleted is finished, the rest goes to `unchecked` (`isComplete()` false, not counted as deleted) and the next run deletes them — cleanup design 3.5, 5.3
 - [x] **GP-25** (! · U) `CachedPersonDirectory` trusts a cached expiry only if it lies within the next 600 s: a record whose expiry is far in the future is a miss and leads to a lookup — cleanup design 3.2
@@ -828,7 +829,7 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **WC-06** (! · A) `apply` other than absent or `1` (`0`, `true`, empty, an array) is refused with `400 invalid-body` and runs nothing — cleanup design 5.1
 - [x] **WC-07** (! · A) the dry run answers `200` with the body of design 5.3 (`applied: false`, `deleted: 0`) and writes nothing — cleanup design 5.3
 - [x] **WC-08** (! · A) `?apply=1` deletes the entries of gone persons only and reports the counts — cleanup design 5.3
-- [x] **WC-09** (! · A) the body contains counts only, none of the person IDs involved (gone, gone admin, active) — cleanup design 5.2
+- [x] **WC-09** (! · A) the body contains counts only, none of the person IDs involved (gone, active; **gone admin removed, AG, 2026-11-13**) — cleanup design 5.2
 - [x] **WC-10** (! · A) a second call within 600 s gets `429 cleanup-too-soon` with `Retry-After` and makes no ChurchTools call; after 600 s it runs — cleanup design 5.2
 - [x] **WC-11** (! · A) a run that fails (`502`) still starts the cooldown: the next call gets `429` and makes no ChurchTools call — cleanup design 5.3
 - [x] **WC-12** (! · A) a held `cache/cleanup.lock` gives `409 cleanup-running`; that call started the cooldown, so the next one gets `429` — cleanup design 5.3, 6.3
@@ -836,3 +837,29 @@ tests are removed; the suite is now `tests/Contract`. Still open from this table
 - [x] **WC-14** (! · A) a lock file that can't be opened gives `500 internal-error` without the path in the body, and the lock is released after every run — cleanup design 6.3
 - [x] **WC-15** (N · A) with the endpoint on, other methods than `POST` get `405` (`Allow: POST` for GET, PUT, DELETE); off, see WC-01 — cleanup design 5.1
 - [x] **WC-16** (! · A) a tampered cooldown record fails closed with `500 misconfigured` and runs nothing — cleanup design 5.2
+
+## 19. Admin group and `access` category (spec 3.2, 4.3, 4.4, 4.8, 6.5, D9)
+
+Cases for the admin role from a ChurchTools group, the `access` category and the release check. They replace the
+`adminUsers` cases marked removed above (AZ-04, AZ-05, SE-03, TS-09, TS-10, GP-03, GP-10, GP-22).
+
+- [ ] **AG-01** (! · U) Group ID matching: `"12"` matches 12; `"012"`, `"12 "`, `"1e1"`, `12.0`, `null` don't — 4.4 step 4
+- [ ] **AG-02** (! · A) Admin only with an `active` membership in exactly the configured group; `waiting`, `requested`,
+  `to_delete`, another group, or no `groups.admins` → `admin: false` — 4.4 step 4
+- [ ] **AG-03** (N · A) Login answer: `admin` and `version` present; `version` equals `Version::current()` — 4.4
+- [ ] **AG-04** (! · A) `access` missing, value missing, `groupId` missing, `0`, negative or a string → login works,
+  `admin: false`; machine clients without `access` are refused — 3.2, D9
+- [ ] **AG-05** (S · A) ChurchTools answers `404` or `403` for the person's groups → login works, `admin: false`,
+  `warning` logged; `5xx`/timeout → `502 upstream-unavailable` (no token issued with a guessed role) — 4.4 step 4
+- [ ] **AG-06** (! · A) Authorization reads only the token: a token with `admin: true` may act on others; `admin: false`
+  may not, even if `adminUsers` in `settings` still lists the person — 4.3
+- [ ] **AG-07** (! · U) A token without `admin`, or with `admin` as `"true"`/`1` → `401 invalid-token` — 4.4
+- [ ] **AG-08** (N · A) `/v1/test` check "access": ok; fails for unreadable `access`, invalid `groupId` — 4.8
+- [ ] **AG-09** (N · U) `settings` with `schema`, `revision`, `oauthClientId`, `texts`, `adminUsers`, `machineClients`
+  parses as before; none of them changes `Settings` — 3.2
+- [ ] **AG-10** (! · C) Contract: with a user's OAuth token, `GET /api/persons/{id}/groups` lists the user's own active
+  memberships (measures extension spec 14.3) — 4.4 step 4
+- [ ] **AG-11** (N · C) Contract: an OAuth client with redirect URI `…/ccm/ctpassstore/auth/callback` is accepted, and
+  the authorize step redirects there with `code` and `state` (measures extension spec 14.1) — 3.3
+- [ ] **AG-12** (N · U) Release check: tag `backend-vX.Y.Z`; `MAJOR.MINOR` differing from `extension/package.json`
+  fails — 6.5, `versioning.md`
