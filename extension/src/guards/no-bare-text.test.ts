@@ -48,14 +48,16 @@ describe('no bare text in templates', () => {
     it('finds bare text (self-check)', () => {
         expect(bareTexts('<p>Hallo {{ x }}</p>')).toEqual(['Hallo']);
         expect(bareTexts('<p>{{ $t("a") }}</p><b :title="x" />')).toEqual([]);
+        expect(bareTexts('<div><p v-if="a">Ja</p><p v-else><span>Nein</span></p></div>')).toEqual(['Ja', 'Nein']);
         expect(bareTexts('<input placeholder="Name">')).toEqual(['placeholder="Name"']);
     });
 
     for (const file of vueFiles(SRC)) {
         it(path.relative(SRC, file), () => {
             const source = fs.readFileSync(file, 'utf8');
-            const template = /<template>([\s\S]*)<\/template>/.exec(source)?.[1] ?? '';
-            expect(bareTexts(template)).toEqual([]);
+            const template = /<template(?:\s[^>]*)?>([\s\S]*)<\/template>/.exec(source)?.[1];
+            expect(template, 'no <template> block found').toBeDefined();
+            expect(bareTexts(template!)).toEqual([]);
         });
     }
 });
