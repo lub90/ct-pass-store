@@ -57,4 +57,12 @@ describe('schemas', () => {
         const bad = { schema: 2, revision: 1, groups: { users: g, admins: { groupId: 2 ** 60, createdBySetup: false }, service: g }, machineClients: [] };
         expect(v.safeParse(AccessSchema, bad).success).toBe(false);
     });
+
+    it('never throws on malformed keys', () => {
+        const g = { groupId: 1, createdBySetup: false };
+        for (const bad of ['!!!', 'AAAAA', 'A']) {
+            const value = { schema: 2, revision: 1, groups: { users: g, admins: g, service: g }, machineClients: [{ ...client, publicKeys: [bad] }, { ...client, id: 'other', publicKeys: [bad] }] };
+            expect(v.safeParse(AccessSchema, value).success).toBe(false);
+        }
+    });
 });

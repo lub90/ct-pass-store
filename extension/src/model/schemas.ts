@@ -15,9 +15,13 @@ function decodesTo32Bytes(s: string): boolean {
 }
 
 /** The bytes of a key given as base64 or base64url (so both spellings of one key compare equal). */
-function keyBytes(s: string): string {
-    const std = s.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-    return atob(std.padEnd(Math.ceil(std.length / 4) * 4, '='));
+function keyBytes(s: string): string | null {
+    try {
+        const std = s.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
+        return atob(std.padEnd(Math.ceil(std.length / 4) * 4, '='));
+    } catch {
+        return null; // malformed: the per-key check reports it
+    }
 }
 
 /** `https://`, no credentials, no query, no fragment (mirrors backend spec 3.2). */
@@ -75,6 +79,7 @@ export const AccessSchema = v.looseObject({
             const seen = new Set<string>();
             for (const c of clients) {
                 for (const k of new Set(c.publicKeys.map(keyBytes))) {
+                    if (k === null) continue;
                     if (seen.has(k)) return false;
                     seen.add(k);
                 }

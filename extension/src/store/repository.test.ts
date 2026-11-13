@@ -154,6 +154,17 @@ describe('ExtensionStore fixes', () => {
     });
 });
 
+describe('ExtensionStore malformed keys', () => {
+    it('reads invalid, not throwing, for malformed public keys', async () => {
+        for (const bad of ['!!!', 'AAAAA']) {
+            const stored = { ...access, machineClients: [{ id: 'abc', name: 'n', publicKeys: [bad], permissions: ['entries:read'], createdAt: 'x' }] };
+            const r = await new ExtensionStore(new MemoryKv({ access: [JSON.stringify(stored)] })).readAccess();
+            expect(r.state).toBe('invalid');
+            expect(r.state === 'invalid' && r.issues.length).toBeGreaterThan(0);
+        }
+    });
+});
+
 describe('ChurchToolsKv', () => {
     it('works through the API layer', async () => {
         const api = createFakeChurchTools({
