@@ -18,6 +18,7 @@
     "dependencies": {
         "@churchtools/churchtools-client": "^1.7.3",
         "@mdi/js": "^7.4.47",
+        "valibot": "^1.5.0",
         "vue": "^3.5.45",
         "vue-i18n": "^11.4.19",
         "vue-router": "^5.5.1"
