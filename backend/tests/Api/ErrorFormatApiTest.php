@@ -152,7 +152,8 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->clearValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY]);
 
-        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
+        // A change needs the settings; a person's read doesn't since the admin role is in the token.
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']));
 
         self::assertStringContainsString('settings', (string) $body['detail']);
     }

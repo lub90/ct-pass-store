@@ -122,7 +122,7 @@ final class Kernel
             $logger,
         );
         // The log folder is `logs/` next to the cache folder, as `public/index.php` lays them out (spec 3.1).
-        $selfCheck = new SelfCheckController($settings, new SelfCheck([
+        $selfCheck = new SelfCheckController(new SelfCheck([
             new CredentialsFileCheck($config->credentialsPath),
             new LogFolderCheck(dirname($config->cacheDir) . '/logs'),
             new CacheFolderCheck($config->cacheDir, $securityStore),
@@ -140,9 +140,10 @@ final class Kernel
         $login = new AuthController(new Login(
             $config->instanceOrigin(),
             new ChurchToolsIdentityProvider($churchTools, $config->oauthClientId, $config->oauthClientSecret, $logger),
+            $settings,
             $tokens,
             $logger,
-        ), $addressLimiter, $logger);
+        ), $addressLimiter, $logger, $version);
 
         $authenticator = new Authenticator($codec, $tokens, new MachineTokens($settings, new FileReplayCache($securityStore), $clock, $codec));
 

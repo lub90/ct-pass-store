@@ -452,10 +452,13 @@ final class LoadTest extends TestCase
         return $response['ms'];
     }
 
+    /**
+     * A token as a login of an admin-group member would issue it; the admin role is the token's claim (spec 4.3).
+     */
     private function adminToken(): string
     {
         return (new UserTokens(self::$jwtSecret, new SystemClock(), new FirebaseTokenCodec()))
-            ->issue(new PersonPrincipal(new PersonId(self::$adminId), self::$adminUsername))->token;
+            ->issue(new PersonPrincipal(new PersonId(self::$adminId), self::$adminUsername, admin: true))->token;
     }
 
     /**

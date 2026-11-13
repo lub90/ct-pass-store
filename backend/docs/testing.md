@@ -152,9 +152,10 @@ The OAuth flow can't be automated. Check it by hand against the test instance:
    `response_type=code`, `scope=api`, `state` and `code_challenge_method=S256`.
 2. On the first login, ChurchTools shows the consent screen; after consenting, it redirects back to the extension page.
    On later logins, the redirect happens without a visible step.
-3. The extension calls `POST /v1/auth/token` and gets `200` with `accessToken`, `tokenType: "Bearer"` and
-   `expiresIn: 900`. Decode the token (e.g. on jwt.io with a test token only): `iss` `ctpassstore-backend`, `aud`
-   `ctpassstore-api`, `sub` the person ID, `username` the ChurchTools username.
+3. The extension calls `POST /v1/auth/token` and gets `200` with `accessToken`, `tokenType: "Bearer"`,
+   `expiresIn: 900`, `admin` and `version`. Decode the token (e.g. on jwt.io with a test token only): `iss`
+   `ctpassstore-backend`, `aud` `ctpassstore-api`, `sub` the person ID, `username` the ChurchTools username, `admin`
+   `true` only for an active member of the admin group.
 4. Repeat the request with the same code: `400 oauth-code-invalid`.
 5. A user without the extension's `view` permission gets `403 no-service-access`.
 6. A user without the right "Bei Drittsystem via ChurchTools-Benutzerkonto einloggen" for the OAuth application sees

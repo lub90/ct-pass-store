@@ -844,16 +844,16 @@ Cases for the admin role from a ChurchTools group, the `access` category and the
 `adminUsers` cases marked removed above (AZ-04, AZ-05, SE-03, TS-09, TS-10, GP-03, GP-10, GP-22).
 
 - [x] **AG-01** (! · U) Group ID matching: `"12"` matches 12; `"012"`, `"12 "`, `"1e1"`, `12.0`, `null` don't — 4.4 step 4
-- [ ] **AG-02** (! · A) Admin only with an `active` membership in exactly the configured group; `waiting`, `requested`,
+- [x] **AG-02** (! · A) Admin only with an `active` membership in exactly the configured group; `waiting`, `requested`,
   `to_delete`, another group, or no `groups.admins` → `admin: false` — 4.4 step 4
-- [ ] **AG-03** (N · A) Login answer: `admin` and `version` present; `version` equals `Version::current()` — 4.4
-- [ ] **AG-04** (! · A) `access` missing, value missing, `groupId` missing, `0`, negative or a string → login works,
+- [x] **AG-03** (N · A) Login answer: `admin` and `version` present; `version` equals `Version::current()` — 4.4
+- [x] **AG-04** (! · A) `access` missing, value missing, `groupId` missing, `0`, negative or a string → login works,
   `admin: false`; machine clients without `access` are refused — 3.2, D9
-- [ ] **AG-05** (S · A) ChurchTools answers `404` or `403` for the person's groups → login works, `admin: false`,
+- [x] **AG-05** (S · A) ChurchTools answers `404` or `403` for the person's groups → login works, `admin: false`,
   `warning` logged; `5xx`/timeout → `502 upstream-unavailable` (no token issued with a guessed role) — 4.4 step 4
-- [ ] **AG-06** (! · A) Authorization reads only the token: a token with `admin: true` may act on others; `admin: false`
+- [x] **AG-06** (! · A) Authorization reads only the token: a token with `admin: true` may act on others; `admin: false`
   may not, even if `adminUsers` in `settings` still lists the person — 4.3
-- [ ] **AG-07** (! · U) A token without `admin`, or with `admin` as `"true"`/`1` → `401 invalid-token` — 4.4
+- [x] **AG-07** (! · U) A token without `admin`, or with `admin` as `"true"`/`1` → `401 invalid-token` — 4.4
 - [ ] **AG-08** (N · A) `/v1/test` check "access": ok; fails for unreadable `access`, invalid `groupId` — 4.8
 - [x] **AG-09** (N · U) `settings` with `schema`, `revision`, `oauthClientId`, `texts`, `adminUsers`, `machineClients`
   parses as before; none of them changes `Settings` — 3.2

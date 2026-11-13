@@ -29,6 +29,8 @@ final class AuthController
         private readonly Login $login,
         private readonly AddressLimiter $limiter,
         private readonly LoggerInterface $logger,
+        /** The backend version (spec 6.5), so the extension can compare it with its own. */
+        private readonly string $version,
     ) {}
 
     public function token(ServerRequestInterface $request, ResponseInterface $response): ResponseInterface
@@ -56,6 +58,8 @@ final class AuthController
             'accessToken' => $issued->token,
             'tokenType' => 'Bearer',
             'expiresIn' => $issued->expiresIn,
+            'admin' => $issued->admin,
+            'version' => $this->version,
         ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
 
         return $response->withHeader('Content-Type', 'application/json')->withStatus(200);

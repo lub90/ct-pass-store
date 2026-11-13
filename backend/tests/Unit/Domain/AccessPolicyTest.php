@@ -8,7 +8,6 @@ use CtPassStore\Domain\AccessPolicy;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Domain\Principal;
-use CtPassStore\Domain\Settings;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -22,14 +21,12 @@ final class AccessPolicyTest extends TestCase
     private const ADMIN = 100;
     private const READER = 200;
 
-    private static function settings(): Settings
-    {
-        return new Settings(true, true, 16, [self::ADMIN], null);
-    }
-
+    /**
+     * The admin role is the token's claim (spec 4.3, D9); here ADMIN carries it.
+     */
     private static function person(int $id): PersonPrincipal
     {
-        return new PersonPrincipal(new PersonId($id), "user$id");
+        return new PersonPrincipal(new PersonId($id), "user$id", $id === self::ADMIN);
     }
 
     #[DataProvider('matrix')]
@@ -38,8 +35,8 @@ final class AccessPolicyTest extends TestCase
         $principal = self::person($caller);
         $targetId = new PersonId($target);
 
-        self::assertSame($mayRead, AccessPolicy::mayRead($principal, $targetId, self::settings()), 'read');
-        self::assertSame($mayChange, AccessPolicy::mayChange($principal, $targetId, self::settings()), 'change');
+        self::assertSame($mayRead, AccessPolicy::mayRead($principal, $targetId), 'read');
+        self::assertSame($mayChange, AccessPolicy::mayChange($principal, $targetId), 'change');
         self::assertSame($caller === $target, AccessPolicy::isOwner($principal, $targetId), 'owner');
     }
 
@@ -69,8 +66,8 @@ final class AccessPolicyTest extends TestCase
         $target = new PersonId(self::USER);
 
         self::assertFalse(AccessPolicy::isOwner($machine, $target));
-        self::assertFalse(AccessPolicy::mayRead($machine, $target, self::settings()));
-        self::assertFalse(AccessPolicy::mayChange($machine, $target, self::settings()));
+        self::assertFalse(AccessPolicy::mayRead($machine, $target));
+        self::assertFalse(AccessPolicy::mayChange($machine, $target));
     }
 
     /**
@@ -83,12 +80,22 @@ final class AccessPolicyTest extends TestCase
 
         foreach ([self::USER, self::OTHER, self::ADMIN] as $target) {
             $id = new PersonId($target);
-            self::assertTrue(AccessPolicy::mayRead($reader, $id, self::settings()));
-            self::assertFalse(AccessPolicy::mayChange($reader, $id, self::settings()));
+            self::assertTrue(AccessPolicy::mayRead($reader, $id));
+            self::assertFalse(AccessPolicy::mayChange($reader, $id));
             self::assertFalse(AccessPolicy::isOwner($reader, $id));
-            self::assertFalse(AccessPolicy::mayRead($none, $id, self::settings()));
-            self::assertFalse(AccessPolicy::mayChange($none, $id, self::settings()));
+            self::assertFalse(AccessPolicy::mayRead($none, $id));
+            self::assertFalse(AccessPolicy::mayChange($none, $id));
         }
+    }
+
+    public function testOnlyTheAdminFlagMakesAnAdmin(): void
+    {
+        $target = new PersonId(self::USER);
+
+        self::assertTrue(AccessPolicy::mayRead(new PersonPrincipal(new PersonId(self::OTHER), 'other', true), $target));
+        self::assertTrue(AccessPolicy::mayChange(new PersonPrincipal(new PersonId(self::OTHER), 'other', true), $target));
+        self::assertFalse(AccessPolicy::mayRead(new PersonPrincipal(new PersonId(self::ADMIN), 'admin', false), $target));
+        self::assertFalse(AccessPolicy::mayChange(new PersonPrincipal(new PersonId(self::ADMIN), 'admin'), $target), 'Default: no admin.');
     }
 
     public function testAMachineClientNamedLikeAnAdminGetsNoAdminRights(): void
@@ -96,7 +103,7 @@ final class AccessPolicyTest extends TestCase
         // Principals are never compared across kinds: client "100" isn't admin person 100.
         $client = new \CtPassStore\Domain\MachinePrincipal('100', []);
 
-        self::assertFalse(AccessPolicy::mayRead($client, new PersonId(self::USER), self::settings()));
+        self::assertFalse(AccessPolicy::mayRead($client, new PersonId(self::USER)));
         self::assertFalse(AccessPolicy::isOwner($client, new PersonId(100)));
     }
 }

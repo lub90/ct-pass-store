@@ -38,7 +38,7 @@ use Slim\Psr7\Factory\StreamFactory;
  * | ------------- | ----------- | ----------------------------------- |
  * | user          | 10          | –                                   |
  * | other         | 11          | –                                   |
- * | admin         | 100         | adminUsers                          |
+ * | admin         | 100         | – (its tokens carry `admin: true`)  |
  * | machine       | ct-radius   | machineClients, `entries:read`      |
  * | machine       | no-rights   | machineClients, no permission       |
  */
@@ -213,11 +213,14 @@ abstract class ApiTestCase extends TestCase
     }
 
     /**
-     * A backend access token for the person, as POST /v1/auth/token would issue it now.
+     * A backend access token for the person, as POST /v1/auth/token would issue it now. The admin role is the token's
+     * claim (spec 4.3); by default only ADMIN has it.
      */
-    protected function tokenOf(int $personId): string
+    protected function tokenOf(int $personId, ?bool $admin = null): string
     {
-        return (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->issue(new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId"))->token;
+        $person = new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId", $admin ?? $personId === self::ADMIN);
+
+        return (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->issue($person)->token;
     }
 
     /**

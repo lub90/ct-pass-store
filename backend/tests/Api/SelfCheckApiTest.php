@@ -77,6 +77,17 @@ final class SelfCheckApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/test', self::USER));
     }
 
+    /** AG-06 */
+    public function testTheAdminGateReadsTheTokenClaim(): void
+    {
+        $asAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::USER, admin: true)];
+        $notAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::ADMIN, admin: false)];
+
+        self::assertSame(200, $this->request('GET', '/v1/test', headers: $asAdmin)->getStatusCode(), 'Any person with admin: true.');
+        // ADMIN is still listed in the old adminUsers; that no longer counts.
+        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/test', headers: $notAdmin));
+    }
+
     /** TS-05 */
     public function testMachineClientGets403(): void
     {

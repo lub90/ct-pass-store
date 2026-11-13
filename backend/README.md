@@ -10,7 +10,7 @@ All routes live under `/v1/` and need HTTPS. Bodies are JSON (`Content-Type: app
 
 | Route | Who | Purpose |
 | --- | --- | --- |
-| `POST /v1/auth/token` | anyone with an OAuth code | Exchanges a ChurchTools OAuth code for a backend token |
+| `POST /v1/auth/token` | anyone with an OAuth code | Exchanges a ChurchTools OAuth code for a backend token: `{"accessToken", "tokenType": "Bearer", "expiresIn": 900, "admin", "version"}`. `admin` is `true` for active members of the admin group (`access` category); `version` is the backend version |
 | `GET /v1/entries/{id}` | the person, admins, machine clients with read permission | Returns the encrypted secondary password: `{"secondaryPwd": "..."}`. `404 person-not-found` if the person is deleted or archived |
 | `PUT /v1/entries/{id}` | the person, admins | Sets the password. Body (all optional): `primaryPwd`, `secondaryPwd`. `204` for a custom password; `200` with the generated one if `secondaryPwd` is omitted. `404 person-not-found` if the person is deleted or archived |
 | `DELETE /v1/entries/{id}` | the person, admins | Deletes the entry, `204` |
