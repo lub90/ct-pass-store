@@ -875,4 +875,92 @@ final class KvSettingsRepositoryTest extends TestCase
         }
         self::assertSame(2, $this->settingsReads());
     }
+
+    private function accessReads(): int
+    {
+        return count(array_filter(
+            $this->fake->calls(),
+            fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categories[KvSchema::ACCESS_CATEGORY],
+        ));
+    }
+
+    private function seededSettingsOnly(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+    }
+
+    public function testAMissingAccessValueIsAskedForOnceWithinTheTtl(): void
+    {
+        $this->seededSettingsOnly();
+
+        for ($i = 0; $i < 3; $i++) {
+            $repository = $this->cachedRepository();
+            self::assertNull($repository->settings()->adminGroupId);
+            self::assertStringContainsString('access', $repository->findings()[0]);
+        }
+        self::assertSame(1, $this->accessReads());
+        self::assertSame(1, $this->settingsReads());
+
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
+        $this->cachedRepository()->settings();
+        self::assertSame(2, $this->accessReads(), 'After the TTL ChurchTools is asked again.');
+    }
+
+    public function testRefreshMakesTheNextReadAskForAMissingAccessAgain(): void
+    {
+        $this->seededSettingsOnly();
+        $repository = $this->cachedRepository();
+        $repository->settings();
+        self::assertSame(1, $this->accessReads());
+
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], json_encode(self::validAccess(), JSON_THROW_ON_ERROR));
+        $repository->refresh();
+
+        self::assertSame(12, $repository->settings()->adminGroupId);
+        self::assertSame(2, $this->accessReads());
+    }
+
+    public function testAnOutageOnAccessPropagatesAndIsRemembered(): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException('503'));
+
+        foreach ([0, 9] as $later) {
+            $this->clock->advance($later);
+            try {
+                $this->cachedRepository()->settings();
+                self::fail('expected the outage to propagate');
+            } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException) {
+            }
+        }
+        self::assertSame(1, $this->accessReads(), 'The failed read; the second failure is remembered.');
+        self::assertSame(1, $this->settingsReads(), 'The settings stayed cached.');
+
+        $this->clock->advance(2);
+        self::assertNull($this->cachedRepository()->settings()->adminGroupId);
+        self::assertSame(2, $this->accessReads(), 'After the memory ran out ChurchTools is asked again.');
+    }
+
+    public function testARateLimitOnAccessPropagatesAndIsRemembered(): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException('429', 60));
+
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('expected the rate limit to propagate');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException) {
+        }
+        $reads = $this->accessReads();
+
+        $this->clock->advance(20);
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('expected the remembered rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException $e) {
+            self::assertGreaterThanOrEqual(60, $e->retryAfterSeconds());
+        }
+        self::assertSame($reads, $this->accessReads(), 'ChurchTools isn\'t asked within the window.');
+        self::assertSame(1, $this->settingsReads(), 'The settings stayed cached.');
+    }
 }

@@ -41,6 +41,9 @@ final class KvSettingsRepository implements SettingsRepository
 
     private const CACHE_ACCESS = 'access';
 
+    /** The remembered outcome of a missing or unusable access value (the finding), so it isn't asked for on every request. */
+    private const CACHE_ACCESS_MISSING = 'access-missing';
+
     private const CACHE_PUBLIC_KEY = 'publicKey';
 
     private ?Settings $settings = null;
@@ -79,16 +82,30 @@ final class KvSettingsRepository implements SettingsRepository
 
     /**
      * The admin group and machine clients. A missing or unusable access category or value is a finding, never an
-     * exception: nobody is an admin and no machine client is enabled, but users can log in. An unavailable or rate
-     * limiting ChurchTools still throws, as for the settings.
+     * exception: nobody is an admin and no machine client is enabled, but users can log in. That outcome is cached
+     * like a valid value, so the normal state before the setup isn't asked for on every request. A failing
+     * ChurchTools (unavailable, rate limiting) still throws, with the same failure memory as for the settings.
      */
     private function access(): ParsedAccess
     {
+        $missing = $this->cache?->get(self::CACHE_ACCESS_MISSING);
+        if ($missing !== null && is_string($missing['finding'] ?? null)) {
+            return self::noAccess($missing['finding']);
+        }
+
         try {
             return AccessParser::parse($this->cachedValue(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
         } catch (ConfigurationException $e) {
-            return new ParsedAccess(null, [], [$e->getMessage() . ' Nobody is an admin and no machine client is enabled.']);
+            $finding = $e->getMessage();
+            $this->cache?->put(self::CACHE_ACCESS_MISSING, ['finding' => $finding], self::SETTINGS_TTL);
+
+            return self::noAccess($finding);
         }
+    }
+
+    private static function noAccess(string $finding): ParsedAccess
+    {
+        return new ParsedAccess(null, [], [$finding . ' Nobody is an admin and no machine client is enabled.']);
     }
 
     /**
@@ -101,6 +118,7 @@ final class KvSettingsRepository implements SettingsRepository
         $this->findings = [];
         $this->forget(self::CACHE_SETTINGS);
         $this->forget(self::CACHE_ACCESS);
+        $this->cache?->forget(self::CACHE_ACCESS_MISSING);
         $this->refreshPublicKey();
     }
 
