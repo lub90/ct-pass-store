@@ -188,8 +188,12 @@ seeing their password or login token. Observed behavior:
     (from `GET /api/csrftoken`); that answers `302` with `Location: <redirect URI>?code=…&state=…`. A second
     `GET /oauth/authorize` then answers `302` to the same URI directly. `state` comes back exactly as sent.
   - A user without the right "login to external system" for that client gets `500` with the page text „Du bist nicht
-    berechtigt dich bei „<client>“ einzuloggen.“ instead of a consent page (a normal test user, for a client created
-    on the fly). A user with the right (the admin test user) gets through.
+    berechtigt dich bei „<client>“ einzuloggen.“ instead of a consent page. A freshly created client therefore needs
+    the right for every user (the right's data ID is the client's numeric `id`, not its `identifier`). The contract
+    test measured with a **normal user** after granting the right for the temporary client with
+    `PUT /api/permissions/person/{id}` (`{"authId": <id>, "dataId": [<client id>]}`; `PUT` **adds** to the user's
+    existing list for that right, it doesn't replace it) and removed it with `DELETE` and the same body (a `dataId`
+    list removes only those entries). `/permissions/global` showed the client at once.
   - `POST /oauth/access_token` with the code, the `code_verifier`, `client_id`, `client_secret` and `redirect_uri` as
     form fields answers `200` with an `access_token`.
   - **Groups with the OAuth token:** `GET /api/persons/{id}/groups` with `Authorization: Bearer <token>` (and
