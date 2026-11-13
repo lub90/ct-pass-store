@@ -39,6 +39,8 @@ final class KvSettingsRepository implements SettingsRepository
 
     private const CACHE_SETTINGS = 'settings';
 
+    private const CACHE_ACCESS = 'access';
+
     private const CACHE_PUBLIC_KEY = 'publicKey';
 
     private ?Settings $settings = null;
@@ -64,17 +66,33 @@ final class KvSettingsRepository implements SettingsRepository
         $raw = $this->cachedValue(self::CACHE_SETTINGS, KvSchema::SETTINGS_CATEGORY, 'The extension settings', 'Save the settings in the extension.');
 
         $parsed = SettingsParser::parse($raw);
+        $access = $this->access();
+        $findings = [...$parsed->findings, ...$access->findings];
         // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why.
-        foreach ($parsed->findings as $finding) {
+        foreach ($findings as $finding) {
             $this->logger->warning($finding);
         }
-        $this->findings = $parsed->findings;
+        $this->findings = $findings;
 
-        return $this->settings = $parsed->settings;
+        return $this->settings = $parsed->settings->withAccess($access->adminGroupId, $access->machineClients);
     }
 
     /**
-     * Forgets everything this repository remembers, in memory and in the cache (settings, public key and remembered
+     * The admin group and machine clients. A missing or unusable access category or value is a finding, never an
+     * exception: nobody is an admin and no machine client is enabled, but users can log in. An unavailable or rate
+     * limiting ChurchTools still throws, as for the settings.
+     */
+    private function access(): ParsedAccess
+    {
+        try {
+            return AccessParser::parse($this->cachedValue(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
+        } catch (ConfigurationException $e) {
+            return new ParsedAccess(null, [], [$e->getMessage() . ' Nobody is an admin and no machine client is enabled.']);
+        }
+    }
+
+    /**
+     * Forgets everything this repository remembers, in memory and in the cache (settings, access, public key and remembered
      * upstream failures), so the next call asks ChurchTools. For the self-check, so a fix shows at once (spec 4.8).
      */
     public function refresh(): void
@@ -82,6 +100,7 @@ final class KvSettingsRepository implements SettingsRepository
         $this->settings = null;
         $this->findings = [];
         $this->forget(self::CACHE_SETTINGS);
+        $this->forget(self::CACHE_ACCESS);
         $this->refreshPublicKey();
     }
 

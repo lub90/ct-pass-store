@@ -215,9 +215,9 @@ final class SelfCheckApiTest extends ApiTestCase
         $this->assertOnlyFails('Settings', $this->request('GET', '/v1/test', self::ADMIN));
 
         // Changed in ChurchTools only; the cache entries of the first request are still there.
-        $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
+        $categoryId = $this->categoryIds[KvSchema::ACCESS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
-        $this->churchTools->seedValue($categoryId, json_encode(['adminUsers' => [self::ADMIN], 'backendUrl' => self::BACKEND_URL, 'passwordLength' => 12, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true, 'machineClients' => []], JSON_THROW_ON_ERROR));
+        $this->churchTools->seedValue($categoryId, json_encode([KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]], KvSchema::ACCESS_MACHINE_CLIENTS => []], JSON_THROW_ON_ERROR));
 
         self::assertSame(200, $this->request('GET', '/v1/test', self::ADMIN)->getStatusCode());
     }

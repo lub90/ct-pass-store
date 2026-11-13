@@ -14,6 +14,7 @@ final class KvSchema
     public const PASSWORD_CATEGORY = 'passwordStore';
     public const SETTINGS_CATEGORY = 'settings';
     public const ENCRYPTION_CATEGORY = 'encryptionSettings';
+    public const ACCESS_CATEGORY = 'access';
 
     /** Fields of a value in PASSWORD_CATEGORY. */
     public const ENTRY_PERSON_ID = 'personId';
@@ -25,7 +26,12 @@ final class KvSchema
     public const SETTING_PASSWORD_LENGTH = 'passwordLength';
     public const SETTING_ADMIN_USERS = 'adminUsers';
     public const SETTING_BACKEND_URL = 'backendUrl';
-    public const SETTING_MACHINE_CLIENTS = 'machineClients';
+
+    /** Fields of the value in ACCESS_CATEGORY (spec 3.2); the backend reads only these. */
+    public const ACCESS_GROUPS = 'groups';
+    public const GROUP_ADMINS = 'admins';
+    public const GROUP_ID = 'groupId';
+    public const ACCESS_MACHINE_CLIENTS = 'machineClients';
 
     /** Field of the value in ENCRYPTION_CATEGORY. */
     public const PUBLIC_KEY = 'publicKey';

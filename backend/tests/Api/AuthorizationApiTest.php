@@ -62,7 +62,7 @@ final class AuthorizationApiTest extends ApiTestCase
 
     public function testAMachineClientNamedLikeAPersonHasNoOwnEntry(): void
     {
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
             ['id' => '100', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
         ]]);
         $token = fn(): string => 'Bearer ' . $this->machineTokenOf('100', keyOf: self::NO_RIGHTS_CLIENT);
@@ -75,7 +75,7 @@ final class AuthorizationApiTest extends ApiTestCase
     public function testAPersonWhoseIdEqualsAClientIdGetsNoneOfItsRights(): void
     {
         // Client "123" may read every entry. Person 123 is an ordinary user; the two are never compared (spec 4.3).
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
             ['id' => '123', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
         ]]);
         $this->seedEntry(self::OTHER);
@@ -281,7 +281,7 @@ final class AuthorizationApiTest extends ApiTestCase
     public function testADisabledClientGets401AndTheLogSaysWhy(): void
     {
         $token = $this->machineTokenOf(self::READER_CLIENT);
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
             ['id' => self::READER_CLIENT, 'publicKeys' => [], 'permissions' => ['entries:read']],
         ]]);
 

@@ -12,7 +12,8 @@ final class Settings
     /**
      * @param list<int> $adminUsers person IDs that may read and change every entry
      * @param string|null $backendUrl without a trailing slash; null if the setting is missing
-     * @param array<string, MachineClient> $machineClients the enabled clients by ID
+     * @param array<string, MachineClient> $machineClients the enabled clients by ID (from the access category)
+     * @param int|null $adminGroupId the ChurchTools group whose active members are admins; null means no admins
      */
     public function __construct(
         public readonly bool $requirePrimaryPassword,
@@ -21,6 +22,7 @@ final class Settings
         public readonly array $adminUsers,
         public readonly ?string $backendUrl,
         public readonly array $machineClients = [],
+        public readonly ?int $adminGroupId = null,
     ) {
         if ($passwordLength < PasswordPolicy::MIN_CONFIGURABLE_LENGTH || $passwordLength > PasswordPolicy::MAX_CONFIGURABLE_LENGTH) {
             throw new \InvalidArgumentException("A password length of $passwordLength is outside the configurable range.");
@@ -30,5 +32,23 @@ final class Settings
     public function isAdmin(PersonId $person): bool
     {
         return in_array($person->value, $this->adminUsers, true);
+    }
+
+    /**
+     * The same settings with the admin group and machine clients of the access category.
+     *
+     * @param array<string, MachineClient> $machineClients
+     */
+    public function withAccess(?int $adminGroupId, array $machineClients): self
+    {
+        return new self(
+            $this->requirePrimaryPassword,
+            $this->allowCustomPasswords,
+            $this->passwordLength,
+            $this->adminUsers,
+            $this->backendUrl,
+            $machineClients,
+            $adminGroupId,
+        );
     }
 }

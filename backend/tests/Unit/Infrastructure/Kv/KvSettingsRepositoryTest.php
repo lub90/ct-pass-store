@@ -49,6 +49,7 @@ final class KvSettingsRepositoryTest extends TestCase
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
             KvSchema::PASSWORD_CATEGORY,
+            KvSchema::ACCESS_CATEGORY,
         ]);
     }
 
@@ -98,10 +99,15 @@ final class KvSettingsRepositoryTest extends TestCase
 
     /**
      * @param array<string, mixed>|string $settings a JSON object, or a raw value
+     * @param array<string, mixed>|string|false|null $access the value of the access category; null seeds a valid one, false none
      */
-    private function settings(array|string $settings): KvSettingsRepository
+    private function settings(array|string $settings, array|string|false|null $access = null): KvSettingsRepository
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], is_string($settings) ? $settings : json_encode($settings, JSON_THROW_ON_ERROR));
+        $access ??= self::validAccess();
+        if ($access !== false) {
+            $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], is_string($access) ? $access : json_encode($access, JSON_THROW_ON_ERROR));
+        }
 
         return $this->repository = new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
     }
@@ -154,7 +160,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings->settings();
         $settings->settings();
 
-        self::assertSame(1, $this->fake->countCalls(['getValues']));
+        self::assertSame(2, $this->fake->countCalls(['getValues']), 'The settings and the access value, once each.');
     }
 
     /**
@@ -408,11 +414,76 @@ final class KvSettingsRepositoryTest extends TestCase
     }
 
     /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private static function validAccess(array $overrides = []): array
+    {
+        return $overrides + [KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]]];
+    }
+
+    /**
      * @param mixed $machineClients
      */
     private function machineSettings(mixed $machineClients): \CtPassStore\Domain\Settings
     {
-        return $this->settings(['machineClients' => $machineClients] + self::validSettings())->settings();
+        return $this->settings(self::validSettings(), self::validAccess([KvSchema::ACCESS_MACHINE_CLIENTS => $machineClients]))->settings();
+    }
+
+    // ---------------------------------------------------------------- access (AG-04, AG-09)
+
+    public function testTheAdminGroupAndClientsComeFromAccess(): void
+    {
+        $settings = $this->settings(self::validSettings(), [
+            'schema' => 2,
+            'revision' => 4,
+            KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12, 'createdBySetup' => true], 'users' => [KvSchema::GROUP_ID => 11]],
+            KvSchema::ACCESS_MACHINE_CLIENTS => [self::client()],
+        ])->settings();
+
+        self::assertSame(12, $settings->adminGroupId);
+        self::assertSame(['ct-radius'], array_keys($settings->machineClients));
+        self::assertSame([7, 8], $settings->adminUsers, 'adminUsers still works until the token claim replaces it.');
+        self::assertSame([], $this->repository->findings());
+    }
+
+    public function testAMachineClientsKeyInSettingsIsIgnored(): void
+    {
+        $settings = $this->settings(['machineClients' => [self::client()]] + self::validSettings(), [KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]]])->settings();
+
+        self::assertSame([], $settings->machineClients);
+    }
+
+    public function testAMissingAccessCategoryIsAFindingNotAnError(): void
+    {
+        $fake = new FakeChurchToolsClient();
+        $ids = $fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
+        $fake->seedValue($ids[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $repository = new KvSettingsRepository(new ExtensionData($fake), new \Monolog\Logger('test', [$this->log]));
+
+        $settings = $repository->settings();
+
+        self::assertNull($settings->adminGroupId);
+        self::assertSame([], $settings->machineClients);
+        self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
+        self::assertStringContainsString('access', $repository->findings()[0]);
+        self::assertTrue($this->log->hasWarningThatContains('access'));
+    }
+
+    public function testAMissingAccessValueIsAFindingNotAnError(): void
+    {
+        $missing = $this->settings(self::validSettings(), false);
+        self::assertNull($missing->settings()->adminGroupId);
+        self::assertStringContainsString('access', $missing->findings()[0]);
+    }
+
+    public function testABrokenAccessValueIsAFindingNotAnError(): void
+    {
+        $broken = $this->settings(self::validSettings(), 'not json');
+
+        self::assertNull($broken->settings()->adminGroupId);
+        self::assertStringContainsString('access', $broken->findings()[0]);
+        self::assertSame(16, $broken->settings()->passwordLength);
     }
 
     public function testMissingMachineClientsMeansNone(): void
@@ -606,6 +677,7 @@ final class KvSettingsRepositoryTest extends TestCase
     public function testFindingsAreLoggedOnEveryRequestFromTheCache(): void
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(['backendUrl' => 'http://x.example'] + self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], json_encode(self::validAccess(), JSON_THROW_ON_ERROR));
 
         $first = $this->cachedRepository();
         $second = $this->cachedRepository();

@@ -107,6 +107,7 @@ abstract class ApiTestCase extends TestCase
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
             KvSchema::PASSWORD_CATEGORY,
+            KvSchema::ACCESS_CATEGORY,
         ]);
 
         foreach (self::NAMES as $personId => $name) {
@@ -155,13 +156,33 @@ abstract class ApiTestCase extends TestCase
         $this->forgetCache();
         $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
-        $this->churchTools->seedValue($categoryId, json_encode($overrides + [
+        $this->churchTools->seedValue($categoryId, json_encode(array_diff_key($overrides, [KvSchema::ACCESS_MACHINE_CLIENTS => true]) + [
             KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false,
             KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true,
             'passwordLength' => 12,
             'adminUsers' => [self::ADMIN],
             'backendUrl' => self::BACKEND_URL,
-            'machineClients' => [
+        ], JSON_THROW_ON_ERROR));
+        // The machine clients live in the access category; tests keep passing them with the settings.
+        $this->setAccess(array_intersect_key($overrides, [KvSchema::ACCESS_MACHINE_CLIENTS => true]));
+    }
+
+    /**
+     * Replaces the access value (admin group and machine clients; by default the two test clients). Takes effect
+     * with the next request, like setSettings().
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function setAccess(array $overrides): void
+    {
+        $this->forgetCache();
+        $categoryId = $this->categoryIds[KvSchema::ACCESS_CATEGORY];
+        $this->churchTools->clearValues($categoryId);
+        $this->churchTools->seedValue($categoryId, json_encode($overrides + [
+            'schema' => 2,
+            'revision' => 1,
+            KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12, 'createdBySetup' => true]],
+            KvSchema::ACCESS_MACHINE_CLIENTS => [
                 ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
                 ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
             ],

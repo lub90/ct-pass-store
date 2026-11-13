@@ -156,7 +156,7 @@ final class CacheApiTest extends ApiTestCase
         $ciphertext = (string) $this->json($this->request('GET', '/v1/entries/' . self::USER, self::USER))['secondaryPwd'];
 
         $files = glob($this->cacheDir . '/cache-*') ?: [];
-        self::assertCount(3, $files, 'settings, publicKey and ids');
+        self::assertCount(4, $files, 'settings, access, publicKey and ids');
         foreach ($files as $file) {
             $content = (string) file_get_contents($file);
             foreach ([self::PASSWORD, $ciphertext, $token, self::JWT_SECRET, self::OAUTH_CLIENT_SECRET, 'service-token'] as $secret) {
@@ -172,7 +172,7 @@ final class CacheApiTest extends ApiTestCase
     {
         $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN);
         $files = glob($this->cacheDir . '/cache-*') ?: [];
-        self::assertCount(3, $files, 'settings, ids and persons');
+        self::assertCount(4, $files, 'settings, access, ids and persons');
         foreach ($files as $file) {
             file_put_contents($file, '{"format": 1, "keyId"');
         }
@@ -212,8 +212,10 @@ final class CacheApiTest extends ApiTestCase
         $this->request('GET', '/v1/entries/' . self::USER, self::USER);
         $settings = $this->churchTools->storedValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY])[0]['value'];
         $encryption = $this->churchTools->storedValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY])[0]['value'];
+        $access = $this->churchTools->storedValues($this->categoryIds[KvSchema::ACCESS_CATEGORY])[0]['value'];
         $this->churchTools->removeModule(KvSchema::EXTENSION_KEY);
-        $ids = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
+        $ids = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY, KvSchema::ACCESS_CATEGORY]);
+        $this->churchTools->seedValue($ids[KvSchema::ACCESS_CATEGORY], (string) $access);
         $this->churchTools->seedValue($ids[KvSchema::SETTINGS_CATEGORY], (string) $settings);
         $this->churchTools->seedValue($ids[KvSchema::ENCRYPTION_CATEGORY], (string) $encryption);
         $this->churchTools->seedValue($ids[KvSchema::PASSWORD_CATEGORY], json_encode([KvSchema::ENTRY_PERSON_ID => self::USER, KvSchema::ENTRY_CIPHERTEXT => 'bmV3'], JSON_THROW_ON_ERROR));
