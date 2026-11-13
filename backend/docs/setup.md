@@ -7,6 +7,15 @@ arrived here through the CtPassStore setup process, that is already the case.
 > A shell-free installation (a release zip that the extension's setup wizard configures through the backend) is
 > planned; until then, follow the steps below.
 
+**Where to host it.** Every request calls ChurchTools at least once, so the backend's network path to ChurchTools
+decides how fast it is. Run it on a web server in a data centre, ideally close to your ChurchTools instance (for a
+German instance, a German host). On such a host a password read takes about 0.1–0.2 s even with 500 users. Behind a
+home or mobile internet connection, the same read took 1–2.5 s in tests.
+
+**Turn on OPcache if your host offers it.** Without it, PHP compiles the backend's files on every request, which adds
+roughly 30–40 ms. On shared hosting it's usually a switch or a `php.ini` setting (`opcache.enable=1`) in the PHP
+settings of the hosting control panel.
+
 ## 1. Create the service user
 
 The backend needs its own ChurchTools account, the **service user**. It is the only account that may write to

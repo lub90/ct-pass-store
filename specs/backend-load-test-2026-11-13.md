@@ -22,12 +22,18 @@ Reads get slower as the store grows: the backend lists the **whole** `passwordSt
 that list is 400 KB, and the read time grows with it. The 0.5 s cached-read target misses even at 50 entries. A
 ChurchTools round trip from this network takes 100–400 ms, and a read always needs at least one.
 
+> **Update: the read targets are met on a hosted server.** The misses above come from the client's network, a
+> mobile (5G) connection. Measured from a shared web host in a German data centre, a read at 500 entries takes about
+> 0.13 s cached and 0.19 s uncached (median). No design change is needed for 500 entries. See
+> [Follow-up: measured from a hosted server](#follow-up-measured-from-a-hosted-server).
+
 ## Environment
 
 - **Instance:** the test instance (a dedicated ChurchTools test instance; never production). 625 persons. At the
   start, `passwordStore` held 1 value (the baseline).
 - **Client:** a Linux developer machine (8 cores), PHP 8.3.6 CLI, OPcache **off** for the CLI (the PHP default).
-  The test ran over the internet to the hosted instance.
+  The test ran over the internet to the hosted instance, through a **mobile (5G) connection**. That connection
+  dominates the times below; see the follow-up section for measurements from a hosted server.
 - **Backend under test:** a temporary sandbox folder holding copies of `public/index.php` and `bin/cleanup.php`, the
   `VERSION` file, a symlinked `vendor/`, and its own empty `cache/` and `logs/`. `config/credentials.php` was generated
   from the real one, with three changes:
@@ -187,7 +193,72 @@ person, no sandbox folder, no server process.
   On this machine it is **skipped** before it starts the server: `config/credentials.php` lacks
   `OAUTH_CLIENT_ID`, which it needs. The router fix now applies to it too, but it couldn't be run end to end here.
 
+## Follow-up: measured from a hosted server
+
+The run above measured from a developer machine on a mobile (5G) connection. To find out how much of the time was
+that connection, the same ChurchTools calls were measured from a shared web host in a German data centre
+(PHP 8.4, FastCGI, OPcache off), with a single-file probe script against the same test instance. The probe used the
+minimal service user's token, added dummy entries to `passwordStore` (person IDs from 900000000, removed afterwards),
+and timed each call on a **new connection**, as a PHP request makes it.
+
+### Results (median of 10 calls per value)
+
+| | 1 entry | 50 | 200 | 500 entries (397 KB) |
+| --- | --- | --- | --- | --- |
+| Connect + TLS | 21 ms | 27 ms | 22 ms | 19 ms |
+| ChurchTools' answer (time to first byte) | 55 ms | 53 ms | 55 ms | 58 ms |
+| Download of the list | 0 ms | 15 ms | 29 ms | 38 ms |
+| PHP: decode the list, find the entry | 0 ms | 0 ms | 1 ms | 4 ms |
+| **Cached read** (list on a new connection) | **80 ms** | **95 ms** | **109 ms** | **125 ms** |
+| **Uncached read** (person lookup + list on one connection) | **147 ms** | **160 ms** | **174 ms** | **194 ms** |
+| Old backend's call pattern (`main`), another person's entry: 11 calls, 5 connections | 740 ms | 812 ms | 758 ms | 848 ms |
+
+The highest single values were 142 ms (cached) and 517 ms (uncached) at 500 entries.
+
+The same calls from the developer machine, for comparison (500 entries, 403 KB): connect + TLS about 140 ms,
+ChurchTools' answer about 120 ms, download about 440 ms.
+
+### What the follow-up shows
+
+- **ChurchTools answers the list quickly at every size.** The time to first byte stays at about 55 ms from 1 to 500
+  entries. The size only costs download time.
+- **The mobile connection caused the read misses.** It made each round trip 50–170 ms and the 400 KB download about
+  440 ms. From the hosted server, a round trip is about 10 ms and the download 38 ms.
+- **The backend's own work is small.** Decoding 400 KB and finding the entry takes 4 ms. The gap between the bare
+  list and the cached read in the main run (260–560 ms, see the conclusions below) was the connection setup per PHP
+  request and the download over the mobile connection, not decoding.
+- **Estimated complete backend request on such a host**, adding the backend's own start-up (about 40 ms without
+  OPcache, about 5 ms with it):
+  - cached read: about 0.14 s (50 entries) to 0.17 s (500 entries);
+  - uncached read: about 0.2–0.23 s;
+  - after the settings and ID caches expire (rare): about 0.4 s;
+  - PUT: about 0.25–0.5 s, depending on whether the primary password is checked.
+  - The caller's own connection to the backend (RADIUS server or browser) comes on top, about 20–100 ms.
+- **The targets are met at 500 entries** (cached p95 < 0.5 s, uncached p95 < 1 s), with a wide margin. The list grows
+  by about 9 ms per 100 entries.
+- **Compared with the old backend (`main`)**, which makes 8–11 calls over 4–5 connections per read and caches
+  nothing, reads are 4–6 times faster.
+
+### The KV store can't return single values
+
+Checked on the same instance before the follow-up measurements:
+
+- `GET …/customdatavalues/{valueId}` answers `405`: there is no read of a single value. Only `PUT` and `DELETE` take
+  a value ID.
+- The list ignores every query parameter tried (`limit`, `page`, `offset`, `ids[]`, `id`, `value`, `search`,
+  `query`, `filter`, `q`, `personId`) and always returns the whole category.
+- The extension boilerplate's KV helper does the same: it lists a category and filters it on the client.
+- `HEAD …/customdatavalues/{valueId}` answers `405` as well.
+
+So a read always lists a whole category. If stores grow far beyond 500 entries, the option is to split
+`passwordStore` into a fixed number of categories (for example by `personId mod 16`). A 32-entry list measured from
+the developer machine took about 0.29 s, close to an empty one. That is a design change for the backend and the
+extension, and is not needed for the sizes measured here.
+
 ## Conclusions
+
+> These conclusions were drawn from the developer machine's mobile connection. Measured from a hosted server, the read
+> targets are met; see [Follow-up: measured from a hosted server](#follow-up-measured-from-a-hosted-server).
 
 - **What dominates a read: the KV list.** Every `GET /v1/entries/{id}` loads the whole `passwordStore` category,
   because the KV store can't filter by person.

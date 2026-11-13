@@ -20,9 +20,10 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Performance
 
-- [ ] **Every request loads every user's password entry**
-  `getPwd()` and `putPwd()` fetch the whole `passwordStore` category and filter it in PHP. That works for small installations, but frequent lookups (e.g. RADIUS) with a few hundred users will be slow.
-  - Consider one entry per person keyed by person ID, so a lookup no longer loads everything.
+- [ ] **Every request loads every user's password entry** (low priority: measured fast enough up to 500 entries)
+  Reads and writes fetch the whole `passwordStore` category and filter it in PHP, because the ChurchTools KV store has no read of a single value and no filter. Measured from a hosted server (see [`specs/backend-load-test-2026-11-13.md`](specs/backend-load-test-2026-11-13.md), "Follow-up"), a read at 500 entries takes about 0.13 s cached and 0.19 s uncached, so this matters only for stores far beyond 500 entries.
+  - If needed: split `passwordStore` into a fixed number of categories (e.g. by `personId mod 16`), so a read lists only one small category. This changes the backend and the extension.
+  - Re-check when ChurchTools' reworked KV store arrives; it may offer reads by key.
 
 - [ ] **Timing issues caused by the many backend calls to ChurchTools**
   A single request makes about 5–7 round trips to ChurchTools (whoami, permissions, module ID, categories, settings, data), none of them cached. This causes noticeable latency and can run into timeouts.
