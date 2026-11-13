@@ -58,7 +58,7 @@ final class OAuthCodeFetcher
         // Follows redirects inside ChurchTools by hand (e.g. to a consent page); stops at the redirect URI.
         for ($hops = 0; $hops < 6; $hops++) {
             $location = $response->getHeaderLine('Location');
-            if ($location !== '' && str_starts_with($location, $redirectUri)) {
+            if ($location !== '' && explode('?', $location, 2)[0] === $redirectUri) {
                 return $this->parse($location, $state);
             }
             if ($location !== '') {

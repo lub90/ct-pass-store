@@ -9,6 +9,7 @@ use CtPassStore\Tests\Contract\Helpers\OAuthCodeFetcher;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\RequestOptions;
+use PHPUnit\Framework\Attributes\Depends;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -53,25 +54,61 @@ final class AdminGroupContractTest extends TestCase
         self::assertSame(200, $login->getStatusCode(), 'Admin login');
         self::$csrf = (string) self::json(self::$admin->get(self::$root . '/api/csrftoken'))['data'];
 
-        $create = self::$admin->post(self::$root . '/api/oauthclients', [
-            RequestOptions::HEADERS => ['CSRF-Token' => self::$csrf],
-            RequestOptions::JSON => ['name' => self::CLIENT_NAME, 'redirectUri' => self::$redirectUri, 'confidential' => true],
-        ]);
-        $body = self::json($create);
-        $client = $body['data'] ?? [];
-        $client = is_array($client) && array_is_list($client) ? ($client[0] ?? []) : $client;
-        self::$clientId = (string) ($client['identifier'] ?? '');
-        self::$clientSecret = (string) ($client['clientSecret'] ?? '');
-        self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . substr((string) $create->getBody(), 0, 300));
-        self::assertNotSame('', self::$clientId);
+        try {
+            self::deleteClients(self::stale());
+            $create = self::$admin->post(self::$root . '/api/oauthclients', [
+                RequestOptions::HEADERS => ['CSRF-Token' => self::$csrf],
+                RequestOptions::JSON => ['name' => self::CLIENT_NAME, 'redirectUri' => self::$redirectUri, 'confidential' => true],
+            ]);
+            $client = self::json($create)['data'] ?? [];
+            $client = is_array($client) && array_is_list($client) ? ($client[0] ?? []) : $client;
+            self::$clientId = (string) ($client['identifier'] ?? '');
+            self::$clientSecret = (string) ($client['clientSecret'] ?? '');
+            self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . substr((string) $create->getBody(), 0, 300));
+            self::assertNotSame('', self::$clientId);
+        } catch (\Throwable $e) {
+            // tearDownAfterClass doesn't run when setUpBeforeClass fails, so clean up here.
+            try {
+                self::deleteClients(self::$clientId === '' ? self::stale() : [self::$clientId]);
+            } catch (\Throwable) {
+                // The original failure is the one to report.
+            }
+            throw $e;
+        }
     }
 
     public static function tearDownAfterClass(): void
     {
         if (self::$clientId !== '') {
-            self::$admin->delete(self::$root . '/api/oauthclients/' . rawurlencode(self::$clientId), [
+            self::deleteClients([self::$clientId]);
+        }
+    }
+
+    /** @return list<string> identifiers of clients named exactly like the test client (left by crashed runs) */
+    private static function stale(): array
+    {
+        $list = self::json(self::$admin->get(self::$root . '/api/oauthclients'))['data'] ?? [];
+        $ids = [];
+        foreach (is_array($list) ? $list : [] as $client) {
+            if (is_array($client) && ($client['name'] ?? null) === self::CLIENT_NAME && is_string($client['identifier'] ?? null)) {
+                $ids[] = $client['identifier'];
+            }
+        }
+
+        return $ids;
+    }
+
+    /** @param list<string> $identifiers */
+    private static function deleteClients(array $identifiers): void
+    {
+        foreach ($identifiers as $identifier) {
+            $status = self::$admin->delete(self::$root . '/api/oauthclients/' . rawurlencode($identifier), [
                 RequestOptions::HEADERS => ['CSRF-Token' => self::$csrf],
-            ]);
+            ])->getStatusCode();
+            if ($status < 200 || $status >= 300) {
+                fwrite(STDERR, "WARNING: deleting the test OAuth client $identifier answered $status; delete it by hand.\n");
+                throw new \RuntimeException("Deleting the test OAuth client $identifier answered $status.");
+            }
         }
     }
 
@@ -81,7 +118,7 @@ final class AdminGroupContractTest extends TestCase
         $fetcher = new OAuthCodeFetcher((string) getenv('CT_API_URL'));
         $authorization = $fetcher->code(self::$user['username'], self::$user['pwd'], self::$clientId, self::$redirectUri);
         self::assertNotSame('', $authorization['code']);
-        self::assertSame(32 - 16, strlen($authorization['state']), 'The state is returned as sent.');
+        self::assertSame(16, strlen($authorization['state']), 'The state is returned as sent.');
         self::$authorization = $authorization;
         self::$verifier = $fetcher->codeVerifier();
 
@@ -89,11 +126,8 @@ final class AdminGroupContractTest extends TestCase
         self::assertNotSame('', $token);
     }
 
-    /**
-     * AG-10
-     *
-     * @depends testDeepRedirectUriIsAcceptedAndRedirectsWithCodeAndState
-     */
+    /** AG-10 */
+    #[Depends('testDeepRedirectUriIsAcceptedAndRedirectsWithCodeAndState')]
     public function testOAuthTokenReadsOwnGroupMemberships(): void
     {
         $userSession = new Client([RequestOptions::COOKIES => new CookieJar(), RequestOptions::HTTP_ERRORS => false, RequestOptions::TIMEOUT => 30]);
