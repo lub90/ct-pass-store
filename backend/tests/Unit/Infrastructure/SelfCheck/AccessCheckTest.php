@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Unit\Infrastructure\SelfCheck;
 
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 use CtPassStore\Infrastructure\SelfCheck\AccessCheck;
@@ -55,6 +58,49 @@ final class AccessCheckTest extends TestCase
 
         self::assertFalse($result->ok);
         self::assertSame("The service user can't read the category access; grant it view custom category and view custom data on access.", $result->message);
+    }
+
+    public function testARejectedServiceUserFailsWithTheRightsMessage(): void
+    {
+        $this->fake->failNextRead($this->access, new ServiceCredentialRejectedException('GET customdatavalues: ChurchTools answered 403.'));
+
+        $result = $this->outcome();
+
+        self::assertFalse($result->ok);
+        self::assertSame("The service user can't read the category access; grant it view custom category and view custom data on access.", $result->message);
+    }
+
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function outages(): iterable
+    {
+        yield 'unavailable' => [new UnavailableException('503')];
+        yield 'rate limited' => [new RateLimitedException('429', 60)];
+    }
+
+    #[DataProvider('outages')]
+    public function testAnOutageIsNotReportedAsMissingRights(\Throwable $outage): void
+    {
+        $log = new \Monolog\Handler\TestHandler();
+        $this->fake->failNextRead($this->access, $outage);
+
+        $result = (new AccessCheck(new ExtensionData($this->fake), new \Monolog\Logger('test', [$log])))->run();
+
+        self::assertFalse($result->ok);
+        self::assertSame("ChurchTools didn't answer while reading access; try again.", $result->message);
+        self::assertTrue($log->hasWarningThatContains('access'));
+    }
+
+    public function testSeveralValuesAreNamed(): void
+    {
+        $this->fake->seedValue($this->access, '{"groups":{"admins":{"groupId":12}}}');
+        $this->fake->seedValue($this->access, '{"groups":{"admins":{"groupId":13}}}');
+
+        $result = $this->outcome();
+
+        self::assertFalse($result->ok);
+        self::assertStringStartsWith('The category access holds 2 values; it must hold exactly one.', $result->message);
     }
 
     public function testAMissingCategoryFails(): void

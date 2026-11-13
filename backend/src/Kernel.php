@@ -126,7 +126,7 @@ final class Kernel
             new CacheFolderCheck($config->cacheDir, $securityStore),
             new OAuthConfigurationCheck($config),
             new SettingsCheck($settings),
-            new AccessCheck($extensionData),
+            new AccessCheck($extensionData, $logger),
             new PublicKeyCheck($settings, new RsaPasswordCipher($settings)),
             new PasswordStoreReadCheck($extensionData),
             new ServiceUserRightsCheck($churchTools, $extensionData),

@@ -6,6 +6,7 @@ namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 
@@ -321,18 +322,30 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('The service user can read access; the admin group is 12.', $this->checks($this->request('GET', '/v1/test', self::ADMIN))['access']['message']);
     }
 
-    /** AG-08 */
-    public function testUnreadableAccessFails(): void
+    /**
+     * AG-08: the measured case is a 403 on the values (category readable, values not); a 404 is the same finding.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('unreadableAccess')]
+    public function testUnreadableAccessFails(\Throwable $failure): void
     {
         // The Settings check reads access first, then this check.
         foreach ([1, 2] as $read) {
-            $this->churchTools->failNextRead($this->categoryIds[KvSchema::ACCESS_CATEGORY], new NotFoundException('GET customdatavalues: ChurchTools answered 404.'));
+            $this->churchTools->failNextRead($this->categoryIds[KvSchema::ACCESS_CATEGORY], $failure);
         }
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
         $this->assertFails('access', $response);
         self::assertStringContainsString("can't read the category access", $this->checks($response)['access']['message']);
+    }
+
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function unreadableAccess(): iterable
+    {
+        yield '403 on the values' => [new ServiceCredentialRejectedException('GET customdatavalues: ChurchTools answered 403.')];
+        yield '404 on the values' => [new NotFoundException('GET customdatavalues: ChurchTools answered 404.')];
     }
 
     /** AG-08 */

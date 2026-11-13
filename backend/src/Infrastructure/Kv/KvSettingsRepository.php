@@ -8,7 +8,9 @@ use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\Settings;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Crypto\RsaPublicKey;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
@@ -53,6 +55,9 @@ final class KvSettingsRepository implements SettingsRepository
     /** @var list<string> */
     private array $findings = [];
 
+    /** Whether access is missing or unreadable: access() logs that finding itself, once when it's remembered. */
+    private bool $accessUnusable = false;
+
     public function __construct(
         private readonly ExtensionData $extension,
         private readonly LoggerInterface $logger,
@@ -71,8 +76,9 @@ final class KvSettingsRepository implements SettingsRepository
         $parsed = SettingsParser::parse($raw);
         $access = $this->access();
         $findings = [...$parsed->findings, ...$access->findings];
-        // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why.
-        foreach ($findings as $finding) {
+        // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why. A missing or
+        // unreadable access is logged once per TTL, when it's remembered, not on every request.
+        foreach ($this->accessUnusable ? $parsed->findings : $findings as $finding) {
             $this->logger->warning($finding);
         }
         $this->findings = $findings;
@@ -83,29 +89,36 @@ final class KvSettingsRepository implements SettingsRepository
     /**
      * The admin group and machine clients. A missing or unusable access category or value is a finding, never an
      * exception: nobody is an admin and no machine client is enabled, but users can log in. That outcome is cached
-     * like a valid value, so the normal state before the setup isn't asked for on every request. A failing
+     * like a valid value, so the normal state before the setup isn't asked for on every request. So is a service user
+     * that may not read the category (rejected, or 404 on its values): a partial rights grant never makes the backend
+     * unusable for users. A failing
      * ChurchTools (unavailable, rate limiting) still throws, with the same failure memory as for the settings.
      */
     private function access(): ParsedAccess
     {
         $missing = $this->cache?->get(self::CACHE_ACCESS_MISSING);
         if ($missing !== null && is_string($missing['finding'] ?? null)) {
-            return self::noAccess($missing['finding']);
+            $this->accessUnusable = true;
+
+            return new ParsedAccess(null, [], [$missing['finding']]);
         }
 
         try {
             return AccessParser::parse($this->cachedValue(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
         } catch (ConfigurationException $e) {
-            $finding = $e->getMessage();
-            $this->cache?->put(self::CACHE_ACCESS_MISSING, ['finding' => $finding], self::SETTINGS_TTL);
-
-            return self::noAccess($finding);
+            return $this->rememberNoAccess($e->getMessage() . ' Nobody is an admin and no machine client is enabled.');
+        } catch (ServiceCredentialRejectedException|NotFoundException) {
+            return $this->rememberNoAccess("The service user can't read the category access; grant it view custom category and view custom data on access. Nobody is an admin and no machine client is enabled.");
         }
     }
 
-    private static function noAccess(string $finding): ParsedAccess
+    private function rememberNoAccess(string $finding): ParsedAccess
     {
-        return new ParsedAccess(null, [], [$finding . ' Nobody is an admin and no machine client is enabled.']);
+        $this->cache?->put(self::CACHE_ACCESS_MISSING, ['finding' => $finding], self::SETTINGS_TTL);
+        $this->logger->warning($finding);
+        $this->accessUnusable = true;
+
+        return new ParsedAccess(null, [], [$finding]);
     }
 
     /**
@@ -116,6 +129,7 @@ final class KvSettingsRepository implements SettingsRepository
     {
         $this->settings = null;
         $this->findings = [];
+        $this->accessUnusable = false;
         $this->forget(self::CACHE_SETTINGS);
         $this->forget(self::CACHE_ACCESS);
         $this->cache?->forget(self::CACHE_ACCESS_MISSING);

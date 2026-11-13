@@ -878,6 +878,38 @@ final class KvSettingsRepositoryTest extends TestCase
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
     }
 
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function unreadableAccess(): iterable
+    {
+        yield '403 on the values' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException('403')];
+        yield '404 on the values' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException('404')];
+    }
+
+    /**
+     * The service user may read the settings but not access: a finding like a missing category, remembered, logged once.
+     */
+    #[DataProvider('unreadableAccess')]
+    public function testAnUnreadableAccessIsAFindingRememberedAndLoggedOnce(\Throwable $failure): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], $failure);
+
+        for ($i = 0; $i < 2; $i++) {
+            $repository = $this->cachedRepository();
+            $settings = $repository->settings();
+            self::assertNull($settings->adminGroupId);
+            self::assertSame([], $settings->machineClients);
+            self::assertSame(16, $settings->passwordLength);
+            self::assertStringContainsString("can't read the category access; grant it view custom category and view custom data on access.", $repository->findings()[0]);
+        }
+
+        self::assertSame(1, $this->accessReads(), 'Remembered like a missing category.');
+        $warnings = array_filter($this->log->getRecords(), static fn(array $r): bool => $r['level_name'] === 'WARNING');
+        self::assertCount(1, $warnings, 'Logged when remembered, not on the cached read.');
+    }
+
     public function testAMissingAccessValueIsAskedForOnceWithinTheTtl(): void
     {
         $this->seededSettingsOnly();

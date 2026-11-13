@@ -554,6 +554,14 @@ final class LoginApiTest extends ApiTestCase
         $this->assertLoginWorksWithoutAdminsOrMachineClients();
     }
 
+    public function testAnUnreadableAccessCategoryDoesNotStopLoginsAndMakesNobodyAdmin(): void
+    {
+        $this->forgetCache();
+        $this->churchTools->failNextRead($this->categoryIds[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException('GET customdatavalues: ChurchTools answered 403.'));
+
+        $this->assertLoginWorksWithoutAdminsOrMachineClients();
+    }
+
     private function assertLoginWorksWithoutAdminsOrMachineClients(): void
     {
         $this->grant();
