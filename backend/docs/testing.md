@@ -42,7 +42,8 @@ You need:
 ### ChurchTools test instance
 
 **Never use a production instance.** The tests write values with the reserved person ID `0` and the entry of one test
-user, and delete them again; they never change settings or keys.
+user, and delete them again; they never change settings or keys. The one exception is `AdminGroupContractTest`, which
+creates and deletes an OAuth client and temporarily changes one fixture user's permissions (see the table below).
 
 1. Upload the **ctpassstore** extension and run its setup, so the module, its categories, the settings and the public
    key exist. The settings must allow custom passwords without a primary password (for `LiveEntriesTest`).
@@ -89,6 +90,7 @@ composer test:contract
 | --- | --- | --- |
 | `ChurchToolsClientContractTest` | The shared client contract against real ChurchTools (the fake passes the same cases in the unit layer). Its OAuth cases send an unknown code and a wrong client secret. | Values with `personId` `0`, deleted again |
 | `LiveEntriesTest` | The locally started backend (port 8091, several workers) with the instance's real settings and key: a round trip and parallel PUTs. | The first fixture user's entry, deleted again |
+| `AdminGroupContractTest` | The admin-group check against real ChurchTools. Needs `fixtures/admin_users.json` (an account that may manage OAuth clients and person permissions) and `fixtures/normal_users.json`. | Creates the OAuth client "ctpassstore contract test" and deletes it again; temporarily grants the first normal fixture user the churchcore right "login to external system" for that client and removes it again (checked against the previous grants). A consent for that user stays in ChurchTools. |
 | `NodeSignedMachineTokenTest` | A machine token signed with Node.js, as ct-radius signs it, passes the verifier. Skipped without `node`. | Nothing |
 
 Notes on `LiveEntriesTest`:
@@ -129,7 +131,7 @@ What it does, strictly sequentially and paced below the ChurchTools rate limit (
 
 1. Records the values in `passwordStore` (the baseline). They're never changed.
 2. Creates 20 persons "CtPassStore Load 01…20" and gives each an entry, then existing persons (not the fixture users,
-   not the admins, not persons with an entry) entries in stages: 50, 200, 500 in total.
+   not persons with an entry) entries in stages: 50, 200, 500 in total.
 3. At each stage, against a backend in a temporary sandbox (copies of `public/index.php` and `bin/cleanup.php`,
    symlinked `vendor/`, its own `config/`, `cache/`, `logs/`, generated `credentials.php` with a random
    `CLEANUP_TOKEN`): `GET /v1/entries/{id}` as admin for 50 persons with an empty persons cache and again cached,

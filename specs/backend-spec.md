@@ -114,9 +114,15 @@ Data lives in three KV categories of the `ctpassstore` module:
     EC or Ed25519 keys, certificates and private keys are rejected. PEM with CRLF line endings is accepted.
   - `access` is read like `settings` and cached the same way (6.1). The service user needs `view custom data` on it.
     - `access.groups.admins.groupId` is a positive integer (a JSON integer, not a string such as `"12"`, `"012"` or
-      `12.0`). Missing or invalid means **no admins**, logged as `warning` and reported by `/v1/test`. Users and machine
-      clients aren't affected, and it never produces `500 misconfigured`: no admins is the safe side (D9).
-    - A missing `access` category or value means no admins and no machine clients, with the same reporting.
+      `12.0`). Missing or invalid means **no admins**, logged as `warning` (once per cache period, not on every request).
+      Users and machine clients aren't affected, and it never produces `500 misconfigured`: no admins is the safe side
+      (D9). `/v1/test` is for admins only, so it can show the cause only on an installation that has an admin; where
+      nobody is admin, the cause is in the log and in the extension's setup or migration.
+    - A missing `access` category or value, or a service user that may not read it (`403`, or `404` on its values),
+      means no admins and no machine clients, with the same reporting, and is remembered like a missing category.
+      Only a failing ChurchTools (unavailable, rate limited) is passed on.
+    - After uploading the backend, run the extension's migration at once. Until then ct-radius logins (machine clients)
+      are refused and nobody is admin.
   - `access.machineClients` is a list of registered machine clients (D5; they used to live in `settings`):
 
     ```json
@@ -900,8 +906,9 @@ This covers the lookup and write logic in `KvPasswordRepository`.
 3. They're validated according to 3.2 (`SettingsParser`).
 4. Missing optional lists (`access.machineClients`) mean "empty".
 5. `access` is loaded and cached like `settings` (`SettingsParser` reads both). A missing `access` category or value, or a
-   missing or invalid `groups.admins.groupId`, gives "no admins" and "no machine clients" with a `warning` (3.2); it
-   never throws.
+   missing or invalid `groups.admins.groupId`, or a category the service user can't read, gives "no admins" and "no
+   machine clients" with a `warning` (3.2); it never throws for content or rights. Only unavailable or rate-limited
+   ChurchTools propagates.
 
 ### 5.5 Authentication (`Login`, `UserTokens`, `MachineTokens`, `TokenRules`, `PrimaryPasswordVerifier`)
 
@@ -1077,7 +1084,7 @@ The security stores (`jti` replay cache, rate-limit counters;
   | --- | --- | --- |
   | Module ID, category IDs | 1 hour | These only change on reinstall |
   | Persons confirmed active | 10 minutes | A deleted or archived person is locked out of `GET` and `PUT` of their entry within 10 minutes (D7, 5.8.3). Only "exists" is cached, never "gone". |
-| Settings, public key | 5 minutes | Admin changes (admins, machine clients and their keys, the public key) take up to 5 minutes to apply. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
+| Settings, `access`, public key | 5 minutes | Changes to machine clients and their keys and to the public key take up to 5 minutes to apply. For admins: a new member is admin at their next login; a removed one stays admin until their token expires (up to 15 minutes); a changed `groupId` applies after up to 5 minutes (cache) plus a new login. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
 
 - `passwordStore` values are **never** cached. Reads must always see the latest write.
 - **Cache backend:** a file cache outside the web root. No APCu, to keep the backend lean (Q3).

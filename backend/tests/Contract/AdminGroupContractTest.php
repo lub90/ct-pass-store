@@ -79,8 +79,11 @@ final class AdminGroupContractTest extends TestCase
         } catch (\Throwable $e) {
             // tearDownAfterClass doesn't run when setUpBeforeClass fails, so clean up here.
             try {
-                self::restoreLoginRight();
-                self::deleteClients(self::$clientId === '' ? self::stale() : [self::$clientId]);
+                try {
+                    self::restoreLoginRight();
+                } finally {
+                    self::deleteClients(self::$clientId === '' ? self::stale() : [self::$clientId]);
+                }
             } catch (\Throwable) {
                 // The original failure is the one to report.
             }
