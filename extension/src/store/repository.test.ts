@@ -42,9 +42,9 @@ describe('ExtensionStore reads', () => {
     });
 
     it('reads the highest value ID and counts duplicates', async () => {
-        const { store } = setup([JSON.stringify({ ...settings, backendUrl: 'old' }), JSON.stringify({ ...settings, backendUrl: 'new' })]);
+        const { store } = setup([JSON.stringify({ ...settings, backendUrl: 'https://old.example' }), JSON.stringify({ ...settings, backendUrl: 'https://new.example' })]);
         const r = await store.readSettings();
-        expect(r.state === 'ok' && r.value.backendUrl).toBe('new');
+        expect(r.state === 'ok' && r.value.backendUrl).toBe('https://new.example');
         expect(r.state === 'ok' && r.duplicates).toBe(1);
     });
 });
@@ -80,7 +80,7 @@ describe('ExtensionStore writes', () => {
         const many = Array.from({ length: 100 }, (_, i) => ({
             id: `client-${i}`,
             name: 'n'.repeat(20),
-            publicKeys: [btoa('a'.repeat(32))],
+            publicKeys: [btoa(String(i).padStart(32, '0'))],
             permissions: ['entries:read' as const],
             createdAt: '2026-01-01T00:00:00Z',
         }));
@@ -117,6 +117,40 @@ describe('ExtensionStore writes', () => {
         kv.failFromWrite = 2;
         await expect(store.saveSettings({ ...settings, passwordLength: 30 }, 1)).rejects.toThrow();
         expect(await store.readSettings()).toMatchObject({ state: 'ok', value: { passwordLength: 30 }, duplicates: 1 });
+    });
+});
+
+describe('ExtensionStore fixes', () => {
+    it('removes optional fields the caller omits, keeps unknown ones', async () => {
+        const { store } = setup([JSON.stringify({ ...settings, oauthClientId: 'abc', texts: { de: { title: 'T' } }, future: 1 })]);
+        await store.saveSettings({ ...settings }, 1);
+        const r = await store.readSettings();
+        expect(r.state === 'ok' && r.value.texts).toBeUndefined();
+        expect(r.state === 'ok' && r.value.oauthClientId).toBeUndefined();
+        expect(r).toMatchObject({ value: { future: 1 } });
+    });
+
+    it('drops invalid texts on read with an issue, other fields stay strict', async () => {
+        for (const texts of [{ de: { title: 5 } }, { de: { title: 'x'.repeat(61) } }]) {
+            const r = await setup([JSON.stringify({ ...settings, texts })]).store.readSettings();
+            expect(r.state).toBe('ok');
+            if (r.state !== 'ok') return;
+            expect(r.value.texts).toBeUndefined();
+            expect(r.issues?.[0]).toContain('texts');
+        }
+        expect((await setup([JSON.stringify({ ...settings, texts: 3, passwordLength: 1 })]).store.readSettings()).state).toBe('invalid');
+    });
+
+    it('strips a trailing slash from backendUrl and rejects unsafe URLs', async () => {
+        const { store } = setup();
+        await store.saveSettings({ ...settings, backendUrl: 'https://b.example/api//' }, 1);
+        expect(await store.readSettings()).toMatchObject({ value: { backendUrl: 'https://b.example/api' } });
+        for (const backendUrl of ['http://b.example', 'https://u:p@b.example', 'https://b.example?x=1', 'https://b.example#f', 'nonsense']) {
+            await expect(store.saveSettings({ ...settings, backendUrl }, 2)).rejects.toBeInstanceOf(InvalidValueError);
+        }
+        const without: SettingsV2 = { ...settings };
+        delete without.backendUrl;
+        await store.saveSettings(without, 2);
     });
 });
 

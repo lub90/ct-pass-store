@@ -1,6 +1,6 @@
 import * as v from 'valibot';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, SCHEMA_VERSION, SettingsSchema, type AccessV2, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type SettingsV2 } from '@/model/schemas';
 import type { KvBackend } from './kv';
 
 export const VALUE_LIMIT = 10_000;
@@ -9,9 +9,19 @@ export type Read<T> =
     | { state: 'missing' }
     | { state: 'invalid'; issues: string[] }
     | { state: 'newer'; schema: number }
-    | { state: 'ok'; value: T; valueId: number; duplicates: number };
+    /**
+     * `issues` (settings only): `texts` was invalid and was dropped, so the defaults apply; the value never carries
+     * invalid texts. Saving it removes them from storage.
+     */
+    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[] };
 
 type Schema = typeof SettingsSchema | typeof AccessSchema;
+
+/** Removes trailing slashes of `backendUrl` (backend spec 3.2). */
+function normalize<T>(value: T): T {
+    const url = (value as { backendUrl?: unknown }).backendUrl;
+    return typeof url === 'string' ? { ...value, backendUrl: url.replace(/\/+$/, '') } : value;
+}
 
 const issuesOf = (issues: v.BaseIssue<unknown>[]): string[] =>
     issues.map((i) => `${i.path?.map((p) => String(p.key)).join('.') || '(value)'}: ${i.message}`);
@@ -58,14 +68,25 @@ export class ExtensionStore {
         }
         const version = (raw as { schema?: unknown } | null)?.schema;
         if (typeof version === 'number' && version > SCHEMA_VERSION) return { state: 'newer', schema: version };
+        let textIssues: string[] = [];
+        if (schema === SettingsSchema && typeof raw === 'object' && raw !== null && 'texts' in raw) {
+            const texts = v.safeParse(SettingsTextsSchema, (raw as { texts: unknown }).texts);
+            if (!texts.success) {
+                const rest = { ...(raw as Record<string, unknown>) };
+                delete rest.texts;
+                raw = rest;
+                textIssues = issuesOf(texts.issues).map((i) => `texts.${i}`);
+            }
+        }
         const result = v.safeParse(schema, raw);
         if (!result.success) return { state: 'invalid', issues: issuesOf(result.issues) };
-        return { state: 'ok', value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
+        const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
+        return textIssues.length > 0 ? { ...ok, issues: textIssues } : ok;
     }
 
     private async save<S extends Schema>(category: string, schema: S, next: v.InferOutput<S>, expectedRevision: number): Promise<void> {
         // Strict: validate what the caller hands in, before touching the store.
-        const checked = v.safeParse(schema, next);
+        const checked = v.safeParse(schema, normalize(next));
         if (!checked.success) throw new InvalidValueError(issuesOf(checked.issues));
 
         // Read right before writing (no version/ETag exists, so this narrows the race as far as possible).
@@ -91,7 +112,9 @@ export class ExtensionStore {
         }
         if (currentRevision !== expectedRevision) throw new ConflictError(currentRevision);
 
-        const json = JSON.stringify({ ...stored, ...checked.output, revision: expectedRevision + 1 });
+        // Known keys come only from `next` (an omitted optional field is removed); unknown stored fields survive.
+        const unknown = Object.fromEntries(Object.entries(stored).filter(([k]) => !(k in schema.entries)));
+        const json = JSON.stringify({ ...unknown, ...checked.output, revision: expectedRevision + 1 });
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
 
         // Value first, deletions last: an interruption leaves duplicates, never a lost value.

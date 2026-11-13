@@ -33,8 +33,28 @@ describe('schemas', () => {
     });
 
     it('rejects non-string texts', () => {
-        const base = { schema: 2, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16, backendUrl: '' };
+        const base = { schema: 2, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16, backendUrl: 'https://b.example' };
         expect(v.safeParse(SettingsSchema, { ...base, texts: { de: { title: 5 } } }).success).toBe(false);
         expect(v.safeParse(SettingsSchema, { ...base, texts: { de: { title: 'ok' } } }).success).toBe(true);
+    });
+
+    it('rejects duplicate client ids and keys shared between clients (also base64 vs base64url)', () => {
+        const g = { groupId: 1, createdBySetup: false };
+        const access = (machineClients: unknown[]) => ({ schema: 2, revision: 1, groups: { users: g, admins: g, service: g }, machineClients });
+        const bytes = String.fromCharCode(...new Uint8Array(32).fill(251));
+        const std = btoa(bytes);
+        const url = std.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        const other = { ...client, id: 'second' };
+        const ok = (c: unknown[]) => v.safeParse(AccessSchema, access(c)).success;
+        expect(ok([client, other])).toBe(false);
+        expect(ok([client, { ...other, publicKeys: [key32] }])).toBe(false);
+        expect(ok([{ ...client, publicKeys: [std] }, { ...other, publicKeys: [url] }])).toBe(false);
+        expect(ok([client, { ...other, id: 'third', publicKeys: [url] }])).toBe(true);
+    });
+
+    it('requires safe positive integer group ids', () => {
+        const g = { groupId: 1, createdBySetup: false };
+        const bad = { schema: 2, revision: 1, groups: { users: g, admins: { groupId: 2 ** 60, createdBySetup: false }, service: g }, machineClients: [] };
+        expect(v.safeParse(AccessSchema, bad).success).toBe(false);
     });
 });
