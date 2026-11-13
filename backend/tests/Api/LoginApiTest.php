@@ -14,12 +14,13 @@ use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
+use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use Firebase\JWT\JWT;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * `POST /v1/auth/token` (spec 4.4, catalog AX-01 to AX-19, TK-14, AG-02 to AG-05).
+ * `POST /v1/auth/token` (spec 4.4, catalog AX-01 to AX-20, TK-14, AG-02 to AG-05).
  */
 final class LoginApiTest extends ApiTestCase
 {
@@ -625,6 +626,8 @@ final class LoginApiTest extends ApiTestCase
         $this->assertNoTokenIssued($response);
     }
 
+    // ---------------------------------------------------------------- AX-20
+
     public function testABrokenSettingsValueFailsTheLoginBeforeTheCodeIsUsed(): void
     {
         $this->grant();
@@ -636,5 +639,21 @@ final class LoginApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::Misconfigured, $response);
         $this->assertNoTokenIssued($response);
         self::assertSame(0, $this->churchTools->countCalls(['exchangeAuthorizationCode']), 'The code stays usable for a retry.');
+    }
+
+    public function testAnOutageWhileLoadingTheSettingsFailsTheLoginBeforeTheCodeIsUsed(): void
+    {
+        $this->grant();
+        $this->churchTools->failNext('getModuleByKey', new UnavailableException('GET custommodules/ctpassstore: ChurchTools is unreachable (ConnectException).'));
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
+        $this->assertNoTokenIssued($response);
+        self::assertSame(0, $this->churchTools->countCalls(['exchangeAuthorizationCode']), 'The code stays usable for a retry.');
+        // The outage is remembered for a short while (spec 6.2); afterwards the same code still works.
+        $this->clock->advance(KvSettingsRepository::FAILURE_MIN_SECONDS + 1);
+        $retry = $this->login();
+        self::assertSame(200, $retry->getStatusCode(), (string) $retry->getBody());
     }
 }

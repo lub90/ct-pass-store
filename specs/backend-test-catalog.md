@@ -257,7 +257,8 @@ normal case names it ("→ PV-05").
 
 ### Login (`POST /v1/auth/token`, spec 4.4)
 
-- [x] **AX-01** (N · A) Valid code → `200` with `accessToken`, `tokenType: Bearer`, `expiresIn: 900` — 4.4
+- [x] **AX-01** (N · A) Valid code → `200` with `accessToken`, `tokenType: Bearer`, `expiresIn: 900` (plus `admin` and
+  `version`, AG-03) — 4.4
 - [x] **AX-02** (N · A) The code exchange sends client ID, secret, `redirect_uri` and `code_verifier` — 4.4.2
 - [x] **AX-03** (! · A) `redirectUri` outside the ChurchTools instance → `400 invalid-body`, without calling ChurchTools.
   The check compares the **parsed** scheme, host and port, not a string prefix. All of these are rejected:
@@ -292,6 +293,9 @@ normal case names it ("→ PV-05").
 - [x] **AX-13** (! · A) Counterparts of AX-01: a wrong `codeVerifier` (PKCE), a code for another client, or the same code
   twice → no token issued (`400 oauth-code-invalid`). A missing `codeVerifier` is `400 invalid-body` before ChurchTools
   is called (AX-10) — 4.4.2
+- [x] **AX-20** (! · A) Missing or invalid `settings` → `500 misconfigured`; ChurchTools unavailable while loading
+  `settings`/`access` → `502 upstream-unavailable`. Both before the code exchange (no `exchangeAuthorizationCode` call,
+  no token issued) — 4.4 step 1a
 
 ### Machine client tokens (spec 4.4a)
 

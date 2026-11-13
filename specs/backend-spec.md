@@ -296,6 +296,12 @@ All three fields are required, non-empty strings of at most 2,048 characters.
 1. `redirectUri` is **parsed**; its scheme must be `https` and its host and port must equal those of `CT_API_URL`.
    A string prefix check isn't enough (`https://<instance>.evil.com`, `https://<instance>@evil.com`). Otherwise
    `400 invalid-body`, without calling ChurchTools. ChurchTools additionally checks it against the registered URI.
+1a. **Before the code exchange,** the backend loads `settings` and `access` (cached, 6.1), because step 4 needs the
+   admin group. Invalid or missing `settings` → `500 misconfigured` (also for a code that is invalid anyway); a
+   ChurchTools failure while loading them → the usual upstream problem (`502 upstream-unavailable`,
+   `503 upstream-rate-limited`, …; an outage is remembered briefly, 6.2). Both happen before ChurchTools sees the
+   code, so the code isn't used up and the client can retry with it. Missing or invalid `access` content only means
+   no admins (3.2). Broken `settings` therefore block every login until fixed.
 2. The backend exchanges the code at `POST /oauth/access_token` with `grant_type=authorization_code`, its client ID and
    secret, `redirect_uri` and `code_verifier`.
    - Code invalid, expired or already used → `400 oauth-code-invalid`.
