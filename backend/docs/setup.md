@@ -1,7 +1,7 @@
 # PHP Backend Setup
 
 This guide installs the PHP backend by hand. It assumes that the CtPassStore extension is installed in your
-ChurchTools instance and that its data categories (`passwordStore`, `encryptionSettings`, `settings`) exist. If you
+ChurchTools instance and that its data categories (`passwordStore`, `encryptionSettings`, `settings`, `access`) exist. If you
 arrived here through the CtPassStore setup process, that is already the case.
 
 > A shell-free installation (a release zip that the extension's setup wizard configures through the backend) is
@@ -15,7 +15,8 @@ rights in ChurchTools' rights management:
 
 - **View** the CtPassStore extension (the backend looks up the extension's module with it; without it every request
   fails).
-- **View custom category** and **view custom data** for `passwordStore`, `encryptionSettings` and `settings`.
+- **View custom category** and **view custom data** for `passwordStore`, `encryptionSettings`, `settings` and `access`
+  (the admin group and the machine clients are in `access`; the service user only reads it).
 - **Create, edit and delete custom data** in `passwordStore` only.
 - **Read persons**, so the backend can tell a deleted or archived person from an active one (the read check and the
   cleanup, see below).
@@ -23,8 +24,8 @@ rights in ChurchTools' rights management:
 | Module | Right | For |
 | --- | --- | --- |
 | CtPassStore extension | View | Looking up the extension |
-| CtPassStore extension | View custom category | `passwordStore`, `encryptionSettings`, `settings` (without it ChurchTools lists no category) |
-| CtPassStore extension | View custom data | `passwordStore`, `encryptionSettings`, `settings` |
+| CtPassStore extension | View custom category | `passwordStore`, `encryptionSettings`, `settings`, `access` (without it ChurchTools lists no category) |
+| CtPassStore extension | View custom data | `passwordStore`, `encryptionSettings`, `settings`, `access` |
 | CtPassStore extension | Create, edit, delete custom data | `passwordStore` only |
 | Persons (`churchdb`) | "Personen" sehen (`view`) | Reading persons |
 | Persons (`churchdb`) | "Personen eines Bereiches sehen" (`view alldata`) | **Every** department of the instance |
@@ -32,7 +33,7 @@ rights in ChurchTools' rights management:
 | Persons (`churchdb`) | "Auch versteckte Personen sehen" (`view hidden persons`) | Seeing hidden persons |
 
 Do **not** give it administrative rights such as `administer settings`, `administer persons` or
-`administer custom modules`, and no write access to any other extension category. None of the persons rights above is
+`administer custom modules`, and no write access to any other extension category, `access` included. None of the persons rights above is
 administrative. `/v1/test` fails when the service user has more rights than needed, and also when it lacks one of the
 rights in the table: for the persons right it names the missing parts, e.g.
 `The service user can't read persons (missing: churchdb view archive)`.
@@ -140,8 +141,8 @@ Save the URL of the backend: you need it in the settings of the CtPassStore exte
 
 ## 6. Test the backend
 
-Log in to the extension as a user listed in the `adminUsers` setting and call `GET /v1/test` with that user's backend
-token (others get `403`). A healthy installation answers `200`:
+Log in to the extension as a member of the admin group (admins are the active members of the group named in the
+`access` category) and call `GET /v1/test` with that user's backend token (others get `403`). A healthy installation answers `200`:
 
 ```json
 {
@@ -163,7 +164,7 @@ Entries remain in `passwordStore` after a person has been deleted or archived in
 stops working within 10 minutes (`GET` and `PUT` answer `404 person-not-found`), but the cleanup removes the entry
 itself. It needs the persons rights of step 1. It checks every person with an entry in ChurchTools, and it deletes an
 entry only after ChurchTools confirmed for that person that they are deleted or archived. An unclear answer never deletes
-anything. Persons in `adminUsers` who are gone are only reported; remove them in the extension settings.
+anything.
 
 **Dry run or apply.** Without `--apply` (CLI) or `?apply=1` (web) the cleanup only reports what it would delete. Try a
 dry run first.
@@ -191,7 +192,7 @@ delete those mails accordingly, or redirect stdout to `/dev/null` to get mail on
 | Code | Meaning |
 | --- | --- |
 | 0 | Done: nothing to do, or everything was deleted (in a dry run: would have been). |
-| 1 | Done, but `adminUsers` contains a gone person or a delete failed. |
+| 1 | Done, but a delete failed. |
 | 2 | Aborted, nothing was deleted: wrong argument, broken `credentials.php`, another cleanup is running, the lock file can't be opened, missing persons rights or a failed ChurchTools lookup. |
 
 ### Web cron (no server cron)
@@ -221,7 +222,7 @@ endpoint is **off** until you set `CLEANUP_TOKEN` in `credentials.php`.
 The answer is `200` with counts only (no person IDs; those are in `logs/`):
 
 ```json
-{"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
+{"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0}
 ```
 
 | Field | Meaning |
@@ -232,7 +233,6 @@ The answer is `200` with counts only (no person IDs; those are in `logs/`):
 | `gone` | Gone persons found |
 | `deleted` | Entries deleted (always `0` in a dry run) |
 | `failedDeletes` | Deletes that failed; the next run (after the 600-second cooldown) retries them |
-| `goneAdmins` | Persons in `adminUsers` who are gone (see `/v1/test`) |
 
 Problems the service may report: `401 invalid-token` (wrong or missing token), `429 cleanup-too-soon` (a run starts at
 most every 600 seconds; a call that hits a running cleanup or fails also starts the period), `409 cleanup-running`, and

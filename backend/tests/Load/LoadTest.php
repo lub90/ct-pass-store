@@ -139,7 +139,7 @@ final class LoadTest extends TestCase
         self::$baseline = array_map(static fn(array $v): string => $v['value'], $this->values());
         self::$results['baselineCount'] = count(self::$baseline);
 
-        // Settings: the admin of the fixture must be in adminUsers.
+        // The admin of the fixture: its token carries `admin: true`, so it needs no entry in the instance's settings.
         $admins = json_decode((string) file_get_contents(self::FIXTURES . 'admin_users.json'), true, 512, JSON_THROW_ON_ERROR);
         self::assertIsArray($admins[0] ?? null, 'admin_users.json needs one user.');
         self::$adminId = (int) $admins[0]['id'];
@@ -154,14 +154,7 @@ final class LoadTest extends TestCase
         self::assertCount(1, $settingsValues, 'Exactly one settings value expected.');
         $raw = json_decode((string) $settingsValues[0]['value'], true, 512, JSON_THROW_ON_ERROR);
         self::assertIsArray($raw);
-        $realAdmins = is_array($raw['adminUsers'] ?? null) ? $raw['adminUsers'] : [];
-        self::$results['adminInRealAdminUsers'] = in_array(self::$adminId, $realAdmins, true);
-        self::$results['realAdminUsersCount'] = count($realAdmins);
         self::$results['requirePrimaryPassword'] = (bool) ($raw['requirePasswordForPasswordChange'] ?? false);
-        if (!self::$results['adminInRealAdminUsers']) {
-            self::$results['notes'][] = 'The fixture admin is not in the instance\'s adminUsers. The run puts the real settings plus this admin into the sandbox\'s own settings cache (never into ChurchTools).';
-        }
-        $raw['adminUsers'] = array_values(array_unique([...$realAdmins, self::$adminId]));
         self::$plantedSettings = $raw;
 
         // Who must never get an entry from this run.
@@ -173,9 +166,6 @@ final class LoadTest extends TestCase
                     $excluded[$value] = true;
                 }
             });
-        }
-        foreach ($realAdmins as $id) {
-            $excluded[(int) $id] = true;
         }
         $who = $this->ok('GET', 'whoami', self::$serviceToken);
         $excluded[(int) ($who['data']['id'] ?? 0)] = true;

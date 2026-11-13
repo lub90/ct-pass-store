@@ -154,7 +154,7 @@ final class CleanupApiTest extends ApiTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
         self::assertSame(
-            ['applied' => false, 'complete' => true, 'checked' => 2, 'gone' => 1, 'deleted' => 0, 'failedDeletes' => 0, 'goneAdmins' => 0],
+            ['applied' => false, 'complete' => true, 'checked' => 2, 'gone' => 1, 'deleted' => 0, 'failedDeletes' => 0],
             $this->json($response),
         );
         self::assertSame($writes, $this->churchTools->writeCount());
@@ -173,7 +173,7 @@ final class CleanupApiTest extends ApiTestCase
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame(
-            ['applied' => true, 'complete' => true, 'checked' => 3, 'gone' => 2, 'deleted' => 2, 'failedDeletes' => 0, 'goneAdmins' => 0],
+            ['applied' => true, 'complete' => true, 'checked' => 3, 'gone' => 2, 'deleted' => 2, 'failedDeletes' => 0],
             $this->json($response),
         );
         self::assertSame([self::USER], $this->storedPersonIds());
@@ -182,7 +182,6 @@ final class CleanupApiTest extends ApiTestCase
     /** WC-09 */
     public function testBodyHasCountsOnly(): void
     {
-        $this->setSettings(['adminUsers' => [self::ADMIN, 4713]]);
         $this->seedEntry(self::USER);
         $this->seedEntry(self::GONE);
         $this->seedEntry(self::ALSO_GONE);
@@ -191,8 +190,7 @@ final class CleanupApiTest extends ApiTestCase
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         $body = (string) $response->getBody();
-        self::assertSame(1, $this->json($response)['goneAdmins']);
-        foreach ([self::USER, self::ADMIN, self::GONE, self::ALSO_GONE, 4713] as $id) {
+        foreach ([self::USER, self::ADMIN, self::GONE, self::ALSO_GONE] as $id) {
             self::assertStringNotContainsString((string) $id, $body);
         }
     }
@@ -266,7 +264,7 @@ final class CleanupApiTest extends ApiTestCase
 
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame(
-            ['applied' => true, 'complete' => false, 'checked' => 2, 'gone' => 1, 'deleted' => 1, 'failedDeletes' => 0, 'goneAdmins' => 0],
+            ['applied' => true, 'complete' => false, 'checked' => 2, 'gone' => 1, 'deleted' => 1, 'failedDeletes' => 0],
             $this->json($response),
         );
         self::assertCount(1, $this->storedEntries());

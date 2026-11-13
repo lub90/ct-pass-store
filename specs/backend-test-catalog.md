@@ -858,7 +858,7 @@ Cases for the admin role from a ChurchTools group, the `access` category and the
 - [x] **AG-06** (! · A) Authorization reads only the token: a token with `admin: true` may act on others; `admin: false`
   may not, even if `adminUsers` in `settings` still lists the person — 4.3
 - [x] **AG-07** (! · U) A token without `admin`, or with `admin` as `"true"`/`1` → `401 invalid-token` — 4.4
-- [ ] **AG-08** (N · A) `/v1/test` check "access": ok; fails for unreadable `access`, invalid `groupId` — 4.8
+- [x] **AG-08** (N · A) `/v1/test` check "access": ok; fails for unreadable `access`, invalid `groupId` — 4.8
 - [x] **AG-09** (N · U) `settings` with `schema`, `revision`, `oauthClientId`, `texts`, `adminUsers`, `machineClients`
   parses as before; none of them changes `Settings` — 3.2
 - [x] **AG-10** (! · C) Contract: with a user's OAuth token, `GET /api/persons/{id}/groups` lists the user's own active

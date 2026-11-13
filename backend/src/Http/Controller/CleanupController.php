@@ -77,7 +77,6 @@ final class CleanupController
             'gone' => count($report->gone),
             'deleted' => $report->deletedCount(),
             'failedDeletes' => count($report->failedDeletes),
-            'goneAdmins' => count($report->goneAdmins),
         ], JSON_THROW_ON_ERROR));
 
         return $response->withHeader('Content-Type', 'application/json')->withStatus(200);

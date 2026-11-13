@@ -58,10 +58,10 @@ final class SignedFileCacheTest extends TestCase
     public function testPutThenGetWithinTtl(): void
     {
         $cache = $this->cache();
-        $cache->put('settings', ['adminUsers' => [1]], 60);
+        $cache->put('settings', ['passwordLength' => 1], 60);
         $this->clock->advance(59);
 
-        self::assertSame(['adminUsers' => [1]], $cache->get('settings'));
+        self::assertSame(['passwordLength' => 1], $cache->get('settings'));
     }
 
     /** CA-02 */
@@ -94,9 +94,9 @@ final class SignedFileCacheTest extends TestCase
     public function testTamperedEntryIsNullAndLogsError(): void
     {
         $cache = $this->cache();
-        $cache->put('settings', ['adminUsers' => [1]], 60);
+        $cache->put('settings', ['passwordLength' => 1], 60);
         $file = json_decode((string) file_get_contents($this->fileFor('settings')), true);
-        $file['data'] = json_encode(['expires' => $this->clock->now()->getTimestamp() + 60, 'data' => ['adminUsers' => [99]]]);
+        $file['data'] = json_encode(['expires' => $this->clock->now()->getTimestamp() + 60, 'data' => ['passwordLength' => 99]]);
         file_put_contents($this->fileFor('settings'), json_encode($file));
 
         self::assertNull($cache->get('settings'));
@@ -108,7 +108,7 @@ final class SignedFileCacheTest extends TestCase
     public function testEntryWithoutMacIsNullAndLogsError(): void
     {
         $cache = $this->cache();
-        $cache->put('settings', ['adminUsers' => [1]], 60);
+        $cache->put('settings', ['passwordLength' => 1], 60);
         $file = json_decode((string) file_get_contents($this->fileFor('settings')), true);
         unset($file['mac']);
         file_put_contents($this->fileFor('settings'), json_encode($file));
@@ -137,7 +137,7 @@ final class SignedFileCacheTest extends TestCase
         mkdir($this->dir, 0o700);
         file_put_contents(
             $this->fileFor('settings'),
-            $signer->seal('settings', ['expires' => $this->clock->now()->getTimestamp() + 60, 'data' => ['adminUsers' => [99]]]),
+            $signer->seal('settings', ['expires' => $this->clock->now()->getTimestamp() + 60, 'data' => ['passwordLength' => 99]]),
         );
 
         self::assertNull($this->cache()->get('settings'));

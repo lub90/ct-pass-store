@@ -24,7 +24,6 @@ final class KvSchema
     public const SETTING_REQUIRE_PRIMARY_PASSWORD = 'requirePasswordForPasswordChange';
     public const SETTING_ALLOW_CUSTOM_PASSWORD = 'allowCustomPassword';
     public const SETTING_PASSWORD_LENGTH = 'passwordLength';
-    public const SETTING_ADMIN_USERS = 'adminUsers';
     public const SETTING_BACKEND_URL = 'backendUrl';
 
     /** Fields of the value in ACCESS_CATEGORY (spec 3.2); the backend reads only these. */

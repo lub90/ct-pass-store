@@ -53,6 +53,21 @@ final class SettingsParserTest extends TestCase
         self::assertNull($withExtras->settings->adminGroupId);
     }
 
+    /**
+     * AG-09: an `adminUsers` key in old settings is accepted and ignored, even a malformed one (the migration removes it).
+     */
+    public function testAnOldAdminUsersKeyIsIgnoredWhateverItHolds(): void
+    {
+        $base = ['requirePasswordForPasswordChange' => true, 'allowCustomPassword' => false, 'passwordLength' => 16, 'backendUrl' => 'https://backend.example.org'];
+
+        foreach ([[7, 8], 'garbage', ['a' => -1], null] as $old) {
+            $parsed = SettingsParser::parse($base + ['adminUsers' => $old]);
+
+            self::assertEquals(SettingsParser::parse($base)->settings, $parsed->settings);
+            self::assertSame([], $parsed->findings);
+        }
+    }
+
     public function testInvalidSettingsThrow(): void
     {
         $this->expectException(ConfigurationException::class);

@@ -14,7 +14,6 @@ use CtPassStore\Application\DeletePassword;
 use CtPassStore\Application\EntryGuard;
 use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\GetPassword;
-use CtPassStore\Application\GoneAdmins;
 use CtPassStore\Application\GonePersons;
 use CtPassStore\Application\Login;
 use CtPassStore\Application\Port\Clock;
@@ -52,7 +51,7 @@ use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Logging\AddVersionToErrors;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
-use CtPassStore\Infrastructure\SelfCheck\AdminUsersCheck;
+use CtPassStore\Infrastructure\SelfCheck\AccessCheck;
 use CtPassStore\Infrastructure\SelfCheck\CacheFolderCheck;
 use CtPassStore\Infrastructure\SelfCheck\CleanupTokenCheck;
 use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
@@ -105,7 +104,6 @@ final class Kernel
         $extensionData = $shared['extensionData'];
         $settings = $shared['settings'];
         $passwords = $shared['passwords'];
-        $goneAdmins = $shared['goneAdmins'];
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
         $addressLimiter = new FileAddressLimiter($securityStore, $clock, $config->jwtSecret);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
@@ -128,11 +126,11 @@ final class Kernel
             new CacheFolderCheck($config->cacheDir, $securityStore),
             new OAuthConfigurationCheck($config),
             new SettingsCheck($settings),
+            new AccessCheck($extensionData),
             new PublicKeyCheck($settings, new RsaPasswordCipher($settings)),
             new PasswordStoreReadCheck($extensionData),
             new ServiceUserRightsCheck($churchTools, $extensionData),
             new OAuthClientCheck($churchTools, $config),
-            new AdminUsersCheck($settings, $goneAdmins, $logger),
             new CleanupTokenCheck($config),
         ], $logger, [
             new WriteRoundTripCheck($passwords, new RsaPasswordCipher($settings)),
@@ -192,7 +190,7 @@ final class Kernel
      * the cleanup with its lock (cleanup design 3.5, 6.3). The person lookups here are never cached: a cached "active"
      * would hide a person who was deleted minutes ago. The web app puts its own cached directory in front of GET and PUT.
      *
-     * @return array{cleanup: CleanupOrphans, lock: CleanupLock, cache: SignedFileCache, extensionData: ExtensionData, settings: KvSettingsRepository, passwords: KvPasswordRepository, goneAdmins: GoneAdmins}
+     * @return array{cleanup: CleanupOrphans, lock: CleanupLock, cache: SignedFileCache, extensionData: ExtensionData, settings: KvSettingsRepository, passwords: KvPasswordRepository}
      */
     public static function cleanupServices(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): array
     {
@@ -203,16 +201,14 @@ final class Kernel
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $persons = new ChurchToolsPersonDirectory($churchTools);
         $gonePersons = new GonePersons($persons, $clock);
-        $goneAdmins = new GoneAdmins($gonePersons);
 
         return [
-            'cleanup' => new CleanupOrphans($passwords, $settings, $persons, $gonePersons, $goneAdmins, $clock, $logger),
+            'cleanup' => new CleanupOrphans($passwords, $settings, $persons, $gonePersons, $clock, $logger),
             'lock' => new CleanupLock($config->cacheDir . '/cleanup.lock'),
             'cache' => $cache,
             'extensionData' => $extensionData,
             'settings' => $settings,
             'passwords' => $passwords,
-            'goneAdmins' => $goneAdmins,
         ];
     }
 

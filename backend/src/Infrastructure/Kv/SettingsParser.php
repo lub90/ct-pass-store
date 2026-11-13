@@ -40,7 +40,6 @@ final class SettingsParser
             requirePrimaryPassword: self::boolean($raw, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD),
             allowCustomPasswords: self::boolean($raw, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD),
             passwordLength: self::passwordLength($raw),
-            adminUsers: self::personIds($raw, KvSchema::SETTING_ADMIN_USERS),
             backendUrl: $backendUrl,
         ), $findings);
     }
@@ -66,25 +65,6 @@ final class SettingsParser
         $value = $raw[$key] ?? null;
         if (!is_int($value) || $value < PasswordPolicy::MIN_CONFIGURABLE_LENGTH || $value > PasswordPolicy::MAX_CONFIGURABLE_LENGTH) {
             throw new ConfigurationException(sprintf('The setting %s must be a whole number from %d to %d. Save the settings in the extension.', $key, PasswordPolicy::MIN_CONFIGURABLE_LENGTH, PasswordPolicy::MAX_CONFIGURABLE_LENGTH));
-        }
-
-        return $value;
-    }
-
-    /**
-     * @param array<string, mixed> $raw
-     * @return list<int>
-     */
-    private static function personIds(array $raw, string $key): array
-    {
-        $value = $raw[$key] ?? [];
-        if (!is_array($value) || !array_is_list($value)) {
-            throw new ConfigurationException("The setting $key must be a list of person IDs. Save the settings in the extension.");
-        }
-        foreach ($value as $id) {
-            if (!is_int($id) || $id < 1) {
-                throw new ConfigurationException("The setting $key must contain only positive whole numbers (person IDs). Save the settings in the extension.");
-            }
         }
 
         return $value;

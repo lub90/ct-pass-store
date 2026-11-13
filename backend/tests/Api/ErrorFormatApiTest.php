@@ -361,7 +361,6 @@ final class ErrorFormatApiTest extends ApiTestCase
     public static function brokenSettings(): iterable
     {
         yield 'passwordLength' => ['passwordLength', 'VALUE-SECRET-1'];
-        yield 'adminUsers' => ['adminUsers', ['VALUE-SECRET-2']];
         yield 'requirePasswordForPasswordChange' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 'VALUE-SECRET-3'];
         yield 'allowCustomPassword' => [KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD, 'VALUE-SECRET-4'];
     }

@@ -141,8 +141,9 @@ What it does, strictly sequentially and paced below the ChurchTools rate limit (
 5. Teardown, also after a failure: deletes the values it created, deletes the 20 persons, removes the sandbox and
    checks that `passwordStore` equals the baseline. A failed check is printed loudly.
 
-If the fixture admin isn't in the instance's `adminUsers`, the run never changes the settings in ChurchTools. It puts
-the real settings plus that admin into the **sandbox's own** settings cache instead, and says so in the results.
+The run never changes the settings in ChurchTools. The fixture admin needs no entry anywhere: the run signs its token
+itself, with `admin: true` (the admin role is a claim of the backend token, from the admin group). The sandbox's own
+settings cache gets a copy of the instance's real settings.
 
 ## Manual OAuth check before each release
 

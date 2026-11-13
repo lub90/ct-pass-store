@@ -51,11 +51,13 @@ final class ServiceUserRightsCheckTest extends TestCase
 
     private int $passwords;
 
+    private int $access;
+
     protected function setUp(): void
     {
         $this->fake = new FakeChurchToolsClient();
-        $ids = $this->fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
-        [$this->settings, $this->encryption, $this->passwords] = [$ids[KvSchema::SETTINGS_CATEGORY], $ids[KvSchema::ENCRYPTION_CATEGORY], $ids[KvSchema::PASSWORD_CATEGORY]];
+        $ids = $this->fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY, KvSchema::ACCESS_CATEGORY]);
+        [$this->settings, $this->encryption, $this->passwords, $this->access] = [$ids[KvSchema::SETTINGS_CATEGORY], $ids[KvSchema::ENCRYPTION_CATEGORY], $ids[KvSchema::PASSWORD_CATEGORY], $ids[KvSchema::ACCESS_CATEGORY]];
     }
 
     /**
@@ -64,7 +66,7 @@ final class ServiceUserRightsCheckTest extends TestCase
      */
     private function minimal(array $overrides = []): array
     {
-        $all = [$this->settings, $this->encryption, $this->passwords];
+        $all = [$this->settings, $this->encryption, $this->passwords, $this->access];
 
         return [KvSchema::EXTENSION_KEY => $overrides + [
             'view' => true,
@@ -131,6 +133,22 @@ final class ServiceUserRightsCheckTest extends TestCase
 
         self::assertFalse($result->ok);
         self::assertStringContainsString('edit custom data', $result->message);
+    }
+
+    /** Extension spec 16.2 rows S2/S3: the service user reads `access` and never writes it. */
+    public function testWritingTheAccessCategoryFails(): void
+    {
+        foreach (['create custom data', 'edit custom data', 'delete custom data'] as $right) {
+            $result = $this->check($this->minimal([$right => [$this->passwords, $this->access]]));
+
+            self::assertFalse($result->ok, $right);
+            self::assertStringContainsString($right, $result->message);
+        }
+    }
+
+    public function testReadingTheAccessCategoryPasses(): void
+    {
+        self::assertTrue($this->check($this->minimal(['view custom category' => [$this->passwords, $this->access], 'view custom data' => [$this->passwords, $this->access]]))->ok);
     }
 
     public function testCreatingAndDeletingInOtherCategoriesFails(): void

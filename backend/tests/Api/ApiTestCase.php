@@ -145,7 +145,7 @@ abstract class ApiTestCase extends TestCase
 
     /**
      * Replaces the settings value. Unset keys get these defaults: no primary password required, custom passwords
-     * allowed, length 12, admin 100, the backend URL and the two machine clients.
+     * allowed, length 12, the backend URL and the two machine clients.
      *
      * Takes effect with the next request: the settings cache is cleared (spec 6.1; Review Focus 1).
      *
@@ -160,7 +160,6 @@ abstract class ApiTestCase extends TestCase
             KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false,
             KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true,
             'passwordLength' => 12,
-            'adminUsers' => [self::ADMIN],
             'backendUrl' => self::BACKEND_URL,
         ], JSON_THROW_ON_ERROR));
         // The machine clients live in the access category; tests keep passing them with the settings.
