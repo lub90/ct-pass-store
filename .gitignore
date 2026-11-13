@@ -2,3 +2,6 @@
 !.vscode/extensions.json
 !.vscode/launch.json
 !.vscode/tasks.json
+
+# Claude Code: personal settings stay local
+.claude/settings.local.json
