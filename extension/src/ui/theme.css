@@ -8,8 +8,9 @@
  * Contrast (WCAG AA: 4.5:1 for text, 3:1 for large text and UI edges), light values:
  *   text on surface            ~16:1    text-muted on surface   ~7.6:1
  *   accent-text on accent      ~5.4:1   danger on danger-pale   ~4.6:1 (text uses --cps-text on the pale fills)
- *   create-text on create      white on green-500 is only ~2.3:1: the host's own button text colour is kept, and the
- *                              label is bold (700); check against the host in dark mode before relying on it.
+ *   create-text on create      white on the darkened green: 5.06:1 (light fallback, computed: oklch(72.3% 0.219 149.6)
+ *                              mixed 72% with black in oklab = about rgb(0, 128, 49)).
+ *                              The host's own green with white text would be only ~2.3:1.
  * The dark values come from the host and are checked there; text always sits on `surface`, `panel` or a pale fill
  * together with `--cps-text`, never accent-coloured on a pale fill below 4.5:1.
  */
@@ -28,8 +29,8 @@
     --cps-warning: var(--color-warning-bright, oklch(76.9% 0.188 70.08));
     --cps-warning-pale: var(--color-warning-b-pale, oklch(97.3% 0.071 103.193));
     --cps-success: var(--color-success-bright, oklch(62.7% 0.194 149.214));
-    /* Green of "create something new". */
-    --cps-create: var(--color-constructive-b-bright, oklch(72.3% 0.219 149.579));
+    /* Green of "create something new", darkened so that white text reaches AA (5.06:1 on the light fallback). */
+    --cps-create: color-mix(in oklab, var(--color-constructive-b-bright, oklch(72.3% 0.219 149.579)) 72%, black);
     --cps-create-text: var(--color-constructive-inverted, #fff);
     --cps-radius: var(--radius-md, 0.375rem);
     --cps-radius-lg: var(--radius-lg, 0.5rem);
@@ -45,6 +46,7 @@
     /* One height for buttons and fields; a finger gets 44 px (below). */
     --cps-control-h: 40px;
     --cps-shadow-card: 0 1px 3px #0f172a14, 0 6px 16px #0f172a0d;
+    /* Duration and easing for every transition. Components never write raw durations; reduced motion sets it to 0s. */
     --cps-transition: 150ms ease;
     /* Lato of ChurchTools has 300, 400 and 700: text is regular, buttons and headings bold. No 500 or 600. */
     --cps-weight-normal: 400;
@@ -121,6 +123,11 @@
     border-color: transparent;
     background: transparent;
 }
+/* Same specificity as the base hover and later in the file, so it must restate the hover itself. */
+.cps :where(button.cps-btn--ghost:hover:not(:disabled)) {
+    border-color: transparent;
+    background: var(--cps-panel);
+}
 /* A symbol only: a square the height of a control. */
 .cps :where(button.cps-btn--icon) {
     width: var(--cps-control-h);
@@ -176,13 +183,9 @@
     }
 }
 
-/* Less motion on request: no transitions at all. Specificity of one class beats the `:where()` rules above. */
+/* Less motion on request (no !important): every transition reads the token, which becomes 0s here. */
 @media (prefers-reduced-motion: reduce) {
-    .cps,
-    .cps *,
-    .cps *::before,
-    .cps *::after {
-        transition: none;
-        animation: none;
+    .cps {
+        --cps-transition: 0s;
     }
 }
