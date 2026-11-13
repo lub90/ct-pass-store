@@ -23,9 +23,14 @@ const canConfirm = computed(() => {
 
 function confirm() {
     if (!canConfirm.value || !request.value) return;
-    answerConfirm(request.value.field ? { confirmed: true, value: value.value } : { confirmed: true });
+    const typed = value.value;
+    const field = request.value.field;
+    // The typed secret lives only until it is handed to the resolver.
+    value.value = '';
+    answerConfirm(field ? { confirmed: true, value: typed } : { confirmed: true });
 }
 function cancel() {
+    value.value = '';
     answerConfirm({ confirmed: false });
 }
 
@@ -69,6 +74,7 @@ watch(
             window.addEventListener('keydown', onKey, true);
         } else if (!current && previous) {
             window.removeEventListener('keydown', onKey, true);
+            value.value = '';
             opener?.focus();
             opener = null;
         }
@@ -82,7 +88,10 @@ watch(
     },
     { flush: 'post' },
 );
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey, true));
+onBeforeUnmount(() => {
+    window.removeEventListener('keydown', onKey, true);
+    value.value = '';
+});
 </script>
 
 <template>

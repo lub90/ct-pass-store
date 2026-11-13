@@ -76,11 +76,18 @@ async function lookup(query: string) {
     open.value = true;
 }
 
+/** Closes the list for good: a waiting debounce and a search in flight must not reopen it. */
+function close() {
+    clearTimeout(timer);
+    run++;
+    open.value = false;
+    active.value = -1;
+}
+
 function choose(person: PersonOption) {
     selected.value = person;
     text.value = person.name;
-    open.value = false;
-    active.value = -1;
+    close();
 }
 
 function onKeydown(event: KeyboardEvent) {
@@ -96,11 +103,12 @@ function onKeydown(event: KeyboardEvent) {
             event.preventDefault();
             choose(person);
         }
-    } else if (event.key === 'Escape' && open.value) {
-        event.preventDefault();
-        event.stopPropagation();
-        open.value = false;
-        active.value = -1;
+    } else if (event.key === 'Escape') {
+        if (open.value) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        close();
     }
 }
 
@@ -127,7 +135,7 @@ onBeforeUnmount(() => clearTimeout(timer));
             spellcheck="false"
             @input="onInput"
             @keydown="onKeydown"
-            @blur="open = false"
+            @blur="close"
         >
         <ul
             v-if="results.length > 0 && open"

@@ -143,4 +143,46 @@ describe('ConfirmDialog', () => {
         answerConfirm({ confirmed: false });
         await second;
     });
+
+    describe('forgets the typed secret', () => {
+        const typed = async () => {
+            const { result, shown } = open({ ...base, field: { label: 'Password', type: 'password' } });
+            await shown;
+            const input = document.body.querySelector('input')!;
+            input.value = 'hunter2';
+            input.dispatchEvent(new Event('input'));
+            await nextTick();
+            return { result };
+        };
+        const forgotten = async () => {
+            await flush();
+            expect((w.vm as unknown as { value: string }).value).toBe('');
+            expect(document.body.innerHTML).not.toContain('hunter2');
+            expect([...document.body.querySelectorAll('input')].every((i) => i.value === '')).toBe(true);
+            const next = open({ ...base, field: { label: 'Password', type: 'password' } });
+            await next.shown;
+            expect(document.body.querySelector('input')!.value).toBe('');
+            answerConfirm({ confirmed: false });
+            await next.result;
+        };
+
+        it('after confirm', async () => {
+            const { result } = await typed();
+            btn('Delete').click();
+            await expect(result).resolves.toEqual({ confirmed: true, value: 'hunter2' });
+            await forgotten();
+        });
+        it('after cancel', async () => {
+            const { result } = await typed();
+            btn('Cancel').click();
+            await result;
+            await forgotten();
+        });
+        it('after Escape', async () => {
+            const { result } = await typed();
+            key('Escape');
+            await result;
+            await forgotten();
+        });
+    });
 });

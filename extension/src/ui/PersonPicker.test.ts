@@ -128,4 +128,57 @@ describe('PersonPicker', () => {
         await w.find('input').setValue('Anna B');
         expect(w.emitted('update:selected')!.at(-1)).toEqual([null]);
     });
+
+    describe('closing cancels pending searches', () => {
+        it('choose before the debounce fires: no search, list stays closed', async () => {
+            // Open with a first result, then type again and choose from the old list before the debounce fires.
+            const search = vi.fn().mockResolvedValue(people);
+            const w = mount(PersonPicker, { props: { ...props, search } });
+            await type(w, 'An');
+            await w.find('input').setValue('Ann');
+            await w.findAll('[role="option"]')[0]!.trigger('click');
+            await vi.advanceTimersByTimeAsync(500);
+            await flushPromises();
+            expect(search).toHaveBeenCalledTimes(1);
+            expect(w.find('[role="listbox"]').exists()).toBe(false);
+        });
+
+        it('Escape before the debounce fires keeps the list closed', async () => {
+            const search = vi.fn().mockResolvedValue(people);
+            const w = mount(PersonPicker, { props: { ...props, search } });
+            await w.find('input').setValue('An');
+            await w.find('input').trigger('keydown', { key: 'Escape' });
+            await vi.advanceTimersByTimeAsync(500);
+            await flushPromises();
+            expect(search).not.toHaveBeenCalled();
+            expect(w.find('[role="listbox"]').exists()).toBe(false);
+        });
+
+        it('blur before the debounce fires keeps the list closed', async () => {
+            const search = vi.fn().mockResolvedValue(people);
+            const w = mount(PersonPicker, { props: { ...props, search } });
+            await w.find('input').setValue('An');
+            await w.find('input').trigger('blur');
+            await vi.advanceTimersByTimeAsync(500);
+            await flushPromises();
+            expect(search).not.toHaveBeenCalled();
+            expect(w.find('[role="listbox"]').exists()).toBe(false);
+        });
+
+        it('a search in flight that resolves after Escape or blur does not reopen', async () => {
+            for (const close of [(w: ReturnType<typeof mount>) => w.find('input').trigger('keydown', { key: 'Escape' }), (w: ReturnType<typeof mount>) => w.find('input').trigger('blur')]) {
+                let done!: (v: typeof people) => void;
+                const search = vi.fn().mockImplementation(() => new Promise((r) => (done = r)));
+                const w = mount(PersonPicker, { props: { ...props, search } });
+                await w.find('input').setValue('An');
+                await vi.advanceTimersByTimeAsync(250);
+                expect(search).toHaveBeenCalledTimes(1);
+                await close(w);
+                done(people);
+                await flushPromises();
+                expect(w.find('[role="listbox"]').exists()).toBe(false);
+                expect(w.find('input').attributes('aria-expanded')).toBe('false');
+            }
+        });
+    });
 });
