@@ -32,4 +32,27 @@ describe('Toggle', () => {
         expect(w.find(`#${sw.attributes('aria-describedby')}`).text()).toBe('Why');
         expect(sw.attributes('aria-labelledby')).toBeTruthy();
     });
+
+    describe('row clicks flip exactly once', () => {
+        function setup() {
+            const w = mount(Toggle, {
+                attachTo: document.body,
+                props: { modelValue: false, label: 'Enable', help: 'Why', 'onUpdate:modelValue': (v: boolean) => w.setProps({ modelValue: v }) },
+            });
+            return w;
+        }
+
+        it.each([
+            ['label text', '.cps-toggle__label'],
+            ['switch button', '[role="switch"]'],
+            ['help text', '.cps-toggle__help'],
+        ])('a click on the %s', async (_name, selector) => {
+            const w = setup();
+            (w.find(selector).element as HTMLElement).click();
+            await w.vm.$nextTick();
+            expect(w.emitted('update:modelValue')).toEqual([[true]]);
+            expect(w.find('[role="switch"]').attributes('aria-checked')).toBe('true');
+            w.unmount();
+        });
+    });
 });

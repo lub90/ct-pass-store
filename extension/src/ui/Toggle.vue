@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
  * An on/off switch: a native button with `role="switch"`, so Space and Enter work without extra code. The whole row is
- * a `<label>`: a click on the text activates the button (and focuses it), which gives the touch hit area.
+ * a `<label>`: a click on the text activates the button, which gives the touch hit area. Whether a label click also moves focus is
+ * browser-dependent; keyboard and focus behavior is covered by the browser tests.
  */
 import { useId } from 'vue';
 

@@ -83,4 +83,11 @@ describe('SecretField', () => {
         expect(input.attributes('name')).toBe('pw');
         expect(w.element.getAttribute('aria-describedby')).toBeNull();
     });
+
+    it('puts class and style on the root, not the input', () => {
+        const w = mount(SecretField, { props, attrs: { class: 'extra', style: 'margin: 1px' } });
+        expect(w.classes()).toContain('extra');
+        expect(w.attributes('style')).toContain('margin');
+        expect(w.find('input').classes()).not.toContain('extra');
+    });
 });
