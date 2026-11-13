@@ -4,3 +4,8 @@ export type { IconName } from './Icon.vue';
 export { default as PageHeader } from './PageHeader.vue';
 export { default as Pill } from './Pill.vue';
 export { default as StatusLine } from './StatusLine.vue';
+export { default as ChoiceCard } from './ChoiceCard.vue';
+export { default as Field } from './Field.vue';
+export { default as LinkCard } from './LinkCard.vue';
+export { default as SecretField } from './SecretField.vue';
+export { default as Toggle } from './Toggle.vue';
