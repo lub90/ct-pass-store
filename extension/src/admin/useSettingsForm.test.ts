@@ -1,7 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { flushPromises, mount } from '@vue/test-utils';
+import { describe, expect, it, vi } from 'vitest';
+import { defineComponent, h } from 'vue';
 import { CtForbiddenError, CtHttpError, CtRateLimitedError, NotAuthenticatedError } from '../ct/errors';
 import { CategoryMissingError, InvalidValueError, ValueTooLargeError } from '../model/errors';
-import { settingsErrorText } from './useSettingsForm';
+import type { Read } from '../store/repository';
+import { settingsErrorText, useSettingsForm, type SettingsForm } from './useSettingsForm';
+
+// The form asks before leaving through the router; these tests mount it without one.
+vi.mock('vue-router', () => ({ onBeforeRouteLeave: () => undefined }));
 
 describe('settingsErrorText', () => {
     it.each([
@@ -15,5 +21,54 @@ describe('settingsErrorText', () => {
         ['anything else', new CtHttpError(500), { key: 'state.ctUnavailable', params: {} }],
     ])('%s', (_n, error, expected) => {
         expect(settingsErrorText(error)).toStrictEqual(expected);
+    });
+});
+
+describe('useSettingsForm: overlapping loads', () => {
+    type V = { revision: number; name: string };
+    const ok = (name: string): Read<V> => ({ state: 'ok', value: { revision: 1, name }, valueId: 1, duplicates: 0 });
+
+    /** Mounts a page that only holds the form; each `load()` waits for its own `resolve`/`reject`. */
+    function setup() {
+        const pending: { resolve: (r: Read<V>) => void; reject: (e: unknown) => void }[] = [];
+        let form!: SettingsForm<V>;
+        const Page = defineComponent({
+            setup() {
+                form = useSettingsForm<V>(
+                    () => new Promise<Read<V>>((resolve, reject) => pending.push({ resolve, reject })),
+                    () => Promise.resolve(),
+                    { confirm: () => Promise.resolve({ confirmed: true }), leaveQuestion: () => ({ title: 't', text: 't', confirmLabel: 'c', cancelLabel: 'x' }) },
+                );
+                return () => h('div');
+            },
+        });
+        const wrapper = mount(Page);
+        return { form: () => form, pending, wrapper };
+    }
+
+    it('the newer read wins when the older one answers last', async () => {
+        const { form, pending, wrapper } = setup();
+        void form().load();
+        void form().load();
+        pending[1]!.resolve(ok('newer'));
+        await flushPromises();
+        pending[0]!.resolve(ok('older'));
+        await flushPromises();
+        expect(form().status.value).toBe('ready');
+        expect(form().value.value?.name).toBe('newer');
+        wrapper.unmount();
+    });
+
+    it('an older read failing last changes nothing', async () => {
+        const { form, pending, wrapper } = setup();
+        void form().load();
+        void form().load();
+        pending[1]!.resolve(ok('newer'));
+        await flushPromises();
+        pending[0]!.reject(new Error('late'));
+        await flushPromises();
+        expect(form().status.value).toBe('ready');
+        expect(form().loadError.value).toBeNull();
+        wrapper.unmount();
     });
 });

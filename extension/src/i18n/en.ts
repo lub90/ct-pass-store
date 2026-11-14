@@ -123,6 +123,7 @@ const en: Messages = {
         repairNote: 'Check the values below and save to repair them. Invalid rules are prefilled with safe values.',
         noRepair: "They can't be repaired here because the backend address or the OAuth client ID is invalid. Check them on “Backend & status”.",
         noRepairVersion: "They can't be repaired here. Check them on “Setup”.",
+        noRepairAsk: "They can't be repaired here. Ask someone who may run the setup.",
         repairOnRules: 'Repair them on “Password rules” first.',
         rules: {
             intro: 'Decide what new passwords look like and what has to be confirmed to set one.',

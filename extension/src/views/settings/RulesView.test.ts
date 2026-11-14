@@ -31,6 +31,7 @@ const TEXT = {
     repairNote: 'Prüf die Werte unten und speichere, um sie zu reparieren. Ungültige Regeln sind mit sicheren Werten vorbelegt.',
     noRepair: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Backend & Status“.',
     noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     retry: 'Erneut versuchen',
     unavailable: 'ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.',
     loggedOut: 'Du bist in ChurchTools nicht mehr angemeldet. Lade die Seite neu.',
@@ -404,13 +405,22 @@ describe('what the stored value lacks', () => {
         expect(writes).toEqual([]);
     });
 
-    it('an invalid value without a usable revision: no repair here, pointing to „Einrichtung“', async () => {
-        const { wrapper, writes, openWith } = await start({ path: '/settings' });
+    it('an invalid value without a usable revision: no repair here; a setup-capable editor is pointed to „Einrichtung“', async () => {
+        const { wrapper, writes, openWith } = await start({ path: '/settings', setupCapable: true });
         await openWith({ ...SETTINGS, revision: 'x', passwordLength: 99 }, '/settings/rules');
         const banner = wrapper.find('.cps-settings-form__issues');
         expect(banner.text()).toContain(TEXT.noRepairVersion);
         expect(banner.text()).not.toContain(TEXT.noRepair);
         expect(wrapper.find('#cps-rules-length').exists()).toBe(false);
+        expect(writes).toEqual([]);
+    });
+
+    it('an invalid value without a usable revision: an editor who can\'t run the setup is told to ask someone who can', async () => {
+        const { wrapper, writes, openWith } = await start({ path: '/settings', setupCapable: false });
+        await openWith({ ...SETTINGS, revision: 'x', passwordLength: 99 }, '/settings/rules');
+        const banner = wrapper.find('.cps-settings-form__issues');
+        expect(banner.text()).toContain(TEXT.noRepairAsk);
+        expect(banner.text()).not.toContain('„Einrichtung“');
         expect(writes).toEqual([]);
     });
 

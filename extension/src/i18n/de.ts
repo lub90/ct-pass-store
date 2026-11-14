@@ -129,6 +129,7 @@ const de = {
         repairNote: 'Prüf die Werte unten und speichere, um sie zu reparieren. Ungültige Regeln sind mit sicheren Werten vorbelegt.',
         noRepair: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Backend & Status“.',
         noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+        noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
         repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
         rules: {
             intro: 'Leg fest, wie neue Passwörter aussehen und was zum Festlegen bestätigt werden muss.',

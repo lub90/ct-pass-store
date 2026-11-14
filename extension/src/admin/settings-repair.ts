@@ -16,6 +16,7 @@ function safeLength(stored: unknown): number {
 
 export function settingsRepair(read: InvalidRead<SettingsV2>): { value: SettingsV2 } | { reason: NoRepair } {
     const r = read.repair;
+    // The store only hands over usable revisions (0 or more); `< 0` guards a caller that builds a read itself.
     if (!r || read.revision === undefined || read.revision < 0) return { reason: 'version' };
     if (r.broken.includes('backendUrl') || r.broken.includes('oauthClientId')) return { reason: 'backend' };
     return {

@@ -23,6 +23,8 @@ const TEXT = {
     issuesTitle: 'Ein Teil der gespeicherten Einstellungen ist ungültig und wird nicht verwendet:',
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     bidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
 };
 /** Would be message syntax, a linked message, a plural separator or HTML if it were ever compiled or parsed. */
@@ -209,6 +211,18 @@ describe('Texte: rights and stored problems', () => {
         const banner = wrapper.find('.cps-settings-form__issues');
         expect(banner.text()).toContain('Hier lassen sie sich nicht reparieren, weil die Backend-Adresse');
         expect(banner.text()).not.toContain(TEXT.repairOnRules);
+    });
+
+    it.each([
+        [true, TEXT.noRepairVersion],
+        [false, TEXT.noRepairAsk],
+    ])('an invalid value without a usable revision (setup-capable: %s): no repair, says whom to turn to', async (setupCapable, text) => {
+        const { wrapper, openWith, writes } = await start({ path: '/settings', setupCapable });
+        await openWith({ ...SETTINGS, revision: 'x', passwordLength: 99 }, '/settings/texts');
+        const banner = wrapper.find('.cps-settings-form__issues');
+        expect(banner.text()).toContain(text);
+        expect(banner.text()).not.toContain(TEXT.repairOnRules);
+        expect(writes).toEqual([]);
     });
 
     it('stored texts that are invalid are dropped as a whole (valid languages too): shown before saving', async () => {
