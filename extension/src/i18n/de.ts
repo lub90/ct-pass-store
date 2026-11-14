@@ -16,6 +16,24 @@ const de = {
         defaultIntro:
             'Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort.',
     },
+    problems: {
+        entryNotFound: 'Noch kein Passwort',
+        primaryPasswordRequired: 'Bitte gib dein ChurchTools-Passwort ein.',
+        invalidPrimaryPassword: 'Das ChurchTools-Passwort stimmt nicht.',
+        passwordInvalid: 'Das Passwort erfüllt die Regeln nicht.',
+        customPasswordNotAllowed: 'Eigene Passwörter sind gerade nicht erlaubt.',
+        rateLimited: 'Zu viele Versuche. Versuch es in {n} Minuten noch einmal.',
+        session: 'Deine Anmeldung ist abgelaufen. Lade die Seite neu.',
+        noServiceAccess: 'Du hast keinen Zugriff auf diese Erweiterung.',
+        forbidden: 'Dafür hast du keine Berechtigung.',
+        personNotFound: 'Diese Person gibt es in ChurchTools nicht mehr.',
+        loginFailed: 'Die Anmeldung hat nicht geklappt. Lade die Seite neu.',
+        upstreamUnavailable: 'ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.',
+        notSetUp: 'Der Dienst ist noch nicht richtig eingerichtet.',
+        generic: 'Etwas ist schiefgelaufen ({status}).',
+        unreachable: 'Der Dienst ist gerade nicht erreichbar. Versuch es gleich noch einmal.',
+        unexpected: 'Der Dienst hat unerwartet geantwortet ({status}).',
+    },
 };
 
 export default de;
