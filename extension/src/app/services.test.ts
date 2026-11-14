@@ -1,7 +1,7 @@
 /** The backend factory of the app: the token is bound to the address each request goes to (security review F1). */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Auth, TOKEN_KEY, type AuthEnv } from '../backend/auth';
-import { backendFor } from './services';
+import { backendFor, createServices } from './services';
 
 const BACKEND = 'https://pw.example';
 const NOW = 1_800_000_000_000;
@@ -44,5 +44,24 @@ describe('backendFor', () => {
         const seen = stubFetch();
         await backendFor(auth())('https://evil.example').getEntry(1);
         expect(seen).toEqual([{ url: 'https://evil.example/v1/entries/1', authorization: undefined }]);
+    });
+});
+
+describe('createServices (the wiring the app runs with)', () => {
+    afterEach(() => window.sessionStorage.clear());
+
+    it('its backend factory sends the token only to the configured backend', async () => {
+        const record = { accessToken: TOKEN, expiresAt: Date.now() + 600_000, admin: false, version: '0.1.0', backend: `${BACKEND}/v1`, person: 1 };
+        window.sessionStorage.setItem(TOKEN_KEY, JSON.stringify(record));
+        const services = createServices('de');
+        services.auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        services.auth.bindPerson(1);
+        const seen = stubFetch();
+        await services.backend('https://evil.example').getEntry(1);
+        await services.backend(BACKEND).getEntry(1);
+        expect(seen).toEqual([
+            { url: 'https://evil.example/v1/entries/1', authorization: undefined },
+            { url: `${BACKEND}/v1/entries/1`, authorization: `Bearer ${TOKEN}` },
+        ]);
     });
 });

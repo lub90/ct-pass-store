@@ -888,6 +888,46 @@ describe('app states as shown (spec 3.2)', () => {
     });
 });
 
+describe('reloadSettings (Task 12 point A)', () => {
+    async function started() {
+        const stored = { value: JSON.stringify(SETTINGS) };
+        const built = await build({
+            ct: (ct) => ({
+                ...ct,
+                values: async (moduleId, categoryId) =>
+                    categoryId === SETTINGS_ID ? [{ id: 101, dataCategoryId: SETTINGS_ID, value: stored.value }] : ct.values(moduleId, categoryId),
+            }),
+        });
+        const app = createAppState({
+            services: built.services,
+            router: built.router,
+            session: createSession(built.auth, () => built.router.currentRoute.value.fullPath),
+            callbackWindow: built.win,
+            appVersion: '0.1.0',
+        });
+        await app.start();
+        return { app, stored };
+    }
+
+    it('takes the new policy but keeps backendUrl and oauthClientId from startup', async () => {
+        const { app, stored } = await started();
+        stored.value = JSON.stringify({ ...SETTINGS, revision: 2, passwordLength: 20, backendUrl: 'https://evil.example', oauthClientId: 'other-client' });
+        await app.reloadSettings();
+        expect(app.settings.value).toMatchObject({ revision: 2, passwordLength: 20, backendUrl: BACKEND, oauthClientId: CLIENT });
+    });
+
+    it.each([
+        ['invalid', { schema: 2, revision: 2, passwordLength: 'x' }],
+        ['of a newer schema', { ...SETTINGS, schema: 99, revision: 2, passwordLength: 20 }],
+    ])('keeps the old settings when the re-read is %s', async (_name, value) => {
+        const { app, stored } = await started();
+        const before = { ...app.settings.value };
+        stored.value = JSON.stringify(value);
+        await app.reloadSettings();
+        expect(app.settings.value).toEqual(before);
+    });
+});
+
 describe('the one ConfirmDialog', () => {
     it('is mounted once, on body inside a .cps wrapper, outside the app root', async () => {
         const { wrapper } = await start({ token: { admin: true } });

@@ -1265,13 +1265,19 @@ describe('point-A review: smaller cases (M1 to M11)', () => {
 
     it('a failed copy says so in state 3', async () => {
         const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+        const original = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
         Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-        const { wrapper } = await start();
-        await click(wrapper, TEXT.setPassword);
-        await click(wrapper, TEXT.submitGenerate);
-        await wrapper.find('.cps-flow__result button[aria-label="Kopieren"]').trigger('click');
-        await settle();
-        expect(wrapper.find('.cps-flow__result [role="alert"]').text()).toBe('Kopieren hat nicht geklappt. Markier das Passwort und kopier es selbst.');
+        try {
+            const { wrapper } = await start();
+            await click(wrapper, TEXT.setPassword);
+            await click(wrapper, TEXT.submitGenerate);
+            await wrapper.find('.cps-flow__result button[aria-label="Kopieren"]').trigger('click');
+            await settle();
+            expect(wrapper.find('.cps-flow__result [role="alert"]').text()).toBe('Kopieren hat nicht geklappt. Markier das Passwort und kopier es selbst.');
+        } finally {
+            if (original) Object.defineProperty(navigator, 'clipboard', original);
+            else delete (navigator as { clipboard?: unknown }).clipboard;
+        }
     });
 
     it('the plaintext is not in the app’s session storage either', async () => {
