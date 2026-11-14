@@ -104,7 +104,7 @@ final class KvSettingsRepository implements SettingsRepository
         }
 
         try {
-            return AccessParser::parse($this->cachedValue(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
+            return AccessParser::parseJson($this->cachedJson(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
         } catch (ConfigurationException $e) {
             return $this->rememberNoAccess($e->getMessage() . ' Nobody is an admin and no machine client is enabled.');
         } catch (ServiceCredentialRejectedException|NotFoundException) {
@@ -195,11 +195,40 @@ final class KvSettingsRepository implements SettingsRepository
             return $cached;
         }
 
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($this->loadValue($cacheName, $category, $what, $fix), true);
+        $this->cache?->put($cacheName, $decoded, self::SETTINGS_TTL);
+
+        return $decoded;
+    }
+
+    /**
+     * The JSON text of the only value in a category (a JSON object), from the cache if it holds a valid entry. The
+     * text is cached as it is, so the difference between objects and lists survives (`{"0": …}` is no list).
+     */
+    private function cachedJson(string $cacheName, string $category, string $what, string $fix): string
+    {
+        $cached = $this->cache?->get($cacheName);
+        if ($cached !== null && is_string($cached['json'] ?? null) && json_decode($cached['json'], false) instanceof \stdClass) {
+            return $cached['json'];
+        }
+
+        $json = $this->loadValue($cacheName, $category, $what, $fix);
+        $this->cache?->put($cacheName, ['json' => $json], self::SETTINGS_TTL);
+
+        return $json;
+    }
+
+    /**
+     * Reads the value from ChurchTools, with the failure memory for outages and rate limits.
+     */
+    private function loadValue(string $cacheName, string $category, string $what, string $fix): string
+    {
         $failureName = $cacheName . '-failure';
         $this->rethrowRememberedFailure($failureName);
 
         try {
-            $raw = $this->singleValue($category, $what, $fix);
+            $json = $this->singleValue($category, $what, $fix);
         } catch (RateLimitedException $e) {
             $this->rememberFailure($failureName, 'rateLimited', max(self::FAILURE_MIN_SECONDS, $e->retryAfterSeconds()));
             throw $e;
@@ -208,9 +237,8 @@ final class KvSettingsRepository implements SettingsRepository
             throw $e;
         }
         $this->cache?->forget($failureName);
-        $this->cache?->put($cacheName, $raw, self::SETTINGS_TTL);
 
-        return $raw;
+        return $json;
     }
 
     private function rememberFailure(string $name, string $kind, int $seconds): void
@@ -234,11 +262,9 @@ final class KvSettingsRepository implements SettingsRepository
     }
 
     /**
-     * The decoded JSON object of the only value in a category.
-     *
-     * @return array<string, mixed>
+     * The JSON text of the only value in a category, checked to be a JSON object.
      */
-    private function singleValue(string $category, string $what, string $fix): array
+    private function singleValue(string $category, string $what, string $fix): string
     {
         $values = $this->extension->values($category);
         if (count($values) !== 1) {
@@ -246,11 +272,10 @@ final class KvSettingsRepository implements SettingsRepository
         }
 
         $value = $values[0]['value'] ?? null;
-        $decoded = is_string($value) ? json_decode($value, true) : null;
-        if (!is_array($decoded) || ($decoded !== [] && array_is_list($decoded))) {
+        if (!is_string($value) || !(json_decode($value, false) instanceof \stdClass)) {
             throw new ConfigurationException("$what aren't a valid JSON object. $fix");
         }
 
-        return $decoded;
+        return $value;
     }
 }

@@ -86,41 +86,43 @@ final class AccessParserTest extends TestCase
     }
 
     /**
-     * AG-13: the shared fixture pins the machine client rules for the backend and the extension.
+     * AG-13: the shared fixture pins the machine client rules for the backend and the extension. It is decoded
+     * without assoc, so JSON objects and lists stay apart as in production.
      *
-     * @return iterable<string, array{array<string, mixed>}>
+     * @return iterable<string, array{\stdClass}>
      */
     public static function fixtureCases(): iterable
     {
-        $cases = json_decode((string) file_get_contents(__DIR__ . '/../../../../../shared/access-client-cases.json'), true, 512, JSON_THROW_ON_ERROR);
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/../../../../../shared/access-client-cases.json'), false, 512, JSON_THROW_ON_ERROR);
         foreach ($cases as $case) {
-            yield $case['name'] => [$case];
+            yield $case->name => [$case];
         }
     }
 
     /**
-     * @param array<string, mixed> $case
+     * The `access` value for a case: the raw machineClients value, or the single client or the list of clients.
      */
-    #[DataProvider('fixtureCases')]
-    public function testFixtureCase(array $case): void
+    public static function accessJson(\stdClass $case): string
     {
-        if (isset($case['client'])) {
-            $parsed = AccessParser::parse(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => [$case['client']]]);
-            self::assertSame($case['valid'], $parsed->machineClients !== [], 'enabled');
-            self::assertSame($case['reasons'], AccessParser::reasons($case['client']));
-            self::assertSame($case['valid'], $parsed->findings === [] || self::onlyPermissionFindings($parsed->findings));
+        $clients = property_exists($case, 'machineClients') ? $case->machineClients : (property_exists($case, 'client') ? [$case->client] : $case->clients);
+
+        return json_encode(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => $clients], JSON_THROW_ON_ERROR);
+    }
+
+    #[DataProvider('fixtureCases')]
+    public function testFixtureCase(\stdClass $case): void
+    {
+        $parsed = AccessParser::parseJson(self::accessJson($case));
+
+        if (property_exists($case, 'client')) {
+            self::assertSame($case->valid, $parsed->machineClients !== [], 'enabled');
+            self::assertSame([$case->reasons], $parsed->entryReasons);
+            self::assertSame($case->valid, $parsed->findings === [] || self::onlyPermissionFindings($parsed->findings));
+        } elseif (property_exists($case, 'clients')) {
+            self::assertSame($case->enabled, array_map(strval(...), array_keys($parsed->machineClients)));
+            self::assertSame($case->reasons, $parsed->entryReasons);
         } else {
-            $parsed = AccessParser::parse(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => $case['clients']]);
-            self::assertSame($case['enabled'], array_keys($parsed->machineClients));
-            $seen = [];
-            $reasons = [];
-            foreach ($case['clients'] as $client) {
-                $reasons[] = AccessParser::reasons($client, $seen);
-                if (is_array($client) && is_string($client['id'] ?? null)) {
-                    $seen[$client['id']] = true;
-                }
-            }
-            self::assertSame($case['reasons'], $reasons);
+            self::assertSame($case->enabled, array_map(strval(...), array_keys($parsed->machineClients)));
         }
     }
 
@@ -136,6 +138,14 @@ final class AccessParserTest extends TestCase
         }
 
         return true;
+    }
+
+    public function testTheStoredNameIsTrimmed(): void
+    {
+        $key = base64_encode(str_repeat('k', 32));
+        $parsed = AccessParser::parse(['machineClients' => [['id' => 'ct-radius', 'name' => "  RADIUS \t", 'publicKeys' => [$key], 'createdAt' => '2026-11-01']]]);
+
+        self::assertSame('RADIUS', $parsed->machineClients['ct-radius']->name);
     }
 
     public function testAFindingNamesTheClientAndTheMissingField(): void

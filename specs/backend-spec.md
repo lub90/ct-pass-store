@@ -148,20 +148,35 @@ Data lives in three KV categories of the `ctpassstore` module:
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
       client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
-    - **Parity fixture** `shared/access-client-cases.json` pins these rules for the backend (`AccessParserTest`, AG-13)
-      and the extension's reader. It is a JSON list of cases, each with a `name` and either
-      `{ "client": <raw entry>, "valid": true|false, "reasons": [<codes>] }` (one entry; `reasons` is empty if valid)
-      or `{ "clients": [<raw entries>], "enabled": [<ids of enabled clients>], "reasons": [[<codes>], …] }` (several
-      entries, for duplicate ids and shared keys; `reasons` has one list per entry, computed in order, so an entry
-      whose id an earlier entry already used gets `duplicate-id`; a shared key is not a reason code, it only shows in
-      `enabled`). Reason codes: `not-an-object`, `invalid-id`, `duplicate-id`, `missing-name`, `invalid-created-at`,
-      `no-keys`, `invalid-key`, `invalid-permissions`, listed in the order they are reported. `invalid-id` and
-      `duplicate-id` exclude each other; `invalid-key` appears once per client however many keys are bad. Trimming
-      removes exactly PHP's `trim()` default characters (space, tab, LF, CR, NUL, vertical tab) and nothing else: a
-      key is trimmed before decoding, a name is trimmed before the emptiness check, and a non-breaking space (U+00A0)
-      is not trimmed (a key padded with it is `invalid-key`; a name of only U+00A0 is non-empty and valid).
-      `createdAt` must be a real calendar date (`2024-02-29` is valid, `2025-02-29` and `2026-02-30` are not).
-      Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
+    - **Objects and lists stay apart.** The `access` value is decoded keeping JSON objects and arrays distinct, and the
+      cache holds the JSON text (not a re-encoded structure). `machineClients`, `publicKeys` and `permissions` must be
+      JSON arrays, and every entry an object: `{"0": …}` is no list, and `"permissions": {}` is invalid
+      (`invalid-permissions`). A `machineClients` that isn't an array disables all clients; `publicKeys` that isn't a
+      non-empty array is `no-keys`.
+    - **Keys are canonical.** After trimming (below), a key is either standard base64 with padding
+      (`^[A-Za-z0-9+/]{43}=$`) or base64url with or without padding (`^[A-Za-z0-9_-]{43}=?$`, Node's JWK `x`), and
+      decoding then re-encoding must give the same text (no non-zero trailing bits). Mixed alphabets, inner whitespace
+      and a 44th character other than a single `=` are `invalid-key`. Two keys are the same if their 32 bytes are the
+      same, whatever the encoding.
+    - **Parity fixture** `shared/access-client-cases.json` pins these rules for the backend (`AccessParserTest`, AG-13,
+      also through the cache in `KvSettingsRepositoryTest`) and the extension's reader. It is a JSON list of cases,
+      each with a `name` and one of: `{ "client": <raw entry>, "valid": true|false, "reasons": [<codes>] }` (one
+      entry; `reasons` is empty if valid); `{ "clients": [<raw entries>], "enabled": [<ids>], "reasons": [[<codes>], …] }`
+      (several entries, `reasons` has one list per entry); `{ "machineClients": <raw value>, "enabled": [] }` (the raw
+      value of the field itself, for values that aren't a list). Reason codes, in the order they are reported:
+      `not-an-object`, `invalid-id`, `duplicate-id`, `missing-name`, `invalid-created-at`, `no-keys`, `invalid-key`,
+      `invalid-permissions`, `shared-key`. An entry whose id an earlier entry already used gets `duplicate-id`
+      (whether or not the earlier entry was valid; the earlier valid entry is disabled too, with no code of its own).
+      `invalid-id` and `duplicate-id` exclude each other; `invalid-key` appears once per client however many keys are
+      bad; `shared-key` is given to every client that shares a key with another valid client. Trimming removes
+      exactly PHP's `trim()` default characters (space, tab, LF, CR, NUL, vertical tab) and nothing else: a key is
+      trimmed before decoding, a name before the emptiness check (and stored trimmed), and a non-breaking space
+      (U+00A0) is not trimmed (a key padded with it is `invalid-key`; a name of only U+00A0 is valid; a name of only
+      NUL is `missing-name`). `createdAt` must match `^\d{4}-\d{2}-\d{2}$` exactly (no time, no trailing newline) and be
+      a real calendar date: `2024-02-29` is valid; `2025-02-29`, `2026-02-30`, month or day `00` and year `0000` are
+      not. An `id` follows the pattern above literally: 3 to 40 characters, a leading hyphen and digits-only are
+      allowed. `permissions` missing or `null` is valid; non-string items inside the list grant nothing and don't
+      invalidate the client. Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
 - Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 

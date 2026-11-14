@@ -50,8 +50,7 @@ final class AccessCheck implements Check
             return CheckOutcome::fail(sprintf('The category access holds %d values; it must hold exactly one. Remove the extra values, or run the extension\'s setup.', count($values)));
         }
         $value = $values[0]['value'] ?? null;
-        $decoded = is_string($value) ? json_decode($value, true) : null;
-        $groupId = AccessParser::parse(is_array($decoded) ? $decoded : null)->adminGroupId;
+        $groupId = AccessParser::parseJson(is_string($value) ? $value : null)->adminGroupId;
         if ($groupId === null) {
             return CheckOutcome::fail('access.groups.admins.groupId is missing or not a positive integer; nobody is admin until the extension\'s setup fixes it.');
         }
