@@ -15,6 +15,10 @@ const de = {
         defaultTitle: 'Mein Zweitpasswort',
         defaultIntro:
             'Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort.',
+        primaryRequired: 'Bitte gib dein ChurchTools-Passwort ein.',
+        customNotAllowed: 'Eigene Passwörter sind gerade nicht erlaubt.',
+        invalidCustom: 'Das Passwort erfüllt die Regeln nicht.',
+        notReady: 'Hier gibt es gerade nichts zu senden.',
     },
     auth: {
         finishing: 'Anmeldung wird abgeschlossen …',

@@ -1,5 +1,6 @@
 import type { BackendApi, LoginResult, SelfTestResult } from '@/backend/api';
 import { BackendProblem } from '@/backend/problems';
+import { checkPassword, SYMBOLS } from '@/password/rules';
 
 /**
  * In-memory backend for tests and the demo. Applies the backend's rules (backend spec 4.1, 4.3 to 4.9, 5.1) in the
@@ -51,23 +52,9 @@ export interface FakeBackendControls {
 
 const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
 const DIGITS = '0123456789';
-const SYMBOLS = '!@$%&*-_+=?.';
 const ALLOWED = LETTERS + DIGITS + SYMBOLS;
-const MAX_LENGTH = 128;
+// The policy check itself is `checkPassword` (`password/rules.ts`), one source with the extension's own feedback.
 
-/** Backend spec 5.1: the maximum length is checked first and alone. */
-function violations(pwd: string, minLength: number): string[] {
-    const bytes = new TextEncoder().encode(pwd).length;
-    if (bytes > MAX_LENGTH) return ['too-long'];
-    const found: string[] = [];
-    if (bytes < minLength) found.push('too-short');
-    const has = (set: string) => [...pwd].some((c) => set.includes(c));
-    if (!has(LETTERS)) found.push('missing-letter');
-    if (!has(DIGITS)) found.push('missing-digit');
-    if (!has(SYMBOLS)) found.push('missing-symbol');
-    if ([...pwd].some((c) => !ALLOWED.includes(c))) found.push('invalid-character');
-    return found;
-}
 
 const MAX_FIELD = 2048;
 
@@ -212,7 +199,7 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
             let generated: string | undefined;
             if (body.secondaryPwd !== undefined) {
                 if (!settings.allowCustomPassword) throw problem('custom-password-not-allowed', 400);
-                const found = violations(body.secondaryPwd, settings.passwordLength);
+                const found = checkPassword(body.secondaryPwd, settings.passwordLength);
                 if (found.length > 0) throw problem('password-invalid', 400, { violations: found });
                 password = body.secondaryPwd;
             } else {

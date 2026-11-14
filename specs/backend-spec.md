@@ -863,6 +863,13 @@ These sections describe behavior per unit. Each numbered rule should map to at l
 6. Each violated rule is reported (`too-short`, `too-long`, `missing-letter`, `missing-digit`,
    `missing-symbol`, `invalid-character`) for the `violations` member.
 
+**Parity fixture** `shared/password-policy-cases.json` pins rules 1–6 for the backend (`PasswordPolicyTest`) and for
+the extension's mirror (`password/rules.ts`, and with it the fake backend). It is a JSON list of cases
+`{ "name": "...", "password": "...", "minLength": 14, "violations": [<codes>] }`; `violations` holds the codes in the
+order the backend reports them (empty if valid). It covers the length boundaries, each missing class alone and
+combined, every kind of forbidden character at the start, middle and end, and non-ASCII input near the limits: the
+length counts UTF-8 bytes, so `ä` is 2 bytes, `€` 3 and an emoji 4.
+
 **Generation:**
 
 1. It produces exactly `passwordLength` characters.

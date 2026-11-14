@@ -14,6 +14,10 @@ const en: Messages = {
     password: {
         defaultTitle: 'My secondary password',
         defaultIntro: "A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password.",
+        primaryRequired: 'Please enter your ChurchTools password.',
+        customNotAllowed: 'Custom passwords are not allowed right now.',
+        invalidCustom: 'The password does not meet the rules.',
+        notReady: 'There is nothing to send right now.',
     },
     auth: {
         finishing: 'Finishing the login …',
