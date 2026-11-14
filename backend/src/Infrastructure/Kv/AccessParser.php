@@ -91,10 +91,20 @@ final class AccessParser
         $seen = [];
         $entryReasons = [];
         $enabledAt = [];
+        $indexesById = [];
         foreach ($value as $index => $entry) {
             $id = self::isObject($entry) ? self::field($entry, 'id') : null;
             $label = is_string($id) && preg_match(MachineClient::ID_PATTERN, $id) === 1 ? $id : "#$index";
             $reasons = self::reasons($entry, $seen);
+            if (in_array('duplicate-id', $reasons, true)) {
+                // Every earlier entry with this id is disabled too, so it carries the code as well.
+                foreach ($indexesById[$id] as $earlier) {
+                    $entryReasons[$earlier] = self::inOrder([...$entryReasons[$earlier], 'duplicate-id']);
+                }
+            }
+            if (is_string($id) && !in_array('invalid-id', $reasons, true)) {
+                $indexesById[$id][] = $index;
+            }
             $entryReasons[$index] = $reasons;
             if (is_string($id)) {
                 $seen[$id] = true;
@@ -174,6 +184,15 @@ final class AccessParser
         }
 
         return [$clients, $problems, $shared];
+    }
+
+    /**
+     * @param list<string> $reasons
+     * @return list<string> without repeats, in the order of REASON_TEXTS
+     */
+    private static function inOrder(array $reasons): array
+    {
+        return array_values(array_intersect(array_keys(self::REASON_TEXTS), $reasons));
     }
 
     /**
