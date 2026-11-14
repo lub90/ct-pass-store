@@ -182,8 +182,8 @@ abstract class ApiTestCase extends TestCase
             'revision' => 1,
             KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12, 'createdBySetup' => true]],
             KvSchema::ACCESS_MACHINE_CLIENTS => [
-                ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
-                ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
+                ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
+                ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => [], 'createdAt' => '2026-11-01'],
             ],
         ], JSON_THROW_ON_ERROR));
     }

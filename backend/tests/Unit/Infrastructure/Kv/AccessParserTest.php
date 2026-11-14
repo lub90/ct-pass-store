@@ -68,7 +68,7 @@ final class AccessParserTest extends TestCase
                 'admins' => ['groupId' => 12, 'createdBySetup' => true],
                 'service' => ['groupId' => 13, 'createdBySetup' => true],
             ],
-            'machineClients' => [['id' => 'ct-radius', 'name' => 'RADIUS', 'publicKeys' => [$key], 'permissions' => ['entries:read']]],
+            'machineClients' => [['id' => 'ct-radius', 'name' => 'RADIUS', 'publicKeys' => [$key], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01']],
         ]);
 
         self::assertSame(12, $parsed->adminGroupId);
@@ -83,5 +83,59 @@ final class AccessParserTest extends TestCase
         self::assertSame(12, $parsed->adminGroupId);
         self::assertSame([], $parsed->machineClients);
         self::assertCount(1, $parsed->findings);
+    }
+
+    /**
+     * AG-13: the shared fixture pins the machine client rules for the backend and the extension.
+     *
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function fixtureCases(): iterable
+    {
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/../../../../../shared/access-client-cases.json'), true, 512, JSON_THROW_ON_ERROR);
+        foreach ($cases as $case) {
+            yield $case['name'] => [$case];
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $case
+     */
+    #[DataProvider('fixtureCases')]
+    public function testFixtureCase(array $case): void
+    {
+        if (isset($case['client'])) {
+            $parsed = AccessParser::parse(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => [$case['client']]]);
+            self::assertSame($case['valid'], $parsed->machineClients !== [], 'enabled');
+            self::assertSame($case['reasons'], AccessParser::reasons($case['client']));
+            self::assertSame($case['valid'], $parsed->findings === [] || self::onlyPermissionFindings($parsed->findings));
+        } else {
+            $parsed = AccessParser::parse(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => $case['clients']]);
+            self::assertSame($case['enabled'], array_keys($parsed->machineClients));
+        }
+    }
+
+    /**
+     * @param list<string> $findings
+     */
+    private static function onlyPermissionFindings(array $findings): bool
+    {
+        foreach ($findings as $finding) {
+            if (!str_contains($finding, 'is unknown and grants nothing')) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public function testAFindingNamesTheClientAndTheMissingField(): void
+    {
+        $parsed = AccessParser::parse(['machineClients' => [['id' => 'ct-radius', 'publicKeys' => [base64_encode(str_repeat('k', 32))]]]]);
+
+        self::assertSame([], $parsed->machineClients);
+        self::assertStringContainsString('ct-radius', $parsed->findings[1]);
+        self::assertStringContainsString('name', $parsed->findings[1]);
+        self::assertStringContainsString('createdAt', $parsed->findings[1]);
     }
 }

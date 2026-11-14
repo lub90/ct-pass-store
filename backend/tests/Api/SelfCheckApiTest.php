@@ -199,7 +199,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-02: a disabled machine client is reported by its id. */
     public function testDisabledMachineClientIsReportedByClientId(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => ['entries:read']]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01']]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
@@ -210,7 +210,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-02: an unknown permission is reported by client id and value. */
     public function testUnknownPermissionIsReportedByClientAndValue(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:write']]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:write'], 'createdAt' => '2026-11-01']]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
@@ -223,7 +223,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** The checks bypass the cache, so a fix shows at once (controller ruling). */
     public function testSettingsFixedInChurchToolsShowWithoutWaitingForTheCache(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => []]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => [], 'createdAt' => '2026-11-01']]]);
         $this->assertOnlyFails('Settings', $this->request('GET', '/v1/test', self::ADMIN));
 
         // Changed in ChurchTools only; the cache entries of the first request are still there.

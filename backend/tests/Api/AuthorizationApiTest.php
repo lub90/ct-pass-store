@@ -63,7 +63,7 @@ final class AuthorizationApiTest extends ApiTestCase
     public function testAMachineClientNamedLikeAPersonHasNoOwnEntry(): void
     {
         $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
-            ['id' => '100', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
+            ['id' => '100', 'name' => 'Numeric', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => [], 'createdAt' => '2026-11-01'],
         ]]);
         $token = fn(): string => 'Bearer ' . $this->machineTokenOf('100', keyOf: self::NO_RIGHTS_CLIENT);
 
@@ -76,7 +76,7 @@ final class AuthorizationApiTest extends ApiTestCase
     {
         // Client "123" may read every entry. Person 123 is an ordinary user; the two are never compared (spec 4.3).
         $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
-            ['id' => '123', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
+            ['id' => '123', 'name' => 'Numeric', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
         ]]);
         $this->seedEntry(self::OTHER);
 
@@ -292,7 +292,7 @@ final class AuthorizationApiTest extends ApiTestCase
     {
         $token = $this->machineTokenOf(self::READER_CLIENT);
         $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
-            ['id' => self::READER_CLIENT, 'publicKeys' => [], 'permissions' => ['entries:read']],
+            ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
         ]]);
 
         $this->assertProblem(ProblemType::InvalidToken, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $token]));

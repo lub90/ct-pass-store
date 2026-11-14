@@ -134,6 +134,9 @@ Data lives in three KV categories of the `ctpassstore` module:
       registered client).
     - `publicKeys` is a non-empty list of valid Ed25519 public keys (the raw 32 bytes, base64 or base64url encoded, as
       Node.js exports them in a JWK's `x`). Several keys allow rotation without downtime.
+    - `name` is a non-empty string (after trimming) and `createdAt` a real `YYYY-MM-DD` date. Without them the client is
+      disabled and reported, because the extension couldn't list it (decided 2026-11-14). A missing `permissions`
+      field is valid and grants nothing.
     - `permissions` may contain only known values; today that's just `entries:read`. Unknown values (`entries:write`,
       `*`) grant nothing and are reported by `/test`.
     - A missing `machineClients` field means an empty list.
@@ -145,6 +148,13 @@ Data lives in three KV categories of the `ctpassstore` module:
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
       client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
+    - **Parity fixture** `shared/access-client-cases.json` pins these rules for the backend (`AccessParserTest`, AG-13)
+      and the extension's reader. It is a JSON list of cases, each with a `name` and either
+      `{ "client": <raw entry>, "valid": true|false, "reasons": [<codes>] }` (one entry; `reasons` is empty if valid,
+      in the order of the list below) or `{ "clients": [<raw entries>], "enabled": [<ids of enabled clients>] }`
+      (several entries, for duplicate ids and shared keys). Reason codes: `not-an-object`, `invalid-id`, `duplicate-id`,
+      `missing-name`, `invalid-created-at`, `no-keys`, `invalid-key`, `invalid-permissions`. Keys are trimmed before
+      decoding. Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
 - Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 
