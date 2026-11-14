@@ -24,6 +24,9 @@ against the real backend).
 **Branch:** `feature/extension-rework` from the branch that holds the specs (`docs/extension-spec`, or `main` after
 it's merged). Work in a worktree; another agent may be working in the main checkout.
 
+Tasks marked **[security-critical]** get, after Superpowers' own task review, a `test-reviewer` and a
+`security-reviewer` pass on their diff (project `.claude/CLAUDE.md`, review point A; added 2026-11-14).
+
 ## Global Constraints
 
 - All commands run in `extension/`. Every commit passes `npm run check` (lint → typecheck → unit and app tests →
@@ -214,7 +217,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: vue-i18n with German and English, browser language, custom page texts"`.
 
-### Task 6: ChurchTools layer and its fake
+### Task 6: ChurchTools layer and its fake [security-critical]
 
 **Files:**
 - Create: `src/ct/client.ts`, `ct/api.ts`, `ct/types.ts`, `ct/errors.ts`, `src/dev/fake-churchtools.ts`
@@ -244,7 +247,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: ChurchTools API layer with an in-memory fake and shared contract cases"`.
 
-### Task 7: KV store, schemas and layout detection
+### Task 7: KV store, schemas and layout detection [security-critical]
 
 **Files:**
 - Create: `src/store/kv.ts`, `store/churchtools-kv.ts`, `store/memory-kv.ts`, `store/repository.ts`,
@@ -274,7 +277,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: KV repository with v2 schemas, revisions and old-layout detection"`.
 
-### Task 8: Backend client, Problem Details and the fake backend
+### Task 8: Backend client, Problem Details and the fake backend [security-critical]
 
 **Files:**
 - Create: `src/backend/http.ts`, `backend/api.ts`, `backend/problems.ts`, `src/dev/fake-backend.ts`,
@@ -305,7 +308,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: backend client with Problem Details, fake backend and shared contract cases"`.
 
-### Task 9: Login, session and renewal
+### Task 9: Login, session and renewal [security-critical]
 
 **Files:**
 - Create: `src/backend/pkce.ts`, `backend/auth.ts`, `src/app/useSession.ts`, `src/views/AuthCallbackView.vue`
@@ -334,7 +337,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: OAuth login with PKCE, callback route, popup renewal and retry"`.
 
-### Task 10: Password rules and the password flow
+### Task 10: Password rules and the password flow [security-critical]
 
 **Files:**
 - Create: `src/password/rules.ts`, `password/flow.ts`, `shared/password-policy-cases.json` (repository root)
@@ -363,7 +366,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` and `composer check` in `backend/` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: password rules mirrored from the backend with shared test cases; flow logic"`.
 
-### Task 11: App state, routes and frame
+### Task 11: App state, routes and frame [security-critical]
 
 **Files:**
 - Create: `src/app/app-state.ts`, `app/useAppState.ts`, `app/version.ts`, `app/services.ts`, `src/router.ts` (all
@@ -398,7 +401,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
   `ct-extension-info.md` section 2.
 - [ ] **Step 5: Commit:** `"Extension: app state from spec 3.2, routes, frame by role"`.
 
-### Task 12: „Mein Passwort“
+### Task 12: „Mein Passwort“ [security-critical]
 
 **Files:**
 - Create: `src/views/PasswordView.vue`, `src/password/PasswordFlow.vue` (states 2 and 3, reused by Task 13),
@@ -425,7 +428,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Mein Passwort with direct path, choice, rules and one-time result"`.
 
-### Task 13: „Passwörter verwalten“
+### Task 13: „Passwörter verwalten“ [security-critical]
 
 **Files:**
 - Create: `src/views/ManageView.vue`, `src/admin/manage.ts`
@@ -447,7 +450,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Passwörter verwalten with search in the users group, banner and confirmations"`.
 
-### Task 14: Settings overview, rules and texts
+### Task 14: Settings overview, rules and texts [security-critical]
 
 **Files:**
 - Create: `src/views/settings/SettingsView.vue`, `settings/RulesView.vue`, `settings/TextsView.vue`,
@@ -469,7 +472,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: settings overview, Passwortregeln and Texte with conflict detection"`.
 
-### Task 15: „Zugriff“ and machine clients
+### Task 15: „Zugriff“ and machine clients [security-critical]
 
 **Files:**
 - Create: `src/views/settings/AccessView.vue`, `settings/ClientFormView.vue`, `src/admin/machine-clients.ts`
@@ -491,7 +494,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Zugriff with groups and machine clients"`.
 
-### Task 16: Backend & Status, Über
+### Task 16: Backend & Status, Über [security-critical]
 
 **Files:**
 - Create: `src/views/settings/BackendView.vue`, `src/views/AboutView.vue`, `src/admin/backend-url.ts`,
@@ -514,7 +517,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Backend & Status with self-test, Über with versioned links"`.
 
-### Task 17: Demo mode and real mode for development
+### Task 17: Demo mode and real mode for development [security-critical]
 
 **Files:**
 - Create: `src/dev/demo-data.ts`, `src/dev/services.ts`
@@ -529,7 +532,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS; `npm run dev` shows the password card with demo data.
 - [ ] **Step 5: Commit:** `"Extension: demo mode by default, real mode through the dev proxy"`.
 
-### Task 18: Contract layer against ChurchTools and the backend
+### Task 18: Contract layer against ChurchTools and the backend [security-critical]
 
 **Files:**
 - Create: `extension/tests/contract/ct.contract.test.ts`, `tests/contract/backend.contract.test.ts`,
