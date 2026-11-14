@@ -8,6 +8,7 @@ use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
@@ -642,6 +643,7 @@ final class LoginApiTest extends ApiTestCase
         yield 'timeout' => [new UnavailableException('GET persons/{id}/groups: ChurchTools is unreachable (ConnectException).'), ProblemType::UpstreamUnavailable];
         yield '429' => [new RateLimitedException('GET persons/{id}/groups: ChurchTools answered 429.', 30), ProblemType::UpstreamRateLimited];
         yield '401' => [new NotAuthenticatedException('GET persons/{id}/groups: ChurchTools answered 401.'), ProblemType::UpstreamInvalid];
+        yield 'malformed answer' => [new InvalidResponseException('GET persons/{id}/groups: a membership has no groupMemberStatus.'), ProblemType::UpstreamInvalid];
     }
 
     #[DataProvider('failingGroups')]

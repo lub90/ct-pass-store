@@ -270,6 +270,38 @@ final class GuzzleChurchToolsClientTest extends TestCase
         self::assertSame('/api/persons/5/groups', $request->getUri()->getPath());
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function nonActiveStatuses(): iterable
+    {
+        yield 'inactive' => ['inactive'];
+        yield 'capitalised' => ['Active'];
+        yield 'upper case' => ['ACTIVE'];
+        yield 'empty' => [''];
+        yield 'leading space' => [' active'];
+        yield 'trailing space' => ['active '];
+        yield 'unknown' => ['archived'];
+    }
+
+    #[DataProvider('nonActiveStatuses')]
+    public function testOnlyTheExactStatusActiveCounts(string $status): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [self::membership('12', $status), self::membership('13', 'active')]]);
+
+        self::assertSame([13], $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5));
+    }
+
+    public function testAnAdminGroupOnlyOnTheSecondPageIsReturned(): void
+    {
+        $client = $this->client();
+        $this->respond(200, ['data' => [self::membership('1', 'active')], 'meta' => ['pagination' => ['lastPage' => 2]]]);
+        $this->respond(200, ['data' => [self::membership('99', 'active')], 'meta' => ['pagination' => ['lastPage' => 2]]]);
+
+        self::assertContains(99, $client->activeGroupIds(Credential::bearerToken(self::USER_TOKEN), 5));
+    }
+
     public function testActiveGroupIdsFollowAllPages(): void
     {
         $client = $this->client();
@@ -316,6 +348,9 @@ final class GuzzleChurchToolsClientTest extends TestCase
         yield 'active with decimal-point ID' => [['data' => [self::membership('1.0', 'active')]]];
         yield 'data not a list' => [['data' => ['id' => 1]]];
         yield 'bad lastPage' => [['data' => [], 'meta' => ['pagination' => ['lastPage' => 'x']]]];
+        yield 'lastPage 0' => [['data' => [], 'meta' => ['pagination' => ['lastPage' => 0]]]];
+        yield 'lastPage -1' => [['data' => [], 'meta' => ['pagination' => ['lastPage' => -1]]]];
+        yield 'lastPage 101' => [['data' => [], 'meta' => ['pagination' => ['lastPage' => 101]]]];
     }
 
     /**
