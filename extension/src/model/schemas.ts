@@ -15,7 +15,7 @@ function decodesTo32Bytes(s: string): boolean {
 }
 
 /** The bytes of a key given as base64 or base64url (so both spellings of one key compare equal). */
-function keyBytes(s: string): string | null {
+export function keyBytes(s: string): string | null {
     try {
         const std = s.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
         return atob(std.padEnd(Math.ceil(std.length / 4) * 4, '='));

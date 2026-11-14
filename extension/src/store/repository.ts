@@ -1,17 +1,19 @@
 import * as v from 'valibot';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, MachineClientSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, conflictingClients, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, MachineClientSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, conflictingClients, keyBytes, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { KvBackend } from './kv';
 
 export const VALUE_LIMIT = 10_000;
 
 export type Read<T> =
     | { state: 'missing' }
-    | { state: 'invalid'; issues: string[] }
+    /** `revision`: the stored integer revision, if any, so an explicit repair save can pass it as `expectedRevision`. */
+    | { state: 'invalid'; issues: string[]; revision?: number }
     | { state: 'newer'; schema: number }
     /**
-     * `issues` (settings only): `texts` was invalid and was dropped, so the defaults apply; the value never carries
-     * invalid texts. Saving it removes them from storage.
+     * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
+     * access: invalid machine clients and unknown permissions). The value never carries them. A save removes dropped
+     * texts and permissions; left-out machine clients are kept unchanged.
      */
     | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[] };
 
@@ -29,6 +31,27 @@ const clip = (text: string): string => (text.length > MAX_ISSUE ? `${text.slice(
 /** Valibot messages echo the received value, so each one is cut to a sane length. */
 const issuesOf = (issues: v.BaseIssue<unknown>[]): string[] =>
     issues.map((i) => clip(`${i.path?.map((p) => String(p.key)).join('.') || '(value)'}: ${i.message}`));
+
+/** A new client that shares an id or a (decodable) key with a preserved entry, as text; `undefined` if none does. */
+function collision(clients: readonly MachineClient[], preserved: readonly unknown[]): string | undefined {
+    const ids = new Set<string>();
+    const keys = new Set<string>();
+    for (const entry of preserved) {
+        if (!isObject(entry)) continue;
+        if (typeof entry.id === 'string') ids.add(entry.id);
+        if (Array.isArray(entry.publicKeys)) {
+            for (const key of entry.publicKeys) {
+                const bytes = typeof key === 'string' ? keyBytes(key) : null;
+                if (bytes !== null) keys.add(bytes);
+            }
+        }
+    }
+    for (const c of clients) {
+        if (ids.has(c.id)) return clip(`machineClients: id "${c.id}" collides with a stored client that couldn't be read; fix or remove that one first`);
+        if (c.publicKeys.some((k) => keys.has(keyBytes(k) ?? ''))) return clip(`machineClients: a public key of "${c.id}" is already used by a stored client that couldn't be read`);
+    }
+    return undefined;
+}
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 
@@ -135,7 +158,10 @@ export class ExtensionStore {
             raw = rest;
         }
         const result = v.safeParse(schema, raw);
-        if (!result.success) return { state: 'invalid', issues: issuesOf(result.issues) };
+        if (!result.success) {
+            const revision = isObject(raw) && Number.isInteger(raw.revision) ? (raw.revision as number) : undefined;
+            return revision === undefined ? { state: 'invalid', issues: issuesOf(result.issues) } : { state: 'invalid', issues: issuesOf(result.issues), revision };
+        }
         const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
         return issues.length > 0 ? { ...ok, issues } : ok;
     }
@@ -175,7 +201,10 @@ export class ExtensionStore {
         const merged: Record<string, unknown> = { ...unknown, ...checked.output, revision: expectedRevision + 1 };
         for (const key of retired) delete merged[key];
         if (schema === AccessSchema && Array.isArray(stored.machineClients) && Array.isArray(merged.machineClients)) {
-            merged.machineClients = [...merged.machineClients, ...parseClients(stored.machineClients).rejected];
+            const rejected = parseClients(stored.machineClients).rejected;
+            const clash = collision(merged.machineClients as MachineClient[], rejected);
+            if (clash) throw new InvalidValueError([clash]);
+            merged.machineClients = [...merged.machineClients, ...rejected];
         }
         const json = JSON.stringify(merged);
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);

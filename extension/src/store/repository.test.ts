@@ -362,3 +362,53 @@ describe('access: tolerant per machine client (R2)', () => {
 function g0() {
     return { groupId: 1, createdBySetup: true };
 }
+
+describe('preserved machine clients vs new ones', () => {
+    const k = (c: string) => btoa(c.repeat(32));
+    const url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    const mk = (id: string, key: string) => ({ id, name: id, publicKeys: [key], permissions: ['entries:read'] as 'entries:read'[], createdAt: 'x' });
+    const run = (clients: unknown[]) => {
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: clients })] });
+        return { kv, store: new ExtensionStore(kv) };
+    };
+    const badId = { id: 'abc', name: 'bad', publicKeys: ['!!!'], permissions: ['entries:read'], createdAt: 'x' };
+
+    it('rejects a new client whose id equals a preserved entry, with no write', async () => {
+        const { kv, store } = run([badId]);
+        await expect(store.saveAccess({ ...access, machineClients: [mk('abc', k('n'))] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+    it('rejects a new client sharing a decodable key with a preserved entry (base64 vs base64url)', async () => {
+        const key = btoa(String.fromCharCode(...new Uint8Array(32).fill(251)));
+        const { kv, store } = run([{ id: 'BAD-ID', name: 'x', publicKeys: [key], permissions: ['entries:read'], createdAt: 'x' }]);
+        await expect(store.saveAccess({ ...access, machineClients: [mk('fresh', url(key))] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+    it('rejects a new client colliding with a client that was left out only because of a conflict', async () => {
+        const { kv, store } = run([mk('dup', k('a')), mk('dup', k('b'))]);
+        await expect(store.saveAccess({ ...access, machineClients: [mk('dup', k('c'))] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        await expect(store.saveAccess({ ...access, machineClients: [mk('other', k('a'))] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+    it('keeps the preserved entry unchanged next to a non-colliding new client', async () => {
+        const { kv, store } = run([badId]);
+        const fresh = mk('fresh', k('n'));
+        await store.saveAccess({ ...access, machineClients: [fresh] }, 1);
+        expect((JSON.parse(kv.writes[0]?.value ?? '{}') as { machineClients: unknown[] }).machineClients).toEqual([fresh, badId]);
+    });
+});
+
+describe('invalid reads carry their revision', () => {
+    it('reports the stored revision so a repair save can use it', async () => {
+        const { store } = setup([JSON.stringify({ ...settings, revision: 3, passwordLength: 99 })]);
+        expect(await store.readSettings()).toMatchObject({ state: 'invalid', revision: 3 });
+        await store.saveSettings(settings, 3);
+        expect(await store.readSettings()).toMatchObject({ state: 'ok', value: { revision: 4, passwordLength: 16 } });
+    });
+    it('has no revision when none is usable', async () => {
+        for (const content of ['{nope', '5', JSON.stringify({ revision: 'x' }), JSON.stringify({ revision: 1.5 })]) {
+            const r = await setup([content]).store.readSettings();
+            expect(r.state === 'invalid' && r.revision).toBeUndefined();
+        }
+    });
+});
