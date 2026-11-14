@@ -167,3 +167,82 @@ through `scripts/sanitize-fixture.js`: secrets under keys like `token`, `secret`
 initials and contact data replaced; the instance host becomes `ct.example`; tokens, hashes and ciphertexts in any
 string become `<jwt>` / `<hash>`. To sanitize a file by hand: `CT_API_URL=… node scripts/sanitize-fixture.js in.json
 out.json`.
+
+## Browser tests
+
+`npm run test:browser` runs Playwright (`playwright.config.ts`, specs in `e2e/`) against the **demo mode** of
+`npm run dev`: Playwright starts the dev server itself on a free port of `127.0.0.1` (`CPS_E2E_PORT` picks one by
+hand) and stops it afterwards. Only the invented demo data is used; the tests never start `--mode real` and never
+touch the test instance or `.env`.
+
+Once per machine:
+
+```sh
+npx playwright install chromium webkit
+```
+
+WebKit also needs system libraries (on Ubuntu 24.04 among others `libavif16`, which pulls in `libgav1-1` and
+`libyuv0`); install them with `sudo npx playwright install-deps webkit`. Without them only Chromium runs:
+`npm run test:browser -- --project='chromium-*'`.
+
+Four projects: Chromium and WebKit, each at 1280 px (`*-desktop`) and at 375 px with touch (`*-phone`, so
+`(pointer: coarse)` applies). Chromium runs the full browser in its new headless mode with the popup blocker switched
+on (Playwright turns it off by default), so a popup outside a click is blocked as in a normal browser.
+
+| Spec | What it shows |
+| --- | --- |
+| `password.spec.ts` | Generate, copy (clipboard read back in Chromium; in WebKit the „Kopiert“ feedback), „Fertig“ drops the plaintext; a chosen password; arrow keys in the ChoiceCard group; the custom form's `autocomplete` attributes and no username-like field |
+| `admin.spec.ts` | An admin sets someone else's password: banner, confirm dialog naming the person with the „ID n“ line; focus trap, Escape, focus back on the opener; the dialog above a stand-in top bar (z-index 1040); one `main` landmark |
+| `controls.spec.ts` | Toggle: Space and Enter, a click on its text flips it once and focuses the switch, a tap |
+| `layout.spec.ts` | Every route of spec 4.1 and the main form states: no horizontal scrolling, every button and input at least 44 px high with touch (Toggle and ChoiceCard through their label), 16 px input text and full-width form buttons at 375 px |
+| `renewal.spec.ts` | The session renewal popup (spec 7.2) from a click, and from the confirm dialog's click when the request after it answers `token-expired`; a control shows the same renewal without a click is blocked. Also, in the demo app, a token one minute before its end: the submit click renews first and keeps everything typed |
+| `docs-screenshots.spec.ts` | The user-guide pictures in `docs/images/` (Chromium only, `*-desktop.png` and `*-phone.png`) |
+
+**Not part of `npm run check`.** The browser tests need the Playwright browsers (and WebKit its system libraries),
+start a dev server and take about a minute; `check` stays fast and runs anywhere. Run them by hand before a release
+and after UI changes (spec 13.1). `e2e/` is type-checked and linted by `check`, and it never reaches the build (Vite
+builds from `index.html` only; `check-dist` would fail on demo code).
+
+**Screenshots** are deterministic: a fixed scenario per picture, a fresh demo state, the demo switch hidden, no
+caret or focus ring, and a fixed example (`Beispiel-Pw-42!x`) in place of the random password. Fonts come from the
+machine (Lato only on the instance), so pictures made on another machine can differ in the font; commit them from one
+machine.
+
+**Session renewal in the demo:** the demo has no OAuth, so its popup is always reported as blocked. The renewal tests
+therefore build a real `Auth` and `Session` from the app's modules on the demo page (Vite serves them under
+`/ccm/ctpassstore/src/`), answer `/oauth/authorize` with a redirect to the callback route, and let the real callback
+page post the code back to its opener. `page.evaluate` counts as a user activation in Chromium; these tests wait
+longer than its 5 s lifetime before the click that matters, which makes them about 10 s each.
+
+### Manual checks on the test instance
+
+What the demo can't show. Each needs the build installed on the test instance (an upload replaces the extension there;
+ask the maintainer first) and a test account; never a production instance.
+
+1. **Dialog above the ChurchTools top bar.** As an admin: „Passwörter verwalten“, pick a person with a password,
+   „Löschen“. Expected: the dark backdrop also covers ChurchTools' top bar and side menu; a click on the top bar area
+   closes the dialog (backdrop = cancel) and does not open a ChurchTools menu. Repeat in a 375 px wide window (browser
+   dev tools) and with „Neues Passwort“ for a person that has one (the „Passwort ersetzen?“ dialog).
+2. **One `main` landmark.** On any page of the extension, in the browser console:
+   `document.querySelectorAll('main, [role=main]').length`. Expected: 1. If ChurchTools wraps the extension in its own
+   `main`, note it (the extension's frame would then need another element).
+3. **Group link.** As an admin: „Einstellungen“ → „Zugriff“ → „In ChurchTools öffnen ↗“ at the users group and at the
+   admin group. Expected: each opens `https://<instance>/groups/<id>/dashboard` with that group's dashboard, not an
+   error page.
+4. **Password managers.** In Chrome (built-in manager), Firefox and Safari, and if available with Bitwarden or
+   1Password: „Mein Passwort“ → „Neues Passwort festlegen“ → „Selbst wählen“, type a new password and the ChurchTools
+   password, save. Expected: no manager offers to replace the saved **ChurchTools** login with the new secondary
+   password; if one offers to save a new login, it must not be under the ChurchTools username. Then generate one
+   („Zufällig erzeugen“): the read-only result field (`autocomplete="off"`) should not trigger a save prompt. Note each
+   manager's behaviour; if one overwrites the ChurchTools login, report it (security review of Task 12, F2).
+5. **Session renewal popup.** As a user, open „Mein Passwort“. In the console, shorten the stored token and reload
+   (the app reads it at startup):
+   `t = JSON.parse(sessionStorage['cps-token']); t.expiresAt = Date.now() + 90000; sessionStorage['cps-token'] = JSON.stringify(t); location.reload()`.
+   Within the remaining minute, click „Neues Passwort festlegen“. Expected: a ChurchTools login popup opens (and closes
+   by itself while ChurchTools still has a session), the form opens, and no „Sitzung erneuern“ banner appears. Repeat
+   in Safari. The other path, a `token-expired` answer after the confirm dialog's click, can't be provoked by hand
+   reliably; `renewal.spec.ts` covers it (Chromium; WebKit where its libraries are installed).
+6. **WebKit run and Safari details** (if WebKit couldn't run locally): `npm run test:browser` on a machine with the
+   WebKit libraries, or the checks by hand in Safari on macOS/iOS: the Toggle's text click (Safari does not focus
+   buttons on a click, so `controls.spec.ts` may report the focus line there), the copy feedback, and 16 px fields
+   without zoom on an iPhone.

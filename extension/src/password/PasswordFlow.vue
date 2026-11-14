@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
                         class="cps-rules__mark"
                         aria-hidden="true"
                     >{{ rule.state === 'ok' ? '✓' : rule.state === 'failed' ? '✗' : '○' }}</span>
-                    <span>{{ ruleText(rule.key) }}</span>
+                    <span class="cps-rules__text">{{ ruleText(rule.key) }}</span>
                     <span class="cps-rules__state">{{ t(`password.rules.${rule.state}`) }}</span>
                     <span
                         v-if="rule.key === 'chars' && notAllowed"
@@ -497,6 +497,11 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
     gap: 0 var(--cps-space-2);
     color: var(--cps-text-muted);
+}
+/* The text wraps beside its mark, never below it (a phone breaks the long symbol rule). */
+.cps-rules__text {
+    flex: 1 1 0;
+    min-width: 0;
 }
 .cps-rules__item--ok {
     color: var(--cps-text);

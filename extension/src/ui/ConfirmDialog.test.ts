@@ -103,6 +103,75 @@ describe('ConfirmDialog', () => {
         expect(document.activeElement).toBe(opener);
     });
 
+    describe('an opener that is disabled while its action runs (found by the browser tests)', () => {
+        /**
+         * A browser blurs a focused button that becomes disabled; the page's focus is then on body. (jsdom doesn't, and
+         * won't blur a disabled element, so the blur comes first here.)
+         */
+        function disableOpener() {
+            opener.blur();
+            opener.focus();
+            opener.blur();
+            opener.disabled = true;
+            expect(document.activeElement).toBe(document.body);
+        }
+
+        it('gets the focus back once it is enabled again', async () => {
+            disableOpener();
+            const { result: p, shown } = open();
+            await shown;
+            key('Escape');
+            await p;
+            await flush();
+            expect(document.activeElement).not.toBe(opener);
+            opener.disabled = false;
+            await flush();
+            expect(document.activeElement).toBe(opener);
+        });
+
+        it('gets it right away if it is enabled by the time the dialog closes', async () => {
+            disableOpener();
+            const { result: p, shown } = open();
+            await shown;
+            opener.disabled = false;
+            key('Escape');
+            await p;
+            await flush();
+            expect(document.activeElement).toBe(opener);
+        });
+
+        it('does not take the focus back once the person has moved it elsewhere', async () => {
+            disableOpener();
+            const { result: p, shown } = open();
+            await shown;
+            key('Escape');
+            await p;
+            await flush();
+            const other = document.createElement('input');
+            document.body.append(other);
+            other.focus();
+            opener.disabled = false;
+            await flush();
+            expect(document.activeElement).toBe(other);
+            other.remove();
+        });
+
+        it('stops waiting when the next dialog opens', async () => {
+            disableOpener();
+            const first = open();
+            await first.shown;
+            key('Escape');
+            await first.result;
+            await flush();
+            const second = open();
+            await second.shown;
+            const inDialog = document.activeElement;
+            opener.disabled = false;
+            await flush();
+            expect(document.activeElement).toBe(inDialog);
+        });
+    });
+
     it('confirm resolves confirmed; a click on the backdrop cancels', async () => {
         const { result: p, shown } = open();
         await shown;

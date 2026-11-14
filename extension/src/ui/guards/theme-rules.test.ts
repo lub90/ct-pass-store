@@ -14,3 +14,13 @@ describe('theme.css button rules', () => {
         expect(css).toMatch(/--cps-create-text:\s*var\(--color-constructive-inverted, #fff\)/);
     });
 });
+
+describe('theme.css form action rows', () => {
+    // Spec 9.3: on a phone the buttons stretch to the full width; `flex: 1 1 100%` needs a flex row around them (found
+    // by the browser tests: without it the buttons kept their own width). `e2e/layout.spec.ts` measures it.
+    it('the action row is a wrapping flex row', () => {
+        const rule = /\.cps :where\(\.cps-form-actions\)\s*{([^}]*)}/.exec(css)?.[1] ?? '';
+        expect(rule).toMatch(/display:\s*flex/);
+        expect(rule).toMatch(/flex-wrap:\s*wrap/);
+    });
+});

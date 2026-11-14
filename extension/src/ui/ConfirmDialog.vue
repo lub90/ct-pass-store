@@ -1,10 +1,11 @@
 <script setup lang="ts">
 /**
  * The one question dialog (spec 9.2): `role="alertdialog"`, modal. The focus starts on cancel for a dangerous step and
- * on confirm otherwise, Tab stays inside, Escape cancels, and the focus returns to the opener. Mounted once in
- * `App.vue`; `useConfirm()` asks, this answers. Texts come with the request (no i18n in `ui/`).
+ * on confirm otherwise, Tab stays inside, Escape cancels, and the focus returns to the opener (a button disabled while
+ * its action runs gets it back once enabled). Mounted once in `App.vue`; `useConfirm()` asks, this answers. Texts come
+ * with the request (no i18n in `ui/`).
  */
-import { computed, nextTick, onBeforeUnmount, ref, useId, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, useId, watch } from 'vue';
 import SecretField from './SecretField.vue';
 import { answerConfirm, pendingConfirm } from './useConfirm';
 
@@ -12,6 +13,49 @@ const uid = useId();
 const dialog = ref<HTMLElement | null>(null);
 const value = ref('');
 let opener: HTMLElement | null = null;
+/** The last element outside the dialog that got the focus. */
+let lastFocused: HTMLElement | null = null;
+let stopWaiting = (): void => undefined;
+
+function track(event: FocusEvent) {
+    if (event.target instanceof HTMLElement && !dialog.value?.contains(event.target)) lastFocused = event.target;
+}
+
+/**
+ * The element to return to. Usually the focused one; but a page often disables its button while the action the dialog
+ * belongs to runs, and the browser then moves the focus to body, so the last focused element counts.
+ */
+function findOpener(): HTMLElement | null {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== document.body) return active;
+    return lastFocused?.isConnected ? lastFocused : null;
+}
+
+const focusIsLost = () => document.activeElement === null || document.activeElement === document.body;
+
+/**
+ * Focus returns to the opener (spec 9.4). A disabled opener gets it once it is enabled again, unless the focus has
+ * moved elsewhere meanwhile or the next dialog opens.
+ */
+function restoreFocus(el: HTMLElement | null) {
+    stopWaiting();
+    if (!el?.isConnected) return;
+    if (!(el as HTMLButtonElement).disabled) {
+        el.focus();
+        return;
+    }
+    const observer = new MutationObserver(() => {
+        if (!el.isConnected || !focusIsLost()) return stopWaiting();
+        if ((el as HTMLButtonElement).disabled) return;
+        stopWaiting();
+        el.focus();
+    });
+    observer.observe(el, { attributes: true, attributeFilter: ['disabled'] });
+    stopWaiting = () => {
+        observer.disconnect();
+        stopWaiting = () => undefined;
+    };
+}
 
 const request = computed(() => pendingConfirm.value);
 /** Read in order: the subject's name, its detail, then the question. */
@@ -76,12 +120,13 @@ watch(
     request,
     async (current, previous) => {
         if (current && !previous) {
-            opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+            stopWaiting();
+            opener = findOpener();
             window.addEventListener('keydown', onKey, true);
         } else if (!current && previous) {
             window.removeEventListener('keydown', onKey, true);
             value.value = '';
-            opener?.focus();
+            restoreFocus(opener);
             opener = null;
         }
         if (current) {
@@ -94,7 +139,10 @@ watch(
     },
     { flush: 'post' },
 );
+onMounted(() => document.addEventListener('focusin', track, true));
 onBeforeUnmount(() => {
+    document.removeEventListener('focusin', track, true);
+    stopWaiting();
     window.removeEventListener('keydown', onKey, true);
     value.value = '';
 });

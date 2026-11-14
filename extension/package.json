@@ -12,7 +12,7 @@
         "preview": "vite preview",
         "test": "vitest run",
         "test:contract": "vitest run --config vitest.contract.config.ts",
-        "test:browser": "echo \"test:browser: Playwright is set up in a later task\"",
+        "test:browser": "playwright test",
         "lint": "eslint .",
         "typecheck": "vue-tsc --noEmit",
         "check": "npm run lint && npm run typecheck && npm test && npm run build",
@@ -28,6 +28,7 @@
     },
     "devDependencies": {
         "@eslint/js": "^10.0.1",
+        "@playwright/test": "1.64.1",
         "@types/node": "^26.6.6",
         "@vitejs/plugin-vue": "^6.0.11",
         "@vue/compiler-dom": "^3.5.45",
