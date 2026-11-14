@@ -72,6 +72,9 @@ final class SetPassword
 
         // Stored first; a generated password is only returned once it's saved (spec 4.6).
         $this->passwords->save($target, $this->cipher->encrypt($password));
+        // Who changed whose password, by ID only (spec 6.4): an admin's change of another person's password is
+        // attributable.
+        $this->logger->info(ucfirst($principal->describe()) . " set the password of person {$target}.");
 
         return $custom === null ? $password : null;
     }

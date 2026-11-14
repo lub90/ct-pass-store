@@ -6,10 +6,14 @@ on:
   push:
     paths:
       - 'backend/**'
+      # The parity fixtures the backend tests read too (shared/*.json).
+      - 'shared/**'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
       - 'backend/**'
+      # The parity fixtures the backend tests read too (shared/*.json).
+      - 'shared/**'
       - '.github/workflows/backend.yml'
 
 # Read only, explicitly.

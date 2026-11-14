@@ -36,6 +36,7 @@ use CtPassStore\Http\Problem\ProblemResponseFactory;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FileAddressLimiter;
 use CtPassStore\Infrastructure\Auth\FileAttemptLimiter;
+use CtPassStore\Infrastructure\Auth\FileMachineClientUsage;
 use CtPassStore\Infrastructure\Auth\FileReplayCache;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\CachedPersonDirectory;
@@ -49,6 +50,7 @@ use CtPassStore\Infrastructure\Crypto\RsaPasswordCipher;
 use CtPassStore\Infrastructure\Kv\ExtensionData;
 use CtPassStore\Infrastructure\Kv\KvPasswordRepository;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Kv\SettingsChangeLog;
 use CtPassStore\Infrastructure\Logging\AddVersionToErrors;
 use CtPassStore\Infrastructure\Logging\EscapeControlCharacters;
 use CtPassStore\Infrastructure\SelfCheck\AccessCheck;
@@ -104,7 +106,7 @@ final class Kernel
         $extensionData = $shared['extensionData'];
         $settings = $shared['settings'];
         $passwords = $shared['passwords'];
-        $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
+        $securityStore = $shared['securityStore'];
         $addressLimiter = new FileAddressLimiter($securityStore, $clock, $config->jwtSecret);
         $guard = new EntryGuard($settings, new ChurchToolsPasswordVerifier($churchTools, $logger), new FileAttemptLimiter($securityStore, $clock), $logger);
 
@@ -116,7 +118,7 @@ final class Kernel
         $entries = new EntriesController(
             new GetPassword($guard, $passwords, $persons, $logger),
             new SetPassword($guard, $settings, new PasswordPolicy(), new RsaPasswordCipher($settings), $passwords, $persons, $logger),
-            new DeletePassword($guard, $passwords),
+            new DeletePassword($guard, $passwords, $logger),
             $logger,
         );
         // The log folder is `logs/` next to the cache folder, as `public/index.php` lays them out (spec 3.1).
@@ -170,7 +172,7 @@ final class Kernel
             $group->put('/entries/{id}', [$entries, 'put']);
             $group->delete('/entries/{id}', [$entries, 'delete']);
             $group->get('/test', [$selfCheck, 'get']);
-        })->add(new AuthMiddleware($authenticator, $addressLimiter, $logger));
+        })->add(new AuthMiddleware($authenticator, $addressLimiter, $logger, new FileMachineClientUsage($securityStore, $clock, $logger)));
 
         // Slim calls the middleware added last first. Resulting order (spec 4.1, 4.2, 5.7):
         // security headers → CORS (answers preflights) → HTTPS check → error handling → routing (404/405)
@@ -190,14 +192,15 @@ final class Kernel
      * the cleanup with its lock (cleanup design 3.5, 6.3). The person lookups here are never cached: a cached "active"
      * would hide a person who was deleted minutes ago. The web app puts its own cached directory in front of GET and PUT.
      *
-     * @return array{cleanup: CleanupOrphans, lock: CleanupLock, cache: SignedFileCache, extensionData: ExtensionData, settings: KvSettingsRepository, passwords: KvPasswordRepository}
+     * @return array{cleanup: CleanupOrphans, lock: CleanupLock, cache: SignedFileCache, extensionData: ExtensionData, settings: KvSettingsRepository, passwords: KvPasswordRepository, securityStore: SignedFileStore}
      */
     public static function cleanupServices(BackendConfig $config, ChurchToolsClient $churchTools, LoggerInterface $logger, ?Clock $clock = null): array
     {
         $clock ??= new SystemClock();
         $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
         $extensionData = new ExtensionData($churchTools, cache: $cache);
-        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock);
+        $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
+        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock, new SettingsChangeLog($securityStore, $logger));
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $persons = new ChurchToolsPersonDirectory($churchTools);
         $gonePersons = new GonePersons($persons, $clock);
@@ -209,6 +212,7 @@ final class Kernel
             'extensionData' => $extensionData,
             'settings' => $settings,
             'passwords' => $passwords,
+            'securityStore' => $securityStore,
         ];
     }
 

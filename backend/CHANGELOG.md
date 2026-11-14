@@ -51,6 +51,11 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - Limits: 5 wrong primary passwords per person and 15 minutes; per address 30 logins and 60 rejected tokens per minute,
   plus 100 logins per minute overall.
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.
+- Audit log: every password change and deletion names who made it and whose password it was, by ID
+  (`User 100 set the password of person 10.`), so an admin's change of another person's password is attributable. A
+  change of the enabled machine clients (ID, permissions, key fingerprints as the extension shows them) or of
+  `backendUrl` is logged at `notice` (old and new), the first values once as "first seen"; each machine client gets a
+  usage summary at most once per hour (request count and addresses since the last summary).
 - Daily rotated logs (14 files), the version in every error log entry, `setup/setup.sh` with permissions and a check of
   the deploy folder (`bin/check-deploy.php`), and a release workflow with `bin/release-check.php`.
 

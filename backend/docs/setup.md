@@ -269,6 +269,18 @@ ones are deleted. The log contains IP addresses and ChurchTools person IDs (deni
 and deletions). These are **personal data**: the backend logs them only to detect abuse. Tell your users, and do not
 copy the logs elsewhere for longer than 14 days. Passwords, tokens, codes and ciphertexts are never logged.
 
+What to look for when you review the log (the default `LOG_LEVEL` `info` shows all of it):
+
+| Level | Line | Meaning |
+| --- | --- | --- |
+| `info` | `User 100 set the password of person 10.` / `User 100 deleted the password of person 10.` | Who changed or deleted whose password (person IDs). A different first number means an admin changed someone else's password. |
+| `notice` | `Enabled machine clients, first seen: …` / `The enabled machine clients changed. Added: … Removed: … Now enabled: …` | The machine clients that may read passwords, each with its ID, permissions and key fingerprints (the same 16 characters the extension shows under „Zugriff“; never the key). Logged when the backend next loads `access` from ChurchTools (the settings cache lasts 5 minutes; the next machine-client request, login or password change after that loads it). An entry you did not make means someone with edit rights on `access` added a reader: remove it and check who has those rights. |
+| `notice` | `Backend address, first seen: …` / `The backend address changed from … to ….` | The `backendUrl` setting changed (old and new value). The extension sends logins to this address. |
+| `info` | `Machine client ct-radius is in use; 523 requests from 1 address since the last summary at ….` | A usage summary, at most once per hour and client, with the address of the current request and the addresses (up to 10) since the last summary. An unknown address can mean a leaked client key. |
+
+The "last seen" values for these comparisons are kept in `cache/` (signed records). Emptying `cache/` or changing
+`JWT_SECRET` makes the next load log the current values as "first seen" again.
+
 ## Rotating secrets
 
 | Secret | Where | How to rotate |
