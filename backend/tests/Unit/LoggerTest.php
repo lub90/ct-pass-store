@@ -61,6 +61,39 @@ final class LoggerTest extends TestCase
         self::assertStringContainsString('"id":5', $content, 'Non-strings stay as they are.');
     }
 
+    /**
+     * Unicode controls (C1, format characters such as the bidi override U+202E, the line and paragraph separators)
+     * can reorder or break what a reader sees, e.g. in a logged backendUrl, so they're escaped too, as `\u{XXXX}`.
+     */
+    public function testUnicodeControlsInMessagesAndContextAreEscaped(): void
+    {
+        $logger = Kernel::logger($this->file, 'debug', '0.1.0');
+
+        $logger->notice("The backend address changed to https://evil.example/\u{202E}gro.elpmaxe\u{2028}[2026-11-01] forged\u{2029}\u{200B}\u{0085}.", [
+            'url' => "https://a.example/\u{202E}x\u{2028}y",
+            'name' => 'Grüße, ok', // ordinary non-ASCII stays as it is
+        ]);
+
+        $content = $this->content();
+        self::assertCount(1, explode("\n", rtrim($content, "\n")));
+        self::assertStringContainsString('evil.example/\u{202E}gro.elpmaxe\u{2028}[2026-11-01] forged\u{2029}\u{200B}\u{0085}.', $content);
+        self::assertStringContainsString('a.example/\\\\u{202E}x\\\\u{2028}y', $content);
+        self::assertStringContainsString('Grüße', $content);
+        self::assertDoesNotMatchRegularExpression('/[\x{80}-\x{9F}\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2028}\x{2029}\x{2066}-\x{2069}]/u', $content);
+    }
+
+    /** Invalid UTF-8 can't be matched as Unicode; its ASCII controls are still escaped and nothing is lost. */
+    public function testInvalidUtf8StillHasItsControlsEscaped(): void
+    {
+        $logger = Kernel::logger($this->file, 'debug', '0.1.0');
+
+        $logger->warning("bad \xFF\xFE bytes\nforged");
+
+        $content = $this->content();
+        self::assertCount(1, explode("\n", rtrim($content, "\n")));
+        self::assertStringContainsString('bytes\x0Aforged', $content);
+    }
+
     /** LG-04 */
     public function testTheLevelIsRespected(): void
     {

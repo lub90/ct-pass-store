@@ -5,26 +5,37 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Unit\Domain;
 
 use CtPassStore\Domain\MachineClient;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The key fingerprint the backend logs is the one the extension shows (extension spec 4.7).
+ * The key fingerprint the backend logs is the one the extension shows (extension spec 4.7): both test suites read the
+ * vectors of shared/key-fingerprint-cases.json, computed with node's crypto (base64url of SHA-256, first 16 characters).
  */
 final class MachineClientTest extends TestCase
 {
-    /**
-     * The expected values were computed with node's crypto (base64url of SHA-256, first 16 characters), the reference
-     * the extension's own tests use.
-     */
-    public function testTheFingerprintIsTheFirst16CharactersOfBase64urlSha256OfTheKeyBytes(): void
+    /** @return iterable<string, array{string, string}> */
+    public static function cases(): iterable
     {
-        $key = implode('', array_map(static fn(int $i): string => chr(0xff - $i), range(0, 31)));
-
-        self::assertSame('GGXACDHnP37iP8E8', MachineClient::keyFingerprint($key));
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/../../../../shared/key-fingerprint-cases.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($cases);
+        foreach ($cases as $case) {
+            yield (string) $case['name'] => [(string) hex2bin((string) $case['keyHex']), (string) $case['fingerprint']];
+        }
     }
 
-    public function testTheFingerprintUsesTheBase64urlAlphabetWithoutPadding(): void
+    #[DataProvider('cases')]
+    public function testTheFingerprintIsTheFirst16CharactersOfBase64urlSha256OfTheKeyBytes(string $key, string $fingerprint): void
     {
-        self::assertSame('cs1uhCLEB_ttCYaQ', MachineClient::keyFingerprint(str_repeat(chr(1), 32)));
+        self::assertSame(32, strlen($key));
+        self::assertSame($fingerprint, MachineClient::keyFingerprint($key));
+    }
+
+    public function testTheSharedCasesCoverTheBase64urlAlphabet(): void
+    {
+        $prints = implode('', array_column(iterator_to_array(self::cases()), 1));
+
+        self::assertMatchesRegularExpression('/[-_]/', $prints);
+        self::assertDoesNotMatchRegularExpression('/[+\/=]/', $prints);
     }
 }

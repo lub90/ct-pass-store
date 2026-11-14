@@ -189,6 +189,20 @@ final class LoggingApiTest extends ApiTestCase
         ], array_values(preg_grep('/ deleted the password of /', $this->infoMessages())));
     }
 
+    /**
+     * A DELETE is idempotent (spec 4.7): the line records the successful request, also when there was no entry. Only
+     * the "Deleted password entry …" lines say that an entry was removed.
+     */
+    public function testADeleteWithoutAnEntryIsLoggedAsTheRequestItWas(): void
+    {
+        $this->setSettings([]);
+        self::assertSame(204, $this->request('DELETE', '/v1/entries/' . self::USER, self::ADMIN, [])->getStatusCode());
+
+        $info = $this->infoMessages();
+        self::assertSame(['User ' . self::ADMIN . ' deleted the password of person ' . self::USER . '.'], array_values(preg_grep('/ deleted the password of /', $info)));
+        self::assertSame([], preg_grep('/^Deleted password entry /', $info));
+    }
+
     /** B1: a change that fails or is refused logs no change line. */
     public function testFailedChangesLogNoChangeLine(): void
     {

@@ -200,7 +200,7 @@ final class Kernel
         $cache = new SignedFileCache($config->cacheDir, new RecordSigner($config->jwtSecret, SignedFileCache::PURPOSE), $clock, $logger);
         $extensionData = new ExtensionData($churchTools, cache: $cache);
         $securityStore = new SignedFileStore($config->cacheDir, $config->jwtSecret, $logger);
-        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock, new SettingsChangeLog($securityStore, $logger));
+        $settings = new KvSettingsRepository($extensionData, $logger, $cache, $clock, new SettingsChangeLog($securityStore, $logger, new FileMachineClientUsage($securityStore, $clock, $logger)));
         $passwords = new KvPasswordRepository($extensionData, $logger);
         $persons = new ChurchToolsPersonDirectory($churchTools);
         $gonePersons = new GonePersons($persons, $clock);

@@ -273,13 +273,18 @@ What to look for when you review the log (the default `LOG_LEVEL` `info` shows a
 
 | Level | Line | Meaning |
 | --- | --- | --- |
-| `info` | `User 100 set the password of person 10.` / `User 100 deleted the password of person 10.` | Who changed or deleted whose password (person IDs). A different first number means an admin changed someone else's password. |
+| `info` | `User 100 set the password of person 10.` / `User 100 deleted the password of person 10.` | Who changed or deleted whose password (person IDs). A different first number means an admin changed someone else's password. A delete is logged as the request it was, also when the person had no password; the `Deleted password entry …` lines show which entries were removed. |
 | `notice` | `Enabled machine clients, first seen: …` / `The enabled machine clients changed. Added: … Removed: … Now enabled: …` | The machine clients that may read passwords, each with its ID, permissions and key fingerprints (the same 16 characters the extension shows under „Zugriff“; never the key). Logged when the backend next loads `access` from ChurchTools (the settings cache lasts 5 minutes; the next machine-client request, login or password change after that loads it). An entry you did not make means someone with edit rights on `access` added a reader: remove it and check who has those rights. |
+| `notice` | `Admin group, first seen: …` / `The admin group changed from 12 to 99.` | The ChurchTools group whose active members are admins changed (`none`: nobody is admin). |
 | `notice` | `Backend address, first seen: …` / `The backend address changed from … to ….` | The `backendUrl` setting changed (old and new value). The extension sends logins to this address. |
-| `info` | `Machine client ct-radius is in use; 523 requests from 1 address since the last summary at ….` | A usage summary, at most once per hour and client, with the address of the current request and the addresses (up to 10) since the last summary. An unknown address can mean a leaked client key. |
+| `info` | `Machine client ct-radius is in use; 523 requests from 1 address since the last summary at ….` | A usage summary, at most once per hour and client, with the address of the current request and the addresses (up to 10) since the last summary. An unknown address can mean a leaked client key. `first request in the last 14 days` starts the count anew. |
 
-The "last seen" values for these comparisons are kept in `cache/` (signed records). Emptying `cache/` or changing
-`JWT_SECRET` makes the next load log the current values as "first seen" again.
+The "last seen" values for these comparisons and the usage counts are kept in `cache/` (signed records). Emptying
+`cache/` or changing `JWT_SECRET` makes the next load log the current values as "first seen" again. The usage counts
+keep no address longer than the log (14 days), and the entry of a machine client is dropped once it is no longer
+configured. If one of these records fails its integrity check, the backend logs a `warning` on each settings load and
+goes on answering requests: check the server for unauthorized access, then empty `cache/`. Unicode control and
+format characters (such as bidi overrides) in logged values appear escaped as `\u{XXXX}`.
 
 ## Rotating secrets
 

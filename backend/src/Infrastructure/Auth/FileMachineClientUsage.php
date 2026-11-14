@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Infrastructure\Auth;
 
 use CtPassStore\Application\Exception\ConfigurationException;
+use CtPassStore\Application\Failure\Reason;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\Port\MachineClientUsage;
 use CtPassStore\Infrastructure\Store\SignedFileStore;
@@ -15,17 +16,29 @@ use Psr\Log\LoggerInterface;
  * after an hour since the last summary logs how many requests came from which addresses since then. No line per
  * request: ct-radius sends one for every RADIUS login.
  *
- * One record per client in the signed security store (`usage:<id>`), written under its lock, so concurrent requests
- * neither lose counts nor log twice. Only authenticated clients get a record, so their number is bounded by the
- * registered clients, and a record keeps at most MAX_ADDRESSES addresses. Fail open: a folder that can't be used is a
- * `warning`, never a refused request (the replay cache, which the request needs anyway, fails closed on its own).
+ * One record (`usage`) in the signed security store holds an entry per client, written under the record's lock, so
+ * concurrent requests neither lose counts nor log twice. Bounded:
+ * - only authenticated clients get an entry, and the access load drops the entries of clients that are no longer
+ *   configured (prune());
+ * - an entry keeps at most MAX_ADDRESSES + 1 addresses: the first MAX_ADDRESSES are logged, one more only tells
+ *   "more than MAX_ADDRESSES";
+ * - every write drops entries whose hour began RETENTION_SECONDS (14 days) ago or more, so no address is kept longer
+ *   than the log keeps it (spec 6.4).
+ *
+ * Fail open: a folder that can't be used or a tampered record is a `warning`, never a refused request (the replay
+ * cache, which the request needs anyway, fails closed on its own).
  */
 final class FileMachineClientUsage implements MachineClientUsage
 {
+    public const RECORD = 'usage';
+
     public const WINDOW_SECONDS = 3600;
 
-    /** Addresses kept per summary; more are only counted as "more than". */
+    /** Addresses listed per summary; one more is kept only to say "more than". */
     public const MAX_ADDRESSES = 10;
+
+    /** The log's retention (14 files, one per day); usage entries are kept no longer. */
+    public const RETENTION_SECONDS = 14 * 86400;
 
     public function __construct(
         private readonly SignedFileStore $store,
@@ -36,28 +49,31 @@ final class FileMachineClientUsage implements MachineClientUsage
     public function record(string $clientId, string $address): void
     {
         $now = $this->clock->now()->getTimestamp();
+        // Prefixed, so an ID like "0" never becomes an integer key (and the record a JSON list).
+        $key = 'c:' . $clientId;
         $summary = null;
         try {
-            $this->store->update('usage:' . $clientId, static function (array $state) use ($now, $address, &$summary): array {
-                $since = $state['since'] ?? null;
-                $count = $state['count'] ?? null;
-                $addresses = $state['addresses'] ?? null;
-                $valid = is_int($since) && is_int($count) && is_array($addresses) && array_is_list($addresses);
+            $this->store->update(self::RECORD, static function (array $all) use ($now, $key, $address, &$summary): array {
+                $all = self::withoutExpired($all, $now);
+                $state = $all[$key] ?? null;
                 // A start "in the future" means the clock went back; that starts a new hour too.
-                if ($valid && $since <= $now && $now - $since < self::WINDOW_SECONDS) {
+                if (is_array($state) && $state['since'] <= $now && $now - $state['since'] < self::WINDOW_SECONDS) {
+                    $addresses = $state['addresses'];
                     if (!in_array($address, $addresses, true) && count($addresses) <= self::MAX_ADDRESSES) {
                         $addresses[] = $address;
                     }
+                    $all[$key] = ['since' => $state['since'], 'count' => $state['count'] + 1, 'addresses' => $addresses];
 
-                    return ['since' => $since, 'count' => $count + 1, 'addresses' => $addresses];
+                    return $all;
                 }
 
-                $summary = $valid ? ['since' => $since, 'count' => $count, 'addresses' => $addresses] : [];
+                $summary = is_array($state) ? $state : [];
+                $all[$key] = ['since' => $now, 'count' => 1, 'addresses' => [$address]];
 
-                return ['since' => $now, 'count' => 1, 'addresses' => [$address]];
+                return $all;
             });
-        } catch (ConfigurationException) {
-            $this->logger->warning("The usage of machine client $clientId can't be counted, because the cache folder can't be used.", ['ip' => $address]);
+        } catch (ConfigurationException $e) {
+            $this->warn($e, "The usage of machine client $clientId can't be counted, because the cache folder can't be used.", ['ip' => $address]);
 
             return;
         }
@@ -66,15 +82,13 @@ final class FileMachineClientUsage implements MachineClientUsage
             return;
         }
         if ($summary === []) {
-            $this->logger->info("Machine client $clientId is in use; first request seen.", ['ip' => $address]);
+            $this->logger->info("Machine client $clientId is in use; first request in the last 14 days.", ['ip' => $address]);
 
             return;
         }
 
-        /** @var list<string> $addresses */
-        $addresses = array_values(array_filter($summary['addresses'], is_string(...)));
-        $more = count($addresses) > self::MAX_ADDRESSES;
-        $addresses = array_slice($addresses, 0, self::MAX_ADDRESSES);
+        $more = count($summary['addresses']) > self::MAX_ADDRESSES;
+        $addresses = array_slice($summary['addresses'], 0, self::MAX_ADDRESSES);
         $this->logger->info(sprintf(
             'Machine client %s is in use; %d %s from %s since the last summary at %s.',
             $clientId,
@@ -83,5 +97,63 @@ final class FileMachineClientUsage implements MachineClientUsage
             $more ? 'more than ' . self::MAX_ADDRESSES . ' addresses' : (count($addresses) === 1 ? '1 address' : count($addresses) . ' addresses'),
             gmdate('Y-m-d\TH:i:sP', $summary['since']),
         ), ['ip' => $address, 'addresses' => $addresses]);
+    }
+
+    /**
+     * Drops the entries of clients not in the list, and old ones. Called when the access value is loaded. Never
+     * creates the record, and fails open like record().
+     *
+     * @param list<string> $clientIds the configured (enabled) clients
+     */
+    public function prune(array $clientIds): void
+    {
+        $now = $this->clock->now()->getTimestamp();
+        $keep = array_fill_keys(array_map(static fn(string $id): string => 'c:' . $id, $clientIds), true);
+        try {
+            if (!$this->store->exists(self::RECORD)) {
+                return;
+            }
+            $this->store->update(self::RECORD, static fn(array $all): array => array_intersect_key(self::withoutExpired($all, $now), $keep));
+        } catch (ConfigurationException $e) {
+            $this->warn($e, "The usage of machine clients can't be cleaned up, because the cache folder can't be used.");
+        }
+    }
+
+    /**
+     * The valid entries that began less than RETENTION_SECONDS ago (a start in the future counts as valid).
+     *
+     * @param array<array-key, mixed> $all
+     * @return array<string, array{since: int, count: int, addresses: list<string>}>
+     */
+    private static function withoutExpired(array $all, int $now): array
+    {
+        $kept = [];
+        foreach ($all as $key => $state) {
+            if (!is_string($key) || !is_array($state)) {
+                continue;
+            }
+            $since = $state['since'] ?? null;
+            $count = $state['count'] ?? null;
+            $addresses = $state['addresses'] ?? null;
+            if (!is_int($since) || !is_int($count) || !is_array($addresses) || $now - $since >= self::RETENTION_SECONDS) {
+                continue;
+            }
+            $kept[$key] = ['since' => $since, 'count' => $count, 'addresses' => array_values(array_filter($addresses, is_string(...)))];
+        }
+
+        return $kept;
+    }
+
+    /**
+     * @param array<string, string> $context
+     */
+    private function warn(ConfigurationException $e, string $unusable, array $context = []): void
+    {
+        $this->logger->warning(
+            $e->reason() === Reason::StoreTampered
+                ? 'The usage record of the machine clients failed its integrity check, so usage isn\'t counted. Check the server for unauthorized access, then empty the folder cache/.'
+                : $unusable,
+            $context,
+        );
     }
 }

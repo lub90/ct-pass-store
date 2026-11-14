@@ -336,6 +336,15 @@ final class SignedFileStoreTest extends TestCase
     /**
      * Spec 6.1, "Locking": the self-check needs to know that flock really excludes a second handle.
      */
+    public function testExistsTellsWhetherARecordWasWritten(): void
+    {
+        self::assertFalse($this->store()->exists('r'));
+        $this->store()->update('r', static fn(array $data): array => ['a' => 1]);
+
+        self::assertTrue($this->store()->exists('r'));
+        self::assertFalse($this->store()->exists('other'));
+    }
+
     public function testProbeLockingSucceedsOnLocalDisk(): void
     {
         self::assertTrue($this->store()->probeLocking());

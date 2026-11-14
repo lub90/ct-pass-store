@@ -53,9 +53,10 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.
 - Audit log: every password change and deletion names who made it and whose password it was, by ID
   (`User 100 set the password of person 10.`), so an admin's change of another person's password is attributable. A
-  change of the enabled machine clients (ID, permissions, key fingerprints as the extension shows them) or of
-  `backendUrl` is logged at `notice` (old and new), the first values once as "first seen"; each machine client gets a
-  usage summary at most once per hour (request count and addresses since the last summary).
+  change of the enabled machine clients (ID, permissions, key fingerprints as the extension shows them), of the admin
+  group or of `backendUrl` is logged at `notice` (old and new), the first values once as "first seen"; each machine
+  client gets a usage summary at most once per hour (request count and addresses since the last summary, kept at most
+  14 days). Unicode control and format characters in log lines are escaped.
 - Daily rotated logs (14 files), the version in every error log entry, `setup/setup.sh` with permissions and a check of
   the deploy folder (`bin/check-deploy.php`), and a release workflow with `bin/release-check.php`.
 

@@ -158,6 +158,14 @@ describe('sha256 and keyFingerprint (spec 4.7)', () => {
         expect(Buffer.from(sha256(bytes)).toString('hex')).toBe(createHash('sha256').update(bytes).digest('hex'));
     });
 
+    // The vectors shared with the backend, which logs the same fingerprints (backend spec 6.4).
+    const fingerprintCases = JSON.parse(readFileSync(resolve(process.cwd(), '../shared/key-fingerprint-cases.json'), 'utf8')) as { name: string; keyHex: string; fingerprint: string }[];
+    it.each(fingerprintCases)('matches the shared vector: $name', ({ keyHex, fingerprint }) => {
+        const bytes = Uint8Array.from(Buffer.from(keyHex, 'hex'));
+        expect(bytes.length).toBe(32);
+        expect(keyFingerprint(bytes)).toBe(fingerprint);
+    });
+
     it('is the first 16 characters of base64url(SHA-256(the 32 key bytes)), whatever encoding was pasted', () => {
         const bytes = new Uint8Array(32).map((_, i) => 0xff - i);
         const expected = createHash('sha256').update(bytes).digest('base64url').slice(0, 16);
