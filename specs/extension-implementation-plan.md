@@ -585,3 +585,84 @@ Tasks marked **[security-critical]** get, after Superpowers' own task review, a 
   users may want to set a new one. User guide: pages, phone use, the versioning sentence of `versioning.md` section 4,
   screenshots from Task 19.
 - [ ] **Step 6: Run** `npm run check` → PASS. **Commit:** `"Extension: CI, release workflow, CHANGELOG and user guide"`.
+
+## Review point B, round 1 — follow-up tasks (2026-11-14)
+
+Added from the end-of-branch reviews (Superpowers final review, security-reviewer, test-reviewer full depth). Each runs
+with subagent-driven development, TDD and the per-task reviews like the tasks above.
+
+### Task 21: Duplicate settings and access values fail closed [security-critical]
+
+**Files:** Modify `src/store/repository.ts`, `src/app/useAppState.ts`, settings pages / `SettingsFormPage.vue`,
+`specs/extension-spec.md` 6.2, `specs/ct-extension-info.md`.
+
+- [ ] Normal users: a `settings` or `access` category with more than one value reads like the backend reads it (fail
+  closed: no backend login, nothing sent; a clear state for admins/editors). Never let the newest id win silently.
+- [ ] Editors and admins see the duplicates (plain text, cut, isolated) and choose which value stays before any save
+  deletes the others; a save never deletes unseen values. Revision- and id-guarded.
+- [ ] Spec 6.2 says what was built; ct-extension-info.md records the 2026-11-14 CSRF measurement (cookie SameSite=None;
+  cross-site text/plain form refused with 401 „CSRF-Token is invalid“; same-origin JSON needs no token).
+- [ ] Commit: `"Extension: duplicate settings and access values fail closed and are shown to editors"`.
+
+### Task 22: Backend audit trail and shared-fixture CI [security-critical]
+
+**Files:** `backend/src/Application/SetPassword.php`, `DeletePassword.php`, `Application/Auth/MachineTokens.php`,
+the access/settings cache refresh, `.github/workflows/backend.yml`, backend tests, backend CHANGELOG.
+
+- [ ] On success, log at `info` „<principal> set|deleted the password of person <target>“ (ids only, never a password).
+- [ ] On each `access` refresh, log at `notice` when the set of enabled machine clients (ids, permissions, key
+  fingerprints) differs from the last one seen; a rate-limited usage summary per client (e.g. first use per hour with id,
+  address, request count).
+- [ ] Log at `notice` when the parsed `backendUrl` differs from the last one seen.
+- [ ] `backend.yml` also runs on `shared/**`.
+- [ ] Commit: `"Backend: audit log for admin changes, machine clients and the backend address; CI on shared fixtures"`.
+
+### Task 23: Page-level hardening and test gaps [security-critical]
+
+**Files:** `ui/PersonPicker.vue`, `password/PasswordFlow.vue`, `views/settings/BackendView.vue`, tests across
+`src/`, `vitest.config.ts`, `playwright.config.ts`, `scripts/check-dist.js`.
+
+- [ ] Person names isolated (`<bdi>` / U+2068–2069) in the picker, the replace dialog text and the banner.
+- [ ] Settings pages in `backend-error`: app tests that a settings editor can open Backend & Status, save a new address
+  through the danger dialog, and that Rules and Access render their forms (spec 3.1.2).
+- [ ] BackendView registers its unsaved address with `trackUnsaved`; a self-test after `invalid-token` settles.
+- [ ] Test gaps: 2xx with a non-JSON content type refused; `latest++` in `usePasswordEntry.change()` pinned or removed;
+  the overview's own rights check; check-dist refuses zero bundles and pins the 8-character secret boundary;
+  ConfirmDialog Escape `stopPropagation`; „Sitzung erneuern“ success then the next submit is sent; the 50 ms race in
+  `services.test.ts`; unit config `passWithNoTests: false`; Playwright output folder per run.
+- [ ] Commit: `"Extension: isolated person names, backend-error settings tests and remaining test gaps"`.
+
+### Task 24: Contract variants and one instance run [security-critical]
+
+**Files:** `tests/contract/backend.contract.test.ts`, `tests/contract/backend-sandbox.ts`.
+
+- [ ] Run the backend subject in both settings variants (primary password required on/off, custom passwords on/off)
+  through a sandbox-side settings override — never by changing the instance's settings.
+- [ ] One `npm run test:contract` run against the instance (also covers the preflight change of 2620400); cleanup
+  verified.
+- [ ] Commit: `"Extension: contract cases in both settings variants against the real backend"`.
+
+### Task 25: Release pipeline hardening
+
+**Files:** `.github/workflows/*.yml`, `.gitleaks.toml`, `extension/docs/development.md`.
+
+- [ ] Pin actions by commit SHA (at least in the release workflows, with the version in a comment).
+- [ ] Publish the release ZIP's SHA-256 (and, if cheap, a build-provenance attestation).
+- [ ] Narrow the source-file allowlists in `.gitleaks.toml` to the invented values (`condition = "AND"` + regexes).
+- [ ] Commit: `"CI: SHA-pinned actions, release checksum, narrower gitleaks exceptions"`.
+
+### Task 26: Docs and spec match what was built
+
+**Files:** `specs/extension-spec.md`, `extension/docs/*.md`, `extension/CHANGELOG.md`, `backend/CHANGELOG.md`, root
+`README.md`, `TODO.md`, `src/i18n/*`, small code tidy-ups.
+
+- [ ] Spec: header status; mark the wizard-dependent parts as deferred (5.1/12.3, 13.4.6, 16.3/16.4, 13.1 WebKit
+  pending); 4.7 status-dot wording; 4.8 settings-right rule; 13.2 reference; E15 heading names the settings editors.
+- [ ] Docs: setup.md and README describe the current install (no wizard yet, release ZIP); CHANGELOG and user guide say
+  the browser language; CHANGELOGs don't promise a migration this version doesn't ship (release waits for the wizard);
+  user guide: review machine clients when an admin leaves.
+- [ ] Texts: no dead-end pointers to „Einrichtung“ while it is a placeholder (or hide the cards); placeholder wording for
+  users; remove unused i18n keys and duplicate texts; consistent apostrophes; fix the intlify parent-scope warning.
+- [ ] Tidy-ups: one callback-path matcher; one trailing-slash helper; stale comments; stale TODO items; the
+  `inlineDynamicImports` deprecation.
+- [ ] Commit: `"Docs and spec describe what 0.1.0 contains; texts and small tidy-ups"`.
