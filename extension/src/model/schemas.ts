@@ -26,6 +26,8 @@ function keyBytes(s: string): string | null {
 
 /** `https://`, no credentials, no query, no fragment (mirrors backend spec 3.2). */
 function isPlainHttpsUrl(s: string): boolean {
+    // Scheme compared case-sensitively and no whitespace, like the backend's parse_url based check.
+    if (!/^https:\/\/\S+$/.test(s)) return false;
     try {
         const u = new URL(s);
         return u.protocol === 'https:' && u.username === '' && u.password === '' && u.search === '' && u.hash === '' && !s.includes('?') && !s.includes('#');
@@ -39,7 +41,11 @@ const PageText = v.looseObject({
     intro: v.optional(v.pipe(v.string(), v.maxLength(300))),
 });
 
-export const SettingsTextsSchema = v.looseObject({ de: v.optional(PageText), en: v.optional(PageText) });
+export const SettingsTextsSchema = v.pipe(
+    v.unknown(),
+    v.check((texts) => !Array.isArray(texts), 'must be an object'),
+    v.looseObject({ de: v.optional(PageText), en: v.optional(PageText) }),
+);
 export type SettingsTexts = v.InferOutput<typeof SettingsTextsSchema>;
 
 const Revision = v.pipe(v.number(), v.integer(), v.minValue(0));
@@ -68,24 +74,32 @@ export type MachineClient = v.InferOutput<typeof MachineClientSchema>;
 
 const GroupRef = v.looseObject({ groupId: v.pipe(v.number(), v.safeInteger(), v.minValue(1)), createdBySetup: v.boolean() });
 
+/** Keys the old (v1) layout had in a category; they are never read into a value and never written back. */
+export const RETIRED_KEYS: Record<'settings' | 'access', readonly string[]> = {
+    settings: ['adminUsers', 'readAccessUsers', 'machineClients'],
+    access: [],
+};
+
+/** Indices of clients the backend disables: those with a duplicate id or a public key shared with another client. */
+export function conflictingClients(clients: readonly MachineClient[]): Set<number> {
+    const result = new Set<number>();
+    const ids = new Map<string, number[]>();
+    const keys = new Map<string, number[]>();
+    clients.forEach((c, i) => {
+        ids.set(c.id, [...(ids.get(c.id) ?? []), i]);
+        for (const k of new Set(c.publicKeys.map(keyBytes))) if (k !== null) keys.set(k, [...(keys.get(k) ?? []), i]);
+    });
+    for (const group of [...ids.values(), ...keys.values()]) if (group.length > 1) group.forEach((i) => result.add(i));
+    return result;
+}
+
 export const AccessSchema = v.looseObject({
     schema: v.literal(SCHEMA_VERSION),
     revision: Revision,
     groups: v.looseObject({ users: GroupRef, admins: GroupRef, service: GroupRef }),
     machineClients: v.pipe(
         v.array(MachineClientSchema),
-        v.check((clients) => new Set(clients.map((c) => c.id)).size === clients.length, 'client ids must be unique'),
-        v.check((clients) => {
-            const seen = new Set<string>();
-            for (const c of clients) {
-                for (const k of new Set(c.publicKeys.map(keyBytes))) {
-                    if (k === null) continue;
-                    if (seen.has(k)) return false;
-                    seen.add(k);
-                }
-            }
-            return true;
-        }, 'a public key must belong to one client only'),
+        v.check((clients) => conflictingClients(clients).size === 0, 'client ids must be unique and a public key must belong to one client only'),
     ),
 });
 export type AccessV2 = v.InferOutput<typeof AccessSchema>;

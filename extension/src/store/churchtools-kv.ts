@@ -16,12 +16,17 @@ export class ChurchToolsKv implements KvBackend {
     }
 
     private moduleId(): Promise<number> {
-        this.module ??= this.api.moduleId(this.moduleKey).then((id) => {
+        if (this.module) return this.module;
+        const lookup = this.api.moduleId(this.moduleKey).then((id) => {
             if (id === null) throw new Error(`Extension module "${this.moduleKey}" not found`);
             return id;
         });
-        this.module.catch(() => (this.module = undefined));
-        return this.module;
+        this.module = lookup;
+        // A failed lookup is not cached (only reset our own promise, never a newer one).
+        lookup.catch(() => {
+            if (this.module === lookup) this.module = undefined;
+        });
+        return lookup;
     }
 
     private async list(): Promise<{ moduleId: number; categories: CtCategory[] }> {

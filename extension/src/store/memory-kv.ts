@@ -1,4 +1,5 @@
 import type { CtValue } from '@/ct/types';
+import { CtHttpError } from '@/ct/errors';
 import { CategoryMissingError } from '@/model/errors';
 import type { KvBackend } from './kv';
 
@@ -65,7 +66,7 @@ export class MemoryKv implements KvBackend {
 
     async update(category: string, valueId: number, value: string) {
         const v = this.list(category).find((x) => x.id === valueId);
-        if (!v) throw new Error(`MemoryKv: no value ${valueId}`);
+        if (!v) throw new CtHttpError(404, 'Value not found');
         this.beginWrite({ kind: 'update', category, valueId, value });
         v.value = value;
         return { ...v };
@@ -73,6 +74,7 @@ export class MemoryKv implements KvBackend {
 
     async delete(category: string, valueId: number) {
         const list = this.list(category);
+        if (!list.some((x) => x.id === valueId)) throw new CtHttpError(404, 'Value not found');
         this.beginWrite({ kind: 'delete', category, valueId });
         this.data.set(category, list.filter((x) => x.id !== valueId));
     }
