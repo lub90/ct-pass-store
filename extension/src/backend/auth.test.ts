@@ -477,6 +477,20 @@ describe('Auth token', () => {
         expect(auth.token()).toBe('tok-123');
     });
 
+    it('tells subscribers when the configuration or the token changes', async () => {
+        const { h, auth } = setup({ configure: false });
+        const changed = vi.fn();
+        const stop = auth.subscribe(changed);
+        auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        expect(changed).toHaveBeenCalledTimes(1);
+        const { stored } = await startLogin(auth, h);
+        await auth.completePageLogin({ code: 'c', state: stored.state });
+        expect(changed).toHaveBeenCalledTimes(2);
+        stop();
+        auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        expect(changed).toHaveBeenCalledTimes(2);
+    });
+
     it('clear() removes it from memory and sessionStorage', async () => {
         const { h, auth } = await loggedIn();
         auth.clear();
@@ -674,6 +688,23 @@ describe('Auth.loginInPopup', () => {
         expect(await settled(done)).toBe('pending');
         h.send(good());
         await expect(done).resolves.toBeUndefined();
+    });
+
+    it('gives up after 5 minutes: closes the popup, stops listening, rejects PopupClosed', async () => {
+        const { h, backend, done, good } = await openPopup();
+        h.now.value = NOW + 5 * 60_000 - 1;
+        h.tick();
+        expect(await settled(done)).toBe('pending');
+        expect(h.popup!.closed).toBe(false);
+        h.now.value = NOW + 5 * 60_000;
+        h.tick();
+        await expect(done).rejects.toBeInstanceOf(PopupClosed);
+        expect(h.popup!.closed).toBe(true);
+        expect(h.listeners.size).toBe(0);
+        expect(h.timers.size).toBe(0);
+        h.send(good());
+        await flush();
+        expect(backend.login).not.toHaveBeenCalled();
     });
 
     it('does not reject while the popup stays open', async () => {

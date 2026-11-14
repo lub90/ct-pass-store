@@ -6,17 +6,17 @@ import { inject, ref, type InjectionKey, type Ref } from 'vue';
 import { PopupBlocked, PopupClosed, type Auth } from '../backend/auth';
 import { BackendProblem } from '../backend/problems';
 
-/** Renew when this much or less is left. */
+/** Renew when less than this is left (spec 7.2: „fewer than 2 minutes“). */
 export const RENEW_BEFORE_MS = 120_000;
 
-export type SessionAuth = Pick<Auth, 'loginInPopup' | 'startPageLogin' | 'clear' | 'info' | 'expiresInMs'>;
+export type SessionAuth = Pick<Auth, 'loginInPopup' | 'startPageLogin' | 'clear' | 'info' | 'expiresInMs' | 'subscribe'>;
 
 export interface Session {
     admin: Ref<boolean>;
     backendVersion: Ref<string | null>;
     /** True after the popup was blocked or closed, or the token became unusable while a form had input. */
     needsRenewal: Ref<boolean>;
-    /** Renews through the popup if 120 s or less are left. Call it inside a click handler. */
+    /** Renews through the popup if less than 120 s are left. Call it inside a click handler. */
     ensureFresh(): Promise<void>;
     /** Popup login (the „Sitzung erneuern“ button; overlapping calls share one popup). */
     renew(): Promise<void>;
@@ -34,13 +34,16 @@ export function createSession(auth: SessionAuth, currentPath: () => string): Ses
     const unsaved = new Set<() => boolean>();
     let renewing: Promise<void> | null = null;
 
-    // Role and version change only with a new login, so the frame stays while a renewal is pending.
+    // Follow the usable token: after configure(), a page login and a renewal. A dropped token keeps the last values,
+    // so the frame stays while a renewal is pending.
     const takeInfo = (): void => {
         const info = auth.info();
-        admin.value = info?.admin ?? false;
-        backendVersion.value = info?.version ?? null;
+        if (!info) return;
+        admin.value = info.admin;
+        backendVersion.value = info.version;
     };
     takeInfo();
+    auth.subscribe(takeInfo);
 
     function renew(): Promise<void> {
         renewing ??= auth
@@ -48,7 +51,6 @@ export function createSession(auth: SessionAuth, currentPath: () => string): Ses
             .then(
                 () => {
                     needsRenewal.value = false;
-                    takeInfo();
                 },
                 (error: unknown) => {
                     if (error instanceof PopupBlocked || error instanceof PopupClosed) needsRenewal.value = true;
@@ -62,7 +64,7 @@ export function createSession(auth: SessionAuth, currentPath: () => string): Ses
     }
 
     async function ensureFresh(): Promise<void> {
-        if (auth.expiresInMs() <= RENEW_BEFORE_MS) await renew();
+        if (auth.expiresInMs() < RENEW_BEFORE_MS) await renew();
     }
 
     async function call<T>(fn: () => Promise<T>): Promise<T> {

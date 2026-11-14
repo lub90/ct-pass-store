@@ -27,6 +27,8 @@ const POPUP_STATE_PREFIX = 'p.';
 const POPUP_NAME = 'cps-login';
 const POPUP_FEATURES = 'popup,width=520,height=680';
 const POLL_MS = 500;
+/** A popup login that hasn't handed over a code by then is given up. */
+const POPUP_TIMEOUT_MS = 5 * 60_000;
 const MAX_CODE_LENGTH = 4096;
 const MAX_RETURN_PATH_LENGTH = 2048;
 
@@ -169,6 +171,7 @@ function single(value: unknown): string | null {
 export class Auth {
     private config: AuthConfig | null = null;
     private current: TokenRecord | null;
+    private readonly listeners = new Set<() => void>();
     private readonly backend: (baseUrl: string) => Pick<BackendApi, 'login'>;
     private readonly env: AuthEnv;
 
@@ -182,6 +185,17 @@ export class Auth {
     /** Called once the settings are known; a changed backend makes the stored token unusable. */
     configure(config: AuthConfig): void {
         this.config = { backendUrl: config.backendUrl, clientId: config.clientId };
+        this.notify();
+    }
+
+    /** Called after `configure()` and after every new token (not on `clear()`); returns the unsubscribe. */
+    subscribe(listener: () => void): () => void {
+        this.listeners.add(listener);
+        return () => void this.listeners.delete(listener);
+    }
+
+    private notify(): void {
+        for (const listener of [...this.listeners]) listener();
     }
 
     /** The bearer token for the configured backend, or `null`. Expiry is the backend's call (`token-expired`). */
@@ -236,7 +250,9 @@ export class Auth {
 
     /**
      * Renewal through a popup (spec 7.2). Must be called inside a click handler: the popup is opened synchronously.
-     * Rejects `PopupBlocked`, `PopupClosed`, `LoginUnavailable` or the backend's error.
+     * Rejects `PopupBlocked`, `PopupClosed` (also after 5 minutes without a code), `LoginUnavailable` or the backend's
+     * error. Must not run twice at once (both would share the popup window name); `useSession` makes overlapping
+     * renewals share one call.
      */
     loginInPopup(): Promise<void> {
         let config: AuthConfig;
@@ -282,7 +298,14 @@ export class Auth {
                 resolve(data.code);
             });
             // The callback closes itself right after posting; one more check gives its message time to arrive.
+            const deadline = this.env.now() + POPUP_TIMEOUT_MS;
             const stopPolling = this.env.every(POLL_MS, () => {
+                if (this.env.now() >= deadline) {
+                    stop();
+                    closeQuietly(popup);
+                    reject(new PopupClosed());
+                    return;
+                }
                 if (!isClosed(popup)) return;
                 if (!closedSeen) {
                     closedSeen = true;
@@ -326,6 +349,7 @@ export class Auth {
         };
         // Without sessionStorage the token stays in memory only (a reload logs in again).
         this.write(TOKEN_KEY, JSON.stringify(this.current));
+        this.notify();
     }
 
     private loadToken(): TokenRecord | null {
