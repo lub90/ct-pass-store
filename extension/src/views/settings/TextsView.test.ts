@@ -210,6 +210,8 @@ describe('Texte: rights and stored problems', () => {
         await openWith({ ...SETTINGS, passwordLength: 99, backendUrl: 'http://pw.example' }, '/settings/texts');
         const banner = wrapper.find('.cps-settings-form__issues');
         expect(banner.text()).toContain('Hier lassen sie sich nicht reparieren, weil die Backend-Adresse');
+        expect(banner.text()).toContain('Wende dich an jemanden, der die Einrichtung ausführen darf.');
+        expect(banner.text()).not.toContain('„Backend & Status“');
         expect(banner.text()).not.toContain(TEXT.repairOnRules);
     });
 

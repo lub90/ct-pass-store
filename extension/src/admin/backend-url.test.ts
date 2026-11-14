@@ -36,6 +36,11 @@ describe('backend url rules', () => {
         ['https://a.example\n', 'invalid'],
         ['https://a.example\\@evil.example', 'invalid'],
         ['https://a.example:99999', 'invalid'],
+        ['https://a\u200B.example', 'invisible'],
+        ['https://a.example/\u202E', 'invisible'],
+        ['https://a.example/\u2066x\u2069', 'invisible'],
+        ['https://a.example/\uFEFF', 'invalid'],
+        ['https://a.example/\u00AD', 'invisible'],
     ])('%j is refused: %s', (input, reason) => {
         expect(normalizeBackendUrl(input)).toStrictEqual({ ok: false, reason });
     });

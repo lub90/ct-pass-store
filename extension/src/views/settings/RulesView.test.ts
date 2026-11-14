@@ -29,7 +29,9 @@ const TEXT = {
     issuesNote: 'Beim nächsten Speichern wird er entfernt.',
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairNote: 'Prüf die Werte unten und speichere, um sie zu reparieren. Ungültige Regeln sind mit sicheren Werten vorbelegt.',
-    noRepair: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Backend & Status“.',
+    noRepair: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist.',
+    noRepairBackend: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Einrichtung“.',
+    noRepairBackendAsk: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     retry: 'Erneut versuchen',
@@ -393,13 +395,14 @@ describe('what the stored value lacks', () => {
     });
 
     it.each([
-        ['backendUrl', { backendUrl: 'http://pw.example' }],
-        ['oauthClientId', { oauthClientId: '' }],
-    ])('an invalid %s: no repair here (these pages never write it, E15)', async (_n, broken) => {
-        const { wrapper, writes, openWith } = await start({ path: '/settings' });
+        ['backendUrl', { backendUrl: 'http://pw.example' }, true, TEXT.noRepairBackend],
+        ['oauthClientId', { oauthClientId: '' }, true, TEXT.noRepairBackend],
+        ['backendUrl', { backendUrl: 'http://pw.example' }, false, TEXT.noRepairBackendAsk],
+    ])('an invalid %s: no repair here (these pages never write it, E15); says whom to turn to', async (_n, broken, setupCapable, text) => {
+        const { wrapper, writes, openWith } = await start({ path: '/settings', setupCapable });
         await openWith({ ...SETTINGS, passwordLength: 99, ...broken }, '/settings/rules');
-        expect(wrapper.find('.cps-settings-form__issues').text()).toContain(TEXT.noRepair);
-        expect(wrapper.find('.cps-settings-form__issues').text()).not.toContain(TEXT.noRepairVersion);
+        expect(wrapper.find('.cps-settings-form__issues').text()).toContain(text);
+        expect(wrapper.find('.cps-settings-form__issues').text()).not.toContain('„Backend & Status“');
         expect(wrapper.find('#cps-rules-length').exists()).toBe(false);
         expect(button(wrapper, TEXT.save)).toBeUndefined();
         expect(writes).toEqual([]);

@@ -864,3 +864,21 @@ describe('bidi controls in client names (M1)', () => {
         expect((JSON.parse(kv.writes[0]!.value!) as { machineClients: unknown[] }).machineClients[0]).toEqual(odd);
     });
 });
+
+describe('invisible characters in backendUrl', () => {
+    it.each(['​', '‮', '⁦', '­'])('a new or changed address with %j is refused on save, nothing written', async (ch) => {
+        const { kv, store } = setup();
+        await expect(store.saveSettings({ ...settings, backendUrl: `https://b${ch}.example` }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('a stored one is read (the backend reads it too) and kept unchanged when other fields are saved', async () => {
+        const odd = 'https://b​.example/';
+        const { kv, store } = setup([JSON.stringify({ ...settings, backendUrl: odd })]);
+        const r = await store.readSettings();
+        expect(r.state === 'ok' && r.value.backendUrl).toBe(odd);
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveSettings({ ...r.value, passwordLength: 20 }, 1);
+        expect((JSON.parse(kv.writes[0]!.value!) as SettingsV2).backendUrl).toBe('https://b​.example');
+    });
+});

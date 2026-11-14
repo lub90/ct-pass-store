@@ -125,15 +125,16 @@ onBeforeUnmount(() => {
                 v-if="request.subject"
                 class="cps-confirm__subject"
             >
-                <span
+                <!-- Isolated: names and addresses may carry their own writing direction. -->
+                <bdi
                     :id="`${uid}-subject`"
                     class="cps-confirm__subject-name"
-                >{{ request.subject.name }}</span>
-                <span
+                >{{ request.subject.name }}</bdi>
+                <bdi
                     v-if="request.subject.detail"
                     :id="`${uid}-subject-detail`"
                     class="cps-confirm__subject-detail"
-                >{{ request.subject.detail }}</span>
+                >{{ request.subject.detail }}</bdi>
             </p>
             <p
                 :id="`${uid}-text`"

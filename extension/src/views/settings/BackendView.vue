@@ -43,6 +43,8 @@ const allowed = computed(() => app.settingsEditor.value.settings);
 const admin = computed(() => app.state.value === 'admin');
 /** The address the app runs with (startup); the only one ever asked. */
 const runningUrl = computed(() => app.settings.value?.backendUrl ?? null);
+/** Addresses compare without trailing slashes, as the store and the backend normalize them. */
+const bare = (url: string | null | undefined): string | null => (url == null ? null : url.replace(/\/+$/, ''));
 
 // --- The address ---------------------------------------------------------------------------------------------------
 
@@ -50,11 +52,15 @@ const form = useSettingsForm<SettingsV2>(
     () => services.store.readSettings(),
     (value, revision) => services.store.saveSettings(value, revision),
     {
+        // A stored trailing slash is no change of its own: the unchanged state holds the normalized address.
+        prepare: (stored) => (stored.backendUrl === undefined ? stored : { ...stored, backendUrl: bare(stored.backendUrl)! }),
         beforeSave: async (next, previous) => {
-            if (next.backendUrl === previous?.backendUrl) return true;
+            if (bare(next.backendUrl) === bare(previous?.backendUrl)) return true;
             const answer = await confirm({
                 title: t('backend.confirmTitle'),
-                text: t('backend.confirmText', { old: previous?.backendUrl ?? t('backend.noAddress'), new: next.backendUrl ?? t('backend.noAddress') }),
+                // Both addresses isolated in the dialog's subject (`<bdi>`).
+                subject: { name: next.backendUrl ?? t('backend.noAddress'), detail: t('backend.confirmOld', { old: previous?.backendUrl ?? t('backend.noAddress') }) },
+                text: t('backend.confirmText'),
                 confirmLabel: t('backend.confirm'),
                 cancelLabel: t('common.cancel'),
                 danger: true,
@@ -68,7 +74,7 @@ const form = useSettingsForm<SettingsV2>(
 );
 
 // No repair here: this page writes the address only into a valid value (spec 4.4 „Stored problems“).
-const unrepairable = computed(() => ({ text: `${t('backend.noRepair')} ${app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk')}` }));
+const unrepairable = computed(() => ({ text: app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk') }));
 
 watch(
     allowed,
@@ -96,7 +102,7 @@ watch(
     { immediate: true },
 );
 
-const URL_ERRORS = { 'not-https': 'notHttps', credentials: 'credentials', query: 'query', fragment: 'fragment', invalid: 'invalid' } as const;
+const URL_ERRORS = { 'not-https': 'notHttps', credentials: 'credentials', query: 'query', fragment: 'fragment', invalid: 'invalid', invisible: 'invisible' } as const;
 const urlError = computed(() => (checked.value.ok ? undefined : t(`backend.urlErrors.${URL_ERRORS[checked.value.reason]}`)));
 
 /** The read value's address, to warn as soon as the field differs from it. */
@@ -104,13 +110,13 @@ const storedUrl = ref<string | null>(null);
 watch(
     () => [form.status.value, form.savedAt.value] as const,
     () => {
-        if (form.status.value === 'ready' && !form.dirty.value) storedUrl.value = form.value.value?.backendUrl ?? null;
+        if (form.status.value === 'ready' && !form.dirty.value) storedUrl.value = bare(form.value.value?.backendUrl);
     },
     { immediate: true },
 );
 const changed = computed(() => form.value.value !== null && checked.value.ok && checked.value.url !== storedUrl.value);
 /** The stored address isn't the one the app runs with (saved here, or elsewhere since startup). */
-const needsReload = computed(() => form.status.value === 'ready' && !form.dirty.value && storedUrl.value !== null && storedUrl.value !== runningUrl.value);
+const needsReload = computed(() => form.status.value === 'ready' && !form.dirty.value && storedUrl.value !== null && storedUrl.value !== bare(runningUrl.value));
 
 function reloadPage(): void {
     window.location.reload();
@@ -244,6 +250,12 @@ watch(
             {{ t('backend.selfTest') }}
         </h2>
         <p
+            v-if="version"
+            class="cps-backend__version"
+        >
+            {{ t('backend.version', { version }) }}
+        </p>
+        <p
             v-if="!admin"
             class="cps-backend__muted"
         >
@@ -254,13 +266,7 @@ watch(
                 v-if="runningUrl"
                 class="cps-backend__tested cps-backend__muted"
             >
-                {{ t('backend.tested', { url: runningUrl }) }}
-            </p>
-            <p
-                v-if="version"
-                class="cps-backend__version"
-            >
-                {{ t('backend.version', { version }) }}
+                {{ t('backend.tested') }} <bdi>{{ runningUrl }}</bdi>
             </p>
             <StatusLine
                 v-if="running"

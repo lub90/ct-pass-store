@@ -29,6 +29,13 @@ export function backendUrlProblem(s: string): BackendUrlProblem | null {
     }
 }
 
+/**
+ * Invisible format characters (`\p{Cf}`: zero-width spaces, soft hyphens, bidi controls): a new or changed
+ * `backendUrl` must not contain them (the field and the store's save refuse it), since the address shown would not be
+ * the address used. A stored one is still read, like the backend reads it.
+ */
+export const INVISIBLE = /\p{Cf}/u;
+
 const isPlainHttpsUrl = (s: string): boolean => backendUrlProblem(s) === null;
 
 /** Bidi embedding/override (U+202A–U+202E) and isolate (U+2066–U+2069) controls: they can make a text read differently. */

@@ -50,7 +50,7 @@ const unrepairable = computed(() => {
     const read = form.invalidRead.value;
     const r = read ? settingsRepair(read) : null;
     if (r && 'value' in r) return { text: t('settings.repairOnRules'), to: '/settings/rules', linkText: t('pages.rules') };
-    if (r?.reason === 'backend') return { text: t('settings.noRepair') };
+    if (r?.reason === 'backend') return { text: app.setupCapable.value ? t('settings.noRepairBackend') : t('settings.noRepairBackendAsk') };
     // Only setup-capable people see „Einrichtung“ (spec 3.1.3); others are told whom to ask.
     return { text: app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk') };
 });

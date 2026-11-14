@@ -30,14 +30,17 @@ const TEXT = {
         query: 'Die Adresse darf kein „?“ enthalten.',
         fragment: 'Die Adresse darf kein „#“ enthalten.',
         invalid: 'Gib eine vollständige Adresse ein, z. B. https://passwort.example.org.',
+        invisible: 'Die Adresse enthält unsichtbare Zeichen oder Steuerzeichen für die Schreibrichtung.',
     },
+    noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
     selfTest: 'Selbsttest',
     adminsOnly: 'Den Selbsttest dürfen nur Admins ausführen, die beim Backend angemeldet sind.',
     runAgain: 'Erneut prüfen',
     runWrite: 'Schreibtest ausführen',
     writeHelp: 'Der Schreibtest legt einen Testwert im Passwortspeicher an, liest ihn und löscht ihn wieder. Echte Passwörter bleiben unberührt.',
     withWrite: 'Mit Schreibtest.',
-    tested: `Geprüft wird das Backend unter ${BACKEND}.`,
+    tested: `Geprüft wird das Backend unter ${BACKEND}`,
     unreachable: 'Der Dienst ist gerade nicht erreichbar. Versuch es gleich noch einmal.',
 };
 
@@ -85,12 +88,14 @@ describe('Backend & Status: rights', () => {
     });
 
     it('a settings editor who is no admin edits the address, but the self-test is neither run nor offered', async () => {
-        const { wrapper, selfTests } = await start({ path: '/settings/backend', admin: false });
+        const { wrapper, selfTests } = await start({ path: '/settings/backend', admin: false, backendVersion: '0.1.4' });
         expect(input(wrapper).element.value).toBe(BACKEND);
         expect(selfTests).toEqual([]);
         expect(wrapper.find('.cps-backend__selftest').text()).toContain(TEXT.adminsOnly);
         expect(button(wrapper, TEXT.runAgain)).toBeUndefined();
         expect(button(wrapper, TEXT.runWrite)).toBeUndefined();
+        // The version (from the login) is not admin-only.
+        expect(wrapper.find('.cps-backend__version').text()).toBe('Backend-Version: 0.1.4');
     });
 });
 
@@ -112,6 +117,8 @@ describe('Backend & Status: the address (spec 4.8, E15)', () => {
         ['https://neu.example#y', 'fragment'],
         ['https://neu.example ', 'invalid'],
         ['', 'invalid'],
+        ['https://neu\u200B.example', 'invisible'],
+        ['https://neu.example/\u202Eabc', 'invisible'],
     ] as const)('%j is refused at the field (%s) and can’t be saved', async (text, reason) => {
         const { wrapper, writes } = await start({ path: '/settings/backend' });
         await type(wrapper, text);
@@ -177,6 +184,63 @@ describe('Backend & Status: the address (spec 4.8, E15)', () => {
         await answer(TEXT.confirm);
         expect(writes).toEqual([]);
         expect(wrapper.find('.cps-settings-form__conflict').exists()).toBe(true);
+    });
+
+    it('a stored address with a trailing slash is the same address: nothing changed, no warning, no reload note, no leave question', async () => {
+        const { wrapper, router, writes } = await start({ path: '/settings/backend', settings: { ...SETTINGS, backendUrl: `${BACKEND}/` } });
+        expect(input(wrapper).element.value).toBe(BACKEND);
+        expect(warning(wrapper).exists()).toBe(false);
+        expect(disabled(wrapper, TEXT.save)).toBe(true);
+        expect(wrapper.find('.cps-backend__reload').exists()).toBe(false);
+        await router.push('/settings');
+        await settle();
+        expect(dialog()).toBeNull();
+        expect(router.currentRoute.value.path).toBe('/settings');
+        expect(writes).toEqual([]);
+    });
+
+    it('a new address from that stored with a slash: the dialog names the stored one; afterwards a reload is due', async () => {
+        const { wrapper } = await start({ path: '/settings/backend', settings: { ...SETTINGS, backendUrl: `${BACKEND}/` } });
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.save);
+        expect(dialog()!.textContent).toContain(BACKEND);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-backend__reload').exists()).toBe(true);
+    });
+
+    it('the stored address changed elsewhere since startup: a reload is due, without a change here', async () => {
+        const { wrapper, router, changeElsewhere } = await start({ path: '/settings' });
+        await changeElsewhere({ backendUrl: NEW });
+        await router.push('/settings/backend');
+        await settle();
+        expect(input(wrapper).element.value).toBe(NEW);
+        expect(warning(wrapper).exists()).toBe(false);
+        expect(disabled(wrapper, TEXT.save)).toBe(true);
+        expect(wrapper.find('.cps-backend__reload').text()).toContain(TEXT.reloadNote);
+        // The self-test still checks the address the app runs with.
+        expect(wrapper.find('.cps-backend__tested').text()).toBe(TEXT.tested);
+    });
+
+    it('addresses are shown isolated (<bdi>): the tested one and both in the dialog', async () => {
+        const { wrapper } = await start({ path: '/settings/backend' });
+        expect(wrapper.find('.cps-backend__tested bdi').text()).toBe(BACKEND);
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.save);
+        expect(dialog()!.querySelector('bdi.cps-confirm__subject-name')?.textContent).toBe(NEW);
+        expect(dialog()!.querySelector('bdi.cps-confirm__subject-detail')?.textContent).toContain(BACKEND);
+    });
+
+    it.each([
+        [false, TEXT.noRepairAsk],
+        [true, TEXT.noRepairVersion],
+    ])('an invalid stored value (setup-capable: %s): no field, says once that it can’t be repaired here, and whom to turn to', async (setupCapable, text) => {
+        const { wrapper, openWith, writes } = await start({ path: '/settings', setupCapable });
+        await openWith({ ...SETTINGS, passwordLength: 99 }, '/settings/backend');
+        const banner = wrapper.find('.cps-settings-form__issues');
+        expect(banner.text()).toContain(text);
+        expect(banner.text().split('Hier lassen sie sich nicht reparieren').length).toBe(2);
+        expect(input(wrapper).exists()).toBe(false);
+        expect(writes).toEqual([]);
     });
 
     it('no reload note while the stored address is the one the app runs with', async () => {
