@@ -317,14 +317,26 @@ describe('Auth.completePageLogin', () => {
         expect(h.storage.getItem(LOGIN_KEY)).toBeNull();
     });
 
-    it('works on a fresh page that has no configuration yet (uses the stored backend)', async () => {
+    it('works on a fresh page once it is configured (uses the stored backend)', async () => {
         const { h, auth } = setup();
         const { stored } = await startLogin(auth, h);
         const backend = fakeBackend();
         const fresh = new Auth(backend.factory, h.env);
+        ready(fresh);
         await fresh.completePageLogin({ code: 'c', state: stored.state });
         expect(backend.factory).toHaveBeenCalledWith(BACKEND);
         expect(backend.login).toHaveBeenCalledOnce();
+    });
+
+    it('refuses without configuration: no exchange, no token', async () => {
+        const { h, auth } = setup();
+        const { stored } = await startLogin(auth, h);
+        const backend = fakeBackend();
+        const fresh = new Auth(backend.factory, h.env);
+        await expect(fresh.completePageLogin({ code: 'c', state: stored.state })).rejects.toBeInstanceOf(LoginUnavailable);
+        expect(backend.login).not.toHaveBeenCalled();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+        expect(fresh.token()).toBeNull();
     });
 
     it('refuses a login started for another backend than the configured one, without exchanging the code', async () => {

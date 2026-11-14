@@ -9,7 +9,7 @@ import { createMemoryHistory, type Router } from 'vue-router';
 import App from './App.vue';
 import { SERVICES_KEY, type Services } from './app/services';
 import { createAppState } from './app/useAppState';
-import { SESSION_KEY, createSession } from './app/useSession';
+import { createSession } from './app/useSession';
 import type { BackendApi } from './backend/api';
 import { Auth, CALLBACK_WINDOW_KEY, LAST_LOGIN_KEY, LOGIN_KEY, LOGIN_RETRY_KEY, POPUP_MESSAGE, TOKEN_KEY, type AuthEnv, type CallbackWindow } from './backend/auth';
 import { backendBase } from './backend/http';
@@ -76,7 +76,7 @@ interface Options {
     storage?: Record<string, string>;
     /** sessionStorage can't be used (private mode, blocked). */
     noStorage?: boolean;
-    /** Provide the session from outside (`SESSION_KEY`), so the test can drive it. */
+    /** Put a session into the services, so the test can drive it. */
     session?: boolean;
 }
 
@@ -162,7 +162,9 @@ async function build(o: Options = {}) {
             return original(...args);
         }) as never);
     }
+    const session = o.session ? createSession(auth, () => router.currentRoute.value.fullPath) : null;
     const services: Services = {
+        ...(session ? { session } : {}),
         ct: o.appCt ? o.appCt(ct) : ct,
         store: new ExtensionStore(new ChurchToolsKv(ct, 'ctpassstore')),
         auth,
@@ -172,19 +174,17 @@ async function build(o: Options = {}) {
     };
     const win: CallbackWindow = { opener: o.opener ?? null, origin: ORIGIN, close: vi.fn() };
     await router.push(o.path ?? '/');
-    return { router, auth, storage, assigned, calls, win, fakeCt, fakeBackend, services };
+    return { router, auth, storage, assigned, calls, win, fakeCt, fakeBackend, services, session };
 }
 
 async function start(o: Options = {}) {
     const built = await build(o);
-    const { router, auth, services, win } = built;
-    const session = o.session ? createSession(auth, () => router.currentRoute.value.fullPath) : null;
+    const { router, services, win } = built;
     const provide: Record<symbol, unknown> = { [SERVICES_KEY as symbol]: services, [CALLBACK_WINDOW_KEY as symbol]: win };
-    if (session) provide[SESSION_KEY as symbol] = session;
     const wrapper = mount(App, { attachTo: document.body, global: { plugins: [router, createAppI18n('de')], provide } });
     mounted.push(wrapper);
     await settle();
-    return { ...built, wrapper, session };
+    return { ...built, wrapper };
 }
 
 /** The login data a page login leaves in sessionStorage before ChurchTools sends the person back. */
@@ -301,7 +301,7 @@ describe('routes (spec 4.1)', () => {
         expect(wrapper.find('h1').text()).toBe(title);
     });
 
-    it.each(['/manage', '/manage/5', '/settings', '/settings/rules', '/settings/access/clients/new', '/settings/backend', '/settings/backup', '/settings/setup'])(
+    it.each(['/manage', '/manage/5', '/settings', '/settings/rules', '/settings/texts', '/settings/access', '/settings/access/clients/new', '/settings/access/clients/x', '/settings/backend', '/settings/backup', '/settings/setup'])(
         'a plain user on %s gets the missing-rights banner, not the page',
         async (path) => {
             const { wrapper } = await start({ token: { admin: false }, path });
@@ -310,6 +310,8 @@ describe('routes (spec 4.1)', () => {
             expect(banner.exists()).toBe(true);
             expect(banner.text()).toMatch(/^Diese Seite ist nur für Admins/);
             expect(wrapper.find('main a[href="/"]').exists()).toBe(true);
+            // The card's footer keeps its link to „Über“ next to the banner (spec 4.1).
+            expect(wrapper.find('footer a[href="/about"]').exists()).toBe(true);
         },
     );
 

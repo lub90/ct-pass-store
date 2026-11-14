@@ -103,13 +103,7 @@ export class ExtensionStore {
         return this.save('access', AccessSchema, next, expectedRevision, dropUnusable);
     }
 
-    /** Spec 6.3 on the newest `settings` value and the category names. KV errors propagate. */
-    async oldLayout(): Promise<boolean> {
-        const [names, loaded] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
-        return layoutOf(loaded.newest, names);
-    }
-
-    /** Startup: `oldLayout()` and `readSettings()` from one listing of `settings`. KV errors propagate. */
+    /** Startup: spec 6.3 (old layout) and `readSettings()` from one listing of `settings`. KV errors propagate. */
     async readStartup(): Promise<{ oldLayout: boolean; settings: Read<SettingsV2> }> {
         const [names, loaded] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
         return { oldLayout: layoutOf(loaded.newest, names), settings: this.parse('settings', SettingsSchema, loaded) };

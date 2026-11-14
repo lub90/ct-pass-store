@@ -26,8 +26,8 @@ const router = useRouter();
 const route = useRoute();
 const services = useServices();
 
-// A session provided from outside (tests) is used as is; otherwise the app makes its own.
-const session = inject(SESSION_KEY, null) ?? createSession(services.auth, () => router.currentRoute.value.fullPath);
+// A session in the services (tests) is used as is; otherwise the app makes its own.
+const session = services.session ?? createSession(services.auth, () => router.currentRoute.value.fullPath);
 provide(SESSION_KEY, session);
 provide(AUTH_KEY, services.auth);
 

@@ -8,6 +8,7 @@ import { Auth } from '../backend/auth';
 import { EXTENSION_KEY } from '../config';
 import { createCtApi, type CtApi } from '../ct/api';
 import type { Language } from '../i18n';
+import type { Session } from './useSession';
 import { ChurchToolsKv } from '../store/churchtools-kv';
 import { ExtensionStore } from '../store/repository';
 
@@ -20,6 +21,8 @@ export interface Services {
     language: Language;
     /** The extension's own version; `APP_VERSION` when left out (tests pass their own). */
     appVersion?: string;
+    /** The session of the app; made by `App.vue` when left out (tests pass their own to drive it). */
+    session?: Session;
 }
 
 export const SERVICES_KEY: InjectionKey<Services> = Symbol('services');

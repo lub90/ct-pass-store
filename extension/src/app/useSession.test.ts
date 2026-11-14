@@ -473,8 +473,8 @@ describe('with a real Auth', () => {
         const auth = new Auth(backend, e);
         const session = createSession(auth, () => '/');
         map.set(LOGIN_KEY, JSON.stringify({ state: 's'.repeat(43), verifier: 'v'.repeat(43), returnPath: '/', backendUrl: BACKEND }));
-        await auth.completePageLogin({ code: 'c', state: 's'.repeat(43) });
         auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        await auth.completePageLogin({ code: 'c', state: 's'.repeat(43) });
         auth.bindPerson(1);
         expect(session.admin.value).toBe(true);
         expect(session.backendVersion.value).toBe('0.1.7');

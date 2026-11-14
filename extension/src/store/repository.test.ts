@@ -22,31 +22,24 @@ const setup = (values: string[] = [JSON.stringify(settings)]) => {
     return { kv, store: new ExtensionStore(kv) };
 };
 
-describe('ExtensionStore.oldLayout (spec 6.3)', () => {
+describe('ExtensionStore.readStartup().oldLayout (spec 6.3)', () => {
     const old = JSON.stringify({ adminUsers: [1], readAccessUsers: [2] });
     it('is true for an unversioned settings value with old fields', async () => {
-        expect(await new ExtensionStore(new MemoryKv({ settings: [old] })).oldLayout()).toBe(true);
-        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ readAccessUsers: [] })] })).oldLayout()).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [old] })).readStartup().then((s) => s.oldLayout)).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ readAccessUsers: [] })] })).readStartup().then((s) => s.oldLayout)).toBe(true);
     });
     it('is true when a setupCompleted category exists', async () => {
-        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings)], setupCompleted: [] })).oldLayout()).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings)], setupCompleted: [] })).readStartup().then((s) => s.oldLayout)).toBe(true);
     });
     it('reads the newest settings value', async () => {
-        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings), old] })).oldLayout()).toBe(true);
-        expect(await new ExtensionStore(new MemoryKv({ settings: [old, JSON.stringify(settings)] })).oldLayout()).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings), old] })).readStartup().then((s) => s.oldLayout)).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [old, JSON.stringify(settings)] })).readStartup().then((s) => s.oldLayout)).toBe(false);
     });
     it('is false for the new layout, nothing stored and broken JSON', async () => {
-        expect(await setup().store.oldLayout()).toBe(false);
-        expect(await new ExtensionStore(new MemoryKv()).oldLayout()).toBe(false);
-        expect(await new ExtensionStore(new MemoryKv({ settings: ['{nope'] })).oldLayout()).toBe(false);
-        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ ...settings, adminUsers: [1] })] })).oldLayout()).toBe(false);
-    });
-    it('passes KV errors on (an outage is not a layout)', async () => {
-        const kv = new MemoryKv({ settings: [old] });
-        kv.categoryNames = async () => {
-            throw new CtForbiddenError();
-        };
-        await expect(new ExtensionStore(kv).oldLayout()).rejects.toBeInstanceOf(CtForbiddenError);
+        expect(await setup().store.readStartup().then((s) => s.oldLayout)).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv()).readStartup().then((s) => s.oldLayout)).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv({ settings: ['{nope'] })).readStartup().then((s) => s.oldLayout)).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ ...settings, adminUsers: [1] })] })).readStartup().then((s) => s.oldLayout)).toBe(false);
     });
 });
 
@@ -59,15 +52,21 @@ describe('ExtensionStore.readStartup (layout and settings in one read)', () => {
         return listed;
     };
 
-    it('lists the settings values once and gives the same answers as oldLayout and readSettings', async () => {
-        const seeds: Record<string, string[]>[] = [{ settings: [JSON.stringify(settings)] }, { settings: [old] }, { settings: [JSON.stringify(settings)], setupCompleted: [] }, {}, { settings: ['{nope'] }];
-        for (const seed of seeds) {
+    it('lists the settings values once and gives the layout and the settings read', async () => {
+        const seeds: [Record<string, string[]>, boolean][] = [
+            [{ settings: [JSON.stringify(settings)] }, false],
+            [{ settings: [old] }, true],
+            [{ settings: [JSON.stringify(settings)], setupCompleted: [] }, true],
+            [{}, false],
+            [{ settings: ['{nope'] }, false],
+        ];
+        for (const [seed, oldLayout] of seeds) {
             const kv = new MemoryKv(seed);
             const listed = counted(kv);
             const store = new ExtensionStore(kv);
             const startup = await store.readStartup();
             expect(listed).toEqual(['settings']);
-            expect(startup).toEqual({ oldLayout: await store.oldLayout(), settings: await store.readSettings() });
+            expect(startup).toEqual({ oldLayout, settings: await store.readSettings() });
         }
     });
 

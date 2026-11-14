@@ -304,6 +304,8 @@ export class Auth {
      * first, so it is used at most once whatever happens.
      */
     async completePageLogin(query: Record<string, unknown>): Promise<string> {
+        // Without the settings there is no backend to compare with: the code is not exchanged.
+        const config = this.requireConfig();
         const raw = this.read(LOGIN_KEY);
         this.remove(LOGIN_KEY);
         // Fails closed: login data that can't be removed could be used again.
@@ -313,7 +315,7 @@ export class Auth {
         const code = query.code;
         if (!login || state === null || state !== login.state || !usableCode(code)) throw new LoginStateError();
         // The code goes only to the backend the settings name now, not to one remembered from an older login.
-        if (this.config && backendBase(login.backendUrl) !== backendBase(this.config.backendUrl)) throw new LoginStateError();
+        if (backendBase(login.backendUrl) !== backendBase(config.backendUrl)) throw new LoginStateError();
         const result = await this.backend(login.backendUrl).login(code, login.verifier, this.redirectUri());
         this.storeToken(result, login.backendUrl);
         this.write(LAST_LOGIN_KEY, String(this.env.now()));
