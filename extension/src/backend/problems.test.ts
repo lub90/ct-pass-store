@@ -161,7 +161,7 @@ describe('problemMessageKey', () => {
         expect(de.problems.primaryPasswordRequired).toBe('Bitte gib dein ChurchTools-Passwort ein.');
         expect(de.problems.invalidPrimaryPassword).toBe('Das ChurchTools-Passwort stimmt nicht.');
         expect(de.problems.customPasswordNotAllowed).toBe('Eigene Passwörter sind gerade nicht erlaubt.');
-        expect(de.problems.rateLimited).toBe('Zu viele Versuche. Versuch es in {n} Minuten noch einmal.');
+        expect(de.problems.rateLimited).toBe('Zu viele Versuche. Versuch es in einer Minute noch einmal. | Zu viele Versuche. Versuch es in {n} Minuten noch einmal.');
         expect(de.problems.forbidden).toBe('Dafür hast du keine Berechtigung.');
         expect(de.problems.personNotFound).toBe('Diese Person gibt es in ChurchTools nicht mehr.');
         expect(de.problems.loginFailed).toBe('Die Anmeldung hat nicht geklappt. Lade die Seite neu.');

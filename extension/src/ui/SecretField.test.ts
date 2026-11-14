@@ -102,4 +102,10 @@ describe('SecretField', () => {
         expect(mount(SecretField, { props }).find('input').classes()).not.toContain('cps-secret__input--mono');
         expect(mount(SecretField, { props: { ...props, mono: true } }).find('input').classes()).toContain('cps-secret__input--mono');
     });
+
+    it('reports the reveal state through v-model:revealed', async () => {
+        const w = mount(SecretField, { props: { ...props, revealed: false } });
+        await w.find('button[aria-label="Show"]').trigger('click');
+        expect(w.emitted('update:revealed')).toEqual([[true]]);
+    });
 });

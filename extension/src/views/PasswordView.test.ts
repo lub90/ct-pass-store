@@ -183,10 +183,25 @@ async function start(o: Options = {}) {
     });
     const api: BackendApi = fakeBackend;
     const calls = { get: 0, put: 0 };
+    /** While set, a PUT waits for it before it reaches the backend (a slow request). */
+    const gate: { hold: Promise<void> | null } = { hold: null };
     const counted: BackendApi = {
         ...api,
         getEntry: (id) => (calls.get++, api.getEntry(id)),
-        putEntry: (id, body) => (calls.put++, api.putEntry(id, body)),
+        putEntry: async (id, body) => {
+            calls.put++;
+            if (gate.hold) await gate.hold;
+            return api.putEntry(id, body);
+        },
+    };
+    /** Holds the next PUTs; the returned function lets them through. */
+    const holdPuts = (): (() => void) => {
+        let release = (): void => undefined;
+        gate.hold = new Promise<void>((resolve) => (release = resolve));
+        return () => {
+            gate.hold = null;
+            release();
+        };
     };
     const auth = new Auth(() => counted, env);
     const session = createSession(auth, () => router.currentRoute.value.fullPath);
@@ -207,7 +222,7 @@ async function start(o: Options = {}) {
     });
     mounted.push(wrapper);
     await settle();
-    return { wrapper, router, fakeBackend, session, auth, clock, open, assigned, calls, stored, settings };
+    return { wrapper, router, fakeBackend, session, auth, clock, open, assigned, calls, stored, settings, holdPuts };
 }
 
 /** Startup awaits real Web Crypto as well as promises, so a few macrotasks are needed. */
@@ -399,6 +414,39 @@ describe('state 2, set a new one', () => {
         expect(button(wrapper, TEXT.submitCustom)!.attributes('disabled')).toBeDefined();
     });
 
+    it('while masked, disallowed characters are named by kind, never echoed', async () => {
+        const { wrapper } = await start({ passwordLength: 14 });
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, 'Abcdefgh12345! ä#\t\u200b');
+        const named = wrapper.find('.cps-rules__named').text();
+        expect(named).toContain('Leerzeichen');
+        expect(named).toContain('Umlaute und Zeichen außerhalb von ASCII');
+        expect(named).toContain('Sonderzeichen, die nicht in der Liste stehen');
+        expect(named).toContain('Steuerzeichen');
+        expect(named).not.toContain('ä');
+        expect(named).not.toContain('#');
+        expect(named).not.toContain('U+');
+    });
+
+    it('while revealed, disallowed characters are named; invisible ones as U+XXXX, never as an empty „“', async () => {
+        const { wrapper } = await start({ passwordLength: 14 });
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, 'Abcdefgh12345! ä#\t\u200b\u0007');
+        await wrapper.find('button[aria-label="Passwort anzeigen"]').trigger('click');
+        const named = wrapper.find('.cps-rules__named').text();
+        expect(named).toContain('Leerzeichen');
+        expect(named).toContain('„ä“');
+        expect(named).toContain('„#“');
+        expect(named).toContain('Tabulator');
+        expect(named).toContain('U+200B');
+        expect(named).toContain('U+0007');
+        expect(named).not.toMatch(/„\s*“/);
+        expect(named).not.toContain('\u200b');
+        // Hidden again: back to kinds.
+        await wrapper.find('button[aria-label="Passwort verbergen"]').trigger('click');
+        expect(wrapper.find('.cps-rules__named').text()).not.toContain('ä');
+    });
+
     it('a password over 128 characters fails the length rule', async () => {
         const { wrapper } = await start();
         await click(wrapper, TEXT.setPassword);
@@ -584,15 +632,16 @@ describe('problems (spec 8.2)', () => {
     });
 
     it.each([
-        [125, 3],
-        [0, 1],
-        [999_999, 60],
-    ])('too-many-attempts with retryAfter %s shows %s minutes', async (retryAfter, minutes) => {
+        [125, 'in 3 Minuten'],
+        [60, 'in einer Minute'],
+        [0, 'in einer Minute'],
+        [999_999, 'in 60 Minuten'],
+    ])('too-many-attempts with retryAfter %s says „%s“', async (retryAfter, minutes) => {
         const { wrapper, fakeBackend } = await start();
         await click(wrapper, TEXT.setPassword);
         fakeBackend.failNext('too-many-attempts', 429, { retryAfter });
         await click(wrapper, TEXT.submitGenerate);
-        expect(errorAbove(wrapper).text()).toBe(`Zu viele Versuche. Versuch es in ${minutes} Minuten noch einmal.`);
+        expect(errorAbove(wrapper).text()).toBe(`Zu viele Versuche. Versuch es ${minutes} noch einmal.`);
         expect(errorAbove(wrapper).attributes('role')).toBe('alert');
     });
 
@@ -644,6 +693,75 @@ describe('problems (spec 8.2)', () => {
         fakeBackend.failNext('forbidden', 403);
         await click(wrapper, TEXT.submitGenerate);
         expect(errorAbove(wrapper).text()).toBe('Dafür hast du keine Berechtigung.');
+    });
+});
+
+describe('a slow request (review of Task 12)', () => {
+    it('„Abbrechen“ is disabled while the request runs', async () => {
+        const { wrapper, holdPuts } = await start();
+        await click(wrapper, TEXT.setPassword);
+        const release = holdPuts();
+        await click(wrapper, TEXT.submitGenerate);
+        expect(button(wrapper, TEXT.cancel)!.attributes('disabled')).toBeDefined();
+        release();
+        await settle();
+        expect(resultInput(wrapper).exists()).toBe(true);
+    });
+
+    it('direct path: a loading line instead of the form while the request runs', async () => {
+        const { wrapper, holdPuts, fakeBackend } = await start({ allowCustom: false, requirePrimary: false });
+        const release = holdPuts();
+        await click(wrapper, TEXT.setPassword);
+        expect(wrapper.find('.cps-flow [role="status"]').text()).toBe('Passwort wird erzeugt …');
+        expect(button(wrapper, TEXT.submitGenerate)).toBeUndefined();
+        expect(button(wrapper, TEXT.cancel)).toBeUndefined();
+        release();
+        await settle();
+        expect(resultInput(wrapper).element.value).toBe(fakeBackend.entries.get(ME));
+    });
+
+    it('direct path: a failure leaves the retry surface', async () => {
+        const { wrapper, fakeBackend } = await start({ allowCustom: false, requirePrimary: false });
+        fakeBackend.failNext('forbidden', 403);
+        await click(wrapper, TEXT.setPassword);
+        expect(errorAbove(wrapper).text()).toBe('Dafür hast du keine Berechtigung.');
+        await click(wrapper, TEXT.submitGenerate);
+        expect(resultInput(wrapper).exists()).toBe(true);
+    });
+
+    it.each([
+        ['after the request landed', true],
+        ['before the request landed', false],
+    ])('leaving during a pending PUT and coming back %s: the pill matches the backend', async (_name, releaseFirst) => {
+        const { wrapper, router, holdPuts, fakeBackend } = await start({ allowCustom: false, requirePrimary: false });
+        const release = holdPuts();
+        await click(wrapper, TEXT.setPassword);
+        await router.push('/about');
+        await settle();
+        if (releaseFirst) {
+            release();
+            await settle();
+        }
+        await router.push('/');
+        await settle();
+        if (!releaseFirst) {
+            expect(wrapper.find('.cps-pill').text()).toBe(TEXT.none);
+            release();
+            await settle();
+        }
+        expect(fakeBackend.entries.has(ME)).toBe(true);
+        expect(wrapper.find('.cps-pill').text()).toBe(TEXT.isSet);
+        expect(everything(wrapper)).not.toContain(fakeBackend.entries.get(ME)!);
+    });
+
+    it('leaving the flow reads the status again', async () => {
+        const { wrapper, fakeBackend } = await start();
+        expect(wrapper.find('.cps-pill').text()).toBe(TEXT.none);
+        await click(wrapper, TEXT.setPassword);
+        // Meanwhile an admin set one (another tab, another person).
+        await fakeBackend.putEntry(ME, { secondaryPwd: VALID });
+        await click(wrapper, TEXT.cancel);
+        expect(wrapper.find('.cps-pill').text()).toBe(TEXT.isSet);
     });
 });
 
@@ -699,6 +817,16 @@ describe('session (spec 7.2)', () => {
         await click(wrapper, TEXT.renew);
         expect(open).toHaveBeenCalledTimes(1);
         expect(customInput(wrapper).element.value).toBe(VALID);
+    });
+
+    it('token-expired again right after a successful renewal is not silent', async () => {
+        const { wrapper, fakeBackend, auth, calls } = await start();
+        vi.spyOn(auth, 'loginInPopup').mockResolvedValue(undefined);
+        await click(wrapper, TEXT.setPassword);
+        fakeBackend.expireToken();
+        await click(wrapper, TEXT.submitGenerate);
+        expect(calls.put).toBe(2);
+        expect(errorAbove(wrapper).text()).toBe('Deine Anmeldung ist abgelaufen. Lade die Seite neu.');
     });
 
     it('token-expired on submit with a blocked popup keeps the input as well', async () => {

@@ -7,6 +7,7 @@ import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { failureMessage, isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
+import { translate } from '../i18n';
 import { SCHEMA_VERSION } from '../model/schemas';
 import Banner from '../ui/Banner.vue';
 
@@ -29,7 +30,7 @@ const message = computed(() => (app.failure.value ? failureMessage(app.failure.v
     </template>
     <template v-else-if="app.state.value === 'backend-error' && message">
         <Banner kind="error">
-            <p>{{ t(message.key, message.params) }}</p>
+            <p>{{ translate(t, message.key, message.params) }}</p>
             <details v-if="editor && message.detail">
                 <summary>{{ t('state.details') }}</summary>
                 <p>{{ message.detail }}</p>

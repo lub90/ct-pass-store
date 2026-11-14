@@ -53,6 +53,9 @@ const de = {
             space: 'Leerzeichen',
             tab: 'Tabulator',
             newline: 'Zeilenumbruch',
+            control: 'Steuerzeichen',
+            nonAscii: 'Umlaute und Zeichen außerhalb von ASCII',
+            otherSymbol: 'Sonderzeichen, die nicht in der Liste stehen',
         },
         // State 3.
         resultLabel: 'Dein neues Passwort',
@@ -61,6 +64,7 @@ const de = {
         copyFailed: 'Kopieren hat nicht geklappt. Markier das Passwort und kopier es selbst.',
         onlyNow: 'Du siehst es nur jetzt. Notier es dir oder speicher es in deinem Passwort-Manager.',
         done: 'Fertig',
+        generating: 'Passwort wird erzeugt …',
     },
     // Spec 7.2: the renewal popup was blocked or closed.
     session: {
@@ -94,7 +98,7 @@ const de = {
         updateVersions: 'Gespeicherte Daten: Version {stored}. Diese Erweiterung ({app}) unterstützt Daten bis Version {supported}.',
         unavailable: 'Der Dienst ist gerade nicht erreichbar. Versuch es später noch einmal.',
         ctUnavailable: 'ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.',
-        ctRateLimited: 'ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.',
+        ctRateLimited: 'ChurchTools bremst gerade. Versuch es in einer Minute noch einmal. | ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.',
         toBackend: 'Zu „Backend & Status“',
         details: 'Details',
         loginAgain: 'Erneut anmelden',
@@ -116,7 +120,7 @@ const de = {
         invalidPrimaryPassword: 'Das ChurchTools-Passwort stimmt nicht.',
         passwordInvalid: 'Das Passwort erfüllt die Regeln nicht.',
         customPasswordNotAllowed: 'Eigene Passwörter sind gerade nicht erlaubt.',
-        rateLimited: 'Zu viele Versuche. Versuch es in {n} Minuten noch einmal.',
+        rateLimited: 'Zu viele Versuche. Versuch es in einer Minute noch einmal. | Zu viele Versuche. Versuch es in {n} Minuten noch einmal.',
         session: 'Deine Anmeldung ist abgelaufen. Lade die Seite neu.',
         noServiceAccess: 'Du hast keinen Zugriff auf diese Erweiterung.',
         forbidden: 'Dafür hast du keine Berechtigung.',

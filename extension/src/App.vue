@@ -19,6 +19,7 @@ import type { IconName } from './ui/Icon.vue';
 import PageFrame from './ui/PageFrame.vue';
 import StatusLine from './ui/StatusLine.vue';
 import StateView from './views/StateView.vue';
+import SessionBanner from './views/SessionBanner.vue';
 import WaitingView from './views/WaitingView.vue';
 
 const { t } = useI18n();
@@ -77,7 +78,11 @@ function navigate(to: string): void {
             kind="loading"
             :text="app.onCallback.value ? t('auth.finishing') : t('state.loading')"
         />
-        <RouterView v-else-if="view === 'page'" />
+        <template v-else-if="view === 'page'">
+            <!-- Spec 7.2: on every page, so a blocked renewal can be retried wherever the person is. -->
+            <SessionBanner class="cps-app__session" />
+            <RouterView />
+        </template>
         <template v-else-if="view === 'missing-rights'">
             <Banner kind="warning">
                 <p>{{ t(route.meta.requires === 'admin' ? 'state.needsAdmin' : 'state.needsEditor') }}</p>
@@ -111,6 +116,10 @@ function navigate(to: string): void {
 </template>
 
 <style scoped>
+.cps-app__session {
+    margin-bottom: var(--cps-space-4);
+}
+
 .cps-app__back {
     margin-top: var(--cps-space-3);
 }

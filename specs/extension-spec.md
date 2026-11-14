@@ -408,7 +408,7 @@ technical `detail` (English) is never shown to users; admins and settings editor
 | `primary-password-required`, `invalid-primary-password` | At the ChurchTools password field: „Bitte gib dein ChurchTools-Passwort ein.“ / „Das ChurchTools-Passwort stimmt nicht.“ |
 | `password-invalid` | The rules in `violations` turn red in the rule list |
 | `custom-password-not-allowed` | „Eigene Passwörter sind gerade nicht erlaubt.“ and the settings are reloaded |
-| `too-many-attempts`, `upstream-rate-limited` | „Zu viele Versuche. Versuch es in {n} Minuten noch einmal.“ (from `retryAfter`) |
+| `too-many-attempts`, `upstream-rate-limited` | „Zu viele Versuche. Versuch es in {n} Minuten noch einmal.“ (from `retryAfter`, rounded up, 1 to 60; for 1: „… in einer Minute …“) |
 | `token-expired` | Handled by 7.2, not shown |
 | `missing-token`, `invalid-token` | Handled by 7.2 |
 | `no-service-access` | App state `no-access` |
@@ -425,7 +425,8 @@ A test parses `backend/docs/problems.md` and fails if a documented slug has no m
 ### 8.3 ChurchTools errors
 
 - `403` or a `status: "fail"` answer: missing rights, named from the permission checks (`ct/`).
-- `429`: „ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.“ (`retryAfterMs`, at least 60 s).
+- `429`: „ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.“ (`retryAfterMs`, at least 60 s; for 1: „… in einer
+  Minute …“).
 - An anonymous `whoami` (`id` −1 or 0) is `no-access`, not a crash.
 
 ## 9. Design system (`src/ui/`)

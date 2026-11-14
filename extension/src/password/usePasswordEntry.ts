@@ -3,12 +3,20 @@
  * `session.call()` (renewal on `token-expired`). Nothing here keeps a password: `generate()` hands the new one to the
  * caller, which shows it once and drops it.
  */
-import { ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue';
+import { reactive, ref, toValue, watch, type MaybeRefOrGetter, type Ref } from 'vue';
 import { useServices } from '../app/services';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import type { BackendApi } from '../backend/api';
 import { UnexpectedResponse } from '../backend/problems';
+
+/**
+ * Per person, how often a change was sent (whatever its outcome). Every loaded entry of that person reads its status
+ * again when this moves, also one mounted after the change was sent: a request that lands after its form is gone
+ * still updates the pill.
+ */
+const changes = reactive(new Map<number, number>());
+const changed = (id: number): void => void changes.set(id, (changes.get(id) ?? 0) + 1);
 
 export type EntryStatus = 'loading' | 'set' | 'none' | 'error';
 
@@ -65,29 +73,50 @@ export function usePasswordEntry(personId: MaybeRefOrGetter<number | null>, opti
         }
     }
 
+    /** A change decides the status over any read still pending; all loaded entries of the person read again after it. */
+    async function change<T>(id: number, send: () => Promise<T>, after: EntryStatus): Promise<T> {
+        try {
+            const result = await send();
+            latest++;
+            status.value = after;
+            error.value = null;
+            return result;
+        } finally {
+            changed(id);
+        }
+    }
+
     async function generate(primaryPwd?: string): Promise<string> {
         const id = person();
         const body = primaryPwd === undefined ? {} : { primaryPwd };
-        const { generated } = await session.call(() => api().putEntry(id, body));
-        if (generated === undefined) throw new UnexpectedResponse(200);
-        status.value = 'set';
-        return generated;
+        const { generated } = await change(id, () => session.call(() => api().putEntry(id, body)), 'set').then((r) => {
+            if (r.generated === undefined) throw new UnexpectedResponse(200);
+            return r;
+        });
+        return generated!;
     }
 
     async function setCustom(password: string, primaryPwd?: string): Promise<void> {
         const id = person();
         const body = primaryPwd === undefined ? { secondaryPwd: password } : { secondaryPwd: password, primaryPwd };
-        await session.call(() => api().putEntry(id, body));
-        status.value = 'set';
+        await change(id, () => session.call(() => api().putEntry(id, body)), 'set');
     }
 
     async function remove(primaryPwd?: string): Promise<void> {
         const id = person();
-        await session.call(() => api().deleteEntry(id, primaryPwd));
-        status.value = 'none';
+        await change(id, () => session.call(() => api().deleteEntry(id, primaryPwd)), 'none');
     }
 
-    if (options.load !== false) watch(() => toValue(personId), () => void reload(), { immediate: true });
+    if (options.load !== false) {
+        watch(
+            () => {
+                const id = toValue(personId);
+                return id === null ? null : `${id}#${changes.get(id) ?? 0}`;
+            },
+            () => void reload(),
+            { immediate: true },
+        );
+    }
 
     return { status, error, reload, generate, setCustom, remove };
 }

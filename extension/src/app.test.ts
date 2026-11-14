@@ -765,6 +765,22 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('button').exists()).toBe(false);
     });
 
+    it('a ChurchTools rate limit of one minute says „einer Minute“ (8.3)', async () => {
+        const { wrapper } = await start({
+            ct: (ct) => ({ ...ct, values: () => Promise.reject(new CtRateLimitedError(30_000)) }),
+        });
+        expect(wrapper.text()).toContain('ChurchTools bremst gerade. Versuch es in einer Minute noch einmal.');
+    });
+
+    it('the session banner („Sitzung erneuern“) is part of the frame, on every page', async () => {
+        const { wrapper, session } = await start({ token: { admin: false }, path: '/about', session: true });
+        expect(wrapper.text()).not.toContain('Deine Sitzung ist abgelaufen.');
+        session!.needsRenewal.value = true;
+        await settle();
+        expect(wrapper.find('main .cps-banner--warning').text()).toContain('Deine Sitzung ist abgelaufen.');
+        expect(wrapper.findAll('button').some((b) => b.text() === 'Sitzung erneuern')).toBe(true);
+    });
+
     it('row 3: old layout → waiting text, no login', async () => {
         const { wrapper, assigned } = await start({ settings: { adminUsers: [1], readAccessUsers: [2] }, token: null });
         expect(wrapper.find('main').text()).toBe(TEXT.waiting);

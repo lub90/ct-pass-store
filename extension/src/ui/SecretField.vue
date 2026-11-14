@@ -23,12 +23,12 @@ const props = defineProps<{
     autocomplete?: string;
     help?: string;
     error?: string;
-    /** Start with the value visible (a value shown once, such as a generated password). */
-    revealed?: boolean;
     /** Monospace, so look-alike characters (l, 1, I, O, 0) can be told apart. */
     mono?: boolean;
 }>();
 const model = defineModel<string>();
+/** Whether the value is visible. A static `revealed` starts it visible (a value shown once); `v-model:revealed` follows it. */
+const shown = defineModel<boolean>('revealed', { default: false });
 const emit = defineEmits<{ 'copy-failed': [] }>();
 
 const id = `cps-s-${useId()}`;
@@ -45,7 +45,6 @@ const describedby = computed(() => {
     const ids = [props.help ? `${id}-help` : '', props.error ? `${id}-error` : '', attrs['aria-describedby'] as string | undefined].filter(Boolean);
     return ids.length ? ids.join(' ') : undefined;
 });
-const shown = ref(props.revealed === true);
 const copied = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
 

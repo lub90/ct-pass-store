@@ -12,6 +12,7 @@ import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import { PopupBlocked, PopupClosed } from '../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams } from '../backend/problems';
+import { translate } from '../i18n';
 import { pageTexts } from '../i18n/custom-texts';
 import PasswordFlow from '../password/PasswordFlow.vue';
 import { usePasswordEntry } from '../password/usePasswordEntry';
@@ -19,7 +20,6 @@ import Banner from '../ui/Banner.vue';
 import PageHeader from '../ui/PageHeader.vue';
 import Pill from '../ui/Pill.vue';
 import StatusLine from '../ui/StatusLine.vue';
-import SessionBanner from './SessionBanner.vue';
 
 const { t } = useI18n();
 const services = useServices();
@@ -39,7 +39,7 @@ const saved = ref(false);
 const openError = ref<unknown>(null);
 
 const problem = (error: unknown) => ({
-    text: t(problemMessageKey(error), problemParams(error)),
+    text: translate(t, problemMessageKey(error), problemParams(error)),
     detail: detailed.value && error instanceof BackendProblem && error.detail ? error.detail : undefined,
 });
 const loadProblem = computed(() => (entry.status.value === 'error' ? problem(entry.error.value) : null));
@@ -59,9 +59,11 @@ async function open(): Promise<void> {
     flowOpen.value = true;
 }
 
+/** Back to state 1, whatever happened in the flow: the status is read again, so the pill matches the backend. */
 function done(outcome: 'cancelled' | 'saved' | 'generated'): void {
     flowOpen.value = false;
     saved.value = outcome === 'saved';
+    void entry.reload();
 }
 </script>
 
@@ -72,7 +74,6 @@ function done(outcome: 'cancelled' | 'saved' | 'generated'): void {
         :intro="texts.intro"
     />
     <div class="cps-password">
-        <SessionBanner />
         <Banner
             v-if="!allowed"
             kind="warning"
@@ -85,7 +86,6 @@ function done(outcome: 'cancelled' | 'saved' | 'generated'): void {
             :settings="settings"
             :has-entry="entry.status.value === 'set'"
             @done="done"
-            @changed="entry.reload()"
         />
         <StatusLine
             v-else-if="entry.status.value === 'loading'"

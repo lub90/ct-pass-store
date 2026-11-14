@@ -4,8 +4,10 @@
  * asks for a new password; without anything to choose or confirm it sends right away (the direct path).
  *
  * Plaintext (typed or generated) lives only in this component's refs: never in storage, the address or a log. It is
- * dropped on „Fertig“, „Abbrechen“, after saving and when the component unmounts (leaving the page). While any is on
- * screen the session counts it as unsaved input, so a token problem asks for a renewal instead of reloading the page.
+ * dropped on „Fertig“, „Abbrechen“, after saving and when the component unmounts (leaving the page); a password that
+ * arrives after the unmount is not kept. While any is on screen the session counts it as unsaved input, so a token
+ * problem asks for a renewal instead of reloading the page. The status of the entry is not this component's business:
+ * every change is announced through `usePasswordEntry`, and the page reads the status again.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
@@ -13,11 +15,13 @@ import { isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import { PopupBlocked, PopupClosed } from '../backend/auth';
+import { translate } from '../i18n';
 import { BackendProblem, BackendUnreachable, UnexpectedResponse, problemMessageKey, problemParams } from '../backend/problems';
 import Banner from '../ui/Banner.vue';
 import ChoiceCard from '../ui/ChoiceCard.vue';
 import Pill from '../ui/Pill.vue';
 import SecretField from '../ui/SecretField.vue';
+import StatusLine from '../ui/StatusLine.vue';
 import { canSubmit, nextAfterOverview, type FlowSettings, type FlowState } from './flow';
 import { MAX_LENGTH, SYMBOLS, checkPassword, type Rule } from './rules';
 import { usePasswordEntry } from './usePasswordEntry';
@@ -32,8 +36,6 @@ const props = defineProps<{
 const emit = defineEmits<{
     /** Back to state 1: `saved` after a chosen password, `generated` after „Fertig“. */
     done: [outcome: 'cancelled' | 'saved' | 'generated'];
-    /** The stored entry may have changed (saved, or the outcome is unknown): the status should be read again. */
-    changed: [];
 }>();
 
 const { t } = useI18n();
@@ -64,6 +66,9 @@ const primaryError = ref('');
 const serverViolations = ref<Rule[]>([]);
 const unknownOutcome = ref(false);
 const copyFailed = ref(false);
+/** Whether the custom password is visible; disallowed characters are only echoed then. */
+const customShown = ref(false);
+let alive = true;
 
 const requirePrimary = computed(() => props.settings.requirePasswordForPasswordChange);
 const mode = computed(() => (state.value.step === 'choose' ? state.value.mode : 'generate'));
@@ -73,6 +78,8 @@ const choice = computed({
         state.value = { step: 'choose', mode: value === 'custom' ? 'custom' : 'generate' };
     },
 });
+/** Nothing to choose or confirm: generated right away; only a failure shows the form (to retry). */
+const direct = computed(() => nextAfterOverview(props.settings) === 'generate-now');
 const generated = computed(() => (state.value.step === 'result' ? (state.value.generated ?? '') : ''));
 const detailed = computed(() => session.admin.value || isSettingsEditor(app.settingsEditor.value));
 
@@ -95,11 +102,37 @@ const ruleText = (key: RuleKey): string =>
           ? t('password.rules.symbol', { symbols: SYMBOLS.split('').join(' ') })
           : t(`password.rules.${key}`);
 
-/** The characters the rules don't allow, named so that a pasted space or line break is visible. */
+const codePoint = (c: string): string => `U+${c.codePointAt(0)!.toString(16).toUpperCase().padStart(4, '0')}`;
+
+/**
+ * The characters the rules don't allow, named so that a pasted space or line break is visible. While the field is
+ * masked only their kinds are named (the password is not echoed); while it is shown each one is, and invisible ones
+ * (controls, format and zero-width characters, other spaces, combining marks) as U+XXXX.
+ */
 const notAllowed = computed(() => {
-    const allowed = /[A-Za-z0-9]/;
-    const seen = [...new Set(password.value.split(''))].filter((c) => !allowed.test(c) && !SYMBOLS.includes(c));
-    return seen.map((c) => (c === ' ' ? t('password.rules.space') : c === '\t' ? t('password.rules.tab') : c === '\n' || c === '\r' ? t('password.rules.newline') : `„${c}“`)).join(', ');
+    const bad = [...new Set(Array.from(password.value))].filter((c) => !/^[A-Za-z0-9]$/.test(c) && !SYMBOLS.includes(c));
+    if (customShown.value) {
+        return bad
+            .map((c) => {
+                if (c === ' ') return t('password.rules.space');
+                if (c === '\t') return t('password.rules.tab');
+                if (c === '\n' || c === '\r') return t('password.rules.newline');
+                if (/[\p{C}\p{Z}\p{M}]/u.test(c)) return codePoint(c);
+                return `„${c}“`;
+            })
+            .join(', ');
+    }
+    const kinds = new Set<string>();
+    for (const c of bad) {
+        if (c === ' ') kinds.add('space');
+        else if (/\p{Cc}/u.test(c)) kinds.add('control');
+        else if (c.codePointAt(0)! > 0x7f) kinds.add('nonAscii');
+        else kinds.add('otherSymbol');
+    }
+    return ['space', 'control', 'nonAscii', 'otherSymbol']
+        .filter((k) => kinds.has(k))
+        .map((k) => t(`password.rules.${k}`))
+        .join(', ');
 });
 
 // A new input invalidates what the backend said about the old one.
@@ -122,7 +155,7 @@ function clearInput(): void {
 }
 
 function showProblem(e: unknown): void {
-    error.value = { text: t(problemMessageKey(e), problemParams(e)) };
+    error.value = { text: translate(t, problemMessageKey(e), problemParams(e)) };
     if (detailed.value && e instanceof BackendProblem && e.detail) error.value.detail = e.detail;
 }
 
@@ -130,10 +163,15 @@ function showProblem(e: unknown): void {
 async function fail(e: unknown, sent: boolean): Promise<void> {
     // The session shows „Sitzung erneuern“ or logs in again; what was typed stays.
     if (e instanceof PopupBlocked || e instanceof PopupClosed) return;
-    if (e instanceof BackendProblem && SESSION_SLUGS.has(e.slug)) return;
+    if (e instanceof BackendProblem && SESSION_SLUGS.has(e.slug)) {
+        // With the banner up the person renews there; otherwise (e.g. token-expired again right after a renewal)
+        // say so instead of nothing.
+        if (session.needsRenewal.value) return;
+        return showProblem(e);
+    }
     if (sent && (e instanceof BackendUnreachable || e instanceof UnexpectedResponse)) {
+        // The status is read again by the page (every change is announced).
         unknownOutcome.value = true;
-        emit('changed');
         return;
     }
     if (!(e instanceof BackendProblem)) return showProblem(e);
@@ -172,17 +210,17 @@ async function submit(): Promise<void> {
     try {
         if (mode.value === 'generate') {
             const plaintext = await entry.generate(primaryPwd);
+            // Left meanwhile: nobody can see it any more, so it is not kept.
+            if (!alive) return;
             clearInput();
             state.value = { step: 'result', generated: plaintext };
-            emit('changed');
         } else {
             await entry.setCustom(password.value, primaryPwd);
             clearInput();
-            emit('changed');
             emit('done', 'saved');
         }
     } catch (e) {
-        await fail(e, true);
+        if (alive) await fail(e, true);
     } finally {
         busy.value = false;
     }
@@ -201,9 +239,10 @@ function finish(): void {
 let untrack = (): void => undefined;
 onMounted(() => {
     untrack = session.trackUnsaved(() => password.value !== '' || primary.value !== '' || state.value.step === 'result');
-    if (nextAfterOverview(props.settings) === 'generate-now') void submit();
+    if (direct.value) void submit();
 });
 onBeforeUnmount(() => {
+    alive = false;
     untrack();
     clearInput();
     state.value = { step: 'choose', mode: 'generate' };
@@ -247,6 +286,16 @@ onBeforeUnmount(() => {
         </div>
     </section>
 
+    <section
+        v-else-if="direct && busy"
+        class="cps-flow"
+    >
+        <StatusLine
+            kind="loading"
+            :text="t('password.generating')"
+        />
+    </section>
+
     <form
         v-else
         class="cps-flow"
@@ -276,6 +325,7 @@ onBeforeUnmount(() => {
         <template v-if="mode === 'custom'">
             <SecretField
                 v-model="password"
+                v-model:revealed="customShown"
                 :label="t('password.customLabel')"
                 autocomplete="new-password"
                 :reveal-label="t('password.reveal')"
@@ -349,6 +399,7 @@ onBeforeUnmount(() => {
             <button
                 type="button"
                 class="cps-btn cps-btn--ghost"
+                :disabled="busy"
                 @click="cancel"
             >
                 {{ t('common.cancel') }}
