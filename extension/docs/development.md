@@ -276,15 +276,41 @@ ask the maintainer first) and a test account; never a production instance.
 
 `.github/workflows/extension.yml` runs on every push and pull request with read-only permissions, on Node 24 LTS:
 `npm ci`, lint, typecheck, unit and app tests, `npm run build` (with `check-dist`) and `npm audit --audit-level=high`.
-A second job scans the whole git history with gitleaks (pinned version, checked against its sha256); a reviewed false
-positive goes into `.gitleaksignore` by its fingerprint. The contract tests and the browser tests don't run in CI (see
-above).
+The contract tests and the browser tests don't run in CI (see above).
 
-A release starts with a tag `extension-vX.Y.Z` (`specs/versioning.md`). `.github/workflows/extension-release.yml`
-first runs `node scripts/release-check.js <tag>`: the tag, `package.json`, `package-lock.json` and a section
-`## [X.Y.Z] - YYYY-MM-DD` with a real date in `CHANGELOG.md` must agree, `CHANGELOG.md` must have no `## [Unreleased]`
-section, and `X.Y` must equal the first two numbers of `backend/VERSION`; it names every mismatch. Run it locally before
-tagging. The workflow then runs the audit and `npm run check`, refuses a build whose version isn't exactly `X.Y.Z`
-(built from a clean checkout of the tag), zips `dist/` (`ctpassstore-extension-X.Y.Z.zip`, without sourcemaps) and
-publishes a GitHub release with the CHANGELOG section as notes. The build runs with read access only; a second job,
-which runs no project code, gets the write permission to create the release.
+### Secret scan (gitleaks)
+
+A second job scans the whole git history with gitleaks (pinned version, checked against its sha256) and the committed
+configuration `.gitleaks.toml` at the repository root: all default rules, plus exceptions for a few committed **test**
+files by their exact path (test RSA keys, an invented JWT, invented tokens), each with its reason. gitleaks can't run
+on the development machine of this rework, so **the first CI run is what verifies this configuration**; if it reports a
+finding:
+
+1. Look at the finding (file, commit, rule; the value is redacted in the log). If it may be a real secret, don't
+   suppress it: treat it as leaked (change it where it is used) and tell the maintainer.
+2. If it is a reviewed test or example value: for a single finding, add its fingerprint (`<commit>:<file>:<rule>:<line>`,
+   printed by gitleaks) to `.gitleaksignore` at the repository root, with a comment line above it saying why. For a
+   test file whose many values would all match, add a `[[allowlists]]` block with its exact path and a description
+   to `.gitleaks.toml`. Never disable a rule or allowlist by a value pattern.
+3. Both files are reviewed like code.
+
+### Releases
+
+The CHANGELOG section of the next version is headed `## [X.Y.Z] - Unreleased` until release day; the release check
+accepts only a real date, so it fails until then. Steps for a release:
+
+1. Set the version in `package.json` and `package-lock.json` (`npm version X.Y.Z --no-git-tag-version`), and make sure
+   `backend/VERSION` has the same `X.Y`.
+2. Head the CHANGELOG section exactly `## [X.Y.Z] - YYYY-MM-DD` with the release date; there must be no
+   `## [Unreleased]` section and only one section for `X.Y.Z`.
+3. Run `node scripts/release-check.js extension-vX.Y.Z`. It checks that the tag, `package.json`, `package-lock.json`
+   (also its root entry `packages[""]`) and the CHANGELOG section agree, and that `X.Y` equals the first two numbers of
+   `backend/VERSION`; it names every mismatch and prints the release notes when all is well.
+4. Commit, then tag `extension-vX.Y.Z` and push the tag (ask the maintainer first).
+
+`.github/workflows/extension-release.yml` then runs the release check, the audit and `npm run check`, and compares
+`dist/version.txt` (the app version the build carries, written by `vite.config.ts`) with the tag: a build from anything
+but a clean checkout of the tag carries `X.Y.Z+sha` and is refused. It zips `dist/`
+(`ctpassstore-extension-X.Y.Z.zip`, without sourcemaps) and publishes a GitHub release with the CHANGELOG section as
+notes. The build runs with read access only; a second job, which runs no project code, gets the write permission to
+create the release.

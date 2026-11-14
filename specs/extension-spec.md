@@ -55,7 +55,7 @@
 | E12 | **No Pinia.** Local `ref`s and a few composables. | The app is small. |
 | E13 | **Versioning:** backend and extension share `MAJOR.MINOR` ([`versioning.md`](versioning.md)). | Compatibility is visible in the version number and checked at release and at runtime. |
 | E14 | **Rights model as one table** (section 16): each role maps to a ChurchTools group; the setup creates new groups or uses existing ones; the mapping can be changed later; a check compares the real rights with the table. | Least privilege that's verified, not just described; churches can reuse groups they already have. |
-| E15 | **The admin group is trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. The admin group, and everyone who controls its membership, must therefore be as trustworthy as ChurchTools administrators. |
+| E15 | **The admin group is trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. Everyone with `edit custom data` on `settings` (normally the admin group), everyone who can grant that right, and everyone who controls the membership of a group holding it must therefore be as trustworthy as ChurchTools administrators. |
 
 ## 3. Roles and app states
 
@@ -300,9 +300,11 @@ refused at the field and by the store (stored texts with them are dropped on rea
 
 - Field „Backend-Adresse“ (`backendUrl`): `https://`, no query, fragment or credentials; a trailing slash is removed.
   Changing it shows a warning that machine clients sign tokens for this address (backend spec 4.4a).
-  Whoever can change this address (the admin group and everyone who controls its membership) can make users' browsers
-  send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another
-  server; the admin group must therefore be as trustworthy as ChurchTools administrators (E15). As soon as the field
+  Whoever can change this address can make users' browsers send their ChurchTools password (when
+  `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. That is everyone with
+  `edit custom data` on the `settings` category (normally the admin group, which the setup grants it, 16.2), everyone
+  who can grant that right, and everyone who can change the members of a group holding it; all of them must therefore
+  be as trustworthy as ChurchTools administrators (E15). As soon as the field
   differs from the stored address, the page warns about this, and saving asks in a danger dialog naming the old and the
   new address. The save writes only `backendUrl` into the value as read (revision-guarded). The app keeps using the
   address it started with; the new one takes effect with the next page load (everyone then logs in to the new backend),
@@ -697,7 +699,7 @@ Neither the unit nor the app layer needs network access.
 - Only production builds: `vite.config.ts` refuses a build in another mode than `production` or with `NODE_ENV` other
   than production (`import.meta.env.DEV` true); only the build tests pass it, with `CPS_ALLOW_NON_PRODUCTION_BUILD=1`.
   CI runs `npm run build` (with its check), never a bare `vite build`.
-- A second CI job scans the whole git history with gitleaks (pinned version and checksum). Locally, `check-dist` also
+- A second CI job scans the whole git history with gitleaks (pinned version and checksum; default rules plus path-scoped test-file exceptions in `.gitleaks.toml`). Locally, `check-dist` also
   fails when the value of a `CT_*` variable (or an old `VITE_PASSWORD`/`VITE_BASE_URL`) of `.env` or `.env.*` appears
   in `dist/`, naming the variable, never the value.
 - Not in CI: the contract tests (they need the shared test instance and its credentials) and the browser tests (run by

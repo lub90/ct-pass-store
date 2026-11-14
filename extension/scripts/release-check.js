@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Checks an extension release before it is built (spec 13.7, versioning.md): the tag is `extension-v<x.y.z>`;
-// package.json, package-lock.json and a dated CHANGELOG.md section `## [x.y.z] - YYYY-MM-DD` all carry that version;
+// package.json, package-lock.json (also its root entry packages[""]) and exactly one CHANGELOG.md section, headed
+// exactly `## [x.y.z] - YYYY-MM-DD` with a real date, all carry that version;
 // CHANGELOG.md has no `## [Unreleased]` section; and MAJOR.MINOR equals that of ../backend/VERSION.
 // On success it prints the CHANGELOG section (the release notes); otherwise one line per problem on stderr. Exits 0 or 1.
 // Usage: node scripts/release-check.js <tag> [extension folder]
@@ -53,9 +54,12 @@ export function checkRelease(tag, extensionDir) {
 
     const lock = readJson(path.join(extensionDir, 'package-lock.json'));
     expect('package-lock.json', lock?.version);
-    if (typeof lock?.version === 'string' && lock.packages?.[''] !== undefined) {
-        const root = lock.packages[''].version;
-        if (root !== version) problems.push(`package-lock.json (packages[""]) has version ${root}, the tag ${tag} needs ${version}`);
+    if (typeof lock?.version === 'string') {
+        const root = lock.packages?.[''];
+        if (root === null || typeof root !== 'object') problems.push('package-lock.json has no root package entry packages[""]');
+        else if (root.version !== version) {
+            problems.push(`package-lock.json (packages[""]) has version ${root.version}, the tag ${tag} needs ${version}`);
+        }
     }
 
     const lines = (read(path.join(extensionDir, 'CHANGELOG.md')) ?? '').split(/\r?\n/);
@@ -64,16 +68,20 @@ export function checkRelease(tag, extensionDir) {
         problems.push('CHANGELOG.md still has an "## [Unreleased]" section');
     }
     let notes = '';
-    const own = headings.findIndex(([line]) => line === `## [${version}]` || line.startsWith(`## [${version}] `));
-    if (own === -1) {
+    const own = headings.filter(([line]) => line === `## [${version}]` || line.startsWith(`## [${version}] `));
+    if (own.length === 0) {
         problems.push(`CHANGELOG.md has no section "## [${version}] - YYYY-MM-DD"`);
+    } else if (own.length > 1) {
+        problems.push(`CHANGELOG.md has ${own.length} sections for [${version}]`);
     } else {
-        const [heading, start] = headings[own];
-        const date = heading.slice(`## [${version}]`.length).replace(/^ - /, '').trim();
-        if (!isRealDate(date)) {
-            problems.push(`CHANGELOG.md: section [${version}] has no valid date (YYYY-MM-DD), found "${date}"`);
+        const [heading, start] = own[0];
+        const date = new RegExp(`^## \\[${version.replaceAll('.', '\\.')}\\] - (\\d{4}-\\d{2}-\\d{2})$`).exec(heading)?.[1];
+        if (date === undefined || !isRealDate(date)) {
+            problems.push(
+                `CHANGELOG.md: the heading of section [${version}] must be "## [${version}] - YYYY-MM-DD" with a real date, found "${heading}"`,
+            );
         } else {
-            const end = headings[own + 1]?.[1] ?? lines.length;
+            const end = headings.find(([, i]) => i > start)?.[1] ?? lines.length;
             notes = lines.slice(start + 1, end).join('\n').trim();
             if (notes === '') problems.push(`CHANGELOG.md: section [${version}] is empty`);
         }

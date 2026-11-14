@@ -1,9 +1,6 @@
 # Changelog
 
 All notable changes to the extension are documented here, in the style of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-The release waits for the backend's setup and migration and for ct-radius: the `0.1.0` section is still marked
-`Unreleased`, and `scripts/release-check.js` accepts only a real date (`YYYY-MM-DD`), so it fails until the date is set
-on release day.
 
 ## [0.1.0] - Unreleased
 

@@ -131,7 +131,7 @@ describe('checkDist', () => {
     });
 
     describe('values of local .env files (security MINOR 5 of Task 17)', () => {
-        const token = { name: 'CT_LOGIN_TOKEN', file: '.env', value: 'tok-9f8e7d6c5b4a' };
+        const token = { name: 'CT_LOGIN_TOKEN', file: '.env', value: 'dummy-local-token-value' };
 
         it('fails when the value of a local CT_* variable appears in any text file, without printing it', () => {
             const failures = checkDist(
@@ -159,11 +159,11 @@ describe('checkDist', () => {
 
         it('reads the CT_* values of .env and every .env.* file', () => {
             env('.env', 'CT_BASE_URL=https://gemeinde.example.org\nCT_LOGIN_TOKEN="abc def 123 456"\n');
-            env('.env.real', "# comment\nexport CT_PASSWORD='s3cr3t-passw0rd'\nCT_API_TOKEN=api-token-value # note\r\n");
+            env('.env.real', "# comment\nexport CT_PASSWORD='dummy-password-value'\nCT_API_TOKEN=api-token-value # note\r\n");
             expect(localSecrets(envDir)).toEqual([
                 { name: 'CT_BASE_URL', file: '.env', value: 'https://gemeinde.example.org' },
                 { name: 'CT_LOGIN_TOKEN', file: '.env', value: 'abc def 123 456' },
-                { name: 'CT_PASSWORD', file: '.env.real', value: 's3cr3t-passw0rd' },
+                { name: 'CT_PASSWORD', file: '.env.real', value: 'dummy-password-value' },
                 { name: 'CT_API_TOKEN', file: '.env.real', value: 'api-token-value' },
             ]);
         });
@@ -237,15 +237,15 @@ describe('checkDist', () => {
         it('fails on a local .env value in the build, names the variable and never prints the value', () => {
             const envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-dist-env-'));
             try {
-                fs.writeFileSync(path.join(envDir, '.env.real'), 'CT_LOGIN_TOKEN=tok-9f8e7d6c5b4a\n');
+                fs.writeFileSync(path.join(envDir, '.env.real'), 'CT_LOGIN_TOKEN=dummy-local-token-value\n');
                 const result = run(
-                    makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"tok-9f8e7d6c5b4a"')),
+                    makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"dummy-local-token-value"')),
                     path.join(import.meta.dirname, '..', 'src', 'dev', 'demo-data.ts'),
                     envDir,
                 );
                 expect(result.status).toBe(1);
                 expect(result.stderr).toContain('the value of CT_LOGIN_TOKEN (from .env.real) in assets/index-abc.js');
-                expect(result.stderr + result.stdout).not.toContain('tok-9f8e7d6c5b4a');
+                expect(result.stderr + result.stdout).not.toContain('dummy-local-token-value');
             } finally {
                 fs.rmSync(envDir, { recursive: true, force: true });
             }

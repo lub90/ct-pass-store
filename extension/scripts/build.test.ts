@@ -74,6 +74,17 @@ describe('the demo in builds', () => {
     }, 60_000);
 });
 
+describe('version.txt (the release workflow compares it with the tag)', () => {
+    it('holds exactly the app version the bundle carries (__APP_VERSION__)', async () => {
+        const outDir = await buildInto('production', 'production');
+        const version = fs.readFileSync(path.join(outDir, 'version.txt'), 'utf8');
+        const base = (JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8')) as { version: string }).version;
+        expect(version).toMatch(new RegExp(`^${base.replaceAll('.', '\\.')}(\\+([0-9a-f]+(-dirty)?|unknown))?$`));
+        const code = bundleOf(outDir);
+        expect([`"${version}"`, `'${version}'`, `\`${version}\``].some((quoted) => code.includes(quoted))).toBe(true);
+    }, 60_000);
+});
+
 describe('only production builds (spec 13.7, a release must never ship a development build)', () => {
     it.each([
         ['development', 'development'],

@@ -1,0 +1,27 @@
+# gitleaks configuration for the CI secret scan (.github/workflows/extension.yml).
+# All default rules stay on. The only exceptions are the committed TEST files below, each with its exact path and the
+# reason; no rule is disabled and there is no allowlist by regex over values. A new exception needs a review that the
+# value is a test value; prefer a fingerprint in .gitleaksignore for a single finding (extension/docs/development.md).
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test RSA private key of the backend's crypto tests (unencrypted); never used outside tests"
+paths = ['''^backend/tests/keys/privateKey1\.pem$''']
+
+[[allowlists]]
+description = "The same test key, passphrase-encrypted, for the backend's encrypted-key tests"
+paths = ['''^backend/tests/keys/privateKey1Encrypted\.pem$''']
+
+[[allowlists]]
+description = "Invented JWT-shaped string (payload sub 947, signature 'signature-of-the-token') for the fixture sanitizer tests"
+paths = ['''^extension/scripts/sanitize-fixture\.test\.js$''']
+
+[[allowlists]]
+description = "Invented 64-hex cleanup token of the backend's cleanup API tests"
+paths = ['''^backend/tests/Api/CleanupApiTest\.php$''']
+
+[[allowlists]]
+description = "Invented dummy login token (redaction tests of the contract helpers)"
+paths = ['''^extension/tests/contract/helpers\.unit\.test\.ts$''']

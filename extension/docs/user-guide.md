@@ -72,16 +72,22 @@ verwalten“, „Einstellungen“ and „Über“.
 Every settings page saves only on „Speichern“ and asks before you leave it with unsaved changes. If someone else
 changed the settings in the meantime, the page tells you instead of overwriting their change.
 
-### Who must be trusted: the admin group
+### Who must be trusted with the backend address
 
 **Whoever can change the backend address can obtain the ChurchTools passwords of your users.** Users type their
 ChurchTools password into the extension to confirm a change (if the settings ask for it), and the extension sends it,
 and every new secondary password, to the backend at that address. Someone who changes the address to a server of their
 own receives those passwords from then on, and users see no difference.
 
-The backend address can be changed by the admin group, and by everyone who controls who is in that group. So the
-admin group, and everyone who can change its members, must be **as trustworthy as your ChurchTools administrators**.
-Keep it small, and don't give anyone the right to change its members who isn't trusted that much.
+The backend address is stored in the extension's settings category in ChurchTools. It can be changed by:
+
+- everyone with the ChurchTools right to edit the data of that category („edit custom data“ on the extension's
+  `settings` category). Normally that is the admin group, which the setup grants this right;
+- everyone who can grant that right to someone (ChurchTools administrators who manage rights);
+- everyone who can change the members of a group that holds the right, above all the admin group.
+
+All of them must be **as trustworthy as your ChurchTools administrators**. Keep these circles small, and don't give the
+right, or control over the admin group's members, to anyone who isn't trusted that much.
 
 „Backend & Status“ warns about exactly this as soon as the address field differs from the stored address, and saving
 asks again in a dialog naming the old and the new address. Normal users are not asked: they couldn't judge it. The

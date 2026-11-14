@@ -63,6 +63,16 @@ function productionBuildsOnly(): Plugin {
     };
 }
 
+/** Writes the app version (the value of `__APP_VERSION__`) to `version.txt`; the release workflow compares it with the tag. */
+function versionFile(version: string): Plugin {
+    return {
+        name: 'version-file',
+        generateBundle() {
+            this.emitFile({ type: 'asset', fileName: 'version.txt', source: version });
+        },
+    };
+}
+
 export interface ConfigEnv {
     mode: string;
     command: 'build' | 'serve';
@@ -78,11 +88,13 @@ export function appConfig({ mode, command, isPreview }: ConfigEnv, envDir: strin
     // Only the dev server reads them; a build and `vite preview` (which would reuse `server.proxy`) never do.
     const proxy = command === 'serve' && !isPreview ? devProxy(mode, loadEnv(mode, envDir, 'CT_')) : undefined;
 
+    const version = gitVersion();
+
     return {
         base: '/ccm/ctpassstore/',
         envPrefix: ENV_PREFIX,
-        plugins: [productionBuildsOnly(), vue(), thirdPartyLicenses(), ...(proxy ? [realModeGuard()] : [])],
-        define: { __APP_VERSION__: JSON.stringify(gitVersion()) },
+        plugins: [productionBuildsOnly(), vue(), thirdPartyLicenses(), versionFile(version), ...(proxy ? [realModeGuard()] : [])],
+        define: { __APP_VERSION__: JSON.stringify(version) },
         resolve: { alias: { '@': path.join(root, 'src') } },
         server: { proxy },
         build: {

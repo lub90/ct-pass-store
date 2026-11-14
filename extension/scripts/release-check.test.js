@@ -104,6 +104,16 @@ describe('checkRelease', () => {
         ]);
     });
 
+    it('names a package-lock.json without the root package entry packages[""]', () => {
+        const dir = makeRepo(() => json('package-lock.json', (p) => ({ ...p, packages: {} })));
+        expect(checkRelease('extension-v0.1.0', dir).problems).toEqual(['package-lock.json has no root package entry packages[""]']);
+    });
+
+    it('names a package-lock.json without packages', () => {
+        const dir = makeRepo(() => json('package-lock.json', (p) => { delete p.packages; return p; }));
+        expect(checkRelease('extension-v0.1.0', dir).problems).toEqual(['package-lock.json has no root package entry packages[""]']);
+    });
+
     it('names a missing package-lock.json', () => {
         const dir = makeRepo(() => fs.rmSync(path.join(ext, 'package-lock.json')));
         expect(checkRelease('extension-v0.1.0', dir).problems).toEqual(['package-lock.json is missing or has no version']);
@@ -124,16 +134,28 @@ describe('checkRelease', () => {
         expect(checkRelease('extension-v0.1.0', dir).problems).toEqual(['CHANGELOG.md has no section "## [0.1.0] - YYYY-MM-DD"']);
     });
 
-    it.each(['## [0.1.0]', '## [0.1.0] - Unreleased', '## [0.1.0] - 2026-13-01', '## [0.1.0] - 2026-02-30', '## [0.1.0] - 20-11-2026'])(
-        'names the undated or wrongly dated section %j',
-        (heading) => {
-            const dir = makeRepo(() => write('CHANGELOG.md', CHANGELOG.replace('## [0.1.0] - 2026-11-20', heading)));
-            const found = heading.replace('## [0.1.0]', '').replace(' - ', '');
-            expect(checkRelease('extension-v0.1.0', dir).problems).toEqual([
-                `CHANGELOG.md: section [0.1.0] has no valid date (YYYY-MM-DD), found "${found}"`,
-            ]);
-        },
-    );
+    it.each([
+        '## [0.1.0]',
+        '## [0.1.0] - Unreleased',
+        '## [0.1.0] - 2026-13-01',
+        '## [0.1.0] - 2026-02-30',
+        '## [0.1.0] - 20-11-2026',
+        '## [0.1.0] 2026-11-20',
+        '## [0.1.0]  - 2026-11-20',
+        '## [0.1.0] - 2026-11-20 (beta)',
+        '## [0.1.0] - 2026-11-20 ',
+        '## [0.1.0] – 2026-11-20',
+    ])('names the section heading %j, which is not exactly "## [0.1.0] - YYYY-MM-DD" with a real date', (heading) => {
+        const dir = makeRepo(() => write('CHANGELOG.md', CHANGELOG.replace('## [0.1.0] - 2026-11-20', heading)));
+        expect(checkRelease('extension-v0.1.0', dir).problems).toEqual([
+            `CHANGELOG.md: the heading of section [0.1.0] must be "## [0.1.0] - YYYY-MM-DD" with a real date, found "${heading}"`,
+        ]);
+    });
+
+    it('names two sections for the same version', () => {
+        const dir = makeRepo(() => write('CHANGELOG.md', CHANGELOG + '\n## [0.1.0] - 2026-11-21\n\n- Again.\n'));
+        expect(checkRelease('extension-v0.1.0', dir).problems).toEqual(['CHANGELOG.md has 2 sections for [0.1.0]']);
+    });
 
     it('names an empty CHANGELOG section', () => {
         const dir = makeRepo(() => write('CHANGELOG.md', '# Changelog\n\n## [0.1.0] - 2026-11-20\n\n## [0.0.9] - 2026-01-02\n\n- x\n'));

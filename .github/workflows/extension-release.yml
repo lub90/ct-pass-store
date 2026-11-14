@@ -54,14 +54,15 @@ jobs:
       - name: Zip it
         run: |
           VERSION="${GITHUB_REF_NAME#extension-v}"
-          # The app shows x.y.z only on a clean checkout of the tag (scripts/app-version.ts); never ship x.y.z+sha.
-          if grep -rqF -- "${VERSION}+" dist; then
-            echo "The build carries a ${VERSION}+<sha> version; a release must be built from the clean tag." >&2
+          # dist/version.txt is the app version the bundle carries (__APP_VERSION__, vite.config.ts). It is x.y.z only
+          # on a clean checkout of the tag (scripts/app-version.ts); a release never ships x.y.z+sha.
+          BUILT="$(cat dist/version.txt 2>/dev/null || true)"
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "The build carries the app version '$BUILT', the tag needs '$VERSION'." >&2
             exit 1
           fi
-          # The minifier may quote the version with ", ' or a backtick.
-          if ! grep -rqF -e "\"${VERSION}\"" -e "'${VERSION}'" -e "\`${VERSION}\`" dist/assets; then
-            echo "The build doesn't carry the version ${VERSION}." >&2
+          if grep -rqF -- "${VERSION}+" dist/assets; then
+            echo "The bundle carries a ${VERSION}+<sha> version; a release must be built from the clean tag." >&2
             exit 1
           fi
           zip -r -q "$RUNNER_TEMP/release/ctpassstore-extension-${VERSION}.zip" dist/ -x '*.map' '*.DS_Store'

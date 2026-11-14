@@ -77,7 +77,7 @@ jobs:
           echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
           tar -xzf gitleaks.tar.gz gitleaks
 
-      # The whole history; findings are redacted in the log. A reviewed false positive goes into .gitleaksignore
-      # (its fingerprint), never into an allowlist by path.
+      # The whole history, with the default rules plus the committed test-file exceptions of .gitleaks.toml; findings
+      # are redacted in the log. A reviewed single false positive goes into .gitleaksignore (its fingerprint).
       - name: Scan the repository
-        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .'
+        run: '"$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --no-banner --exit-code 1 .'
