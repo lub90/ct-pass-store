@@ -24,6 +24,11 @@ export type InvalidRead<T> = Extract<Read<T>, { state: 'invalid' }>;
 export type FormStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'newer' | 'invalid' | 'error';
 
 export interface SettingsFormOptions<T> {
+    /**
+     * Turns a valid stored value into the unchanged state of the form (e.g. with an empty draft entry appended): what
+     * counts as no change, and what Discard returns to. Gets a copy.
+     */
+    prepare?: (stored: T) => T;
     /** The value an explicit repair save of an `invalid` read starts from; `null`: not repairable here. */
     repair?: (read: InvalidRead<T>) => T | null;
     /** After a successful save (e.g. the app reloads its settings). */
@@ -115,9 +120,10 @@ export function useSettingsForm<T extends { revision: number }>(
         invalidRead.value = read.state === 'invalid' ? read : null;
         repairing.value = false;
         if (read.state === 'ok') {
-            baseline = canonical(read.value);
+            const shown = options.prepare ? options.prepare(copy(read.value)) : read.value;
+            baseline = canonical(shown);
             revision = read.value.revision;
-            value.value = copy(read.value);
+            value.value = copy(shown);
             status.value = 'ready';
         } else if (read.state === 'invalid') {
             const base = read.revision === undefined ? null : (options.repair?.(read) ?? null);
@@ -190,13 +196,14 @@ export function useSettingsForm<T extends { revision: number }>(
     return { status, value, issues, repairing, dirty, saving, savedAt, error, loadError, conflict, invalidRead, load: reload, save: doSave, discard };
 }
 
-/** The text (i18n key and params) for a failed load or save of `settings`. */
-export function settingsErrorText(error: unknown): { key: string; params: Record<string, string | number> } {
-    if (error instanceof CtForbiddenError) return { key: 'settings.missingRight', params: { right: error.missing ?? 'edit custom data', category: 'settings' } };
+/** The text (i18n key and params) for a failed load or save of `settings` (or `category`). */
+export function settingsErrorText(error: unknown, category: 'settings' | 'access' = 'settings'): { key: string; params: Record<string, string | number> } {
+    if (error instanceof CtForbiddenError) return { key: 'settings.missingRight', params: { right: error.missing ?? 'edit custom data', category } };
     if (error instanceof CtRateLimitedError) return { key: 'state.ctRateLimited', params: { n: retryMinutes(error.retryAfterMs / 1000) } };
     if (error instanceof NotAuthenticatedError) return { key: 'manage.ctLoggedOut', params: {} };
     if (error instanceof ValueTooLargeError) return { key: 'settings.tooLarge', params: { size: error.size, limit: VALUE_LIMIT } };
-    if (error instanceof InvalidValueError) return { key: 'settings.notSaved', params: {} };
-    if (error instanceof CategoryMissingError) return { key: 'settings.categoryMissing', params: {} };
+    // `access`: also a new client that collides with a stored entry the backend can't use (the store refuses it).
+    if (error instanceof InvalidValueError) return { key: category === 'access' ? 'access.notSaved' : 'settings.notSaved', params: {} };
+    if (error instanceof CategoryMissingError) return { key: 'settings.categoryMissing', params: { category } };
     return { key: 'state.ctUnavailable', params: {} };
 }

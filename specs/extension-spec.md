@@ -252,13 +252,25 @@ refused at the field and by the store (stored texts with them are dropped on rea
   status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
   ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
   The service user's group is shown on „Einrichtung“, not here.
-- **Machine clients:** a list with name, `id`, permissions („darf lesen“), number of keys, `createdAt`, and „Bearbeiten“
-  / „Entfernen“. A green „+ Client hinzufügen“ button.
+- **Machine clients:** a list with name, `id`, permissions („darf lesen“), number of keys, `createdAt` (and who
+  created it), and „Bearbeiten“ / „Entfernen“. A green „+ Client hinzufügen“ button.
+- **Falsch konfiguriert:** every stored entry the backend disables (backend spec 3.2: e.g. without `name` or
+  `createdAt`, a duplicate `id`, a shared key) is listed with its position, its raw `id` (plain text, isolated, cut
+  to 40 characters) and the reasons in words, each with „Entfernen“ (danger confirm). Removal sends the entry's index
+  and raw `id` with the read's `revision`; the store refuses it if either no longer matches. If `access` is invalid
+  as a whole, the entries are still listed, but nothing can be removed here.
+- The page and the client form need `edit custom data` on `access`; without it they name the right and read nothing.
+- Until the setup assistant exists (12.6), „Gruppe ändern“ is shown disabled with „Kommt mit dem
+  Einrichtungsassistenten.“, and no status dot is shown (the rights check comes with it).
 - **Client form** (`/settings/access/clients/new` and `/:id`):
   - Name; ID proposed from the name (`^[a-z0-9-]{3,40}$`, unique, fixed after creation).
   - Public keys: one or more, each pasted as base64 or base64url and checked on the spot (decodes to 32 bytes; not a
     key another client uses, backend spec 3.2).
-  - Permission „Passwörter lesen“ (`entries:read`).
+  - Permission „Passwörter lesen“ (`entries:read`), off for a new client until turned on.
+  - A new client gets `createdAt` as the admin's **local** calendar date (`YYYY-MM-DD`; the backend only checks that
+    it is a real date) and `createdBy` = the logged-in ChurchTools person (`whoami`). Both are notes only: the client
+    stays valid when that person leaves the church or the admin group. „Zugriff“ says so, and clients nobody needs
+    any more are removed there. A creator ChurchTools no longer shows is listed by ID.
 - „Entfernen“: confirm dialog with „Wirkt innerhalb von 5 Minuten.“
 - The page validates with the same rules as backend spec 3.2, so the backend never disables a client the extension
   saved.
@@ -348,7 +360,8 @@ extension/src/
 - `oauthClientId`: the client ID of the backend's OAuth application, written by the setup wizard. It isn't secret; the
   extension needs it for `/oauth/authorize` (7.1). Without it, the state is `setup-needed`.
 - `texts`: `{ "de"?: { "title"?: string, "intro"?: string }, "en"?: {…} }`; title ≤ 60, intro ≤ 300 characters.
-- `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`).
+- `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`). The extension also
+  writes `createdBy` (the ChurchTools person ID of whoever added the client, 4.7); the backend ignores it.
 - `groups`: `{ "users": {…}, "admins": {…}, "service": {…} }`, each `{ "groupId": <positive integer>,
   "createdBySetup": <boolean> }`. `createdBySetup` decides what may be deleted later (16.5): the extension never
   deletes a group it didn't create.

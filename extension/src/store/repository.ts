@@ -15,8 +15,9 @@ export type Read<T> =
      * `repair` (settings only, for a value with `schema` 2 and such a revision): the known fields that are valid on
      * their own (`kept`) and the ones present but invalid (`broken`), so a page can rebuild a value without losing
      * what it may not write. Invalid `texts` are dropped as on an `ok` read (an issue, in neither list).
+     * `unusable` (access only, when `machineClients` is a list): as on an `ok` read, so the page can still list them.
      */
-    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T> }
+    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T>; unusable?: UnusableClient[] }
     | { state: 'newer'; schema: number }
     /**
      * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
@@ -25,6 +26,12 @@ export type Read<T> =
      * kept unchanged unless `saveAccess` is told to drop them.
      */
     | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[] };
+
+/** An entry to drop on save: its index in the read and its raw id there (none if it had no string id). */
+export interface DropRef {
+    index: number;
+    id?: string;
+}
 
 export interface Repair<T> {
     kept: Partial<T>;
@@ -125,10 +132,12 @@ export class ExtensionStore {
     }
 
     /**
-     * `dropUnusable`: indices (`Read.unusable[].index` of the read this save is based on) of stored entries the
-     * backend can't use that are to be removed. All other unusable entries are kept unchanged.
+     * `dropUnusable`: entries of `Read.unusable` (index and raw id of the read this save is based on) the backend
+     * can't use that are to be removed. All other unusable entries are kept unchanged. If the stored entry at such an
+     * index isn't unusable any more or has another raw id, nothing is written (`ConflictError`): a stale index never
+     * drops another entry, even if the revision wasn't raised.
      */
-    saveAccess(next: AccessV2, expectedRevision: number, dropUnusable: readonly number[] = []): Promise<void> {
+    saveAccess(next: AccessV2, expectedRevision: number, dropUnusable: readonly DropRef[] = []): Promise<void> {
         return this.save('access', AccessSchema, next, expectedRevision, dropUnusable);
     }
 
@@ -184,8 +193,9 @@ export class ExtensionStore {
         const result = v.safeParse(schema, raw);
         if (!result.success) {
             const revision = isObject(raw) && isUsableRevision(raw.revision) ? raw.revision : undefined;
-            if (revision === undefined) return { state: 'invalid', issues: [...issues, ...issuesOf(result.issues)] };
-            const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision };
+            const listed = unusable && unusable.length > 0 ? { unusable } : {};
+            if (revision === undefined) return { state: 'invalid', issues: [...issues, ...issuesOf(result.issues)], ...listed };
+            const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision, ...listed };
             if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
             return { ...invalid, repair: repairOf(raw) as Repair<v.InferOutput<S>> };
         }
@@ -194,7 +204,7 @@ export class ExtensionStore {
         return issues.length > 0 ? { ...withUnusable, issues } : withUnusable;
     }
 
-    private async save<S extends Schema>(category: 'settings' | 'access', schema: S, next: v.InferOutput<S>, expectedRevision: number, dropUnusable: readonly number[] = []): Promise<void> {
+    private async save<S extends Schema>(category: 'settings' | 'access', schema: S, next: v.InferOutput<S>, expectedRevision: number, dropUnusable: readonly DropRef[] = []): Promise<void> {
         // Strict: validate what the caller hands in, before touching the store.
         const checked = v.safeParse(schema, normalize(next));
         if (!checked.success) throw new InvalidValueError(issuesOf(checked.issues));
@@ -231,10 +241,17 @@ export class ExtensionStore {
         const unknown = Object.fromEntries(Object.entries(stored).filter(([k]) => !(k in schema.entries) && !retired.includes(k)));
         const merged: Record<string, unknown> = { ...unknown, ...checked.output, revision: expectedRevision + 1 };
         for (const key of retired) delete merged[key];
-        if (schema === AccessSchema && Array.isArray(stored.machineClients) && Array.isArray(merged.machineClients)) {
-            const rejected = readMachineClients(stored.machineClients)
-                .unusable.filter((u) => !dropUnusable.includes(u.index))
-                .map((u) => (stored.machineClients as unknown[])[u.index]);
+        const storedClients = Array.isArray(stored.machineClients) ? (stored.machineClients as unknown[]) : null;
+        if (dropUnusable.length > 0) {
+            const now = storedClients ? readMachineClients(storedClients).unusable : [];
+            const stale = dropUnusable.some((d) => !now.some((u) => u.index === d.index && u.id === d.id));
+            if (stale) throw new ConflictError(currentRevision);
+        }
+        if (schema === AccessSchema && storedClients && Array.isArray(merged.machineClients)) {
+            const drop = new Set(dropUnusable.map((d) => d.index));
+            const rejected = readMachineClients(storedClients)
+                .unusable.filter((u) => !drop.has(u.index))
+                .map((u) => storedClients[u.index]);
             const clash = collision(merged.machineClients as MachineClient[], rejected);
             if (clash) throw new InvalidValueError([clash]);
             merged.machineClients = [...merged.machineClients, ...rejected];

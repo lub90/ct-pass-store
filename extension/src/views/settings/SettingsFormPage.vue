@@ -25,12 +25,23 @@ const props = defineProps<{
     unrepairable: { text: string; to?: string; linkText?: string };
     /** The form's own checks pass (field errors block saving). */
     valid: boolean;
+    /** The KV category the form edits (texts of errors and stored problems); default `settings`. */
+    category?: 'settings' | 'access';
+    /** The value was read, but there is nothing here to edit (e.g. an unknown item): the `blocked` slot instead. */
+    blocked?: boolean;
 }>();
 
 const { t } = useI18n();
 
+const category = computed(() => props.category ?? 'settings');
+/** Texts that name what is stored: the settings, or the access data. */
+const stored = computed(() =>
+    category.value === 'access'
+        ? { missing: t('access.missing'), newer: t('access.newer'), invalidTitle: t('access.invalidTitle'), issuesNote: t('access.issuesNote') }
+        : { missing: t('settings.missing'), newer: t('settings.newer'), invalidTitle: t('settings.invalidTitle'), issuesNote: t('settings.issuesNote') },
+);
 const message = (error: unknown): string => {
-    const { key, params } = settingsErrorText(error);
+    const { key, params } = settingsErrorText(error, category.value);
     return t(key, params);
 };
 const loadErrorText = computed(() => (props.form.loadError.value === null ? null : message(props.form.loadError.value)));
@@ -80,19 +91,19 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
         <StatusLine
             v-else-if="form.status.value === 'missing'"
             kind="empty"
-            :text="t('settings.missing')"
+            :text="stored.missing"
         />
         <StatusLine
             v-else-if="form.status.value === 'newer'"
             kind="empty"
-            :text="t('settings.newer')"
+            :text="stored.newer"
         />
         <template v-else>
             <Banner
                 v-if="invalidStored || form.issues.value.length > 0"
                 :kind="invalidStored ? 'error' : 'warning'"
                 class="cps-settings-form__issues"
-                :title="invalidStored ? t('settings.invalidTitle') : t('settings.issuesTitle')"
+                :title="invalidStored ? stored.invalidTitle : t('settings.issuesTitle')"
             >
                 <ul>
                     <li
@@ -115,11 +126,15 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
                     </RouterLink>
                 </p>
                 <p v-else>
-                    {{ t('settings.issuesNote') }}
+                    {{ stored.issuesNote }}
                 </p>
             </Banner>
+            <slot
+                v-if="blocked && form.value.value !== null"
+                name="blocked"
+            />
             <form
-                v-if="form.value.value !== null"
+                v-else-if="form.value.value !== null"
                 class="cps-settings-form__form"
                 novalidate
                 @submit.prevent="form.save()"

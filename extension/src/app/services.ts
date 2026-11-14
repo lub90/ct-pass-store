@@ -23,6 +23,8 @@ export interface Services {
     appVersion?: string;
     /** The session of the app; made by `App.vue` when left out (tests pass their own to drive it). */
     session?: Session;
+    /** The ChurchTools base URL for links into ChurchTools; `instanceBaseUrl()` when left out. */
+    ctBaseUrl?: string;
 }
 
 export const SERVICES_KEY: InjectionKey<Services> = Symbol('services');

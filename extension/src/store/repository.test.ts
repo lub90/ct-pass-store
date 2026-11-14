@@ -600,7 +600,7 @@ describe('unusable machine clients are listed and removable', () => {
         const { kv, store } = run([ok('good', 'g'), noName, 'text', null]);
         const r = await store.readAccess();
         if (r.state !== 'ok') throw new Error('not ok');
-        await store.saveAccess(r.value, 1, [1, 3]);
+        await store.saveAccess(r.value, 1, [{ index: 1, id: 'noname' }, { index: 3 }]);
         expect(written(kv)).toEqual([ok('good', 'g'), 'text']);
     });
 
@@ -608,7 +608,7 @@ describe('unusable machine clients are listed and removable', () => {
         const { kv, store } = run([ok('dup', 'd'), ok('dup', 'e'), noName]);
         const r = await store.readAccess();
         if (r.state !== 'ok') throw new Error('not ok');
-        await store.saveAccess(r.value, 1, r.unusable?.map((u) => u.index));
+        await store.saveAccess(r.value, 1, r.unusable);
         expect(written(kv)).toEqual([]);
     });
 
@@ -626,8 +626,42 @@ describe('unusable machine clients are listed and removable', () => {
 
     it('does not let a dropped entry collide any more', async () => {
         const { kv, store } = run([{ ...noName, id: 'clash' }]);
-        await store.saveAccess({ ...access, machineClients: [ok('clash', 'c') as never] }, 1, [0]);
+        await store.saveAccess({ ...access, machineClients: [ok('clash', 'c') as never] }, 1, [{ index: 0, id: 'clash' }]);
         expect(written(kv)).toEqual([ok('clash', 'c')]);
+    });
+
+    it('lists unusable entries on an invalid read too, when machineClients is a list (M1)', async () => {
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, groups: 'broken', machineClients: [ok('good', 'g'), noName] })] });
+        const r = await new ExtensionStore(kv).readAccess();
+        expect(r.state).toBe('invalid');
+        expect(r.state === 'invalid' && r.unusable).toEqual([{ index: 1, id: 'noname', reasons: ['missing-name'] }]);
+    });
+
+    it('an invalid read whose machineClients is no list has no unusable list', async () => {
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, groups: 'broken', machineClients: { a: 1 } })] });
+        const r = await new ExtensionStore(kv).readAccess();
+        expect(r.state === 'invalid' && r.unusable).toBeUndefined();
+    });
+
+    it('refuses to drop when the stored entry at that index has another id (stale index, M2): nothing written', async () => {
+        const { kv, store } = run([ok('good', 'g'), { ...noName, id: 'other' }]);
+        await expect(store.saveAccess({ ...access, machineClients: [ok('good', 'g') as never] }, 1, [{ index: 1, id: 'noname' }])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('refuses to drop by an id when the stored entry has none, and the other way round (M2)', async () => {
+        const a = run(['text']);
+        await expect(a.store.saveAccess({ ...access, machineClients: [] }, 1, [{ index: 0, id: 'text' }])).rejects.toBeInstanceOf(ConflictError);
+        const b = run([noName]);
+        await expect(b.store.saveAccess({ ...access, machineClients: [] }, 1, [{ index: 0 }])).rejects.toBeInstanceOf(ConflictError);
+        expect([...a.kv.writes, ...b.kv.writes]).toEqual([]);
+    });
+
+    it('refuses to drop an index that is no unusable entry (any more), or is out of range (M2)', async () => {
+        const { kv, store } = run([ok('good', 'g')]);
+        await expect(store.saveAccess({ ...access, machineClients: [ok('good', 'g') as never] }, 1, [{ index: 0, id: 'good' }])).rejects.toBeInstanceOf(ConflictError);
+        await expect(store.saveAccess({ ...access, machineClients: [ok('good', 'g') as never] }, 1, [{ index: 5 }])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
     });
 
     it('does not write an unknown permission back, and refuses to write one', async () => {

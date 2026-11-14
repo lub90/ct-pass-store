@@ -16,7 +16,7 @@ import { backendBase } from '../../backend/http';
 import type { CtApi } from '../../ct/api';
 import type { CtValue, Permissions } from '../../ct/types';
 import { createFakeBackend } from '../../dev/fake-backend';
-import { createFakeChurchTools } from '../../dev/fake-churchtools';
+import { createFakeChurchTools, type FakeCtSeed, type FakeGroup } from '../../dev/fake-churchtools';
 import { createAppI18n } from '../../i18n';
 import { createAppRouter } from '../../router';
 import { ChurchToolsKv } from '../../store/churchtools-kv';
@@ -30,6 +30,7 @@ export const ME = 1;
 export const SETTINGS_ID = 11;
 export const ACCESS_ID = 12;
 export const SETTINGS_VALUE_ID = 101;
+export const ACCESS_VALUE_ID = 102;
 
 export const SETTINGS = {
     schema: 2,
@@ -66,6 +67,11 @@ export interface HarnessOptions {
     access?: unknown;
     /** Replaces the fake backend's self-test. */
     selfTest?: BackendApi['selfTest'];
+    /** ChurchTools groups (default none) and the ones the person has "view group" on. */
+    groups?: FakeGroup[];
+    viewGroupIds?: number[];
+    /** More persons than the logged-in one (ME, „Anna Admin“). */
+    persons?: FakeCtSeed['persons'];
 }
 
 const mounted: VueWrapper[] = [];
@@ -116,13 +122,14 @@ export async function start(o: HarnessOptions) {
     const settings = o.settings === undefined ? SETTINGS : o.settings;
     const access = o.access === undefined ? ACCESS : o.access;
     const values: CtValue[] = [{ id: SETTINGS_VALUE_ID, dataCategoryId: SETTINGS_ID, value: encode(settings) }];
-    if (access !== null) values.push({ id: 102, dataCategoryId: ACCESS_ID, value: encode(access) });
+    if (access !== null) values.push({ id: ACCESS_VALUE_ID, dataCategoryId: ACCESS_ID, value: encode(access) });
     const fakeCt = createFakeChurchTools({
         moduleKey: 'ctpassstore',
         moduleId: 7,
         currentPersonId: ME,
-        persons: [{ id: ME, firstName: 'Anna', lastName: 'Admin' }],
-        groups: [],
+        persons: [{ id: ME, firstName: 'Anna', lastName: 'Admin' }, ...(o.persons ?? [])],
+        groups: o.groups ?? [],
+        viewGroupIds: o.viewGroupIds ?? [],
         categories: [
             { id: SETTINGS_ID, name: 'settings', shorty: 'settings' },
             { id: ACCESS_ID, name: 'access', shorty: 'access' },
@@ -177,7 +184,7 @@ export async function start(o: HarnessOptions) {
     const readAccess = store.readAccess.bind(store);
     store.readSettings = () => (storeReads.settings++, readSettings());
     store.readAccess = () => (storeReads.access++, readAccess());
-    const services: Services = { session, ct, store, auth, backend: () => backend, language: 'de', appVersion: '0.1.0' };
+    const services: Services = { session, ct, store, auth, backend: () => backend, language: 'de', appVersion: '0.1.0', ctBaseUrl: ORIGIN };
     const win: CallbackWindow = { opener: null, origin: ORIGIN, close: vi.fn() };
     await router.push(o.path);
     const wrapper = mount(App, {
@@ -213,7 +220,21 @@ export async function start(o: HarnessOptions) {
     const removeStored = async (): Promise<void> => {
         await fakeCt.deleteValue(7, SETTINGS_ID, SETTINGS_VALUE_ID);
     };
-    return { removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
+    /** The stored access value as JSON. */
+    const storedAccess = async (): Promise<Record<string, unknown>> => {
+        const list = await fakeCt.values(7, ACCESS_ID);
+        return JSON.parse(list.find((x) => x.id === ACCESS_VALUE_ID)!.value) as Record<string, unknown>;
+    };
+    /** Another tab (or person) saves `access` meanwhile (revision raised). */
+    const changeAccessElsewhere = async (change: Record<string, unknown>): Promise<void> => {
+        const current = await storedAccess();
+        await fakeCt.updateValue(7, ACCESS_ID, ACCESS_VALUE_ID, JSON.stringify({ ...current, ...change, revision: (current.revision as number) + 1 }));
+    };
+    /** Replaces the stored access value as it is (no revision raised). */
+    const replaceAccess = async (value: unknown): Promise<void> => {
+        await fakeCt.updateValue(7, ACCESS_ID, ACCESS_VALUE_ID, encode(value));
+    };
+    return { storedAccess, changeAccessElsewhere, replaceAccess, removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
 }
 
 export async function settle(): Promise<void> {

@@ -11,6 +11,8 @@ import ManageView from './views/ManageView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import PasswordView from './views/PasswordView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
+import AccessView from './views/settings/AccessView.vue';
+import ClientFormView from './views/settings/ClientFormView.vue';
 import RulesView from './views/settings/RulesView.vue';
 import SettingsView from './views/settings/SettingsView.vue';
 import TextsView from './views/settings/TextsView.vue';
@@ -37,9 +39,10 @@ export const routes: RouteRecordRaw[] = [
     { path: '/settings', component: SettingsView, meta: { requires: 'editor' } },
     { path: '/settings/rules', component: RulesView, meta: { requires: 'editor' } },
     { path: '/settings/texts', component: TextsView, meta: { requires: 'editor' } },
-    placeholder('/settings/access', 'pages.access', 'editor'),
-    placeholder('/settings/access/clients/new', 'pages.client', 'editor'),
-    placeholder('/settings/access/clients/:id', 'pages.client', 'editor'),
+    { path: '/settings/access', component: AccessView, meta: { requires: 'editor' } },
+    // `new` is matched first; an id `new` can't be edited here (a client named so is still listed and removable).
+    { path: '/settings/access/clients/new', component: ClientFormView, meta: { requires: 'editor' } },
+    { path: '/settings/access/clients/:id', component: ClientFormView, meta: { requires: 'editor' } },
     placeholder('/settings/backend', 'pages.backend', 'editor'),
     placeholder('/settings/backup', 'pages.backup', 'admin'),
     placeholder('/settings/setup', 'pages.setup', 'admin'),
