@@ -165,8 +165,9 @@ Data lives in three KV categories of the `ctpassstore` module:
       (several entries, `reasons` has one list per entry); `{ "machineClients": <raw value>, "enabled": [] }` (the raw
       value of the field itself, for values that aren't a list). Reason codes, in the order they are reported:
       `not-an-object`, `invalid-id`, `duplicate-id`, `missing-name`, `invalid-created-at`, `no-keys`, `invalid-key`,
-      `invalid-permissions`, `shared-key`. An entry whose id an earlier entry already used gets `duplicate-id`
-      (whether or not the earlier entry was valid; the earlier valid entry is disabled too, with no code of its own).
+      `invalid-permissions`, `shared-key`. Every entry that shares its id with another entry gets `duplicate-id`,
+      the earlier ones as well, whether or not they are otherwise valid (all of them are disabled). Codes of one entry
+      are listed in the order above (so `["duplicate-id", "missing-name"]`).
       `invalid-id` and `duplicate-id` exclude each other; `invalid-key` appears once per client however many keys are
       bad; `shared-key` is given to every client that shares a key with another valid client. Trimming removes
       exactly PHP's `trim()` default characters (space, tab, LF, CR, NUL, vertical tab) and nothing else: a key is
@@ -176,7 +177,8 @@ Data lives in three KV categories of the `ctpassstore` module:
       a real calendar date: `2024-02-29` is valid; `2025-02-29`, `2026-02-30`, month or day `00` and year `0000` are
       not. An `id` follows the pattern above literally: 3 to 40 characters, a leading hyphen and digits-only are
       allowed. `permissions` missing or `null` is valid; non-string items inside the list grant nothing and don't
-      invalidate the client. Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
+      invalidate the client. An unpadded key of only letters and digits matches the base64url form and is valid; unpadded standard base64
+      containing `+` or `/` is invalid. Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
 - Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 

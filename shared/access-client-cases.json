@@ -554,7 +554,23 @@
     "reasons": []
   },
   {
-    "name": "key as standard base64 without padding",
+    "name": "unpadded key with only letters and digits is valid",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopA"
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "key as standard base64 without padding, containing + or / is invalid",
     "client": {
       "id": "test-client",
       "name": "Test client",
@@ -979,7 +995,9 @@
     ],
     "enabled": [],
     "reasons": [
-      [],
+      [
+        "duplicate-id"
+      ],
       [
         "duplicate-id"
       ]
@@ -1191,6 +1209,7 @@
     "enabled": [],
     "reasons": [
       [
+        "duplicate-id",
         "missing-name"
       ],
       [
@@ -1237,7 +1256,9 @@
     ],
     "enabled": [],
     "reasons": [
-      [],
+      [
+        "duplicate-id"
+      ],
       [
         "duplicate-id"
       ],
