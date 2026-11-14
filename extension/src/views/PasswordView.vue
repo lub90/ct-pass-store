@@ -12,7 +12,6 @@ import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import { PopupBlocked, PopupClosed } from '../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams } from '../backend/problems';
-import { translate } from '../i18n';
 import { pageTexts } from '../i18n/custom-texts';
 import PasswordFlow from '../password/PasswordFlow.vue';
 import { usePasswordEntry } from '../password/usePasswordEntry';
@@ -39,7 +38,7 @@ const saved = ref(false);
 const openError = ref<unknown>(null);
 
 const problem = (error: unknown) => ({
-    text: translate(t, problemMessageKey(error), problemParams(error)),
+    text: t(problemMessageKey(error), problemParams(error)),
     detail: detailed.value && error instanceof BackendProblem && error.detail ? error.detail : undefined,
 });
 const loadProblem = computed(() => (entry.status.value === 'error' ? problem(entry.error.value) : null));

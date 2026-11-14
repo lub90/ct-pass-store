@@ -43,7 +43,11 @@ export interface AppStateHandle {
     settings: Ref<SettingsV2 | null>;
     /** The ChurchTools person logged in (whoami), once known. „Mein Passwort“ acts for this person only. */
     personId: Ref<number | null>;
-    /** Reads `settings` again (e.g. after `custom-password-not-allowed`); keeps the old ones if the read fails. */
+    /**
+     * Reads `settings` again (e.g. after `custom-password-not-allowed`); keeps the old ones if the read fails.
+     * `backendUrl` and `oauthClientId` stay as at startup: the login is configured with them, and a new address takes
+     * effect only with the next page load.
+     */
     reloadSettings(): Promise<void>;
     /** `update-needed`: the stored `schema`. */
     storedSchema: Ref<number | null>;
@@ -245,7 +249,9 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
     async function reloadSettings(): Promise<void> {
         try {
             const read = await store.readSettings();
-            if (read.state === 'ok') settings.value = read.value;
+            if (read.state !== 'ok') return;
+            const { backendUrl, oauthClientId } = settings.value ?? read.value;
+            settings.value = { ...read.value, backendUrl, oauthClientId };
         } catch {
             // The settings of startup stay; the backend decides each request anyway.
         }

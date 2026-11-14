@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { nextTick, ref } from 'vue';
 import { createMemoryHistory, type Router } from 'vue-router';
 import App from '../App.vue';
-import { SERVICES_KEY, type Services } from '../app/services';
+import { SERVICES_KEY, backendFor, type Services } from '../app/services';
 import { APP_STATE_KEY, type AppStateHandle } from '../app/useAppState';
 import { SESSION_KEY, createSession, type Session } from '../app/useSession';
 import type { BackendApi } from '../backend/api';
@@ -17,6 +17,7 @@ import type { CtApi } from '../ct/api';
 import type { Permissions } from '../ct/types';
 import { createFakeBackend, type FakeBackendOptions } from '../dev/fake-backend';
 import { createFakeChurchTools } from '../dev/fake-churchtools';
+import { BackendUnreachable } from '../backend/problems';
 import { createAppI18n } from '../i18n';
 import { createAppRouter } from '../router';
 import { ChurchToolsKv } from '../store/churchtools-kv';
@@ -92,7 +93,12 @@ interface Options {
     tokenLeftMs?: number;
     backend?: FakeBackendOptions;
     path?: string;
+    /** The app's real backend client (over `fetch`, which the test stubs) instead of the fake backend. */
+    realBackend?: boolean;
 }
+
+/** ChurchTools rights of a settings editor who is no admin (spec 3.1). */
+const EDITOR: Partial<Permissions> = { 'view custom data': [SETTINGS_ID, ACCESS_ID], 'edit custom data': [SETTINGS_ID, ACCESS_ID] };
 
 const mounted: VueWrapper[] = [];
 afterEach(() => {
@@ -183,6 +189,8 @@ async function start(o: Options = {}) {
     });
     const api: BackendApi = fakeBackend;
     const calls = { get: 0, put: 0 };
+    /** The bodies of the PUTs as the app sent them. */
+    const puts: Record<string, unknown>[] = [];
     /** While set, a PUT waits for it before it reaches the backend (a slow request). */
     const gate: { hold: Promise<void> | null } = { hold: null };
     const counted: BackendApi = {
@@ -190,6 +198,7 @@ async function start(o: Options = {}) {
         getEntry: (id) => (calls.get++, api.getEntry(id)),
         putEntry: async (id, body) => {
             calls.put++;
+            puts.push({ ...body });
             if (gate.hold) await gate.hold;
             return api.putEntry(id, body);
         },
@@ -205,12 +214,13 @@ async function start(o: Options = {}) {
     };
     const auth = new Auth(() => counted, env);
     const session = createSession(auth, () => router.currentRoute.value.fullPath);
+    const backend = o.realBackend ? backendFor(auth) : () => counted;
     const services: Services = {
         session,
         ct,
         store: new ExtensionStore(new ChurchToolsKv(ct, 'ctpassstore')),
         auth,
-        backend: () => counted,
+        backend,
         language: 'de',
         appVersion: '0.1.0',
     };
@@ -222,7 +232,7 @@ async function start(o: Options = {}) {
     });
     mounted.push(wrapper);
     await settle();
-    return { wrapper, router, fakeBackend, session, auth, clock, open, assigned, calls, stored, settings, holdPuts };
+    return { wrapper, router, fakeBackend, session, auth, clock, open, assigned, calls, puts, stored, settings, holdPuts, storage };
 }
 
 /** Startup awaits real Web Crypto as well as promises, so a few macrotasks are needed. */
@@ -235,6 +245,12 @@ async function settle() {
 }
 
 const button = (w: VueWrapper, text: string): DOMWrapper<HTMLButtonElement> | undefined => w.findAll('button').find((b) => b.text() === text);
+/** A click dispatched synchronously, as the browser does: whatever the handler runs before its first await has run on return. */
+function clickNow(w: VueWrapper, text: string) {
+    const b = button(w, text);
+    if (!b) throw new Error(`No button „${text}“ in: ${w.text()}`);
+    b.element.click();
+}
 async function click(w: VueWrapper, text: string) {
     const b = button(w, text);
     if (!b) throw new Error(`No button „${text}“ in: ${w.text()}`);
@@ -842,7 +858,8 @@ describe('session (spec 7.2)', () => {
 });
 
 describe('the page checks its own rights', () => {
-    function mountAlone(state: AppStateHandle['state']['value'], personId: number | null) {
+    const SETTINGS = { schema: 2, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16, backendUrl: BACKEND, oauthClientId: 'c' };
+    function mountAlone(state: AppStateHandle['state']['value'], personId: number | null, settings: unknown = SETTINGS) {
         const getEntry = vi.fn(async () => 'none' as const);
         const backend = vi.fn(() => ({ getEntry }) as unknown as BackendApi);
         const services = { backend, language: 'de' } as unknown as Services;
@@ -856,7 +873,7 @@ describe('the page checks its own rights', () => {
         const app = {
             state: ref(state),
             personId: ref(personId),
-            settings: ref({ schema: 2, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16, backendUrl: BACKEND, oauthClientId: 'c' }),
+            settings: ref(settings),
             settingsEditor: ref({ settings: false, access: false }),
             admin: ref(false),
         } as unknown as AppStateHandle;
@@ -879,15 +896,389 @@ describe('the page checks its own rights', () => {
         expect(wrapper.find('button').exists()).toBe(false);
     });
 
-    it('without a known person it loads nothing', async () => {
-        const { getEntry } = mountAlone('user', null);
+    it('without a known person it loads nothing and names the missing access', async () => {
+        const { wrapper, getEntry } = mountAlone('user', null);
         await settle();
         expect(getEntry).not.toHaveBeenCalled();
+        expect(wrapper.find('.cps-banner--warning').exists()).toBe(true);
     });
 
-    it('as a user it loads the person’s own status', async () => {
-        const { getEntry } = mountAlone('user', 5);
+    it('without settings it loads nothing and names the missing access', async () => {
+        const { wrapper, getEntry, backend } = mountAlone('user', 5, null);
+        await settle();
+        expect(backend).not.toHaveBeenCalled();
+        expect(getEntry).not.toHaveBeenCalled();
+        expect(wrapper.find('.cps-banner--warning').exists()).toBe(true);
+    });
+
+    it.each(['user', 'admin'] as const)('as %s it loads the person’s own status', async (state) => {
+        const { wrapper, getEntry } = mountAlone(state, 5);
         await settle();
         expect(getEntry).toHaveBeenCalledWith(5);
+        expect(wrapper.find('.cps-banner--warning').exists()).toBe(false);
+    });
+});
+
+describe('point-A review: the backend address (security F1)', () => {
+    const EVIL = 'https://evil.example';
+    const problemJson = (slug: string, status: number) =>
+        new Response(JSON.stringify({ type: `https://x.example/problems.md#${slug}`, title: slug, status }), { status, headers: { 'Content-Type': 'application/problem+json' } });
+
+    it('settings reloaded with another backendUrl: nothing (no token, no ChurchTools password) goes to the new address', async () => {
+        const requests: { url: string; authorization?: string; body?: string }[] = [];
+        vi.stubGlobal(
+            'fetch',
+            vi.fn(async (url: string, init: RequestInit) => {
+                requests.push({ url, authorization: (init.headers as Record<string, string>).Authorization, body: init.body as string | undefined });
+                if (init.method === 'GET') return problemJson('entry-not-found', 404);
+                if (String(init.body).includes('secondaryPwd')) return problemJson('custom-password-not-allowed', 400);
+                return new Response(JSON.stringify({ secondaryPwd: 'Gen3rated!pass12' }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+            }),
+        );
+        try {
+            const { wrapper, stored, settings } = await start({ realBackend: true, requirePrimary: true });
+            await click(wrapper, TEXT.setPassword);
+            await primaryInput(wrapper).setValue(CT_PASSWORD);
+            await chooseCustom(wrapper, VALID);
+            // Another admin points the settings at another backend meanwhile; the page reloads them.
+            stored.value = JSON.stringify({ ...settings, revision: 2, backendUrl: EVIL });
+            await click(wrapper, TEXT.submitCustom);
+            await wrapper.find('input[type="radio"][value="generate"]').setValue(true);
+            await click(wrapper, TEXT.submitGenerate);
+            expect(requests.filter((r) => r.body?.includes(CT_PASSWORD))).toHaveLength(2);
+            expect(requests.every((r) => r.url.startsWith(`${BACKEND}/v1/`))).toBe(true);
+            expect(requests.some((r) => r.url.startsWith(EVIL))).toBe(false);
+            expect(resultInput(wrapper).element.value).toBe('Gen3rated!pass12');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
+    it('the result field is not offered to password managers for filling (autocomplete off)', async () => {
+        const { wrapper } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await click(wrapper, TEXT.submitGenerate);
+        expect(resultInput(wrapper).attributes('autocomplete')).toBe('off');
+    });
+
+    it('unmounted during a pending direct-path PUT: the late plaintext appears nowhere', async () => {
+        const { wrapper, holdPuts, fakeBackend, storage } = await start({ allowCustom: false, requirePrimary: false });
+        const setItem = vi.spyOn(Storage.prototype, 'setItem');
+        const release = holdPuts();
+        await click(wrapper, TEXT.setPassword);
+        mounted.splice(mounted.indexOf(wrapper), 1);
+        wrapper.unmount();
+        release();
+        await settle();
+        const password = fakeBackend.entries.get(ME)!;
+        expect(password).toBeDefined();
+        expect(document.body.innerHTML).not.toContain(password);
+        expect([...storage.map.values()].join('|')).not.toContain(password);
+        expect(setItem.mock.calls.flat().join('|')).not.toContain(password);
+    });
+});
+
+describe('point-A review: renewal inside the click handler (I1)', () => {
+    it('„Passwort festlegen“: ensureFresh and the popup run before the handler awaits anything', async () => {
+        const { wrapper, session, clock, open } = await start();
+        const fresh = vi.spyOn(session, 'ensureFresh');
+        clock.now += 540_000;
+        clickNow(wrapper, TEXT.setPassword);
+        expect(fresh).toHaveBeenCalledTimes(1);
+        expect(open).toHaveBeenCalledTimes(1);
+        await settle();
+    });
+
+    it('submit: ensureFresh and the popup run before the handler awaits anything', async () => {
+        const { wrapper, session, clock, open } = await start();
+        await click(wrapper, TEXT.setPassword);
+        const fresh = vi.spyOn(session, 'ensureFresh');
+        clock.now += 540_000;
+        open.mockClear();
+        clickNow(wrapper, TEXT.submitGenerate);
+        expect(fresh).toHaveBeenCalledTimes(1);
+        expect(open).toHaveBeenCalledTimes(1);
+        await settle();
+    });
+});
+
+describe('point-A review: typed input counts as unsaved (I2)', () => {
+    async function invalidToken(s: Awaited<ReturnType<typeof start>>) {
+        s.fakeBackend.failNext('invalid-token', 401);
+        void s.session.call(() => s.fakeBackend.getEntry(ME)).catch(() => undefined);
+        await settle();
+    }
+
+    it('only a typed custom password: no redirect, the banner, the input kept', async () => {
+        const s = await start();
+        await click(s.wrapper, TEXT.setPassword);
+        await chooseCustom(s.wrapper, VALID);
+        await invalidToken(s);
+        expect(s.assigned).toEqual([]);
+        expect(s.wrapper.text()).toContain(TEXT.sessionExpired);
+        expect(customInput(s.wrapper).element.value).toBe(VALID);
+    });
+
+    it('only a typed ChurchTools password: no redirect, the banner, the input kept', async () => {
+        const s = await start({ requirePrimary: true });
+        await click(s.wrapper, TEXT.setPassword);
+        await primaryInput(s.wrapper).setValue(CT_PASSWORD);
+        await invalidToken(s);
+        expect(s.assigned).toEqual([]);
+        expect(s.wrapper.text()).toContain(TEXT.sessionExpired);
+        expect(primaryInput(s.wrapper).element.value).toBe(CT_PASSWORD);
+    });
+
+    it('the form open with nothing typed: a full login starts', async () => {
+        const s = await start({ requirePrimary: true });
+        await click(s.wrapper, TEXT.setPassword);
+        await invalidToken(s);
+        expect(s.assigned).toHaveLength(1);
+    });
+});
+
+describe('point-A review: failures before and after sending (I3, I5)', () => {
+    it('the renewal before sending fails with an unreachable backend: its text, no unknown outcome, no PUT', async () => {
+        const { wrapper, auth, clock, calls } = await start();
+        await click(wrapper, TEXT.setPassword);
+        vi.spyOn(auth, 'loginInPopup').mockRejectedValue(new BackendUnreachable());
+        clock.now += 540_000;
+        await click(wrapper, TEXT.submitGenerate);
+        expect(errorAbove(wrapper).text()).toBe('Der Dienst ist gerade nicht erreichbar. Versuch es gleich noch einmal.');
+        expect(wrapper.text()).not.toContain(TEXT.unknown);
+        expect(calls.put).toBe(0);
+    });
+
+    it('left during a PUT that times out after writing: the reopened page shows „Passwort ist gesetzt“ without a click', async () => {
+        const { wrapper, router, holdPuts, fakeBackend } = await start({ allowCustom: false, requirePrimary: false });
+        const release = holdPuts();
+        await click(wrapper, TEXT.setPassword);
+        await router.push('/about');
+        await settle();
+        await router.push('/');
+        await settle();
+        expect(wrapper.find('.cps-pill').text()).toBe(TEXT.none);
+        // The held PUT reaches the backend now, which stores and then times out.
+        fakeBackend.breakNext('unreachable', { afterWrite: true });
+        release();
+        await settle();
+        expect(wrapper.find('.cps-pill').text()).toBe(TEXT.isSet);
+    });
+
+    it('state 1 near expiry with the popup blocked: the banner, no error, the form stays closed, nothing requested', async () => {
+        const { wrapper, clock, calls } = await start();
+        const gets = calls.get;
+        clock.now += 540_000;
+        await click(wrapper, TEXT.setPassword);
+        expect(wrapper.text()).toContain(TEXT.sessionExpired);
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+        expect(button(wrapper, TEXT.submitGenerate)).toBeUndefined();
+        expect(calls.get).toBe(gets);
+        expect(calls.put).toBe(0);
+    });
+
+    it('state 1: a renewal failing otherwise shows its text above the button; the form stays closed', async () => {
+        const { wrapper, auth, clock } = await start();
+        vi.spyOn(auth, 'loginInPopup').mockRejectedValue(new BackendUnreachable());
+        clock.now += 540_000;
+        await click(wrapper, TEXT.setPassword);
+        const error = wrapper.find('.cps-password__error');
+        expect(error.attributes('role')).toBe('alert');
+        expect(error.text()).toBe('Der Dienst ist gerade nicht erreichbar. Versuch es gleich noch einmal.');
+        expect(button(wrapper, TEXT.submitGenerate)).toBeUndefined();
+    });
+});
+
+describe('point-A review: details only for admins and settings editors (I4)', () => {
+    const DETAIL = '<b>BACKEND_KEY</b> missing';
+
+    it('a settings editor who is no admin sees „Details“ on a load error', async () => {
+        const { wrapper } = await startFailingGet('misconfigured', 500, DETAIL, { perms: EDITOR });
+        expect(wrapper.find('main details').text()).toContain(DETAIL);
+    });
+
+    async function submitFailing(o: Options) {
+        const s = await start(o);
+        await click(s.wrapper, TEXT.setPassword);
+        s.fakeBackend.failNext('misconfigured', 500, { detail: DETAIL });
+        await click(s.wrapper, TEXT.submitGenerate);
+        return s;
+    }
+
+    it('a user gets no details for a failed submit', async () => {
+        const { wrapper } = await submitFailing({});
+        expect(errorAbove(wrapper).text()).toBe('Der Dienst ist noch nicht richtig eingerichtet.');
+        expect(wrapper.find('details').exists()).toBe(false);
+        expect(wrapper.text()).not.toContain('BACKEND_KEY');
+    });
+
+    it.each([
+        ['an admin', { admin: true }],
+        ['a settings editor', { perms: EDITOR }],
+    ])('%s gets the detail of a failed submit as plain text', async (_who, o) => {
+        const { wrapper } = await submitFailing(o);
+        expect(errorAbove(wrapper).find('details').text()).toContain(DETAIL);
+        expect(errorAbove(wrapper).find('b').exists()).toBe(false);
+    });
+});
+
+describe('point-A review: „✓ Gespeichert“ only right after saving a chosen password (I6)', () => {
+    it('not after „Abbrechen“', async () => {
+        const { wrapper } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await click(wrapper, TEXT.cancel);
+        expect(wrapper.find('.cps-password__saved').exists()).toBe(false);
+    });
+
+    it('not after „Fertig“', async () => {
+        const { wrapper } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await click(wrapper, TEXT.submitGenerate);
+        await click(wrapper, TEXT.done);
+        expect(wrapper.find('.cps-password__saved').exists()).toBe(false);
+    });
+
+    it('gone when the form is opened again and cancelled', async () => {
+        const { wrapper } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, VALID);
+        await click(wrapper, TEXT.submitCustom);
+        expect(wrapper.find('.cps-password__saved').exists()).toBe(true);
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.cancel);
+        expect(wrapper.find('.cps-password__saved').exists()).toBe(false);
+    });
+
+    it('gone on the next click even when the form cannot open (blocked popup)', async () => {
+        const { wrapper, clock } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, VALID);
+        await click(wrapper, TEXT.submitCustom);
+        clock.now += 540_000;
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-password__saved').exists()).toBe(false);
+    });
+});
+
+describe('point-A review: smaller cases (M1 to M11)', () => {
+    it('a double click sends once; the submit button is disabled while sending', async () => {
+        const { wrapper, holdPuts, calls } = await start();
+        await click(wrapper, TEXT.setPassword);
+        const release = holdPuts();
+        clickNow(wrapper, TEXT.submitGenerate);
+        clickNow(wrapper, TEXT.submitGenerate);
+        await settle();
+        expect(button(wrapper, TEXT.submitGenerate)!.attributes('disabled')).toBeDefined();
+        release();
+        await settle();
+        expect(calls.put).toBe(1);
+    });
+
+    it('custom passwords off and on again: the custom field starts empty', async () => {
+        const { wrapper, fakeBackend, stored, settings } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, VALID);
+        stored.value = JSON.stringify({ ...settings, revision: 2, allowCustomPassword: false });
+        fakeBackend.setSettings({ allowCustomPassword: false });
+        await click(wrapper, TEXT.submitCustom);
+        stored.value = JSON.stringify({ ...settings, revision: 3, allowCustomPassword: true });
+        fakeBackend.failNext('custom-password-not-allowed', 400);
+        await click(wrapper, TEXT.submitGenerate);
+        await wrapper.find('input[type="radio"][value="custom"]').setValue(true);
+        expect(customInput(wrapper).element.value).toBe('');
+    });
+
+    it('a session problem while the renewal banner is up adds no error above the button', async () => {
+        const { wrapper, fakeBackend } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, VALID);
+        fakeBackend.failNext('invalid-token', 401);
+        await click(wrapper, TEXT.submitCustom);
+        expect(wrapper.text()).toContain(TEXT.sessionExpired);
+        expect(errorAbove(wrapper).exists()).toBe(false);
+        expect(customInput(wrapper).element.value).toBe(VALID);
+    });
+
+    it('primary-password-required shows at the ChurchTools field', async () => {
+        const { wrapper, fakeBackend } = await start({ requirePrimary: true });
+        await click(wrapper, TEXT.setPassword);
+        await primaryInput(wrapper).setValue(CT_PASSWORD);
+        fakeBackend.failNext('primary-password-required', 400);
+        await click(wrapper, TEXT.submitGenerate);
+        expect(wrapper.find(`#${primaryInput(wrapper).attributes('aria-describedby')}`).text()).toBe(TEXT.primaryMissing);
+        expect(errorAbove(wrapper).exists()).toBe(false);
+    });
+
+    it.each([
+        ['the unknown-outcome warning', (f: ReturnType<typeof createFakeBackend>) => f.breakNext('unreachable', { afterWrite: true }), TEXT.unknown],
+        ['the error above the button', (f: ReturnType<typeof createFakeBackend>) => f.failNext('forbidden', 403), 'Dafür hast du keine Berechtigung.'],
+        ['the error at the ChurchTools field', (f: ReturnType<typeof createFakeBackend>) => f.failNext('invalid-primary-password', 403), TEXT.primaryWrong],
+    ])('%s goes away when the form is sent again', async (_name, arm, text) => {
+        const { wrapper, fakeBackend, holdPuts } = await start({ requirePrimary: true });
+        await click(wrapper, TEXT.setPassword);
+        await primaryInput(wrapper).setValue(CT_PASSWORD);
+        arm(fakeBackend);
+        await click(wrapper, TEXT.submitGenerate);
+        expect(wrapper.text()).toContain(text);
+        const release = holdPuts();
+        await click(wrapper, TEXT.submitGenerate);
+        expect(wrapper.text()).not.toContain(text);
+        release();
+        await settle();
+    });
+
+    it('revealed: a no-break space and a combining mark are named as U+XXXX', async () => {
+        const { wrapper } = await start({ passwordLength: 14 });
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, 'Abcdefgh12345! é');
+        await wrapper.find('button[aria-label="Passwort anzeigen"]').trigger('click');
+        const named = wrapper.find('.cps-rules__named').text();
+        expect(named).toContain('U+00A0');
+        expect(named).toContain('U+0301');
+    });
+
+    it('masked: the first characters outside ASCII (U+00A1) and ASCII symbols not in the list (~) are told apart', async () => {
+        const { wrapper } = await start({ passwordLength: 14 });
+        await click(wrapper, TEXT.setPassword);
+        await chooseCustom(wrapper, 'Abcdefgh12345!¡');
+        expect(wrapper.find('.cps-rules__named').text()).toBe('Nicht erlaubt: Umlaute und Zeichen außerhalb von ASCII');
+        await customInput(wrapper).setValue('Abcdefgh12345!~');
+        expect(wrapper.find('.cps-rules__named').text()).toBe('Nicht erlaubt: Sonderzeichen, die nicht in der Liste stehen');
+    });
+
+    it.each([
+        ['generated', async (w: VueWrapper) => click(w, TEXT.submitGenerate)],
+        [
+            'chosen',
+            async (w: VueWrapper) => {
+                await chooseCustom(w, VALID);
+                await click(w, TEXT.submitCustom);
+            },
+        ],
+    ])('no ChurchTools password in the body when it is not required (%s)', async (_name, send) => {
+        const { wrapper, puts } = await start({ requirePrimary: false });
+        await click(wrapper, TEXT.setPassword);
+        await send(wrapper);
+        expect(puts).toHaveLength(1);
+        expect(Object.keys(puts[0]!)).not.toContain('primaryPwd');
+    });
+
+    it('a failed copy says so in state 3', async () => {
+        const writeText = vi.fn().mockRejectedValue(new Error('denied'));
+        Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+        const { wrapper } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await click(wrapper, TEXT.submitGenerate);
+        await wrapper.find('.cps-flow__result button[aria-label="Kopieren"]').trigger('click');
+        await settle();
+        expect(wrapper.find('.cps-flow__result [role="alert"]').text()).toBe('Kopieren hat nicht geklappt. Markier das Passwort und kopier es selbst.');
+    });
+
+    it('the plaintext is not in the app’s session storage either', async () => {
+        const { wrapper, fakeBackend, storage } = await start();
+        await click(wrapper, TEXT.setPassword);
+        await click(wrapper, TEXT.submitGenerate);
+        const password = fakeBackend.entries.get(ME)!;
+        expect([...storage.map.values()].join('|')).not.toContain(password);
     });
 });

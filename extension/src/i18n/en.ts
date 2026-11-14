@@ -49,7 +49,6 @@ const en: Messages = {
             notAllowed: 'Not allowed:',
             space: 'space',
             tab: 'tab',
-            newline: 'line break',
             control: 'control characters',
             nonAscii: 'umlauts and characters outside ASCII',
             otherSymbol: 'special characters not in the list',

@@ -1178,3 +1178,32 @@ describe('the real browser wiring', () => {
         }
     });
 });
+
+describe('Auth.tokenFor (the token goes only to the backend it belongs to)', () => {
+    function withToken() {
+        const h = harness();
+        h.storage.setItem(TOKEN_KEY, JSON.stringify(validRecord));
+        const auth = new Auth(fakeBackend().factory, h.env);
+        ready(auth);
+        return auth;
+    }
+
+    it.each([BACKEND, `${BACKEND}/`, `${BACKEND}//`, ` ${BACKEND} `])('gives the token for the configured backend (%s)', (base) => {
+        expect(withToken().tokenFor(base)).toBe(TOKEN);
+    });
+
+    it.each(['https://other.example.org', `${BACKEND}/other`, 'https://pw.example.org.evil.example', 'http://pw.example.org', ''])(
+        'gives no token for another address (%s), and keeps it for the configured one',
+        (base) => {
+            const auth = withToken();
+            expect(auth.tokenFor(base)).toBeNull();
+            expect(auth.tokenFor(BACKEND)).toBe(TOKEN);
+        },
+    );
+
+    it('gives none before configure()', () => {
+        const h = harness();
+        h.storage.setItem(TOKEN_KEY, JSON.stringify(validRecord));
+        expect(new Auth(fakeBackend().factory, h.env).tokenFor(BACKEND)).toBeNull();
+    });
+});

@@ -39,10 +39,15 @@ export function useServices(): Services {
     return services;
 }
 
+/** The backend API for an address; it carries the token only when the address is the configured backend. */
+export function backendFor(auth: Pick<Auth, 'tokenFor'>): (baseUrl: string) => BackendApi {
+    return (baseUrl) => createBackendApi(baseUrl, () => auth.tokenFor(baseUrl));
+}
+
 /** The real systems: ChurchTools of the page, its KV store, and the backend from the settings. */
 export function createServices(language: Language): Services {
     const ct = createCtApi();
-    const backend = (baseUrl: string): BackendApi => createBackendApi(baseUrl, () => auth.token());
+    const backend = (baseUrl: string): BackendApi => backendFor(auth)(baseUrl);
     const auth: Auth = new Auth(backend);
     return { ct, store: new ExtensionStore(new ChurchToolsKv(ct, EXTENSION_KEY)), auth, backend, language };
 }

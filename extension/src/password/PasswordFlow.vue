@@ -15,7 +15,6 @@ import { isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import { PopupBlocked, PopupClosed } from '../backend/auth';
-import { translate } from '../i18n';
 import { BackendProblem, BackendUnreachable, UnexpectedResponse, problemMessageKey, problemParams } from '../backend/problems';
 import Banner from '../ui/Banner.vue';
 import ChoiceCard from '../ui/ChoiceCard.vue';
@@ -107,7 +106,8 @@ const codePoint = (c: string): string => `U+${c.codePointAt(0)!.toString(16).toU
 /**
  * The characters the rules don't allow, named so that a pasted space or line break is visible. While the field is
  * masked only their kinds are named (the password is not echoed); while it is shown each one is, and invisible ones
- * (controls, format and zero-width characters, other spaces, combining marks) as U+XXXX.
+ * (controls, format and zero-width characters, other spaces, combining marks) as U+XXXX. Line breaks never get here:
+ * text and password inputs drop them.
  */
 const notAllowed = computed(() => {
     const bad = [...new Set(Array.from(password.value))].filter((c) => !/^[A-Za-z0-9]$/.test(c) && !SYMBOLS.includes(c));
@@ -116,7 +116,6 @@ const notAllowed = computed(() => {
             .map((c) => {
                 if (c === ' ') return t('password.rules.space');
                 if (c === '\t') return t('password.rules.tab');
-                if (c === '\n' || c === '\r') return t('password.rules.newline');
                 if (/[\p{C}\p{Z}\p{M}]/u.test(c)) return codePoint(c);
                 return `„${c}“`;
             })
@@ -155,7 +154,7 @@ function clearInput(): void {
 }
 
 function showProblem(e: unknown): void {
-    error.value = { text: translate(t, problemMessageKey(e), problemParams(e)) };
+    error.value = { text: t(problemMessageKey(e), problemParams(e)) };
     if (detailed.value && e instanceof BackendProblem && e.detail) error.value.detail = e.detail;
 }
 
@@ -263,6 +262,7 @@ onBeforeUnmount(() => {
             :label="t('password.resultLabel')"
             :value="generated"
             readonly
+            autocomplete="off"
             revealed
             mono
             :reveal-label="t('password.reveal')"

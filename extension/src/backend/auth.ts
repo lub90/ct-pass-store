@@ -270,6 +270,15 @@ export class Auth {
         return this.bound()?.accessToken ?? null;
     }
 
+    /**
+     * The token for a request to `baseUrl`: only if that is the configured backend (compared as `backendBase()`), so a
+     * client built for another address never carries it.
+     */
+    tokenFor(baseUrl: string): string | null {
+        if (!this.config || backendBase(baseUrl) !== backendBase(this.config.backendUrl)) return null;
+        return this.token();
+    }
+
     /** Role and backend version from the login answer behind the current token. */
     info(): { admin: boolean; version: string } | null {
         const t = this.bound();

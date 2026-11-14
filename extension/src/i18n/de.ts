@@ -52,7 +52,6 @@ const de = {
             notAllowed: 'Nicht erlaubt:',
             space: 'Leerzeichen',
             tab: 'Tabulator',
-            newline: 'Zeilenumbruch',
             control: 'Steuerzeichen',
             nonAscii: 'Umlaute und Zeichen außerhalb von ASCII',
             otherSymbol: 'Sonderzeichen, die nicht in der Liste stehen',
