@@ -8,7 +8,7 @@ import AuthCallbackView from './AuthCallbackView.vue';
 
 const Target = defineComponent({ render: () => h('div', { class: 'target' }) });
 
-async function mountAt(url: string, options: { complete?: Auth['completePageLogin']; opener?: CallbackWindow['opener'] } = {}) {
+async function mountAt(url: string, options: { complete?: Auth['completePageLogin']; opener?: CallbackWindow['opener']; withoutAuth?: boolean } = {}) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [
@@ -22,7 +22,10 @@ async function mountAt(url: string, options: { complete?: Auth['completePageLogi
     const auth = { completePageLogin } as unknown as Auth;
     const win: CallbackWindow = { opener: options.opener ?? null, origin: 'https://ct.example.org', close: vi.fn() };
     const wrapper = mount(AuthCallbackView, {
-        global: { plugins: [router, createAppI18n('de')], provide: { [AUTH_KEY as symbol]: auth, [CALLBACK_WINDOW_KEY as symbol]: win } },
+        global: {
+            plugins: [router, createAppI18n('de')],
+            provide: { ...(options.withoutAuth ? {} : { [AUTH_KEY as symbol]: auth }), [CALLBACK_WINDOW_KEY as symbol]: win },
+        },
     });
     await flushPromises();
     return { wrapper, router, completePageLogin, win };
@@ -62,9 +65,44 @@ describe('AuthCallbackView', () => {
         expect(completePageLogin).not.toHaveBeenCalled();
     });
 
-    it('shows the error for a popup callback without an opener', async () => {
-        const { completePageLogin, wrapper } = await mountAt(`/auth/callback?code=c2&state=p.${'x'.repeat(43)}`);
+    it('shows the error for a popup callback without an opener and removes the code', async () => {
+        const { completePageLogin, wrapper, router } = await mountAt(`/auth/callback?code=c2&state=p.${'x'.repeat(43)}`);
         expect(completePageLogin).not.toHaveBeenCalled();
         expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+        expect(router.currentRoute.value.fullPath).toBe('/auth/callback');
+    });
+
+    it('closes a popup the person declined, without an alert and without a page login', async () => {
+        const opener = { postMessage: vi.fn() };
+        const { completePageLogin, wrapper, win } = await mountAt(`/auth/callback?error=access_denied&state=p.${'x'.repeat(43)}`, { opener });
+        expect(win.close).toHaveBeenCalledOnce();
+        expect(opener.postMessage).not.toHaveBeenCalled();
+        expect(completePageLogin).not.toHaveBeenCalled();
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    });
+
+    it('shows the error for a malformed popup state and posts nothing', async () => {
+        const opener = { postMessage: vi.fn() };
+        const { completePageLogin, wrapper, win, router } = await mountAt('/auth/callback?code=c2&state=p.', { opener });
+        expect(opener.postMessage).not.toHaveBeenCalled();
+        expect(win.close).not.toHaveBeenCalled();
+        expect(completePageLogin).not.toHaveBeenCalled();
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+        expect(router.currentRoute.value.fullPath).toBe('/auth/callback');
+    });
+
+    it('completes a page login even when the tab has an opener', async () => {
+        const opener = { postMessage: vi.fn() };
+        const { completePageLogin, router, win } = await mountAt(`/auth/callback?code=c3&state=${'x'.repeat(43)}`, { opener });
+        expect(completePageLogin).toHaveBeenCalledOnce();
+        expect(opener.postMessage).not.toHaveBeenCalled();
+        expect(win.close).not.toHaveBeenCalled();
+        expect(router.currentRoute.value.fullPath).toBe('/manage/5');
+    });
+
+    it('shows the error and removes the code when no Auth is provided', async () => {
+        const { wrapper, router } = await mountAt('/auth/callback?code=c4&state=s4', { withoutAuth: true });
+        expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+        expect(router.currentRoute.value.fullPath).toBe('/auth/callback');
     });
 });

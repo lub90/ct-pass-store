@@ -7,7 +7,9 @@
  * - Popup login (renewal during a session): state and verifier stay in this object's memory; the callback page in the
  *   popup posts `{code, state}` to its opener with its own origin as target, and only a message from that popup, from
  *   our own origin, with the expected state is taken.
- * - The token lives in memory and in `sessionStorage['cps-token']`, bound to the backend it was issued for.
+ * - The token lives in memory and in `sessionStorage['cps-token']`, bound to the backend it was issued for and to the
+ *   ChurchTools person (`sub`). The app calls `configure()` with the settings and `bindPerson()` with whoami's id at
+ *   startup (Task 11), before it decides on a page login; until both are done no token is handed out.
  *
  * Code, verifier, state and token never go into an error, a log line or a URL other than the authorize URL.
  */
@@ -16,14 +18,21 @@ import { BASE_PATH, CALLBACK_PATH } from '../config';
 import { instanceBaseUrl } from '../ct/client';
 import type { BackendApi, LoginResult } from './api';
 import { backendBase } from './http';
+import { tokenPerson } from './jwt';
 import { authorizeUrl, createPkce, randomToken } from './pkce';
+import { UnexpectedResponse } from './problems';
 
 export const LOGIN_KEY = 'cps-login';
 export const TOKEN_KEY = 'cps-token';
+/** Epoch ms of the last completed page login (loop guard, `recentPageLogin`). */
+export const LAST_LOGIN_KEY = 'cps-login-done';
+/** A token problem this soon after a page login doesn't start another one. */
+const LOGIN_LOOP_MS = 60_000;
 /** `type` of the message the callback popup posts to its opener. */
 export const POPUP_MESSAGE = 'cps-oauth-callback';
 /** Popup logins use states with this prefix, so the callback page knows to hand over instead of exchanging. */
 const POPUP_STATE_PREFIX = 'p.';
+const POPUP_STATE = /^p\.[A-Za-z0-9_-]{43}$/;
 const POPUP_NAME = 'cps-login';
 const POPUP_FEATURES = 'popup,width=520,height=680';
 const POLL_MS = 500;
@@ -53,6 +62,14 @@ export class LoginStateError extends Error {
     constructor() {
         super('The login callback does not match a started login');
         this.name = 'LoginStateError';
+    }
+}
+
+/** The new token belongs to another person than the one logged into ChurchTools now. It was not stored. */
+export class PersonMismatch extends Error {
+    constructor() {
+        super('The login belongs to another person');
+        this.name = 'PersonMismatch';
     }
 }
 
@@ -137,6 +154,8 @@ interface TokenRecord {
     version: string;
     /** `backendBase()` of the backend that issued it. */
     backend: string;
+    /** ChurchTools person id from the token's `sub`. */
+    person: number;
 }
 
 interface LoginRecord {
@@ -149,18 +168,25 @@ interface LoginRecord {
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v !== '';
 const usableCode = (v: unknown): v is string => nonEmpty(v) && v.length <= MAX_CODE_LENGTH;
+const personId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
 
 /**
- * A path of this app (router path, below `BASE_PATH`) to return to after the login, or `/`. Refuses anything that
- * could leave the app: absolute and protocol-relative URLs, backslashes, whitespace and control characters, overlong
- * paths, and the callback route itself.
+ * A path of this app (router path, below `BASE_PATH`) to return to after the login, or `/`. Accepts printable ASCII
+ * only (router `fullPath`s are percent-encoded), so no whitespace, control, format or look-alike characters. Refuses
+ * absolute and protocol-relative URLs, backslashes, percent-encoded slashes and backslashes, broken encoding, overlong
+ * paths, and the callback route itself, matched like vue-router does: case-insensitive, trailing slash optional.
  */
 export function safeReturnPath(path: unknown): string {
     if (typeof path !== 'string' || path.length > MAX_RETURN_PATH_LENGTH) return '/';
-    if (!/^\/(?![/\\])[^\\\s\p{Cc}]*$/u.test(path)) return '/';
-    const callback = `/${CALLBACK_PATH}`;
-    const rest = path.slice(callback.length);
-    if (path.startsWith(callback) && (rest === '' || /^[/?#]/.test(rest))) return '/';
+    if (!/^\/(?!\/)[\x21-\x5b\x5d-\x7e]*$/.test(path)) return '/';
+    if (/%(2f|5c)/i.test(path)) return '/';
+    let pathname: string;
+    try {
+        pathname = decodeURIComponent(path.split(/[?#]/)[0]!);
+    } catch {
+        return '/';
+    }
+    if (pathname.toLowerCase().replace(/\/+$/, '') === `/${CALLBACK_PATH}`.toLowerCase()) return '/';
     return path;
 }
 
@@ -170,6 +196,7 @@ function single(value: unknown): string | null {
 
 export class Auth {
     private config: AuthConfig | null = null;
+    private person: number | null = null;
     private current: TokenRecord | null;
     private readonly listeners = new Set<() => void>();
     private readonly backend: (baseUrl: string) => Pick<BackendApi, 'login'>;
@@ -188,7 +215,30 @@ export class Auth {
         this.notify();
     }
 
-    /** Called after `configure()` and after every new token (not on `clear()`); returns the unsubscribe. */
+    /**
+     * The ChurchTools person logged in now (whoami). A token of another person is dropped; an invalid id drops the
+     * token too. Called at startup before deciding on a page login.
+     */
+    bindPerson(id: number): void {
+        this.person = personId(id) ? id : null;
+        if (this.person === null) this.clear();
+        this.notify();
+    }
+
+    /** Backend and person the token must belong to; changes when either does. `null` before `configure()`. */
+    scope(): string | null {
+        return this.config ? `${backendBase(this.config.backendUrl)}#${this.person ?? ''}` : null;
+    }
+
+    /** Whether a page login completed less than 60 s ago (in this tab). Guards against a login loop. */
+    recentPageLogin(): boolean {
+        const raw = this.read(LAST_LOGIN_KEY);
+        if (raw === null || !/^\d+$/.test(raw)) return false;
+        const age = this.env.now() - Number(raw);
+        return age >= 0 && age < LOGIN_LOOP_MS;
+    }
+
+    /** Called after `configure()`, `bindPerson()` and every new token (not on `clear()`); returns the unsubscribe. */
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
         return () => void this.listeners.delete(listener);
@@ -198,7 +248,7 @@ export class Auth {
         for (const listener of [...this.listeners]) listener();
     }
 
-    /** The bearer token for the configured backend, or `null`. Expiry is the backend's call (`token-expired`). */
+    /** The bearer token for the configured backend and bound person, or `null`. Expiry is the backend's call (`token-expired`). */
     token(): string | null {
         return this.bound()?.accessToken ?? null;
     }
@@ -239,19 +289,22 @@ export class Auth {
     async completePageLogin(query: Record<string, unknown>): Promise<string> {
         const raw = this.read(LOGIN_KEY);
         this.remove(LOGIN_KEY);
+        // Fails closed: login data that can't be removed could be used again.
+        if (raw !== null && this.read(LOGIN_KEY) !== null) throw new LoginStateError();
         const login = parseLogin(raw);
         const state = single(query.state);
         const code = query.code;
         if (!login || state === null || state !== login.state || !usableCode(code)) throw new LoginStateError();
         const result = await this.backend(login.backendUrl).login(code, login.verifier, this.redirectUri());
         this.storeToken(result, login.backendUrl);
+        this.write(LAST_LOGIN_KEY, String(this.env.now()));
         return login.returnPath;
     }
 
     /**
      * Renewal through a popup (spec 7.2). Must be called inside a click handler: the popup is opened synchronously.
-     * Rejects `PopupBlocked`, `PopupClosed` (also after 5 minutes without a code), `LoginUnavailable` or the backend's
-     * error. Must not run twice at once (both would share the popup window name); `useSession` makes overlapping
+     * Rejects `PopupBlocked`, `PopupClosed` (also after 5 minutes without a code), `LoginUnavailable`,
+     * `PersonMismatch` (someone else is logged into ChurchTools now; the old token is dropped) or the backend's error. Must not run twice at once (both would share the popup window name); `useSession` makes overlapping
      * renewals share one call.
      */
     loginInPopup(): Promise<void> {
@@ -329,23 +382,31 @@ export class Auth {
         return this.config;
     }
 
-    /** The token if it belongs to the configured backend; a token of another backend is dropped. */
+    /** The token if it belongs to the configured backend and bound person; a token of another one is dropped. */
     private bound(): TokenRecord | null {
-        if (!this.current || !this.config) return null;
-        if (this.current.backend !== backendBase(this.config.backendUrl)) {
+        if (!this.current || !this.config || this.person === null) return null;
+        if (this.current.backend !== backendBase(this.config.backendUrl) || this.current.person !== this.person) {
             this.clear();
             return null;
         }
         return this.current;
     }
 
+    /** Rejects a token without a usable `sub` (`UnexpectedResponse`) or for another person (`PersonMismatch`). */
     private storeToken(result: LoginResult, backendUrl: string): void {
+        const person = tokenPerson(result.accessToken);
+        if (person === null) throw new UnexpectedResponse(200);
+        if (this.person !== null && person !== this.person) {
+            this.clear();
+            throw new PersonMismatch();
+        }
         this.current = {
             accessToken: result.accessToken,
             expiresAt: this.env.now() + result.expiresIn * 1000,
             admin: result.admin,
             version: result.version,
             backend: backendBase(backendUrl),
+            person,
         };
         // Without sessionStorage the token stays in memory only (a reload logs in again).
         this.write(TOKEN_KEY, JSON.stringify(this.current));
@@ -412,11 +473,12 @@ function parseToken(raw: string): TokenRecord | null {
         !Number.isFinite(v.expiresAt) ||
         typeof v.admin !== 'boolean' ||
         typeof v.version !== 'string' ||
-        !nonEmpty(v.backend)
+        !nonEmpty(v.backend) ||
+        !personId(v.person)
     ) {
         return null;
     }
-    return { accessToken: v.accessToken, expiresAt: v.expiresAt, admin: v.admin, version: v.version, backend: v.backend };
+    return { accessToken: v.accessToken, expiresAt: v.expiresAt, admin: v.admin, version: v.version, backend: v.backend, person: v.person };
 }
 
 function isClosed(popup: PopupLike): boolean {
@@ -443,11 +505,13 @@ export interface CallbackWindow {
 
 /**
  * The callback route's first step (spec 7.1 step 3). A popup login (state with the popup prefix) hands `{code, state}`
- * to the opener, with this page's origin as the only allowed target, and closes. Returns `'page'` for a page login.
+ * to the opener, with this page's origin as the only allowed target, and closes. Returns `'page'` for a page login,
+ * `'invalid'` for a malformed popup state (nothing posted).
  */
-export function forwardPopupCallback(query: Record<string, unknown>, win: CallbackWindow): 'page' | 'forwarded' | 'closed' | 'no-opener' {
+export function forwardPopupCallback(query: Record<string, unknown>, win: CallbackWindow): 'page' | 'forwarded' | 'closed' | 'no-opener' | 'invalid' {
     const state = single(query.state);
     if (state === null || !state.startsWith(POPUP_STATE_PREFIX)) return 'page';
+    if (!POPUP_STATE.test(state)) return 'invalid';
     if (!win.opener) return 'no-opener';
     const code = query.code;
     if (usableCode(code)) win.opener.postMessage({ type: POPUP_MESSAGE, code, state }, win.origin);

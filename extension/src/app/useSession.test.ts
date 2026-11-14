@@ -3,14 +3,16 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
 import type { BackendApi, LoginResult } from '../backend/api';
-import { Auth, LOGIN_KEY, POPUP_MESSAGE, PopupBlocked, PopupClosed, TOKEN_KEY, type AuthEnv, type MessageLike, type PopupLike } from '../backend/auth';
+import { Auth, LOGIN_KEY, LoginUnavailable, POPUP_MESSAGE, PersonMismatch, PopupBlocked, PopupClosed, TOKEN_KEY, type AuthEnv, type MessageLike, type PopupLike } from '../backend/auth';
 import { BackendProblem } from '../backend/problems';
-import { RENEW_BEFORE_MS, SESSION_KEY, createSession, useSession, type SessionAuth } from './useSession';
+import { LoginLoop, SESSION_KEY, createSession, useSession, type SessionAuth } from './useSession';
 
 function fakeAuth(options: { expiresInMs?: number; admin?: boolean; version?: string } = {}) {
     const state = {
         expiresInMs: options.expiresInMs ?? 600_000,
         info: { admin: options.admin ?? false, version: options.version ?? '0.1.0' } as { admin: boolean; version: string } | null,
+        scope: 'B#1' as string | null,
+        recent: false,
     };
     const listeners = new Set<() => void>();
     const auth = {
@@ -19,6 +21,8 @@ function fakeAuth(options: { expiresInMs?: number; admin?: boolean; version?: st
         clear: vi.fn(() => undefined),
         info: vi.fn(() => state.info),
         expiresInMs: vi.fn(() => state.expiresInMs),
+        scope: vi.fn(() => state.scope),
+        recentPageLogin: vi.fn(() => state.recent),
         subscribe: vi.fn((fn: () => void) => {
             listeners.add(fn);
             return () => void listeners.delete(fn);
@@ -75,21 +79,41 @@ describe('role and version', () => {
     });
 });
 
+describe('role and version are display-only and follow the scope', () => {
+    it('are reset when the backend or person changes, before the new token is read', () => {
+        const { auth, state, emit } = fakeAuth({ admin: true, version: '0.1.4' });
+        const session = createSession(auth, () => '/');
+        state.scope = 'C#1';
+        state.info = null;
+        emit();
+        expect(session.admin.value).toBe(false);
+        expect(session.backendVersion.value).toBeNull();
+        state.info = { admin: true, version: '0.2.0' };
+        emit();
+        expect(session.admin.value).toBe(true);
+        expect(session.backendVersion.value).toBe('0.2.0');
+    });
+
+    it('are not reset when the scope stays the same', () => {
+        const { auth, state, emit } = fakeAuth({ admin: true, version: '0.1.4' });
+        const session = createSession(auth, () => '/');
+        state.info = null;
+        emit();
+        expect(session.admin.value).toBe(true);
+    });
+});
+
 describe('ensureFresh', () => {
     it.each([
-        [RENEW_BEFORE_MS + 1_000, false],
-        [RENEW_BEFORE_MS + 1, false],
-        [RENEW_BEFORE_MS, false],
-        [RENEW_BEFORE_MS - 1, true],
+        [121_000, false],
+        [120_001, false],
+        [120_000, false],
+        [119_999, true],
         [0, true],
     ])('with %i ms left renews: %s', async (left, renews) => {
         const { auth } = fakeAuth({ expiresInMs: left });
         await createSession(auth, () => '/').ensureFresh();
         expect(auth.loginInPopup).toHaveBeenCalledTimes(renews ? 1 : 0);
-    });
-
-    it('is 120 seconds', () => {
-        expect(RENEW_BEFORE_MS).toBe(120_000);
     });
 
     it('takes role and version from the renewed token', async () => {
@@ -216,7 +240,6 @@ describe('call', () => {
     it('a blocked popup sets needsRenewal, rejects with PopupBlocked and resets nothing', async () => {
         const { auth } = fakeAuth({ admin: true });
         auth.loginInPopup.mockRejectedValue(new PopupBlocked());
-        const typed = { password: 'Typed-1!' };
         const fn = vi.fn(async () => {
             throw problem('token-expired');
         });
@@ -225,7 +248,6 @@ describe('call', () => {
         expect(fn).toHaveBeenCalledOnce();
         expect(session.needsRenewal.value).toBe(true);
         expect(session.admin.value).toBe(true);
-        expect(typed.password).toBe('Typed-1!');
         expect(auth.clear).not.toHaveBeenCalled();
         expect(auth.startPageLogin).not.toHaveBeenCalled();
     });
@@ -257,6 +279,77 @@ describe('call', () => {
         // The frame stays as it was until the renewal.
         expect(session.admin.value).toBe(true);
         expect(session.backendVersion.value).toBe('0.1.2');
+    });
+
+    it.each(['invalid-token', 'missing-token'])('on %s right after a page login does not log in again (loop guard)', async (slug) => {
+        const { auth, state } = fakeAuth();
+        state.recent = true;
+        const session = createSession(auth, () => '/');
+        expect(session.loginLoop.value).toBe(false);
+        await expect(session.call(() => Promise.reject(problem(slug)))).rejects.toBeInstanceOf(LoginLoop);
+        expect(auth.startPageLogin).not.toHaveBeenCalled();
+        expect(auth.clear).toHaveBeenCalledOnce();
+        expect(session.loginLoop.value).toBe(true);
+    });
+
+    it('the loop guard error carries no token problem detail', async () => {
+        const { auth, state } = fakeAuth();
+        state.recent = true;
+        const error = await createSession(auth, () => '/')
+            .call(() => Promise.reject(problem('invalid-token')))
+            .catch((e: unknown) => e as Error);
+        expect(error.name).toBe('LoginLoop');
+    });
+
+    it('a renewal that returns another person starts a page login and does not resend', async () => {
+        const { auth } = fakeAuth();
+        auth.loginInPopup.mockRejectedValue(new PersonMismatch());
+        const fn = vi.fn().mockRejectedValue(problem('token-expired'));
+        const session = createSession(auth, () => '/manage/3');
+        expect(await settled(session.call(fn))).toBe('pending');
+        expect(auth.startPageLogin).toHaveBeenCalledExactlyOnceWith('/manage/3');
+        expect(fn).toHaveBeenCalledOnce();
+        expect(session.needsRenewal.value).toBe(false);
+    });
+
+    it('a renewal that returns another person right after a page login hits the loop guard', async () => {
+        const { auth, state } = fakeAuth();
+        state.recent = true;
+        auth.loginInPopup.mockRejectedValue(new PersonMismatch());
+        const session = createSession(auth, () => '/');
+        await expect(session.renew()).rejects.toBeInstanceOf(LoginLoop);
+        expect(auth.startPageLogin).not.toHaveBeenCalled();
+        expect(session.loginLoop.value).toBe(true);
+    });
+
+    it('two calls failing with token-expired at once share one popup and are each resent once', async () => {
+        const { auth } = fakeAuth();
+        let finish!: () => void;
+        auth.loginInPopup.mockImplementation(() => new Promise<undefined>((r) => (finish = () => r(undefined))));
+        const a = vi.fn().mockRejectedValueOnce(problem('token-expired')).mockResolvedValueOnce('a');
+        const b = vi.fn().mockRejectedValueOnce(problem('token-expired')).mockResolvedValueOnce('b');
+        const session = createSession(auth, () => '/');
+        const pa = session.call(a);
+        const pb = session.call(b);
+        await flush();
+        finish();
+        expect(await Promise.all([pa, pb])).toEqual(['a', 'b']);
+        expect(auth.loginInPopup).toHaveBeenCalledOnce();
+        expect(a).toHaveBeenCalledTimes(2);
+        expect(b).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+        ['LoginUnavailable', () => new LoginUnavailable()],
+        ['oauth-code-invalid', () => problem('oauth-code-invalid', 400)],
+    ])('a renewal failing with %s is passed on without resending', async (_name, make) => {
+        const { auth } = fakeAuth();
+        const error = make();
+        auth.loginInPopup.mockRejectedValue(error);
+        const fn = vi.fn().mockRejectedValue(problem('token-expired'));
+        await expect(createSession(auth, () => '/').call(fn)).rejects.toBe(error);
+        expect(fn).toHaveBeenCalledOnce();
+        expect(auth.startPageLogin).not.toHaveBeenCalled();
     });
 
     it('forgets unsaved input once its form stops tracking it', async () => {
@@ -315,7 +408,9 @@ describe('with a real Auth', () => {
     const ORIGIN = 'https://ct.example.org';
     const BACKEND = 'https://pw.example.org';
     const NOW = 1_800_000_000_000;
-    const RESULT: LoginResult = { accessToken: 'tok', expiresIn: 900, admin: true, version: '0.1.7' };
+    const TOKEN = `${btoa('{}')}.${btoa(JSON.stringify({ sub: '1' })).replace(/=+$/, '')}.c2ln`;
+    const RESULT: LoginResult = { accessToken: TOKEN, expiresIn: 900, admin: true, version: '0.1.7' };
+    const RECORD = JSON.stringify({ accessToken: TOKEN, expiresAt: NOW + 600_000, admin: true, version: '0.1.7', backend: `${BACKEND}/v1`, person: 1 });
 
     function env() {
         const map = new Map<string, string>();
@@ -359,14 +454,16 @@ describe('with a real Auth', () => {
     }
     const backend = () => ({ login: vi.fn(async () => RESULT) }) as unknown as BackendApi;
 
-    it('takes role and version once the stored token becomes usable by configure()', () => {
+    it('takes role and version once the stored token becomes usable by configure() and bindPerson()', () => {
         const { e, map } = env();
-        map.set(TOKEN_KEY, JSON.stringify({ accessToken: 'tok', expiresAt: NOW + 600_000, admin: true, version: '0.1.7', backend: `${BACKEND}/v1` }));
+        map.set(TOKEN_KEY, RECORD);
         const auth = new Auth(backend, e);
         const session = createSession(auth, () => '/');
         expect(session.admin.value).toBe(false);
         expect(session.backendVersion.value).toBeNull();
         auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        expect(session.admin.value).toBe(false);
+        auth.bindPerson(1);
         expect(session.admin.value).toBe(true);
         expect(session.backendVersion.value).toBe('0.1.7');
     });
@@ -378,24 +475,52 @@ describe('with a real Auth', () => {
         map.set(LOGIN_KEY, JSON.stringify({ state: 's'.repeat(43), verifier: 'v'.repeat(43), returnPath: '/', backendUrl: BACKEND }));
         await auth.completePageLogin({ code: 'c', state: 's'.repeat(43) });
         auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        auth.bindPerson(1);
         expect(session.admin.value).toBe(true);
         expect(session.backendVersion.value).toBe('0.1.7');
     });
 
     it('keeps the last role when the token is dropped (the frame stays until the renewal)', () => {
         const { e, map } = env();
-        map.set(TOKEN_KEY, JSON.stringify({ accessToken: 'tok', expiresAt: NOW + 600_000, admin: true, version: '0.1.7', backend: `${BACKEND}/v1` }));
+        map.set(TOKEN_KEY, RECORD);
         const auth = new Auth(backend, e);
         auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        auth.bindPerson(1);
         const session = createSession(auth, () => '/');
         auth.clear();
         expect(session.admin.value).toBe(true);
+    });
+
+    it('resets role and version when configure() switches to another backend', () => {
+        const { e, map } = env();
+        map.set(TOKEN_KEY, RECORD);
+        const auth = new Auth(backend, e);
+        auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        auth.bindPerson(1);
+        const session = createSession(auth, () => '/');
+        expect(session.admin.value).toBe(true);
+        auth.configure({ backendUrl: 'https://other.example.org', clientId: 'c' });
+        expect(session.admin.value).toBe(false);
+        expect(session.backendVersion.value).toBeNull();
+    });
+
+    it('resets role and version when another person is bound', () => {
+        const { e, map } = env();
+        map.set(TOKEN_KEY, RECORD);
+        const auth = new Auth(backend, e);
+        auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        auth.bindPerson(1);
+        const session = createSession(auth, () => '/');
+        auth.bindPerson(2);
+        expect(session.admin.value).toBe(false);
+        expect(session.backendVersion.value).toBeNull();
     });
 
     it('after a popup that timed out, a later renew() starts a fresh attempt', async () => {
         const { e, popups, now, tick, listeners } = env();
         const auth = new Auth(backend, e);
         auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+        auth.bindPerson(1);
         const session = createSession(auth, () => '/');
         const first = session.renew();
         await vi.waitFor(() => expect(popups[0]?.urls).toHaveLength(1));

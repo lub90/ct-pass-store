@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { BackendApi } from './api';
+import { tokenPerson } from './jwt';
 import { BackendProblem } from './problems';
 
 /**
@@ -56,6 +57,8 @@ export function defineBackendContract(name: string, make: () => Promise<BackendC
             if (!s.loginArguments) return ctx.skip();
             const result = await s.login(...(await s.loginArguments()));
             expect(result.accessToken.length).toBeGreaterThan(0);
+            // The extension binds the stored token to the ChurchTools person by this claim.
+            expect(tokenPerson(result.accessToken)).toBe(s.ownPersonId);
             expect(result.expiresIn).toBe(900);
             expect(result.admin).toBe(s.admin);
             expect(result.version).toMatch(/^\d+\.\d+\.\d+/);

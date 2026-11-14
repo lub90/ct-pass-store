@@ -103,6 +103,12 @@ function generate(length: number): string {
     return chars.join('');
 }
 
+/** A token shaped like the backend's: the extension reads `sub` to bind it to the person. The signature is fake. */
+function fakeJwt(personId: number): string {
+    const part = (v: unknown) => btoa(JSON.stringify(v)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ sub: String(personId), iss: 'fake' })}.ZmFrZQ`;
+}
+
 function problem(slug: string, status: number, extra: { retryAfter?: number; violations?: string[]; detail?: string } = {}): BackendProblem {
     const p = new BackendProblem(slug, status);
     p.detail = extra.detail ?? `Fake backend: ${slug}`;
@@ -179,7 +185,7 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
             if (options.noServiceAccess) throw problem('no-service-access', 403);
             loggedIn = true;
             expired = false;
-            return { accessToken: 'fake-token', expiresIn: 900, admin, version };
+            return { accessToken: fakeJwt(me), expiresIn: 900, admin, version };
         },
 
         async getEntry(personId) {

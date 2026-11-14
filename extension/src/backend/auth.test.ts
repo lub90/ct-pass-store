@@ -3,12 +3,14 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BackendApi, LoginResult } from './api';
 import {
     Auth,
+    LAST_LOGIN_KEY,
     LOGIN_KEY,
     LoginStateError,
     LoginUnavailable,
     POPUP_MESSAGE,
     PopupBlocked,
     PopupClosed,
+    PersonMismatch,
     TOKEN_KEY,
     callbackWindow,
     forwardPopupCallback,
@@ -19,7 +21,7 @@ import {
     type MessageLike,
     type PopupLike,
 } from './auth';
-import { BackendProblem } from './problems';
+import { BackendProblem, UnexpectedResponse } from './problems';
 
 const ORIGIN = 'https://ct.example.org';
 const BACKEND = 'https://pw.example.org';
@@ -27,6 +29,12 @@ const REDIRECT_PATH = '/ccm/ctpassstore/auth/callback';
 const REDIRECT_URI = ORIGIN + REDIRECT_PATH;
 const CLIENT = 'client-7';
 const NOW = 1_800_000_000_000;
+const PERSON = 1;
+
+const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+/** A token shaped like the backend's (signature not checked by the extension). */
+const jwt = (sub: unknown) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub, admin: true })}.c2ln`;
+const TOKEN = jwt(String(PERSON));
 
 const challengeOf = (verifier: string) => createHash('sha256').update(verifier, 'ascii').digest('base64url');
 
@@ -102,7 +110,7 @@ function harness(): Harness {
     return h;
 }
 
-const LOGIN_RESULT: LoginResult = { accessToken: 'tok-123', expiresIn: 900, admin: true, version: '0.1.0' };
+const LOGIN_RESULT: LoginResult = { accessToken: TOKEN, expiresIn: 900, admin: true, version: '0.1.0' };
 
 function fakeBackend(login: BackendApi['login'] = async () => LOGIN_RESULT) {
     const loginSpy = vi.fn(login);
@@ -114,9 +122,17 @@ function setup(options: { configure?: boolean } = {}) {
     const h = harness();
     const backend = fakeBackend();
     const auth = new Auth(backend.factory, h.env);
-    if (options.configure !== false) auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+    if (options.configure !== false) ready(auth);
     return { h, backend, auth };
 }
+
+/** What the app does at startup: configure from the settings, bind the person from whoami. */
+function ready(auth: Auth, backendUrl = BACKEND, person = PERSON) {
+    auth.configure({ backendUrl, clientId: CLIENT });
+    auth.bindPerson(person);
+}
+
+const validRecord = { accessToken: TOKEN, expiresAt: NOW + 600_000, admin: true, version: '0.1.0', backend: `${BACKEND}/v1`, person: PERSON };
 
 const storedLogin = (h: Harness) => JSON.parse(h.storage.getItem(LOGIN_KEY)!) as Record<string, unknown>;
 const storedToken = (h: Harness) => JSON.parse(h.storage.getItem(TOKEN_KEY)!) as Record<string, unknown>;
@@ -158,6 +174,22 @@ describe('safeReturnPath', () => {
         ['a space', '/my page'],
         ['a DEL character', '/manage\x7f'],
         ['a line separator', '/manage\u2028'],
+        ['a paragraph separator', '/manage\u2029'],
+        ['a zero-width space', '/man\u200bage'],
+        ['a no-break space', '/my\u00a0page'],
+        ['a fullwidth slash', '/\uff0fevil.example'],
+        ['an umlaut', '/m\u00e4nage'],
+        ['an encoded slash', '/%2F%2Fevil.example'],
+        ['an encoded slash in lower case', '/a/%2fb'],
+        ['an encoded backslash', '/%5Cevil'],
+        ['an encoded backslash in lower case', '/%5cevil'],
+        ['broken percent-encoding', '/manage/%E0%A4%A'],
+        ['the callback in upper case', '/AUTH/CALLBACK'],
+        ['the callback in mixed case with a slash', '/Auth/Callback/'],
+        ['the callback with an upper-case part and a query', '/auth/CALLBACK?code=x'],
+        ['the callback with several trailing slashes', '/auth/callback//'],
+        ['the callback percent-encoded', '/auth/%63allback'],
+        ['the callback with a fragment', '/auth/callback#x'],
         ['the callback itself', '/auth/callback'],
         ['the callback with a query', '/auth/callback?code=x'],
         ['the callback below a slash', '/auth/callback/'],
@@ -177,6 +209,11 @@ describe('safeReturnPath', () => {
     it('keeps paths that only start like the callback', () => {
         expect(safeReturnPath('/auth/callbacks')).toBe('/auth/callbacks');
         expect(safeReturnPath('/auth')).toBe('/auth');
+        expect(safeReturnPath('/auth/callback/x')).toBe('/auth/callback/x');
+    });
+
+    it('keeps encoded characters other than slashes in queries', () => {
+        expect(safeReturnPath('/manage?q=M%C3%BCller')).toBe('/manage?q=M%C3%BCller');
     });
 });
 
@@ -252,10 +289,13 @@ describe('Auth.startPageLogin', () => {
         };
         await expect(auth.startPageLogin('/')).rejects.toBeInstanceOf(LoginUnavailable);
         expect(h.assigned).toEqual([]);
-        const nullStorage = setup();
-        nullStorage.h.env.storage = () => null;
-        await expect(nullStorage.auth.startPageLogin('/')).rejects.toBeInstanceOf(LoginUnavailable);
-        expect(nullStorage.h.assigned).toEqual([]);
+    });
+
+    it('does not redirect when there is no sessionStorage', async () => {
+        const { h, auth } = setup();
+        h.env.storage = () => null;
+        await expect(auth.startPageLogin('/')).rejects.toBeInstanceOf(LoginUnavailable);
+        expect(h.assigned).toEqual([]);
     });
 });
 
@@ -269,8 +309,9 @@ describe('Auth.completePageLogin', () => {
         expect(path).toBe('/manage/5');
         expect(backend.factory).toHaveBeenCalledWith(BACKEND);
         expect(backend.login).toHaveBeenCalledExactlyOnceWith('the-code', stored.verifier, REDIRECT_URI);
-        expect(storedToken(h)).toEqual({ accessToken: 'tok-123', expiresAt: NOW + 900_000, admin: true, version: '0.1.0', backend: `${BACKEND}/v1` });
-        expect(auth.token()).toBe('tok-123');
+        expect(storedToken(h)).toEqual({ accessToken: TOKEN, expiresAt: NOW + 900_000, admin: true, version: '0.1.0', backend: `${BACKEND}/v1`, person: PERSON });
+        expect(h.storage.getItem(LAST_LOGIN_KEY)).toBe(String(NOW));
+        expect(auth.token()).toBe(TOKEN);
         expect(auth.info()).toEqual({ admin: true, version: '0.1.0' });
         expect(h.storage.getItem(LOGIN_KEY)).toBeNull();
     });
@@ -301,6 +342,67 @@ describe('Auth.completePageLogin', () => {
         expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
         expect(auth.token()).toBeNull();
         expect(h.storage.getItem(LOGIN_KEY)).toBeNull();
+    });
+
+    it('uses the backend the login was started for, even when the setting changed meanwhile (token then unusable)', async () => {
+        const { h, auth, backend } = setup();
+        const { stored } = await startLogin(auth, h);
+        auth.configure({ backendUrl: 'https://other.example.org', clientId: CLIENT });
+        await auth.completePageLogin({ code: 'c', state: stored.state });
+        expect(backend.factory).toHaveBeenCalledExactlyOnceWith(BACKEND);
+        expect(auth.token()).toBeNull();
+        expect(auth.info()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+    });
+
+    it('does not accept the callback when the login data cannot be removed (fails closed)', async () => {
+        const { h, auth, backend } = setup();
+        const { stored } = await startLogin(auth, h);
+        h.storage.removeItem = () => {
+            throw new Error('SecurityError');
+        };
+        await expect(auth.completePageLogin({ code: 'c', state: stored.state })).rejects.toBeInstanceOf(LoginStateError);
+        expect(backend.login).not.toHaveBeenCalled();
+        expect(auth.token()).toBeNull();
+    });
+
+    it.each([
+        ['an opaque token', 'opaque-token'],
+        ['a token without sub', `${b64({})}.${b64({ admin: true })}.c2ln`],
+        ['a token with a numeric sub', jwt(1)],
+    ])('refuses a login answer with %s and stores nothing', async (_name, accessToken) => {
+        const h = harness();
+        const backend = fakeBackend(async () => ({ ...LOGIN_RESULT, accessToken }));
+        const auth = new Auth(backend.factory, h.env);
+        ready(auth);
+        const { stored } = await startLogin(auth, h);
+        await expect(auth.completePageLogin({ code: 'c', state: stored.state })).rejects.toBeInstanceOf(UnexpectedResponse);
+        expect(auth.token()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+        expect(h.storage.getItem(LAST_LOGIN_KEY)).toBeNull();
+    });
+
+    it('refuses a token for another person than the one logged into ChurchTools, and drops the old one', async () => {
+        const h = harness();
+        h.storage.setItem(TOKEN_KEY, JSON.stringify(validRecord));
+        const backend = fakeBackend(async () => ({ ...LOGIN_RESULT, accessToken: jwt('2') }));
+        const auth = new Auth(backend.factory, h.env);
+        ready(auth);
+        const { stored } = await startLogin(auth, h);
+        await expect(auth.completePageLogin({ code: 'c', state: stored.state })).rejects.toBeInstanceOf(PersonMismatch);
+        expect(auth.token()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+    });
+
+    it('stores a token for any person while none is bound yet; binding decides later', async () => {
+        const h = harness();
+        const backend = fakeBackend(async () => ({ ...LOGIN_RESULT, accessToken: jwt('2') }));
+        const auth = new Auth(backend.factory, h.env);
+        auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        const { stored } = await startLogin(auth, h);
+        await auth.completePageLogin({ code: 'c', state: stored.state });
+        auth.bindPerson(2);
+        expect(auth.token()).toBe(jwt('2'));
     });
 
     it('rejects a callback when no login was started', async () => {
@@ -399,6 +501,49 @@ describe('Auth.completePageLogin', () => {
     });
 });
 
+describe('Auth.recentPageLogin', () => {
+    async function afterLogin() {
+        const s = setup();
+        const { stored } = await startLogin(s.auth, s.h);
+        await s.auth.completePageLogin({ code: 'c', state: stored.state });
+        return s;
+    }
+
+    it('is false without a completed page login', () => {
+        expect(setup().auth.recentPageLogin()).toBe(false);
+    });
+
+    it('is true for less than 60 s after a completed page login, also on the next page', async () => {
+        const { h, auth } = await afterLogin();
+        expect(auth.recentPageLogin()).toBe(true);
+        h.now.value = NOW + 59_999;
+        expect(auth.recentPageLogin()).toBe(true);
+        expect(new Auth(fakeBackend().factory, h.env).recentPageLogin()).toBe(true);
+        h.now.value = NOW + 60_000;
+        expect(auth.recentPageLogin()).toBe(false);
+    });
+
+    it('is false for a time in the future or garbage', () => {
+        const { h, auth } = setup();
+        h.storage.setItem(LAST_LOGIN_KEY, String(NOW + 1));
+        expect(auth.recentPageLogin()).toBe(false);
+        h.storage.setItem(LAST_LOGIN_KEY, 'soon');
+        expect(auth.recentPageLogin()).toBe(false);
+        h.storage.setItem(LAST_LOGIN_KEY, '');
+        expect(auth.recentPageLogin()).toBe(false);
+    });
+
+    it('is not set by a popup login', async () => {
+        const { h, auth } = setup();
+        const done = auth.loginInPopup();
+        await vi.waitFor(() => expect(h.popup!.urls).toHaveLength(1));
+        const state = new URL(h.popup!.urls[0]!).searchParams.get('state')!;
+        h.send({ origin: ORIGIN, source: h.popup, data: { type: POPUP_MESSAGE, code: 'c', state } });
+        await done;
+        expect(auth.recentPageLogin()).toBe(false);
+    });
+});
+
 describe('Auth token', () => {
     async function loggedIn() {
         const s = setup();
@@ -417,14 +562,14 @@ describe('Auth token', () => {
     it('is restored from sessionStorage by a new instance on the same backend', async () => {
         const { h } = await loggedIn();
         const again = new Auth(fakeBackend().factory, h.env);
-        again.configure({ backendUrl: `${BACKEND}/`, clientId: CLIENT });
-        expect(again.token()).toBe('tok-123');
+        ready(again, `${BACKEND}/`);
+        expect(again.token()).toBe(TOKEN);
     });
 
     it('is bound to its backend: another backend gets no token and the stored one is dropped', async () => {
         const { h } = await loggedIn();
         const again = new Auth(fakeBackend().factory, h.env);
-        again.configure({ backendUrl: 'https://other.example.org', clientId: CLIENT });
+        ready(again, 'https://other.example.org');
         expect(again.token()).toBeNull();
         expect(again.info()).toBeNull();
         expect(again.expiresInMs()).toBe(0);
@@ -443,23 +588,80 @@ describe('Auth token', () => {
     it('is not handed out before configuration, but kept', async () => {
         const { h } = await loggedIn();
         const again = new Auth(fakeBackend().factory, h.env);
+        again.bindPerson(PERSON);
         expect(again.token()).toBeNull();
         expect(h.storage.getItem(TOKEN_KEY)).not.toBeNull();
         again.configure({ backendUrl: BACKEND, clientId: CLIENT });
-        expect(again.token()).toBe('tok-123');
+        expect(again.token()).toBe(TOKEN);
+    });
+
+    it('is not handed out before the person is bound, but kept', async () => {
+        const { h } = await loggedIn();
+        const again = new Auth(fakeBackend().factory, h.env);
+        again.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        expect(again.token()).toBeNull();
+        expect(again.info()).toBeNull();
+        expect(again.expiresInMs()).toBe(0);
+        expect(h.storage.getItem(TOKEN_KEY)).not.toBeNull();
+        again.bindPerson(PERSON);
+        expect(again.token()).toBe(TOKEN);
+    });
+
+    it('is bound to the person: another person logged into ChurchTools gets no token, and it is dropped', async () => {
+        const { h } = await loggedIn();
+        const again = new Auth(fakeBackend().factory, h.env);
+        ready(again, BACKEND, 2);
+        expect(again.token()).toBeNull();
+        expect(again.info()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+        again.bindPerson(PERSON);
+        expect(again.token()).toBeNull();
+    });
+
+    it('is dropped when the person changes during the session', async () => {
+        const { h, auth } = await loggedIn();
+        auth.bindPerson(2);
+        expect(auth.token()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+    });
+
+    it.each([0, -1, 1.5, Number.NaN, 2 ** 53])('binding the invalid person %s drops the token', async (person) => {
+        const { h, auth } = await loggedIn();
+        auth.bindPerson(person);
+        expect(auth.token()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+    });
+
+    it('a stored token record that is valid is used', () => {
+        const h = harness();
+        h.storage.setItem(TOKEN_KEY, JSON.stringify(validRecord));
+        const auth = new Auth(fakeBackend().factory, h.env);
+        ready(auth);
+        expect(auth.token()).toBe(TOKEN);
+        expect(auth.info()).toEqual({ admin: true, version: '0.1.0' });
     });
 
     it.each([
         ['not JSON', 'x'],
-        ['without backend', JSON.stringify({ accessToken: 't', expiresAt: NOW + 1, admin: false, version: '1' })],
-        ['with an empty token', JSON.stringify({ accessToken: '', expiresAt: NOW + 1, admin: false, version: '1', backend: `${BACKEND}/v1` })],
-        ['with a string expiry', JSON.stringify({ accessToken: 't', expiresAt: '1', admin: false, version: '1', backend: `${BACKEND}/v1` })],
-        ['with a string admin', JSON.stringify({ accessToken: 't', expiresAt: NOW + 1, admin: 'true', version: '1', backend: `${BACKEND}/v1` })],
-    ])('ignores and removes a stored token %s', (_name, raw) => {
+        ['an array', '[]'],
+        ['without backend', { backend: undefined }],
+        ['with an empty backend', { backend: '' }],
+        ['with an empty token', { accessToken: '' }],
+        ['with a string expiry', { expiresAt: '1' }],
+        ['with a null expiry', { expiresAt: null }],
+        ['with an infinite expiry', { expiresAt: 'Infinity' }],
+        ['with a string admin', { admin: 'true' }],
+        ['without admin', { admin: undefined }],
+        ['with a numeric version', { version: 1 }],
+        ['without person', { person: undefined }],
+        ['with person 0', { person: 0 }],
+        ['with a string person', { person: '1' }],
+        ['with a fractional person', { person: 1.5 }],
+    ])('ignores and removes a stored token %s', (_name, change) => {
         const h = harness();
-        h.storage.setItem(TOKEN_KEY, raw);
+        h.storage.setItem(TOKEN_KEY, typeof change === 'string' ? change : JSON.stringify({ ...validRecord, ...change }));
         const auth = new Auth(fakeBackend().factory, h.env);
-        auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        ready(auth);
         expect(auth.token()).toBeNull();
         expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
     });
@@ -474,21 +676,40 @@ describe('Auth token', () => {
         h.now.value += 5_000;
         expect(auth.expiresInMs()).toBe(0);
         // The backend decides about an expired token (so `token-expired` leads to a popup renewal).
-        expect(auth.token()).toBe('tok-123');
+        expect(auth.token()).toBe(TOKEN);
     });
 
-    it('tells subscribers when the configuration or the token changes', async () => {
+    it('tells subscribers when the configuration, the person or the token changes', async () => {
         const { h, auth } = setup({ configure: false });
         const changed = vi.fn();
         const stop = auth.subscribe(changed);
         auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
         expect(changed).toHaveBeenCalledTimes(1);
+        auth.bindPerson(PERSON);
+        expect(changed).toHaveBeenCalledTimes(2);
         const { stored } = await startLogin(auth, h);
         await auth.completePageLogin({ code: 'c', state: stored.state });
-        expect(changed).toHaveBeenCalledTimes(2);
+        expect(changed).toHaveBeenCalledTimes(3);
         stop();
         auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
-        expect(changed).toHaveBeenCalledTimes(2);
+        expect(changed).toHaveBeenCalledTimes(3);
+    });
+
+    it('names its scope by backend and person', () => {
+        const { auth } = setup({ configure: false });
+        expect(auth.scope()).toBeNull();
+        auth.configure({ backendUrl: `${BACKEND}/`, clientId: CLIENT });
+        const backendOnly = auth.scope();
+        auth.bindPerson(PERSON);
+        const full = auth.scope();
+        expect(full).not.toBe(backendOnly);
+        auth.configure({ backendUrl: BACKEND, clientId: 'other-client' });
+        expect(auth.scope()).toBe(full);
+        auth.configure({ backendUrl: 'https://other.example.org', clientId: CLIENT });
+        expect(auth.scope()).not.toBe(full);
+        auth.configure({ backendUrl: BACKEND, clientId: CLIENT });
+        auth.bindPerson(2);
+        expect(auth.scope()).not.toBe(full);
     });
 
     it('clear() removes it from memory and sessionStorage', async () => {
@@ -505,7 +726,7 @@ describe('Auth token', () => {
             throw new Error('QuotaExceededError');
         };
         await auth.completePageLogin({ code: 'c', state: stored.state });
-        expect(auth.token()).toBe('tok-123');
+        expect(auth.token()).toBe(TOKEN);
     });
 
     it('works without sessionStorage at all (popup login keeps it in memory)', async () => {
@@ -520,7 +741,7 @@ describe('Auth token', () => {
         const state = new URL(h.popup!.urls[0]!).searchParams.get('state')!;
         h.send({ origin: ORIGIN, source: h.popup, data: { type: POPUP_MESSAGE, code: 'c', state } });
         await done;
-        expect(auth.token()).toBe('tok-123');
+        expect(auth.token()).toBe(TOKEN);
     });
 });
 
@@ -610,7 +831,7 @@ describe('Auth.loginInPopup', () => {
         expect(code).toBe('popup-code');
         expect(challengeOf(verifier)).toBe(challenge);
         expect(redirectUri).toBe(REDIRECT_URI);
-        expect(auth.token()).toBe('tok-123');
+        expect(auth.token()).toBe(TOKEN);
         expect(storedToken(h).backend).toBe(`${BACKEND}/v1`);
         expect(h.listeners.size).toBe(0);
         expect(h.timers.size).toBe(0);
@@ -652,6 +873,52 @@ describe('Auth.loginInPopup', () => {
         await flush();
         expect(backend.login).not.toHaveBeenCalled();
         expect(await settled(done)).toBe('pending');
+        // The listener is still there: the real message logs in.
+        h.send(good());
+        await done;
+        expect(backend.login).toHaveBeenCalledExactlyOnceWith('popup-code', expect.any(String), REDIRECT_URI);
+    });
+
+    it.each([
+        ['with an extra character', (s: string) => s + 'x'],
+        ['without its last character', (s: string) => s.slice(0, -1)],
+        ['in other case', (s: string) => s.slice(0, 2) + (s.slice(2).toUpperCase() === s.slice(2) ? s.slice(2).toLowerCase() : s.slice(2).toUpperCase())],
+        ['in an array', (s: string) => [s]],
+        ['empty', () => ''],
+    ])('ignores a popup state %s, then still takes the real message', async (_name, mutate) => {
+        const { h, backend, done, good, state } = await openPopup();
+        h.send(good({ state: mutate(state) }));
+        await flush();
+        expect(backend.login).not.toHaveBeenCalled();
+        expect(await settled(done)).toBe('pending');
+        h.send(good());
+        await done;
+        expect(backend.login).toHaveBeenCalledOnce();
+    });
+
+    it('exchanges at the backend it was started for; a backend switch meanwhile leaves no usable token', async () => {
+        const { h, auth, backend, done, good } = await openPopup();
+        auth.configure({ backendUrl: 'https://other.example.org', clientId: CLIENT });
+        h.send(good());
+        await done;
+        expect(backend.factory).toHaveBeenCalledExactlyOnceWith(BACKEND);
+        expect(auth.token()).toBeNull();
+    });
+
+    it('does not use a renewal token for another person (PersonMismatch) and drops the old token', async () => {
+        const h = harness();
+        h.storage.setItem(TOKEN_KEY, JSON.stringify(validRecord));
+        const backend = fakeBackend(async () => ({ ...LOGIN_RESULT, accessToken: jwt('2') }));
+        const auth = new Auth(backend.factory, h.env);
+        ready(auth);
+        expect(auth.token()).toBe(TOKEN);
+        const done = auth.loginInPopup();
+        await vi.waitFor(() => expect(h.popup!.urls).toHaveLength(1));
+        const state = new URL(h.popup!.urls[0]!).searchParams.get('state')!;
+        h.send({ origin: ORIGIN, source: h.popup, data: { type: POPUP_MESSAGE, code: 'c', state } });
+        await expect(done).rejects.toBeInstanceOf(PersonMismatch);
+        expect(auth.token()).toBeNull();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
     });
 
     it('ignores a replayed message after the login', async () => {
@@ -765,6 +1032,27 @@ describe('forwardPopupCallback', () => {
     it('reports a popup state without an opener and posts nothing', () => {
         const w = win(null);
         expect(forwardPopupCallback({ code: 'c', state: popupState }, w)).toBe('no-opener');
+        expect(w.close).not.toHaveBeenCalled();
+    });
+
+    it.each([
+        ['an array state', { code: 'c', state: [popupState] }],
+        ['a state that is only the prefix', { code: 'c', state: 'p.' }],
+        ['a popup state that is too short', { code: 'c', state: 'p.' + 'a'.repeat(42) }],
+        ['a popup state with a foreign character', { code: 'c', state: 'p.' + 'a'.repeat(42) + '.' }],
+        ['an array code', { code: ['c'], state: popupState }],
+        ['a numeric code', { code: 5, state: popupState }],
+        ['an overlong code', { code: 'c'.repeat(4097), state: popupState }],
+    ])('posts nothing for %s', (_name, query) => {
+        const opener = { postMessage: vi.fn<(message: unknown, targetOrigin: string) => void>() };
+        forwardPopupCallback(query, win(opener));
+        expect(opener.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('reports a malformed popup state as invalid and keeps the window', () => {
+        const opener = { postMessage: vi.fn<(message: unknown, targetOrigin: string) => void>() };
+        const w = win(opener);
+        expect(forwardPopupCallback({ code: 'c', state: 'p.' }, w)).toBe('invalid');
         expect(w.close).not.toHaveBeenCalled();
     });
 
