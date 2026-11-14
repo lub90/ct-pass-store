@@ -968,6 +968,74 @@
     "reasons": []
   },
   {
+    "name": "createdBy as a string is ignored (the client stays enabled)",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01",
+      "createdBy": "x"
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "createdBy as a negative number is ignored (the client stays enabled)",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01",
+      "createdBy": -1
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "createdBy as an object is ignored (the client stays enabled)",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01",
+      "createdBy": {}
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "createdBy as null is ignored (the client stays enabled)",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01",
+      "createdBy": null
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
     "name": "duplicate id disables both entries",
     "clients": [
       {

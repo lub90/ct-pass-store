@@ -664,6 +664,23 @@ describe('unusable machine clients are listed and removable', () => {
         expect(kv.writes).toEqual([]);
     });
 
+    it('M2 pins the index: the same unusable id at another index is refused, nothing written (I3a)', async () => {
+        const { kv, store } = run([ok('aaa', 'a'), noName]);
+        await expect(store.saveAccess({ ...access, machineClients: [ok('aaa', 'a') as never] }, 1, [{ index: 0, id: 'noname' }])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('M2 with the read entry: a shifted list of same-id duplicates never drops the wrong one (I3b)', async () => {
+        const dupA = { ...ok('dup', 'd'), name: 'A' };
+        const dupB = { ...ok('dup', 'e'), name: 'B' };
+        // Read as [dupA, dupB]; meanwhile (revision unchanged) an entry was put in front.
+        const { kv, store } = run([noName, dupA, dupB]);
+        await expect(store.saveAccess({ ...access, machineClients: [] }, 1, [{ index: 1, id: 'dup', entry: dupB }])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+        await store.saveAccess({ ...access, machineClients: [] }, 1, [{ index: 2, id: 'dup', entry: dupB }]);
+        expect(written(kv)).toEqual([noName, dupA]);
+    });
+
     it('does not write an unknown permission back, and refuses to write one', async () => {
         const { kv, store } = run([{ ...ok('perm', 'p'), permissions: ['entries:read', '*'] }]);
         const r = await store.readAccess();
@@ -673,5 +690,109 @@ describe('unusable machine clients are listed and removable', () => {
         const kv2 = run([]);
         await expect(kv2.store.saveAccess({ ...access, machineClients: [{ ...ok('perm', 'p'), permissions: ['*'] } as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
         expect(kv2.kv.writes).toEqual([]);
+    });
+});
+
+describe('stored machine client entries, and removing them from a value of any state (F1)', () => {
+    const key = (c: string) => btoa(c.repeat(32));
+    const ok = (id: string, c: string) => ({ id, name: id, publicKeys: [key(c)], permissions: ['entries:read'], createdAt: '2026-01-01' });
+    const noName = { id: 'noname', publicKeys: [key('n')], permissions: ['entries:read'], createdAt: '2026-01-01' };
+    /** `access` the extension reads as invalid, while the backend (groups.admins and machineClients only) enables clients. */
+    const brokenGroups = { ...group, createdBySetup: 'x' };
+    const invalidAccess = (clients: unknown[], extra: Record<string, unknown> = {}) => ({ ...access, groups: { ...access.groups, service: brokenGroups }, machineClients: clients, note: { kept: [1, 'x'] }, ...extra });
+    const run = (value: unknown) => {
+        const kv = new MemoryKv({ access: [JSON.stringify(value)] });
+        return { kv, store: new ExtensionStore(kv) };
+    };
+    const stored = async (kv: MemoryKv) => JSON.parse((await kv.values('access'))[0]!.value) as Record<string, unknown>;
+
+    it('an ok read lists every stored entry with its raw value, reasons and (if enabled) the client', async () => {
+        const r = await run({ ...access, machineClients: [ok('good', 'g'), noName] }).store.readAccess();
+        expect(r.state === 'ok' && r.clientEntries).toEqual([
+            { index: 0, id: 'good', reasons: [], raw: ok('good', 'g'), client: ok('good', 'g') },
+            { index: 1, id: 'noname', reasons: ['missing-name'], raw: noName },
+        ]);
+    });
+
+    it('an invalid read whose machineClients is a list still lists the clients the backend enables, with the revision', async () => {
+        const r = await run(invalidAccess([ok('reader', 'r'), noName])).store.readAccess();
+        expect(r.state).toBe('invalid');
+        if (r.state !== 'invalid') return;
+        expect(r.revision).toBe(1);
+        expect(r.clientEntries?.map((e) => [e.index, e.id, e.reasons, e.client?.id])).toEqual([
+            [0, 'reader', [], 'reader'],
+            [1, 'noname', ['missing-name'], undefined],
+        ]);
+    });
+
+    it('removes an enabled client from an invalid value: only machineClients and the revision change', async () => {
+        const value = invalidAccess([ok('reader', 'r'), noName]);
+        const { kv, store } = run(value);
+        await store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }]);
+        expect(await stored(kv)).toEqual({ ...value, machineClients: [noName], revision: 2 });
+        expect(Object.keys(await stored(kv))).toEqual(Object.keys(value));
+    });
+
+    it('removes several entries at once (enabled and unusable)', async () => {
+        const { kv, store } = run({ ...access, machineClients: [ok('a', 'a'), noName, 'text', ok('b', 'b')] });
+        await store.removeClients(1, [
+            { index: 1, id: 'noname', entry: noName },
+            { index: 3, id: 'b', entry: ok('b', 'b') },
+        ]);
+        expect((await stored(kv)).machineClients).toEqual([ok('a', 'a'), 'text']);
+    });
+
+    it.each([
+        ['another revision', 2, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }]],
+        ['another id at the index', 1, [{ index: 0, id: 'noname', entry: noName }]],
+        ['another entry at the index (same id)', 1, [{ index: 0, id: 'reader', entry: { ...ok('reader', 'r'), name: 'other' } }]],
+        ['an index out of range', 1, [{ index: 5, id: 'reader', entry: ok('reader', 'r') }]],
+        ['an id given for an entry without one', 1, [{ index: 2, id: 'text', entry: 'text' }]],
+    ])('refuses %s: ConflictError, nothing written', async (_n, revision, drop) => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r'), noName, 'text']));
+        await expect(store.removeClients(revision, drop)).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it.each([
+        ['no usable revision', { revision: 'x' }],
+        ['a revision out of range', { revision: -1 }],
+        ['a newer schema', { schema: 3 }],
+    ])('refuses a stored value with %s, nothing written', async (_n, extra) => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r')], extra));
+        await expect(store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(Error);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('refuses when machineClients is no list (any more), or nothing is stored, or nothing is to be removed', async () => {
+        const a = run(invalidAccess([], { machineClients: { 0: ok('reader', 'r') } }));
+        await expect(a.store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(ConflictError);
+        const b = new ExtensionStore(new MemoryKv({ access: [] }));
+        await expect(b.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(ConflictError);
+        await expect(a.store.removeClients(1, [])).rejects.toBeInstanceOf(InvalidValueError);
+        expect(a.kv.writes).toEqual([]);
+    });
+});
+
+describe('bidi controls in client names (M1)', () => {
+    const key = (c: string) => btoa(c.repeat(32));
+    const named = (id: string, name: string, c: string) => ({ id, name, publicKeys: [key(c)], permissions: [], createdAt: '2026-01-01' });
+
+    it.each(['\u202E', '\u202A', '\u2066', '\u2069'])('a new or changed name with %j is refused on save, nothing written', async (ch) => {
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: [named('old', 'Alt', 'a')] })] });
+        const store = new ExtensionStore(kv);
+        await expect(store.saveAccess({ ...access, machineClients: [named('old', `Alt${ch}`, 'a') as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        await expect(store.saveAccess({ ...access, machineClients: [named('old', 'Alt', 'a') as never, named('new', `x${ch}y`, 'b') as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('a stored name with one is read (parity with the backend) and kept unchanged on a save', async () => {
+        const odd = named('old', 'A\u202Eb', 'a');
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: [odd] })] });
+        const store = new ExtensionStore(kv);
+        const r = await store.readAccess();
+        expect(r.state === 'ok' && r.value.machineClients.map((c) => c.name)).toEqual(['A\u202Eb']);
+        await store.saveAccess({ ...access, machineClients: [odd as never, named('new', 'Neu', 'b') as never] }, 1);
+        expect((JSON.parse(kv.writes[0]!.value!) as { machineClients: unknown[] }).machineClients[0]).toEqual(odd);
     });
 });

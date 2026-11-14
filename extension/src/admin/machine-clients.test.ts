@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { groupPageUrl, parsePublicKey, slugFromName, todayIso, validateClients } from './machine-clients';
+import { createHash } from 'node:crypto';
+import { describeEntry, draftClient, finalizeClient, groupPageUrl, isolate, keyFingerprint, newlyEnabled, parsePublicKey, sha256, slugFromName, todayIso, validateClients } from './machine-clients';
 
 // The parity fixture shared with the backend (spec backend 3.2): the form checks with the same rules.
 interface Single { name: string; client: unknown; valid: boolean; reasons: string[] }
@@ -112,14 +113,19 @@ describe('validateClients (backend spec 3.2)', () => {
     });
 
     it('agrees with the shared fixture (single and multi-entry cases)', () => {
+        const checked = { single: 0, multi: 0 };
         for (const c of cases) {
             if ('client' in c) {
                 expect(validateClients([c.client]).flatMap((i) => i.reasons), c.name).toEqual(c.reasons);
+                checked.single++;
             } else if ('clients' in c) {
                 const expected = c.reasons.flatMap((reasons, index) => (reasons.length > 0 ? [{ index, reasons }] : []));
                 expect(validateClients(c.clients).map(({ index, reasons }) => ({ index, reasons })), c.name).toEqual(expected);
+                checked.multi++;
             }
         }
+        expect(checked.single).toBeGreaterThan(40);
+        expect(checked.multi).toBeGreaterThan(5);
     });
 });
 
@@ -143,5 +149,90 @@ describe('groupPageUrl', () => {
             expect(groupPageUrl(base, 41), base).toBeNull();
         }
         for (const id of [0, -1, 1.5, Number.NaN, 2 ** 53]) expect(groupPageUrl('https://ct.example', id), String(id)).toBeNull();
+    });
+});
+
+describe('sha256 and keyFingerprint (spec 4.7)', () => {
+    it.each([0, 1, 3, 32, 55, 56, 63, 64, 65, 200])('sha256 of %i bytes matches node:crypto', (n) => {
+        const bytes = Uint8Array.from({ length: n }, (_, i) => (i * 31 + 7) & 0xff);
+        expect(Buffer.from(sha256(bytes)).toString('hex')).toBe(createHash('sha256').update(bytes).digest('hex'));
+    });
+
+    it('is the first 8 characters of base64url(SHA-256(the 32 key bytes)), whatever encoding was pasted', () => {
+        const bytes = new Uint8Array(32).map((_, i) => 0xff - i);
+        const expected = createHash('sha256').update(bytes).digest('base64url').slice(0, 8);
+        expect(keyFingerprint(bytes)).toBe(expected);
+        expect(keyFingerprint(parsePublicKey(Buffer.from(bytes).toString('base64'))!)).toBe(expected);
+        expect(keyFingerprint(parsePublicKey(Buffer.from(bytes).toString('base64url'))!)).toBe(expected);
+        expect(expected).toMatch(/^[A-Za-z0-9_-]{8}$/);
+    });
+});
+
+describe('describeEntry: what the page shows of a stored entry (any shape)', () => {
+    it('reads name, permission, createdAt, createdBy and one fingerprint per key, without checking', () => {
+        const d = describeEntry({ name: ' Rad ', publicKeys: [key(1), 'nope', 5], permissions: ['entries:read', '*'], createdAt: '1.1.2026', createdBy: 7 });
+        expect(d).toEqual({ name: ' Rad ', canRead: true, createdAt: '1.1.2026', createdBy: 7, fingerprints: [keyFingerprint(new Uint8Array(32).fill(1)), null, null] });
+    });
+
+    it.each([
+        ['a string', 'x'],
+        ['zero', 0],
+        ['negative', -1],
+        ['a fraction', 1.5],
+        ['an object', {}],
+        ['null', null],
+    ])('ignores a createdBy that is %s', (_n, createdBy) => {
+        expect(describeEntry({ createdBy }).createdBy).toBeUndefined();
+    });
+
+    it('gives nothing for non-objects and odd fields', () => {
+        expect(describeEntry('text')).toEqual({ canRead: false, fingerprints: [] });
+        expect(describeEntry({ name: 5, permissions: 'entries:read', publicKeys: { 0: key(1) }, createdAt: 3 })).toEqual({ canRead: false, fingerprints: [] });
+    });
+});
+
+describe('newlyEnabled: entries a removal would turn on (F2)', () => {
+    const c = (id: string, k: number, extra: Record<string, unknown> = {}) => client(id, [key(k)], extra);
+
+    it('removing one of two entries with the same id enables the other', () => {
+        expect(newlyEnabled([c('same', 1), c('same', 2), c('other', 3)], [0])).toEqual([1]);
+        expect(newlyEnabled([c('same', 1), c('same', 2), c('other', 3)], [1])).toEqual([0]);
+    });
+
+    it('removing one of two clients sharing a key enables the other', () => {
+        expect(newlyEnabled([c('one', 1), c('two', 1)], [1])).toEqual([0]);
+    });
+
+    it('removing both, or an entry nothing depends on, enables nothing', () => {
+        expect(newlyEnabled([c('same', 1), c('same', 2)], [0, 1])).toEqual([]);
+        expect(newlyEnabled([c('one', 1), c('two', 2), 'text'], [2])).toEqual([]);
+        expect(newlyEnabled([c('same', 1), c('same', 2), c('same', 3)], [0])).toEqual([]);
+    });
+});
+
+describe('isolate', () => {
+    it('wraps a text in first-strong isolate and pop isolate (the text form of <bdi>)', () => {
+        expect(isolate('a\u202Eb')).toBe('\u2068a\u202Eb\u2069');
+    });
+});
+
+describe('draftClient and finalizeClient (the client form)', () => {
+    it('a new client: empty fields, no permission, createdAt today (local) and createdBy the person', () => {
+        expect(draftClient(7, new Date(2026, 0, 1, 23, 59))).toEqual({ id: '', name: '', publicKeys: [''], permissions: [], createdAt: '2026-01-01', createdBy: 7 });
+    });
+
+    it('leaves createdBy out without a person id (never null)', () => {
+        const d = draftClient(null, new Date(2026, 0, 1));
+        expect('createdBy' in d).toBe(false);
+    });
+
+    it('trims name and keys of the edited client only (PHP trim), every other entry stays as it is', () => {
+        const other = client('other', [` ${key(1)} `], { name: ' Other ' });
+        const edited = client('edit', [`\t${key(2)}\n`], { name: ' Neu ' });
+        const value = { schema: 2, revision: 1, machineClients: [other, edited] };
+        const out = finalizeClient(value as never, 1) as unknown as typeof value;
+        expect(out.machineClients[0]).toBe(other);
+        expect(out.machineClients[1]).toEqual({ ...edited, name: 'Neu', publicKeys: [key(2)] });
+        expect(value.machineClients[1]!.name).toBe(' Neu ');
     });
 });

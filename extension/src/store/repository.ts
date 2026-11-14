@@ -1,8 +1,8 @@
 import * as v from 'valibot';
-import { decodeKey, readMachineClients, type UnusableClient } from '@/model/machine-clients';
+import { decodeKey, readMachineClients, type ClientReason, type UnusableClient } from '@/model/machine-clients';
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, isUsableRevision, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, BIDI_CONTROLS, isUsableRevision, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { CtValue } from '@/ct/types';
 import type { KvBackend } from './kv';
 
@@ -15,9 +15,10 @@ export type Read<T> =
      * `repair` (settings only, for a value with `schema` 2 and such a revision): the known fields that are valid on
      * their own (`kept`) and the ones present but invalid (`broken`), so a page can rebuild a value without losing
      * what it may not write. Invalid `texts` are dropped as on an `ok` read (an issue, in neither list).
-     * `unusable` (access only, when `machineClients` is a list): as on an `ok` read, so the page can still list them.
+     * `unusable` and `clientEntries` (access only, when `machineClients` is a list): as on an `ok` read, so the page
+     * can still list every stored client, including those the backend enables although the value is invalid here.
      */
-    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T>; unusable?: UnusableClient[] }
+    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T>; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] }
     | { state: 'newer'; schema: number }
     /**
      * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
@@ -25,13 +26,34 @@ export type Read<T> =
      * texts and permissions; `unusable` (access only: stored entries the backend disables, with their reasons) are
      * kept unchanged unless `saveAccess` is told to drop them.
      */
-    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[] };
+    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] };
 
-/** An entry to drop on save: its index in the read and its raw id there (none if it had no string id). */
+/**
+ * One stored `machineClients` entry as read (access only), in stored order: its raw value (unchecked data, never
+ * markup), the backend's reasons to disable it, and the parsed client if the backend enables it (reasons empty).
+ */
+export interface ClientEntry {
+    index: number;
+    id?: string;
+    reasons: ClientReason[];
+    raw: unknown;
+    client?: MachineClient;
+}
+
+/**
+ * An entry to drop: its index in the read, its raw id there (none if it had no string id) and, if given, the raw entry
+ * as read (`ClientEntry.raw`): the stored entry at that index must still be exactly that.
+ */
 export interface DropRef {
     index: number;
     id?: string;
+    entry?: unknown;
 }
+
+const rawId = (entry: unknown): string | undefined => (isObject(entry) && typeof entry.id === 'string' ? entry.id : undefined);
+/** The stored entry at `ref.index` is still the one the read showed. */
+const matches = (list: readonly unknown[], ref: DropRef): boolean =>
+    ref.index >= 0 && ref.index < list.length && rawId(list[ref.index]) === ref.id && (!('entry' in ref) || JSON.stringify(list[ref.index]) === JSON.stringify(ref.entry));
 
 export interface Repair<T> {
     kept: Partial<T>;
@@ -141,6 +163,35 @@ export class ExtensionStore {
         return this.save('access', AccessSchema, next, expectedRevision, dropUnusable);
     }
 
+    /**
+     * Removes stored `machineClients` entries (enabled or not) from a value in any state with a usable revision, even
+     * one the extension reads as invalid (spec 4.7): only `machineClients` and `revision` change; every other stored
+     * field stays as stored (no schema repair). Refused with `ConflictError` if the revision or any entry no longer
+     * matches the read (index, raw id and, if given, the entry itself); nothing is written then.
+     */
+    async removeClients(expectedRevision: number, drop: readonly DropRef[]): Promise<void> {
+        if (drop.length === 0) throw new InvalidValueError(['machineClients: nothing to remove']);
+        const { newest, duplicates } = await this.load('access');
+        if (!newest) throw new ConflictError(0);
+        let raw: unknown;
+        try {
+            raw = JSON.parse(newest.value);
+        } catch {
+            throw new InvalidValueError(['(value): not valid JSON']);
+        }
+        if (!isObject(raw)) throw new InvalidValueError(['(value): not an object']);
+        if (typeof raw.schema === 'number' && raw.schema > SCHEMA_VERSION) throw new InvalidValueError([`stored value has newer schema ${raw.schema}`]);
+        if (!isUsableRevision(raw.revision)) throw new InvalidValueError([`stored revision ${clip(String(raw.revision))} is not usable`]);
+        if (raw.revision !== expectedRevision) throw new ConflictError(raw.revision);
+        const list = raw.machineClients;
+        if (!Array.isArray(list) || !drop.every((ref) => matches(list, ref))) throw new ConflictError(raw.revision);
+        const gone = new Set(drop.map((ref) => ref.index));
+        const json = JSON.stringify({ ...raw, machineClients: list.filter((_, i) => !gone.has(i)), revision: expectedRevision + 1 });
+        if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
+        await this.kv.update('access', newest.id, json);
+        for (const d of duplicates) await this.kv.delete('access', d.id);
+    }
+
     /** Startup: spec 6.3 (old layout) and `readSettings()` from one listing of `settings`. KV errors propagate. */
     async readStartup(): Promise<{ oldLayout: boolean; settings: Read<SettingsV2> }> {
         const [names, loaded] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
@@ -169,6 +220,7 @@ export class ExtensionStore {
         if (typeof version === 'number' && version > SCHEMA_VERSION) return { state: 'newer', schema: version };
         const issues: string[] = [];
         let unusable: UnusableClient[] | undefined;
+        let clientEntries: ClientEntry[] | undefined;
         if (isObject(raw)) {
             const rest = { ...raw };
             for (const key of RETIRED_KEYS[category]) delete rest[key];
@@ -182,6 +234,11 @@ export class ExtensionStore {
             if (schema === AccessSchema) {
                 const parsed = readMachineClients(rest.machineClients);
                 if (!parsed.notAList) {
+                    const stored = Array.isArray(rest.machineClients) ? (rest.machineClients as unknown[]) : [];
+                    clientEntries = parsed.entries.map((e) => {
+                        const client = e.reasons.length === 0 ? parsed.clients.find((c) => c.id === e.id) : undefined;
+                        return { ...e, reasons: [...e.reasons], raw: stored[e.index], ...(client ? { client } : {}) };
+                    });
                     rest.machineClients = parsed.clients;
                     unusable = parsed.unusable;
                     issues.push(...parsed.dropped);
@@ -193,14 +250,14 @@ export class ExtensionStore {
         const result = v.safeParse(schema, raw);
         if (!result.success) {
             const revision = isObject(raw) && isUsableRevision(raw.revision) ? raw.revision : undefined;
-            const listed = unusable && unusable.length > 0 ? { unusable } : {};
+            const listed = { ...(unusable && unusable.length > 0 ? { unusable } : {}), ...(clientEntries ? { clientEntries } : {}) };
             if (revision === undefined) return { state: 'invalid', issues: [...issues, ...issuesOf(result.issues)], ...listed };
             const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision, ...listed };
             if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
             return { ...invalid, repair: repairOf(raw) as Repair<v.InferOutput<S>> };
         }
         const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
-        const withUnusable = unusable && unusable.length > 0 ? { ...ok, unusable } : ok;
+        const withUnusable = { ...ok, ...(unusable && unusable.length > 0 ? { unusable } : {}), ...(clientEntries ? { clientEntries } : {}) };
         return issues.length > 0 ? { ...withUnusable, issues } : withUnusable;
     }
 
@@ -244,8 +301,14 @@ export class ExtensionStore {
         const storedClients = Array.isArray(stored.machineClients) ? (stored.machineClients as unknown[]) : null;
         if (dropUnusable.length > 0) {
             const now = storedClients ? readMachineClients(storedClients).unusable : [];
-            const stale = dropUnusable.some((d) => !now.some((u) => u.index === d.index && u.id === d.id));
+            const stale = dropUnusable.some((d) => !now.some((u) => u.index === d.index && u.id === d.id) || !matches(storedClients ?? [], d));
             if (stale) throw new ConflictError(currentRevision);
+        }
+        if (schema === AccessSchema) {
+            // A new or changed name must not carry bidi controls; a stored one is kept as it is (the backend reads it).
+            const storedNames = new Map((storedClients ?? []).filter(isObject).map((c) => [c.id, c.name] as const));
+            const bad = (checked.output as AccessV2).machineClients.find((c) => BIDI_CONTROLS.test(c.name) && storedNames.get(c.id) !== c.name);
+            if (bad) throw new InvalidValueError([clip(`machineClients: the name of "${bad.id}" contains bidi control characters`)]);
         }
         if (schema === AccessSchema && storedClients && Array.isArray(merged.machineClients)) {
             const drop = new Set(dropUnusable.map((d) => d.index));
