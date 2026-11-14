@@ -10,7 +10,8 @@ import path from 'node:path';
 import { build, type Rolldown } from 'vite';
 import { describe, expect, it } from 'vitest';
 
-const DEV = path.resolve('src', 'dev');
+const DEV = import.meta.dirname;
+const SRC = path.resolve(DEV, '..');
 
 /** The main export of each dev module: what a leaked import would pull into a bundle. */
 const MAIN_EXPORT: Record<string, string> = {
@@ -31,7 +32,7 @@ async function bundle(file: string, name: string): Promise<string> {
             configFile: false,
             logLevel: 'silent',
             define: { __APP_VERSION__: '"test"' },
-            resolve: { alias: { '@': path.resolve('src') } },
+            resolve: { alias: { '@': SRC } },
             build: {
                 write: false,
                 minify: true,

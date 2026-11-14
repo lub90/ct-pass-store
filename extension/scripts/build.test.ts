@@ -21,7 +21,12 @@ afterEach(() => {
     while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true });
 });
 
-/** Builds the app with its config; `NODE_ENV` decides `import.meta.env.DEV` (Vitest itself sets it to `test`). */
+/**
+ * Builds the app with its config; `NODE_ENV` decides `import.meta.env.DEV` (Vitest itself sets it to `test`).
+ * Changing `process.env` is safe only because each test file runs in its own process (Vitest's default `forks` pool,
+ * not changed in vitest.config.ts) and these tests run one after another; with `threads` or `isolate: false` it would
+ * leak into other files. `afterEach` restores it.
+ */
 async function buildApp(mode: string, env: 'production' | 'development'): Promise<string[]> {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-build-'));
     dirs.push(outDir);

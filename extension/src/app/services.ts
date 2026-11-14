@@ -4,7 +4,7 @@
  */
 import { inject, provide, type App, type InjectionKey } from 'vue';
 import { createBackendApi, type BackendApi } from '../backend/api';
-import { Auth } from '../backend/auth';
+import { Auth, LoginUnavailable, windowEnv } from '../backend/auth';
 import { EXTENSION_KEY } from '../config';
 import { createCtApi, type CtApi } from '../ct/api';
 import type { Language } from '../i18n';
@@ -48,10 +48,26 @@ export function backendFor(auth: Pick<Auth, 'tokenFor'>): (baseUrl: string) => B
     return (baseUrl) => createBackendApi(baseUrl, () => auth.tokenFor(baseUrl));
 }
 
+export interface ServicesOptions {
+    /**
+     * `false` on the dev server in real mode (`main.ts`): the page's origin is the dev server, which serves no
+     * `/oauth/authorize`, so a backend login is refused (`LoginUnavailable`, popup blocked) instead of leaving for a
+     * 404. Real mode covers the ChurchTools side only (spec 13.6). Default `true`.
+     */
+    backendLogin?: boolean;
+}
+
 /** The real systems: ChurchTools of the page, its KV store, and the backend from the settings. */
-export function createServices(language: Language): Services {
+export function createServices(language: Language, options: ServicesOptions = {}): Services {
     const ct = createCtApi();
     const backend = (baseUrl: string): BackendApi => backendFor(auth)(baseUrl);
-    const auth: Auth = new Auth(backend);
+    const env = windowEnv();
+    if (options.backendLogin === false) {
+        env.assign = () => {
+            throw new LoginUnavailable();
+        };
+        env.open = () => null;
+    }
+    const auth: Auth = new Auth(backend, env);
     return { ct, store: new ExtensionStore(new ChurchToolsKv(ct, EXTENSION_KEY)), auth, backend, language };
 }

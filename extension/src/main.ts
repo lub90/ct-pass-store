@@ -10,7 +10,9 @@ import { createAppRouter } from './router';
 const language = pickLanguage(navigator.languages);
 // Demo mode is the default of `npm run dev` (spec 13.6); `--mode real` and every production build use the real systems.
 // The condition must stay literal here: Vite replaces it with `false` in a build, which drops `dev/` from the bundle.
-const services = import.meta.env.DEV && import.meta.env.MODE !== 'real' ? startDemo(language) : createServices(language);
+// On the dev server (real mode) there is no backend login: it covers the ChurchTools side only.
+const services =
+    import.meta.env.DEV && import.meta.env.MODE !== 'real' ? startDemo(language) : createServices(language, { backendLogin: !import.meta.env.DEV });
 const app = createApp(App).use(createAppI18n(services.language)).use(createAppRouter());
 provideServices(services, app);
 app.mount('#app');

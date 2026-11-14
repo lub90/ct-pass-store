@@ -1,6 +1,6 @@
 /** The backend factory of the app: the token is bound to the address each request goes to (security review F1). */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Auth, TOKEN_KEY, type AuthEnv } from '../backend/auth';
+import { Auth, LoginUnavailable, PopupBlocked, TOKEN_KEY, type AuthEnv } from '../backend/auth';
 import { backendFor, createServices } from './services';
 
 const BACKEND = 'https://pw.example';
@@ -63,5 +63,20 @@ describe('createServices (the wiring the app runs with)', () => {
             { url: 'https://evil.example/v1/entries/1', authorization: undefined },
             { url: `${BACKEND}/v1/entries/1`, authorization: `Bearer ${TOKEN}` },
         ]);
+    });
+
+    it('without a backend login (the dev server in real mode) refuses to leave the page instead of opening a 404', async () => {
+        // A navigation would leave startPageLogin pending forever; the rejection proves the page stays.
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        try {
+            const services = createServices('de', { backendLogin: false });
+            services.auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+            services.auth.bindPerson(1);
+            await expect(services.auth.startPageLogin('/')).rejects.toBeInstanceOf(LoginUnavailable);
+            await expect(services.auth.loginInPopup()).rejects.toBeInstanceOf(PopupBlocked);
+            expect(open).not.toHaveBeenCalled();
+        } finally {
+            open.mockRestore();
+        }
     });
 });

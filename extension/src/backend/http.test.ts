@@ -137,7 +137,7 @@ describe('request building', () => {
 });
 
 describe('base URL', () => {
-    const make = (url: string, options?: { allowLocalHttp?: boolean }) => () => createBackendApi(url, () => null, options);
+    const make = (url: string) => () => createBackendApi(url, () => null);
 
     it.each([
         ['plain http', 'http://x.example/pw'],
@@ -151,7 +151,6 @@ describe('base URL', () => {
         ['http on a remote host', 'http://x.example'],
     ])('refuses %s before any request', async (_n, url) => {
         expect(make(url)).toThrow(BackendConfigError);
-        expect(make(url, { allowLocalHttp: true })).toThrow(BackendConfigError);
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
@@ -168,13 +167,13 @@ describe('base URL', () => {
         expect(make('https://x.example:8443/a/b/')).not.toThrow();
     });
 
-    it('allows http only for localhost and 127.0.0.1 and only with the explicit option', () => {
+    it('refuses http also for localhost and 127.0.0.1 (no local-http option exists), allows https there', () => {
         for (const url of ['http://localhost:8080', 'http://127.0.0.1/pw', 'http://localhost']) {
             expect(make(url), url).toThrow(BackendConfigError);
-            expect(make(url, { allowLocalHttp: false }), url).toThrow(BackendConfigError);
-            expect(make(url, { allowLocalHttp: true }), url).not.toThrow();
+            // An option object from elsewhere (e.g. a stored value) can't turn it on either.
+            expect(() => (createBackendApi as (u: string, t: () => null, o: unknown) => unknown)(url, () => null, { allowLocalHttp: true }), url).toThrow(BackendConfigError);
         }
-        expect(make('https://localhost', { allowLocalHttp: true })).not.toThrow();
+        expect(make('https://localhost')).not.toThrow();
     });
 });
 

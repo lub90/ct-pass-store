@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { createServices } from '@/app/services';
 import { BackendConfigError } from '@/backend/problems';
 
-const SRC = path.resolve('src');
+const SRC = path.resolve(import.meta.dirname, '..');
 const DEV = path.join(SRC, 'dev');
 const HARNESS = path.join(SRC, 'views', 'settings', 'settings-harness.ts');
 
@@ -41,7 +41,9 @@ describe('dev boundary', () => {
 
     it('main.ts chooses the demo with the literal build condition', () => {
         const main = fs.readFileSync(path.join(SRC, 'main.ts'), 'utf8');
-        expect(main).toContain("import.meta.env.DEV && import.meta.env.MODE !== 'real' ? startDemo(language) : createServices(language)");
+        expect(main).toContain(
+            "import.meta.env.DEV && import.meta.env.MODE !== 'real' ? startDemo(language) : createServices(language, { backendLogin: !import.meta.env.DEV })",
+        );
         expect(main.match(/startDemo\(/g)).toHaveLength(1);
     });
 
@@ -55,9 +57,9 @@ describe('dev boundary', () => {
         expect(found).toEqual([]);
     });
 
-    it('only backend/api.ts mentions allowLocalHttp: nothing in the app turns it on', () => {
-        const found = production.filter((f) => fs.readFileSync(f, 'utf8').includes('allowLocalHttp')).map(rel);
-        expect(found).toEqual([path.join('backend', 'api.ts')]);
+    it('no production code has a local-http switch for the backend client', () => {
+        const found = production.filter((f) => /allowLocalHttp|localhost|127\.0\.0\.1/.test(fs.readFileSync(f, 'utf8'))).map(rel);
+        expect(found).toEqual([]);
     });
 
     it('the real services refuse a local http backend', () => {

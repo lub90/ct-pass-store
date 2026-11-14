@@ -43,10 +43,10 @@ function thirdPartyLicenses(): Plugin {
     };
 }
 
-export default defineConfig(({ mode, command }) => {
+export default defineConfig(({ mode, command, isPreview }) => {
     // CT_* variables have no VITE_ prefix: they are used here only (the dev proxy of --mode real), never in the bundle.
-    // A build never reads them.
-    const proxy = command === 'serve' ? devProxy(mode, loadEnv(mode, root, 'CT_')) : undefined;
+    // Only the dev server reads them; a build and `vite preview` (which would reuse `server.proxy`) never do.
+    const proxy = command === 'serve' && !isPreview ? devProxy(mode, loadEnv(mode, root, 'CT_')) : undefined;
 
     return {
         base: '/ccm/ctpassstore/',

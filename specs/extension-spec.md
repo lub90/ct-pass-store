@@ -667,8 +667,13 @@ Neither the unit nor the app layer needs network access.
   - Selected in `main.ts` by the literal `import.meta.env.DEV && import.meta.env.MODE !== 'real'`, so a build drops it.
     A floating switch picks the scenario (user, admin, setup missing, no access, ChurchTools error, version mismatch);
     the demo state lives in `localStorage` (development only; the production app never uses it).
-  - `npm run dev -- --mode real` uses the dev proxy and the backend from the instance's settings (`https://` only; the
-    app never enables local `http`). `envPrefix` is not `VITE_`, so no `.env` value can be inlined into a build.
+  - `npm run dev -- --mode real` covers the **ChurchTools side only** (KV values, persons, groups, rights) through the
+    dev proxy for `/api`. There is no backend login on the dev server: its origin serves no `/oauth/authorize`, and
+    proxying `/oauth` with the login token would authorize as the token's user without asking, so it isn't done. The
+    app refuses the login there (`LoginUnavailable`: „Die Anmeldung hat nicht geklappt“) instead of leaving for a
+    404. Backend flows (login, entries, self-test) are tested in the build hosted on the test instance and in the
+    contract and browser checks. The backend client accepts `https://` only, in every mode. `envPrefix` is not
+    `VITE_`, so no `.env` value can be inlined into a build; `vite preview` gets no proxy.
 - `__APP_VERSION__` from `git describe` (`x.y.z`, `x.y.z+sha`, `x.y.z+sha-dirty`).
 - `modulePreload.polyfill: false` (CSP).
 - Credential files (`.env`, recorded fixtures) are created with mode `600`; the testing docs say so.

@@ -5,6 +5,9 @@ modes. The choice is made in `src/main.ts` with the literal condition
 `import.meta.env.DEV && import.meta.env.MODE !== 'real'`. A production build replaces it with `false` and drops
 everything under `src/dev/`.
 
+Node.js 23.6 or newer is needed (`engines` in `package.json`): `scripts/check-dist.js` imports
+`src/dev/demo-data.ts` directly, which relies on Node's built-in TypeScript type stripping.
+
 ## Demo mode (default)
 
 ```sh
@@ -32,7 +35,17 @@ real instance.
 npm run dev -- --mode real
 ```
 
-The app uses the real ChurchTools instance through a Vite proxy, and the backend named in the instance's settings.
+Real mode covers **the ChurchTools side only**: KV values (settings, access), persons, groups and rights of a real
+instance, through a Vite proxy for `/api`. It does **not** cover the backend:
+
+- The dev server's origin (`http://localhost:5173`) serves no `/oauth/authorize`, and the backend wouldn't accept its
+  redirect address. `/oauth` is deliberately not proxied: with the login token attached, ChurchTools would authorize
+  as the token's user without asking.
+- So the app refuses the backend login on the dev server: once the settings are set up, it shows „Die Anmeldung hat
+  nicht geklappt“ (backend error) instead of leaving for a 404. Pages before the login (setup missing, migration, no
+  access, the rights) work.
+- Backend flows (login, password entries, self-test) are tested in the build hosted on the test instance and in the
+  contract (`npm run test:contract`) and browser checks.
 
 1. Create `.env` with mode `600` before putting anything into it, so it is never readable by other users:
 
@@ -40,10 +53,13 @@ The app uses the real ChurchTools instance through a Vite proxy, and the backend
    install -m 600 .env-example .env
    ```
 
-   (This replaces an existing `.env`; if you already have one, fix its mode with `chmod 600 .env` instead.) Then fill
+   (This replaces an existing `.env`; if you already have one, fix its mode with `chmod 600 .env` instead. An old
+   `.env` with `VITE_BASE_URL`, `VITE_USERNAME` and `VITE_PASSWORD` must be migrated: put the address into
+   `CT_BASE_URL`, a login token into `CT_LOGIN_TOKEN`, and delete the old `VITE_*` lines, above all the password.) Then fill
    in `CT_BASE_URL` (`https://<instance>.church.tools`) and `CT_LOGIN_TOKEN` (a ChurchTools login token of a
    test account). Check the mode with `ls -l .env` (`-rw-------`).
-2. `vite.config.ts` reads the two variables (only when the dev server starts in mode `real`) and forwards `/api` to the
+2. `vite.config.ts` reads the two variables (only when the dev server starts in mode `real`; never for a build or
+   `vite preview`) and forwards `/api` to the
    instance with `Authorization: Login <token>`, so the browser never sees the token. The server refuses to start if
    `CT_BASE_URL` isn't an `https://` address without credentials or if `CT_LOGIN_TOKEN` is empty.
 
@@ -54,8 +70,8 @@ Notes:
   reach a build.
 - **The login token is effectively a permanent password.** It stays valid until the account's password is changed;
   use a test account and never commit, paste or log it.
-- **Backend address:** the app talks to the backend only over `https://`. Local `http://localhost` backends are not
-  allowed in the app, in any mode.
+- **Backend address:** the backend client accepts `https://` only, in every mode; there is no switch for a local
+  `http://` backend.
 - **Other credential files** (backend `phpunit.xml`, `credentials.php`, recorded contract fixtures) are created with
   mode `600` too, e.g. `install -m 600 /dev/null <file>` before writing into it.
 

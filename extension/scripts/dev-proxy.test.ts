@@ -54,4 +54,14 @@ describe('vite.config', () => {
         const resolved = await (config as (env: { mode: string; command: 'build' }) => { server?: { proxy?: unknown } })({ mode: 'real', command: 'build' });
         expect(resolved.server?.proxy).toBeUndefined();
     });
+
+    it('gives vite preview no proxy in mode real (preview serves a build; it reads no CT_*)', async () => {
+        const resolved = await (config as (env: { mode: string; command: 'serve'; isPreview: boolean }) => { server?: { proxy?: unknown }; preview?: { proxy?: unknown } })({
+            mode: 'real',
+            command: 'serve',
+            isPreview: true,
+        });
+        expect(resolved.server?.proxy).toBeUndefined();
+        expect(resolved.preview?.proxy).toBeUndefined();
+    });
 });

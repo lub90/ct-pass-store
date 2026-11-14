@@ -45,13 +45,8 @@ function personPath(personId: number): string {
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export interface BackendApiOptions {
-    /** Development only: also allow `http://localhost` and `http://127.0.0.1`. */
-    allowLocalHttp?: boolean;
-}
-
-/** Throws `BackendConfigError` unless the address is `https:` without credentials (or local http, if allowed). */
-function checkBaseUrl(baseUrl: string, allowLocalHttp: boolean): void {
+/** Throws `BackendConfigError` unless the address is `https:` without credentials. */
+function checkBaseUrl(baseUrl: string): void {
     let url: URL;
     try {
         url = new URL(baseUrl.trim());
@@ -59,13 +54,11 @@ function checkBaseUrl(baseUrl: string, allowLocalHttp: boolean): void {
         throw new BackendConfigError();
     }
     if (url.username !== '' || url.password !== '') throw new BackendConfigError();
-    if (url.protocol === 'https:') return;
-    if (allowLocalHttp && url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) return;
-    throw new BackendConfigError();
+    if (url.protocol !== 'https:') throw new BackendConfigError();
 }
 
-export function createBackendApi(baseUrl: string, token: () => string | null, options: BackendApiOptions = {}): BackendApi {
-    checkBaseUrl(baseUrl, options.allowLocalHttp === true);
+export function createBackendApi(baseUrl: string, token: () => string | null): BackendApi {
+    checkBaseUrl(baseUrl);
     const request = createHttp(backendBase(baseUrl), token);
 
     return {
