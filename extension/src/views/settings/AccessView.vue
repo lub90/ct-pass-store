@@ -19,7 +19,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { describeEntry, groupPageUrl, isolate, newlyEnabled, type EntryInfo } from '../../admin/machine-clients';
+import { cut, describeEntry, groupPageUrl, isolate, newlyEnabled, type EntryInfo } from '../../admin/machine-clients';
 import { settingsErrorText } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
@@ -148,7 +148,7 @@ const broken = computed(() => rows.value.filter((row) => row.entry.reasons.lengt
 const revision = computed<number | null>(() => {
     const r = read.value;
     if (r?.state === 'ok') return r.value.revision;
-    return r?.state === 'invalid' && r.revision !== undefined && r.clientEntries ? r.revision : null;
+    return r?.state === 'invalid' && r.clientsRevision !== undefined && r.clientEntries ? r.clientsRevision : null;
 });
 /** What an `ok` read dropped other than whole entries (unknown permissions): gone with the next save of the form. */
 const dropped = computed(() => (read.value?.state === 'ok' ? (read.value.issues ?? []).filter((i) => !/^machineClients\.\d+: /.test(i)) : []));
@@ -156,7 +156,7 @@ const invalidIssues = computed(() => (read.value?.state === 'invalid' ? read.val
 const setupFix = computed(() => (app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk')));
 
 const MAX_SHOWN_ID = 40;
-const shownId = (id: string): string => (id.length > MAX_SHOWN_ID ? `${id.slice(0, MAX_SHOWN_ID)}…` : id);
+const shownId = (id: string): string => cut(id, MAX_SHOWN_ID);
 
 const groupText = (view: GroupView): string => {
     if (view.state === 'gone') return `${t('access.groupGone', { id: view.id })} ${app.setupCapable.value ? t('access.groupFixSetup') : t('access.groupFixAsk')}`;
@@ -198,8 +198,8 @@ function questionText(row: Row): string {
     if (turnsOn.length > 0) {
         const items = turnsOn.map(({ entry, info }) =>
             t('access.turnsOnItem', {
-                name: isolate(info.name ?? '–'),
-                id: isolate(entry.id ?? '–'),
+                name: isolate(info.name === undefined ? '–' : cut(info.name, MAX_SHOWN_ID)),
+                id: isolate(entry.id === undefined ? '–' : shownId(entry.id)),
                 permission: permissionText(info),
                 keys: info.fingerprints.map(fingerprintText).join(', '),
             }),
@@ -529,7 +529,7 @@ async function remove(row: Row): Promise<void> {
                                 </p>
                                 <p class="cps-access__muted">
                                     {{ permissionText(row.info) }}<template v-if="row.info.createdAt !== undefined">
-                                        · <span class="cps-access__created">{{ t('access.created', { date: row.info.createdAt }) }}<span v-if="row.info.createdBy !== undefined">{{ ` ${t('access.by')} ` }}<bdi>{{ creatorName(row.info.createdBy) }}</bdi></span></span>
+                                        · <span class="cps-access__created"><template v-if="row.info.createdAtIsDate">{{ t('access.created', { date: row.info.createdAt }) }}</template><template v-else>{{ `${t('access.createdOn')} ` }}<bdi>{{ row.info.createdAt }}</bdi></template><span v-if="row.info.createdBy !== undefined">{{ ` ${t('access.by')} ` }}<bdi>{{ creatorName(row.info.createdBy) }}</bdi></span></span>
                                     </template>
                                 </p>
                                 <p

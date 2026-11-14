@@ -139,6 +139,14 @@ describe('client form (spec 4.7)', () => {
         expect(saveDisabled(wrapper)).toBe(true);
     });
 
+    it('a stored client whose name has bidi controls and padding doesn’t block adding another one (T1)', async () => {
+        const { wrapper, storedAccess } = await start({ path: '/settings/access/clients/new', access: access([client('old', ' A\u202Eb ', [key(1)])]) });
+        await type(wrapper, 'cps-client-name', 'Neu');
+        await type(wrapper, 'cps-client-key-0', key(2));
+        await click(wrapper, TEXT.save);
+        expect(((await storedAccess()).machineClients as { id: string }[]).map((c) => c.id)).toEqual(['old', 'neu']);
+    });
+
     it('an extra empty key row blocks saving (I4)', async () => {
         const { wrapper } = await start({ path: '/settings/access/clients/new' });
         await type(wrapper, 'cps-client-name', 'Neu');

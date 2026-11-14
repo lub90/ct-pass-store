@@ -1,5 +1,5 @@
 import * as v from 'valibot';
-import { decodeKey, readMachineClients, type ClientReason, type UnusableClient } from '@/model/machine-clients';
+import { decodeKey, phpTrim, readMachineClients, type ClientReason, type UnusableClient } from '@/model/machine-clients';
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
 import { AccessSchema, BIDI_CONTROLS, isUsableRevision, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
@@ -17,8 +17,10 @@ export type Read<T> =
      * what it may not write. Invalid `texts` are dropped as on an `ok` read (an issue, in neither list).
      * `unusable` and `clientEntries` (access only, when `machineClients` is a list): as on an `ok` read, so the page
      * can still list every stored client, including those the backend enables although the value is invalid here.
+     * `clientsRevision` (with `clientEntries`): what `removeClients` compares: the usable revision, 0 for a stored
+     * revision that is no integer (as on save), none for an integer out of range (nothing can be removed then).
      */
-    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T>; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] }
+    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T>; unusable?: UnusableClient[]; clientEntries?: ClientEntry[]; clientsRevision?: number }
     | { state: 'newer'; schema: number }
     /**
      * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
@@ -53,7 +55,7 @@ export interface DropRef {
 const rawId = (entry: unknown): string | undefined => (isObject(entry) && typeof entry.id === 'string' ? entry.id : undefined);
 /** The stored entry at `ref.index` is still the one the read showed. */
 const matches = (list: readonly unknown[], ref: DropRef): boolean =>
-    ref.index >= 0 && ref.index < list.length && rawId(list[ref.index]) === ref.id && (!('entry' in ref) || JSON.stringify(list[ref.index]) === JSON.stringify(ref.entry));
+    Number.isInteger(ref.index) && ref.index >= 0 && ref.index < list.length && rawId(list[ref.index]) === ref.id && (!('entry' in ref) || JSON.stringify(list[ref.index]) === JSON.stringify(ref.entry));
 
 export interface Repair<T> {
     kept: Partial<T>;
@@ -181,10 +183,12 @@ export class ExtensionStore {
         }
         if (!isObject(raw)) throw new InvalidValueError(['(value): not an object']);
         if (typeof raw.schema === 'number' && raw.schema > SCHEMA_VERSION) throw new InvalidValueError([`stored value has newer schema ${raw.schema}`]);
-        if (!isUsableRevision(raw.revision)) throw new InvalidValueError([`stored revision ${clip(String(raw.revision))} is not usable`]);
-        if (raw.revision !== expectedRevision) throw new ConflictError(raw.revision);
+        // As on save: an integer out of range is refused; anything that is no integer counts as 0.
+        if (Number.isInteger(raw.revision) && !isUsableRevision(raw.revision)) throw new InvalidValueError([`stored revision ${clip(String(raw.revision))} is out of range`]);
+        const current = isUsableRevision(raw.revision) ? raw.revision : 0;
+        if (current !== expectedRevision) throw new ConflictError(current);
         const list = raw.machineClients;
-        if (!Array.isArray(list) || !drop.every((ref) => matches(list, ref))) throw new ConflictError(raw.revision);
+        if (!Array.isArray(list) || !drop.every((ref) => matches(list, ref))) throw new ConflictError(current);
         const gone = new Set(drop.map((ref) => ref.index));
         const json = JSON.stringify({ ...raw, machineClients: list.filter((_, i) => !gone.has(i)), revision: expectedRevision + 1 });
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
@@ -250,7 +254,12 @@ export class ExtensionStore {
         const result = v.safeParse(schema, raw);
         if (!result.success) {
             const revision = isObject(raw) && isUsableRevision(raw.revision) ? raw.revision : undefined;
-            const listed = { ...(unusable && unusable.length > 0 ? { unusable } : {}), ...(clientEntries ? { clientEntries } : {}) };
+            const rawRevision = isObject(raw) ? raw.revision : undefined;
+            const clientsRevision = isUsableRevision(rawRevision) ? rawRevision : Number.isInteger(rawRevision) ? undefined : 0;
+            const listed = {
+                ...(unusable && unusable.length > 0 ? { unusable } : {}),
+                ...(clientEntries ? { clientEntries, ...(clientsRevision === undefined ? {} : { clientsRevision }) } : {}),
+            };
             if (revision === undefined) return { state: 'invalid', issues: [...issues, ...issuesOf(result.issues)], ...listed };
             const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision, ...listed };
             if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
@@ -306,7 +315,8 @@ export class ExtensionStore {
         }
         if (schema === AccessSchema) {
             // A new or changed name must not carry bidi controls; a stored one is kept as it is (the backend reads it).
-            const storedNames = new Map((storedClients ?? []).filter(isObject).map((c) => [c.id, c.name] as const));
+            // Compared trimmed: the read trims names like the backend (a padded stored name comes back trimmed).
+            const storedNames = new Map((storedClients ?? []).filter(isObject).map((c) => [c.id, typeof c.name === 'string' ? phpTrim(c.name) : c.name] as const));
             const bad = (checked.output as AccessV2).machineClients.find((c) => BIDI_CONTROLS.test(c.name) && storedNames.get(c.id) !== c.name);
             if (bad) throw new InvalidValueError([clip(`machineClients: the name of "${bad.id}" contains bidi control characters`)]);
         }

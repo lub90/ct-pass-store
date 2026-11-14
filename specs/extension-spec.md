@@ -255,15 +255,16 @@ refused at the field and by the store (stored texts with them are dropped on rea
 - **Machine clients:** every stored entry the backend enables, with name (isolated, `<bdi>`), `id`, permissions
   („darf lesen“), number of keys, a fingerprint per key, `createdAt` (and who created it), and „Bearbeiten“ /
   „Entfernen“. A green „+ Client hinzufügen“ button.
-- **Key fingerprint:** the first 8 characters of base64url(SHA-256(the 32 key bytes)), the same whichever encoding was
+- **Key fingerprint:** the first 16 characters (96 bits) of base64url(SHA-256(the 32 key bytes)), the same whichever encoding was
   pasted. An admin compares it with the service's key, e.g. for a key in base64url:
-  `printf %s '<key>' | tr '_-' '/+' | base64 -d | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-8`
+  `printf %s '<key>' | tr '_-' '/+' | base64 -d | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-16`
   (add the `=` padding first if `base64 -d` asks for it). Look-alike entries (same name, different key) are told
   apart by it.
 - **Falsch konfiguriert:** every stored entry the backend disables (backend spec 3.2: e.g. without `name` or
   `createdAt`, a duplicate `id`, a shared key) is listed with its position, its raw `id` (plain text, isolated, cut
-  to 40 characters), its name, permission, `createdAt`/`createdBy` and key fingerprints as far as present, and the
-  reasons in words, each with „Entfernen“ (danger confirm).
+  to 40 characters), its name (isolated, cut to 60), permission, `createdAt` (as is if it is a real date, otherwise
+  isolated and cut to 60), `createdBy` and key fingerprints as far as present, and the reasons in words, each with
+  „Entfernen“ (danger confirm). Names and ids in the dialog's list of entries a removal turns on are cut to 40.
 - **Removing** (any entry): the store removes exactly that entry and changes nothing else in `access` (only
   `machineClients` and `revision`; no schema repair). It compares the read's `revision`, the entry's index, its raw
   `id` and the entry itself, and refuses if any of them no longer matches. Before confirming, the dialog names every
@@ -272,8 +273,8 @@ refused at the field and by the store (stored texts with them are dropped on rea
   entries with it.
 - **`access` invalid here** (e.g. `groups.service` broken) while `machineClients` is a list: the backend reads only
   `groups.admins` and `machineClients`, so it may still enable clients. The page lists the active clients (read-only,
-  no „Bearbeiten“) and the broken entries, and removing works as above if the stored `revision` is usable; otherwise
-  nothing can be removed here. Groups and „+ Client hinzufügen“ need a valid value.
+  no „Bearbeiten“) and the broken entries, and removing works as above. As on save, a stored `revision` that is no
+  integer counts as 0; an integer out of range refuses the removal (nothing can be removed here then). Groups and „+ Client hinzufügen“ need a valid value.
 - The page and the client form need `edit custom data` on `access`; without it they name the right and read nothing.
 - Until the setup assistant exists (12.6), „Gruppe ändern“ is shown disabled with „Kommt mit dem
   Einrichtungsassistenten.“, and no status dot is shown (the rights check comes with it).

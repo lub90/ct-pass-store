@@ -158,20 +158,31 @@ describe('sha256 and keyFingerprint (spec 4.7)', () => {
         expect(Buffer.from(sha256(bytes)).toString('hex')).toBe(createHash('sha256').update(bytes).digest('hex'));
     });
 
-    it('is the first 8 characters of base64url(SHA-256(the 32 key bytes)), whatever encoding was pasted', () => {
+    it('is the first 16 characters of base64url(SHA-256(the 32 key bytes)), whatever encoding was pasted', () => {
         const bytes = new Uint8Array(32).map((_, i) => 0xff - i);
-        const expected = createHash('sha256').update(bytes).digest('base64url').slice(0, 8);
+        const expected = createHash('sha256').update(bytes).digest('base64url').slice(0, 16);
         expect(keyFingerprint(bytes)).toBe(expected);
         expect(keyFingerprint(parsePublicKey(Buffer.from(bytes).toString('base64'))!)).toBe(expected);
         expect(keyFingerprint(parsePublicKey(Buffer.from(bytes).toString('base64url'))!)).toBe(expected);
-        expect(expected).toMatch(/^[A-Za-z0-9_-]{8}$/);
+        expect(expected).toMatch(/^[A-Za-z0-9_-]{16}$/);
+    });
+
+    it('uses the base64url alphabet (- and _), like node’s base64url, over many keys (N3)', () => {
+        const prints = Array.from({ length: 64 }, (_, n) => {
+            const bytes = new Uint8Array(32).fill(n);
+            const print = keyFingerprint(bytes);
+            expect(print, String(n)).toBe(createHash('sha256').update(bytes).digest('base64url').slice(0, 16));
+            return print;
+        });
+        expect(prints.some((p) => /[-_]/.test(p))).toBe(true);
+        expect(prints.every((p) => !/[+/=]/.test(p))).toBe(true);
     });
 });
 
 describe('describeEntry: what the page shows of a stored entry (any shape)', () => {
     it('reads name, permission, createdAt, createdBy and one fingerprint per key, without checking', () => {
         const d = describeEntry({ name: ' Rad ', publicKeys: [key(1), 'nope', 5], permissions: ['entries:read', '*'], createdAt: '1.1.2026', createdBy: 7 });
-        expect(d).toEqual({ name: ' Rad ', canRead: true, createdAt: '1.1.2026', createdBy: 7, fingerprints: [keyFingerprint(new Uint8Array(32).fill(1)), null, null] });
+        expect(d).toEqual({ name: ' Rad ', canRead: true, createdAt: '1.1.2026', createdAtIsDate: false, createdBy: 7, fingerprints: [keyFingerprint(new Uint8Array(32).fill(1)), null, null] });
     });
 
     it.each([
@@ -183,6 +194,19 @@ describe('describeEntry: what the page shows of a stored entry (any shape)', () 
         ['null', null],
     ])('ignores a createdBy that is %s', (_n, createdBy) => {
         expect(describeEntry({ createdBy }).createdBy).toBeUndefined();
+    });
+
+    it.each([[['*']], [['entries:write']], [[]], [[1, null]]])('permissions %j don’t read (N2)', (permissions) => {
+        expect(describeEntry({ permissions }).canRead).toBe(false);
+    });
+
+    it('cuts a long name and a createdAt that is no date to 60 characters; a date is kept as it is (S-N3)', () => {
+        const d = describeEntry({ name: 'n'.repeat(5000), createdAt: `2026\u202E${'x'.repeat(100)}` });
+        expect(d.name).toBe(`${'n'.repeat(60)}…`);
+        expect(d.createdAt).toBe(`2026\u202E${'x'.repeat(55)}…`);
+        expect(d.createdAtIsDate).toBe(false);
+        expect(describeEntry({ createdAt: '2026-11-01' })).toMatchObject({ createdAt: '2026-11-01', createdAtIsDate: true });
+        expect(describeEntry({ name: 'n'.repeat(60) }).name).toBe('n'.repeat(60));
     });
 
     it('gives nothing for non-objects and odd fields', () => {

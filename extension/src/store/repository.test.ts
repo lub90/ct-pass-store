@@ -755,13 +755,71 @@ describe('stored machine client entries, and removing them from a value of any s
     });
 
     it.each([
-        ['no usable revision', { revision: 'x' }],
-        ['a revision out of range', { revision: -1 }],
-        ['a newer schema', { schema: 3 }],
-    ])('refuses a stored value with %s, nothing written', async (_n, extra) => {
-        const { kv, store } = run(invalidAccess([ok('reader', 'r')], extra));
-        await expect(store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(Error);
+        ['a revision below 0', -1],
+        ['a revision above the safe range', 2 ** 53],
+    ])('refuses a stored value with %s (InvalidValueError, also when expected equals it), nothing written', async (_n, revision) => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r')], { revision }));
+        for (const expected of [1, revision]) {
+            await expect(store.removeClients(expected, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(InvalidValueError);
+        }
         expect(kv.writes).toEqual([]);
+    });
+
+    it('refuses a stored value with a newer schema (InvalidValueError), nothing written', async () => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r')], { schema: 3 }));
+        await expect(store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it.each([
+        ['a string', 'x'],
+        ['missing', undefined],
+        ['a fraction', 1.5],
+    ])('a stored revision that is no integer (%s) counts as 0, like on save (S-N1): removable with 0, everything else unchanged', async (_n, revision) => {
+        const value = invalidAccess([ok('reader', 'r'), noName], { revision });
+        const { kv, store } = run(value);
+        await expect(store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+        await store.removeClients(0, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }]);
+        expect(await stored(kv)).toEqual({ ...JSON.parse(JSON.stringify(value)), machineClients: [noName], revision: 1 });
+    });
+
+    it('an invalid read tells the revision a removal compares: the usable one, 0 for a non-integer, none out of range', async () => {
+        const rev = async (revision: unknown) => {
+            const r = await run(invalidAccess([ok('reader', 'r')], { revision })).store.readAccess();
+            return r.state === 'invalid' ? r.clientsRevision : 'not invalid';
+        };
+        expect(await rev(4)).toBe(4);
+        expect(await rev('x')).toBe(0);
+        expect(await rev(undefined)).toBe(0);
+        expect(await rev(-1)).toBeUndefined();
+        expect(await rev(2 ** 53)).toBeUndefined();
+    });
+
+    it.each([
+        ['a negative index', { index: -1 }],
+        ['a fractional index', { index: 0.5 }],
+        ['an index past the end', { index: 3 }],
+    ])('refuses %s even without id and entry (no empty write that raises the revision)', async (_n, ref) => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r'), noName, 'text']));
+        await expect(store.removeClients(1, [ref])).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('refuses a value that stays too large, nothing written', async () => {
+        const { kv, store } = run(invalidAccess([ok('reader', 'r'), noName], { big: 'x'.repeat(11_000) }));
+        await expect(store.removeClients(1, [{ index: 1, id: 'noname', entry: noName }])).rejects.toBeInstanceOf(ValueTooLargeError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('removes duplicate access values after writing the newest (spec 6.2)', async () => {
+        const kv = new MemoryKv({ access: [JSON.stringify(invalidAccess([])), JSON.stringify(invalidAccess([ok('reader', 'r')]))] });
+        const store = new ExtensionStore(kv);
+        await store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }]);
+        const values = await kv.values('access');
+        expect(values).toHaveLength(1);
+        expect((JSON.parse(values[0]!.value) as { machineClients: unknown[] }).machineClients).toEqual([]);
+        expect(kv.writes.map((w) => w.kind)).toEqual(['update', 'delete']);
     });
 
     it('refuses when machineClients is no list (any more), or nothing is stored, or nothing is to be removed', async () => {
@@ -784,6 +842,16 @@ describe('bidi controls in client names (M1)', () => {
         await expect(store.saveAccess({ ...access, machineClients: [named('old', `Alt${ch}`, 'a') as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
         await expect(store.saveAccess({ ...access, machineClients: [named('old', 'Alt', 'a') as never, named('new', `x${ch}y`, 'b') as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
         expect(kv.writes).toEqual([]);
+    });
+
+    it('a stored bidi name with surrounding whitespace (read trimmed) doesn’t block saving other changes (T1)', async () => {
+        const padded = named('old', ' A\u202Eb ', 'a');
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: [padded] })] });
+        const store = new ExtensionStore(kv);
+        const r = await store.readAccess();
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveAccess({ ...r.value, machineClients: [...r.value.machineClients, named('new', 'Neu', 'b') as never] }, 1);
+        expect((JSON.parse(kv.writes[0]!.value!) as { machineClients: { name: string }[] }).machineClients.map((c) => c.name)).toEqual(['A\u202Eb', 'Neu']);
     });
 
     it('a stored name with one is read (parity with the backend) and kept unchanged on a save', async () => {

@@ -179,6 +179,7 @@ const de = {
         keys: 'Kein Schlüssel | {n} Schlüssel | {n} Schlüssel',
         created: 'angelegt am {date}',
         by: 'von',
+        createdOn: 'angelegt am',
         fingerprints: 'Schlüssel:',
         keyInvalid: 'ungültig',
         personById: 'Person mit ID {id}',

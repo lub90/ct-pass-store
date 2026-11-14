@@ -171,6 +171,7 @@ const en: Messages = {
         keys: 'No key | {n} key | {n} keys',
         created: 'created on {date}',
         by: 'by',
+        createdOn: 'created on',
         fingerprints: 'Keys:',
         keyInvalid: 'invalid',
         personById: 'person with ID {id}',

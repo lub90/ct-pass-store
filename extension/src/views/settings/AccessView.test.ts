@@ -23,6 +23,7 @@ const TEXT = {
     admins: 'Admins',
     canRead: 'darf lesen',
     stillActive: 'Das Backend verwendet die aktiven Clients unten trotzdem. Entfernen kannst du sie auch jetzt.',
+    brokenIntro: 'Diese Einträge kann das Backend nicht verwenden; es schaltet sie ab. Entferne sie und leg den Client bei Bedarf neu an.',
     noRemove: 'Solange die Zugriffsdaten keine gültige Revision haben, lässt sich hier nichts entfernen.',
     notSaved: 'Der Zugriff wurde nicht gespeichert: Ein Wert ist ungültig oder kollidiert mit einem falsch konfigurierten Eintrag. Prüf die Liste unter „Zugriff“.',
     retry: 'Erneut versuchen',
@@ -337,15 +338,41 @@ describe('Zugriff: entries the backend can’t use („falsch konfiguriert“)',
         expect(row(wrapper, 'reader').exists()).toBe(false);
     });
 
-    it('an invalid value without a usable revision: lists everything, removes nothing', async () => {
+    it.each([[-1], [2 ** 53]])('an invalid value with a revision out of range (%s): lists everything, removes nothing', async (revision) => {
         const { wrapper, router, replaceAccess } = await open({ path: '/settings' });
-        await replaceAccess({ ...ACCESS, revision: 'x', machineClients: [client('reader', 'Leser', [key(1)]), noName] });
+        await replaceAccess({ ...ACCESS, revision, machineClients: [client('reader', 'Leser', [key(1)]), noName] });
         await router.push('/settings/access');
         await settle();
         expect(row(wrapper, 'reader').exists()).toBe(true);
         expect(rowButton(row(wrapper, 'reader'), TEXT.remove)).toBeUndefined();
         expect(rowButton(broken(wrapper)[0]!, TEXT.remove)).toBeUndefined();
-        expect(wrapper.text()).toContain(TEXT.noRemove);
+        expect(wrapper.find('.cps-access__invalid').text()).toContain(TEXT.noRemove);
+        expect(wrapper.find('.cps-access__invalid').text()).not.toContain(TEXT.stillActive);
+        expect(wrapper.find('.cps-access__broken').text()).toContain(TEXT.noRemove);
+        expect(wrapper.find('.cps-access__broken').text()).not.toContain(TEXT.brokenIntro);
+    });
+
+    it('a planted reader in a value with a revision that is no integer (S-N1): removable, everything else unchanged', async () => {
+        const { wrapper, router, replaceAccess, storedAccess } = await open({ path: '/settings' });
+        const value = { ...ACCESS, revision: 'x', groups: 'broken', machineClients: [client('reader', 'Leser', [key(1)])] };
+        await replaceAccess(value);
+        await router.push('/settings/access');
+        await settle();
+        expect(wrapper.find('.cps-access__invalid').text()).toContain(TEXT.stillActive);
+        rowButton(row(wrapper, 'reader'), TEXT.remove)!.element.click();
+        await settle();
+        await answer(TEXT.remove);
+        expect(await storedAccess()).toEqual({ ...value, machineClients: [], revision: 1 });
+    });
+
+    it('an invalid value: the creator of an active client is named, isolated (M-d)', async () => {
+        const { wrapper, router, replaceAccess } = await open({ path: '/settings' });
+        await replaceAccess({ ...ACCESS, groups: 'broken', machineClients: [client('reader', 'Leser', [key(1)], { createdBy: ME })] });
+        await router.push('/settings/access');
+        await settle();
+        const created = row(wrapper, 'reader').find('.cps-access__created');
+        expect(created.text()).toBe('angelegt am 2026-11-01 von Anna Admin');
+        expect(created.find('bdi').text()).toBe('Anna Admin');
     });
 
     it('a stale entry (changed elsewhere, revision raised) is not dropped: conflict, nothing written', async () => {
@@ -529,7 +556,7 @@ describe('Zugriff: page states and outcomes (I6, I7)', () => {
 });
 
 describe('Zugriff: guards and details (minors)', () => {
-    it('a reload while the question is open: confirming afterwards sends nothing', async () => {
+    it('a removal confirmed after the value changed elsewhere (revision raised) is refused by the store: nothing sent', async () => {
         const { wrapper, writes, changeAccessElsewhere } = await open({ path: '/settings/access', access: access([client('one', 'Eins', [key(1)])]) });
         await changeAccessElsewhere({});
         rowButton(row(wrapper, 'one'), TEXT.remove)!.element.click();
@@ -610,5 +637,73 @@ describe('Zugriff: guards and details (minors)', () => {
     it('no status dot on the groups until the rights check exists (spec 4.7, 12.6)', async () => {
         const { wrapper } = await open({ path: '/settings/access' });
         for (const role of ['users', 'admins'] as const) expect(group(wrapper, role).find('.cps-pill').exists()).toBe(false);
+    });
+});
+
+describe('Zugriff: round 2', () => {
+    it('a removal sends the entry as read: swapped look-alikes (same id, revision unchanged) are refused (N1)', async () => {
+        const echt = client('dup', 'Echt', [key(1)]);
+        const planted = client('dup', 'Planted', [key(2)]);
+        const { wrapper, writes, replaceAccess, storedAccess } = await open({ path: '/settings/access', access: access([echt, planted]) });
+        await replaceAccess(access([planted, echt]));
+        rowButton(broken(wrapper)[1]!, TEXT.remove)!.element.click();
+        await settle();
+        await answer(TEXT.remove);
+        expect(writes).toEqual([]);
+        expect(wrapper.find('.cps-access__error').text()).toContain(TEXT.conflict);
+        expect((await storedAccess()).machineClients).toEqual([planted, echt]);
+    });
+
+    it('an entry with only unknown permissions reads as „darf nichts“, in the row and in the question (N2)', async () => {
+        const { wrapper } = await open({ path: '/settings/access', access: access([client('dup', 'Echt', [key(1)]), client('dup', 'Stern', [key(2)], { permissions: ['*'] })]) });
+        expect(broken(wrapper)[1]!.text()).toContain('darf nichts');
+        expect(broken(wrapper)[1]!.text()).not.toContain(TEXT.canRead);
+        rowButton(broken(wrapper)[0]!, TEXT.remove)!.element.click();
+        await settle();
+        expect(dialog()!.querySelector('.cps-confirm__text')?.textContent).toContain(`„\u2068Stern\u2069“ (ID \u2068dup\u2069, darf nichts, Schlüssel ${fp(2)})`);
+        await answer(TEXT.cancel);
+    });
+
+    it('the „schaltet frei“ list cuts names and ids to 40 (T2)', async () => {
+        const longId = `a${'b'.repeat(39)}`;
+        const longName = 'N'.repeat(55);
+        const { wrapper } = await open({ path: '/settings/access', access: access([client(longId, 'Echt', [key(1)]), client(longId, longName, [key(2)])]) });
+        rowButton(broken(wrapper)[0]!, TEXT.remove)!.element.click();
+        await settle();
+        const text = dialog()!.querySelector('.cps-confirm__text')?.textContent ?? '';
+        expect(text).toContain(`„\u2068${'N'.repeat(40)}…\u2069“ (ID \u2068${longId}\u2069`);
+        await answer(TEXT.cancel);
+    });
+
+    it('a broken entry: a 5000-character name and a createdAt with U+202E are cut and isolated; a real date is plain (S-N3)', async () => {
+        const odd = { id: 'odd', name: 'n'.repeat(5000), publicKeys: [], createdAt: `2026\u202E${'x'.repeat(100)}` };
+        const { wrapper } = await open({ path: '/settings/access', access: access([odd, noNameEntry]) });
+        const first = broken(wrapper)[0]!;
+        expect(first.find('bdi.cps-access__broken-label').text()).toBe(`${'n'.repeat(60)}…`);
+        const created = first.find('.cps-access__created');
+        expect(created.find('bdi').text()).toBe(`2026\u202E${'x'.repeat(55)}…`);
+        expect(created.text()).toBe(`angelegt am 2026\u202E${'x'.repeat(55)}…`);
+        expect(broken(wrapper)[1]!.find('.cps-access__created').text()).toBe('angelegt am 2026-11-01');
+        expect(broken(wrapper)[1]!.find('.cps-access__created bdi').exists()).toBe(false);
+    });
+
+    it('a creator answer of an older read arriving last changes nothing (M-d)', async () => {
+        const held: ((p: { id: number; name: string }) => void)[] = [];
+        const { wrapper, router, ct, changeAccessElsewhere } = await open({ path: '/settings', access: access([client('one', 'Eins', [key(1)], { createdBy: ME })]) });
+        const real = ct.person.bind(ct);
+        vi.spyOn(ct, 'person')
+            .mockImplementationOnce(() => new Promise((resolve) => held.push(resolve)))
+            .mockImplementation(real);
+        await router.push('/settings/access');
+        await settle();
+        await changeAccessElsewhere({});
+        rowButton(row(wrapper, 'one'), TEXT.remove)!.element.click();
+        await settle();
+        await answer(TEXT.remove);
+        await click(wrapper, TEXT.reload);
+        expect(row(wrapper, 'one').find('.cps-access__created').text()).toBe('angelegt am 2026-11-01 von Anna Admin');
+        for (const resolve of held) resolve({ id: ME, name: 'STALE' });
+        await settle();
+        expect(row(wrapper, 'one').find('.cps-access__created').text()).toBe('angelegt am 2026-11-01 von Anna Admin');
     });
 });

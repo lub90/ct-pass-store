@@ -3,7 +3,7 @@
  * the backend reads them (backend spec 3.2, `model/machine-clients.ts`, pinned by `shared/access-client-cases.json`),
  * so the backend never disables a client the extension saved. Public keys are never logged.
  */
-import { decodeKey, PERMISSION_READ_ENTRIES, phpTrim, readMachineClients, type ClientReason } from '../model/machine-clients';
+import { decodeKey, isCalendarDate, PERMISSION_READ_ENTRIES, phpTrim, readMachineClients, type ClientReason } from '../model/machine-clients';
 import type { AccessV2, MachineClient } from '../model/schemas';
 
 /** An entry the backend would disable, with its reasons in the backend's order. */
@@ -125,25 +125,35 @@ export function sha256(data: Uint8Array): Uint8Array {
     return out;
 }
 
+/** Length of a key fingerprint: 16 base64url characters, 96 bits. */
+export const FINGERPRINT_LENGTH = 16;
+
 /**
- * A short fingerprint of a public key: the first 8 characters of base64url(SHA-256(the 32 key bytes)). The same
+ * A short fingerprint of a public key: the first 16 characters of base64url(SHA-256(the 32 key bytes)). The same
  * whatever encoding was pasted, so an admin can compare it with the service's own key (spec 4.7 says how).
  */
 export function keyFingerprint(bytes: Uint8Array): string {
     const b64 = btoa(String.fromCharCode(...sha256(bytes)));
-    return b64.replace(/\+/g, '-').replace(/\//g, '_').slice(0, 8);
+    return b64.replace(/\+/g, '-').replace(/\//g, '_').slice(0, FINGERPRINT_LENGTH);
 }
 
 /** What the page shows of a stored entry, whatever its shape. Unchecked data: shown as plain text only. */
 export interface EntryInfo {
+    /** Cut to 60 characters. */
     name?: string;
     canRead: boolean;
+    /** As stored if it is a real date, else cut to 60 characters (show it isolated then). */
     createdAt?: string;
+    createdAtIsDate?: boolean;
     /** A positive safe integer (a ChurchTools person ID); anything else is ignored. */
     createdBy?: number;
     /** One per stored key: its fingerprint, or `null` if it isn't a valid key. */
     fingerprints: (string | null)[];
 }
+
+const MAX_SHOWN = 60;
+/** At most `max` characters (UTF-16 units), with „…“ when cut. */
+export const cut = (text: string, max: number): string => (text.length > max ? `${text.slice(0, max)}…` : text);
 
 export function describeEntry(raw: unknown): EntryInfo {
     if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return { canRead: false, fingerprints: [] };
@@ -151,9 +161,9 @@ export function describeEntry(raw: unknown): EntryInfo {
     const keys = Array.isArray(e.publicKeys) ? (e.publicKeys as unknown[]) : [];
     const by = e.createdBy;
     return {
-        ...(typeof e.name === 'string' ? { name: e.name } : {}),
+        ...(typeof e.name === 'string' ? { name: cut(e.name, MAX_SHOWN) } : {}),
         canRead: Array.isArray(e.permissions) && e.permissions.includes(PERMISSION_READ_ENTRIES),
-        ...(typeof e.createdAt === 'string' ? { createdAt: e.createdAt } : {}),
+        ...(typeof e.createdAt === 'string' ? { createdAt: isCalendarDate(e.createdAt) ? e.createdAt : cut(e.createdAt, MAX_SHOWN), createdAtIsDate: isCalendarDate(e.createdAt) } : {}),
         ...(typeof by === 'number' && Number.isSafeInteger(by) && by > 0 ? { createdBy: by } : {}),
         fingerprints: keys.map((k) => {
             const bytes = typeof k === 'string' ? parsePublicKey(k) : null;
