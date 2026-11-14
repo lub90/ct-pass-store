@@ -4,7 +4,7 @@
  */
 import type { VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
-import { SETTINGS, button, cleanup, click, settle, start } from './settings-harness';
+import { SETTINGS, answer, button, cleanup, click, dialog, settle, start } from './settings-harness';
 
 afterEach(cleanup);
 
@@ -23,6 +23,7 @@ const TEXT = {
     issuesTitle: 'Ein Teil der gespeicherten Einstellungen ist ungültig und wird nicht verwendet:',
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
+    bidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
 };
 /** Would be message syntax, a linked message, a plural separator or HTML if it were ever compiled or parsed. */
 const ODD = '{x} @:app.name | <b>y</b>';
@@ -120,11 +121,65 @@ describe('Texte (spec 4.6)', () => {
         expect(wrapper.find('main b').exists()).toBe(false);
     });
 
-    it('the stored title comes back literally into the field and the save leaves it unchanged', async () => {
-        const { wrapper } = await start({ path: '/settings/texts', settings: { ...SETTINGS, texts: { de: { title: ODD } } } });
+    it('the stored title comes back literally into the field, and a save of another field leaves it unchanged', async () => {
+        const { wrapper, stored } = await start({ path: '/settings/texts', settings: { ...SETTINGS, texts: { de: { title: ODD } } } });
         expect(field(wrapper, 'de', 'title').element.value).toBe(ODD);
         expect(wrapper.find('main b').exists()).toBe(false);
         expect(disabled(wrapper, TEXT.save)).toBe(true);
+        await type(wrapper, 'en', 'title', 'Hi');
+        await click(wrapper, TEXT.save);
+        expect(await stored()).toMatchObject({ texts: { de: { title: ODD }, en: { title: 'Hi' } } });
+    });
+
+    it('a text is saved as typed (surrounding spaces included; „Mein Passwort“ trims when showing it)', async () => {
+        const { wrapper, stored } = await start({ path: '/settings/texts' });
+        await type(wrapper, 'de', 'title', ' Mein WLAN ');
+        await click(wrapper, TEXT.save);
+        expect(await stored()).toMatchObject({ texts: { de: { title: ' Mein WLAN ' } } });
+    });
+
+    it.each([
+        ['zero-width space', '\u200B'],
+        ['zero-width joiner and spaces', ' \u200D \u2060 '],
+        ['soft hyphen', '\u00AD'],
+    ])('a text of only invisible characters (%s) counts as empty: default shown, nothing saved', async (_n, value) => {
+        const { wrapper, stored } = await start({ path: '/settings/texts', settings: { ...SETTINGS, texts: { de: { title: 'Alt' } } } });
+        await type(wrapper, 'de', 'title', value);
+        expect(block(wrapper, 'de', 'title').find('.cps-texts__default').exists()).toBe(true);
+        await click(wrapper, TEXT.save);
+        expect(await stored()).not.toHaveProperty('texts');
+    });
+
+    it('a stored text of only invisible characters shows the default below it', async () => {
+        const { wrapper } = await start({ path: '/settings/texts', settings: { ...SETTINGS, texts: { de: { title: ' \u200B ' } } } });
+        expect(field(wrapper, 'de', 'title').element.value).toBe(' \u200B ');
+        expect(block(wrapper, 'de', 'title').find('.cps-texts__default').text()).toBe(`Standard: ${TEXT.deTitle}`);
+    });
+
+    it.each([
+        ['U+202E', 'abc\u202Edef'],
+        ['U+202A', '\u202Ax'],
+        ['U+2066', 'x\u2066y'],
+        ['U+2069', 'x\u2069'],
+    ])('a text with a bidi control (%s) is refused at the field, Save disabled, nothing written', async (_n, value) => {
+        const { wrapper, writes } = await start({ path: '/settings/texts' });
+        await type(wrapper, 'de', 'intro', value);
+        expect(block(wrapper, 'de', 'intro').find('.cps-field__error').text()).toBe(TEXT.bidi);
+        expect(disabled(wrapper, TEXT.save)).toBe(true);
+        button(wrapper, TEXT.save)!.element.click();
+        await settle();
+        expect(writes).toEqual([]);
+    });
+
+    it('leaving with changes asks first', async () => {
+        const { wrapper, router } = await start({ path: '/settings/texts' });
+        await type(wrapper, 'de', 'title', 'Neu');
+        void router.push('/settings');
+        await settle();
+        expect(dialog()?.textContent).toContain('Änderungen verwerfen?');
+        await answer('Bleiben');
+        expect(router.currentRoute.value.path).toBe('/settings/texts');
+        expect(field(wrapper, 'de', 'title').element.value).toBe('Neu');
     });
 
     it('second save with a stale revision reports a conflict', async () => {
@@ -138,10 +193,22 @@ describe('Texte (spec 4.6)', () => {
 });
 
 describe('Texte: rights and stored problems', () => {
-    it('without „edit custom data“ on settings: a banner naming it, no fields', async () => {
-        const { wrapper } = await start({ path: '/settings/texts', edit: ['access'] });
+    it('without „edit custom data“ on settings: a banner naming it, no fields, nothing read', async () => {
+        const { wrapper, router, storeReads } = await start({ path: '/settings', edit: ['access'] });
+        const before = storeReads.settings;
+        await router.push('/settings/texts');
+        await settle();
         expect(wrapper.find('main .cps-banner--warning').text()).toBe(TEXT.missingRight);
         expect(field(wrapper, 'de', 'title').exists()).toBe(false);
+        expect(storeReads.settings).toBe(before);
+    });
+
+    it('an invalid value that „Passwortregeln“ can’t repair either: says why, no link there', async () => {
+        const { wrapper, openWith } = await start({ path: '/settings' });
+        await openWith({ ...SETTINGS, passwordLength: 99, backendUrl: 'http://pw.example' }, '/settings/texts');
+        const banner = wrapper.find('.cps-settings-form__issues');
+        expect(banner.text()).toContain('Hier lassen sie sich nicht reparieren, weil die Backend-Adresse');
+        expect(banner.text()).not.toContain(TEXT.repairOnRules);
     });
 
     it('stored texts that are invalid are dropped as a whole (valid languages too): shown before saving', async () => {

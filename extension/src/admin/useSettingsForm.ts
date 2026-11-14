@@ -46,6 +46,8 @@ export interface SettingsForm<T> {
     saving: Ref<boolean>;
     /** Set by a successful save; „Gespeichert“ shows while nothing changed since. */
     savedAt: Ref<number | null>;
+    /** The last read, when it was `invalid` (whether or not this page repairs it). */
+    invalidRead: Ref<InvalidRead<T> | null>;
     /** The last save failed (not a conflict). */
     error: Ref<unknown>;
     /** The load failed. */
@@ -83,6 +85,7 @@ export function useSettingsForm<T extends { revision: number }>(
     const error = shallowRef<unknown>(null);
     const loadError = shallowRef<unknown>(null);
     const conflict = ref(false);
+    const invalidRead = shallowRef<InvalidRead<T> | null>(null);
     /** The stored value as read (canonical JSON); `null` while repairing (then every state is a change). */
     let baseline: string | null = null;
     let revision = 0;
@@ -109,6 +112,7 @@ export function useSettingsForm<T extends { revision: number }>(
         }
         if (mine !== run) return;
         issues.value = read.state === 'ok' || read.state === 'invalid' ? (read.issues ?? []) : [];
+        invalidRead.value = read.state === 'invalid' ? read : null;
         repairing.value = false;
         if (read.state === 'ok') {
             baseline = canonical(read.value);
@@ -152,6 +156,7 @@ export function useSettingsForm<T extends { revision: number }>(
         baseline = canonical({ ...sent, revision });
         value.value = { ...value.value!, revision };
         repairing.value = false;
+        invalidRead.value = null;
         issues.value = [];
         savedAt.value = Date.now();
         await options.onSaved?.();
@@ -164,6 +169,7 @@ export function useSettingsForm<T extends { revision: number }>(
         }
         value.value = JSON.parse(baseline) as T;
         error.value = null;
+        conflict.value = false;
     }
 
     onBeforeRouteLeave(async () => {
@@ -181,7 +187,7 @@ export function useSettingsForm<T extends { revision: number }>(
     window.addEventListener('beforeunload', onUnload);
     onBeforeUnmount(() => window.removeEventListener('beforeunload', onUnload));
 
-    return { status, value, issues, repairing, dirty, saving, savedAt, error, loadError, conflict, load: reload, save: doSave, discard };
+    return { status, value, issues, repairing, dirty, saving, savedAt, error, loadError, conflict, invalidRead, load: reload, save: doSave, discard };
 }
 
 /** The text (i18n key and params) for a failed load or save of `settings`. */

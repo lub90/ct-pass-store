@@ -477,16 +477,18 @@ describe('invalid reads say what a repair keeps', () => {
         const r = await setup([JSON.stringify(stored)]).store.readSettings();
         expect(r).toMatchObject({ state: 'invalid', revision: 3 });
         if (r.state !== 'invalid') throw new Error('not invalid');
-        expect(r.repair).toEqual({
+        expect(r.repair).toStrictEqual({
             kept: { requirePasswordForPasswordChange: false, backendUrl: 'https://b.example', oauthClientId: 'oauth-1' },
             broken: ['allowCustomPassword', 'passwordLength'],
+            brokenValues: { allowCustomPassword: 'yes', passwordLength: 99 },
         });
     });
     it('names an invalid backendUrl or oauthClientId as broken, never kept', async () => {
         const r = await setup([JSON.stringify({ ...settings, passwordLength: 99, backendUrl: 'http://b.example', oauthClientId: '' })]).store.readSettings();
-        expect(r.state === 'invalid' && r.repair).toEqual({
+        expect(r.state === 'invalid' && r.repair).toStrictEqual({
             kept: { requirePasswordForPasswordChange: false, allowCustomPassword: true },
             broken: ['passwordLength', 'backendUrl', 'oauthClientId'],
+            brokenValues: { passwordLength: 99, backendUrl: 'http://b.example', oauthClientId: '' },
         });
     });
     it('keeps valid texts; invalid texts are dropped as before (an issue, neither kept nor broken)', async () => {
@@ -494,7 +496,11 @@ describe('invalid reads say what a repair keeps', () => {
         const kept = await setup([JSON.stringify({ ...settings, passwordLength: 99, texts })]).store.readSettings();
         expect(kept.state === 'invalid' && kept.repair?.kept.texts).toEqual(texts);
         const dropped = await setup([JSON.stringify({ ...settings, passwordLength: 99, texts: { de: { title: 'x'.repeat(61) } } })]).store.readSettings();
-        expect(dropped.state === 'invalid' && dropped.repair).toEqual({ kept: expect.not.objectContaining({ texts: expect.anything() }), broken: ['passwordLength'] });
+        expect(dropped.state === 'invalid' && dropped.repair).toEqual({
+            kept: expect.not.objectContaining({ texts: expect.anything() }),
+            broken: ['passwordLength'],
+            brokenValues: { passwordLength: 99 },
+        });
         expect(dropped.state === 'invalid' && dropped.issues.some((i) => i.startsWith('texts.'))).toBe(true);
     });
     it('offers no repair without schema 2 or without a usable revision (old layout, garbage, unversioned)', async () => {
@@ -506,11 +512,60 @@ describe('invalid reads say what a repair keeps', () => {
             JSON.stringify({ ...settings, schema: undefined, passwordLength: 99 }),
             JSON.stringify({ ...settings, revision: 'x' }),
             JSON.stringify({ ...settings, revision: 1.5 }),
+            JSON.stringify({ ...settings, revision: -1, passwordLength: 99 }),
+            JSON.stringify({ ...settings, revision: Number.MAX_SAFE_INTEGER, passwordLength: 99 }),
+            JSON.stringify({ ...settings, revision: 2 ** 60, passwordLength: 99 }),
         ]) {
             const r = await setup([content]).store.readSettings();
             expect(r.state, content).toBe('invalid');
             expect(r.state === 'invalid' && r.repair, content).toBeUndefined();
         }
+    });
+});
+
+describe('repair details: absent fields, access, texts without revision', () => {
+    it('an absent optional field is neither kept nor broken', async () => {
+        const noUrl: Partial<SettingsV2> = { ...settings };
+        delete noUrl.backendUrl;
+        const r = await setup([JSON.stringify({ ...noUrl, passwordLength: 99 })]).store.readSettings();
+        expect(r.state === 'invalid' && r.repair).toStrictEqual({
+            kept: { requirePasswordForPasswordChange: false, allowCustomPassword: true },
+            broken: ['passwordLength'],
+            brokenValues: { passwordLength: 99 },
+        });
+    });
+    it('an invalid access read has no repair (settings only)', async () => {
+        const kv = new MemoryKv({ settings: [JSON.stringify(settings)], access: [JSON.stringify({ ...access, revision: 3, groups: 'x' })] });
+        const r = await new ExtensionStore(kv).readAccess();
+        expect(r).toMatchObject({ state: 'invalid', revision: 3 });
+        expect(r.state === 'invalid' && 'repair' in r).toBe(false);
+    });
+    it('an invalid read without a usable revision also reports dropped texts', async () => {
+        const r = await setup([JSON.stringify({ ...settings, revision: 'x', texts: { de: { title: 'x'.repeat(61) } } })]).store.readSettings();
+        expect(r.state).toBe('invalid');
+        expect(r.state === 'invalid' && r.issues.some((i) => i.startsWith('texts.'))).toBe(true);
+    });
+    it('stored texts with bidi controls are dropped with an issue, like other invalid texts', async () => {
+        const r = await setup([JSON.stringify({ ...settings, texts: { de: { title: 'a\u202Eb' } } })]).store.readSettings();
+        expect(r).toMatchObject({ state: 'ok' });
+        expect(r.state === 'ok' && r.value.texts).toBeUndefined();
+        expect(r.state === 'ok' && r.issues?.some((i) => i.startsWith('texts.de.title'))).toBe(true);
+    });
+});
+
+describe('revisions out of the safe range (never a stale overwrite)', () => {
+    it.each([-1, Number.MAX_SAFE_INTEGER, 2 ** 60])('a stored integer revision %s refuses every save', async (revision) => {
+        const { store, kv } = setup([JSON.stringify({ ...settings, revision })]);
+        for (const expected of [0, revision, revision - 1]) {
+            await expect(store.saveSettings(settings, expected)).rejects.toBeInstanceOf(InvalidValueError);
+        }
+        expect(JSON.parse((await kv.values('settings'))[0]!.value)).toMatchObject({ revision });
+    });
+    it('the highest usable revision still saves (to MAX_SAFE_INTEGER - 1)', async () => {
+        const top = Number.MAX_SAFE_INTEGER - 2;
+        const { store } = setup([JSON.stringify({ ...settings, revision: top })]);
+        await store.saveSettings(settings, top);
+        expect(await store.readSettings()).toMatchObject({ state: 'ok', value: { revision: top + 1 } });
     });
 });
 

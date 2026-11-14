@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { decodeKey, readMachineClients, type UnusableClient } from '@/model/machine-clients';
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, isUsableRevision, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { CtValue } from '@/ct/types';
 import type { KvBackend } from './kv';
 
@@ -29,6 +29,8 @@ export type Read<T> =
 export interface Repair<T> {
     kept: Partial<T>;
     broken: string[];
+    /** The stored values of the `broken` fields, as they are (unchecked data, never shown as markup). */
+    brokenValues: Record<string, unknown>;
 }
 
 type Schema = typeof SettingsSchema | typeof AccessSchema;
@@ -37,13 +39,17 @@ type Schema = typeof SettingsSchema | typeof AccessSchema;
 function repairOf(raw: Record<string, unknown>): Repair<SettingsV2> {
     const kept: Record<string, unknown> = {};
     const broken: string[] = [];
+    const brokenValues: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(SettingsSchema.entries)) {
         if (key === 'schema' || key === 'revision' || !(key in raw)) continue;
         const field = v.safeParse(entry, raw[key]);
         if (field.success) kept[key] = field.output;
-        else broken.push(key);
+        else {
+            broken.push(key);
+            brokenValues[key] = raw[key];
+        }
     }
-    return { kept: kept as Partial<SettingsV2>, broken };
+    return { kept: kept as Partial<SettingsV2>, broken, brokenValues };
 }
 
 /** Removes trailing slashes of `backendUrl` (backend spec 3.2). */
@@ -177,8 +183,8 @@ export class ExtensionStore {
         }
         const result = v.safeParse(schema, raw);
         if (!result.success) {
-            const revision = isObject(raw) && Number.isInteger(raw.revision) ? (raw.revision as number) : undefined;
-            if (revision === undefined) return { state: 'invalid', issues: issuesOf(result.issues) };
+            const revision = isObject(raw) && isUsableRevision(raw.revision) ? raw.revision : undefined;
+            if (revision === undefined) return { state: 'invalid', issues: [...issues, ...issuesOf(result.issues)] };
             const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision };
             if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
             return { ...invalid, repair: repairOf(raw) as Repair<v.InferOutput<S>> };
@@ -203,7 +209,10 @@ export class ExtensionStore {
                 if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
                     stored = raw as Record<string, unknown>;
                     const revision = stored.revision;
-                    if (typeof revision === 'number' && Number.isInteger(revision)) currentRevision = revision;
+                    if (isUsableRevision(revision)) currentRevision = revision;
+                    // An integer no save can compare and raise exactly: refused, never treated as 0 (a stale save
+                    // with expected 0 would overwrite it). The setup deals with it.
+                    else if (Number.isInteger(revision)) throw new InvalidValueError([`stored revision ${String(revision)} is out of range`]);
                     const version = stored.schema;
                     if (typeof version === 'number' && version > SCHEMA_VERSION) {
                         throw new InvalidValueError([`stored value has newer schema ${version}`]);

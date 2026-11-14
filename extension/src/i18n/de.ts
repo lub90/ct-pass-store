@@ -148,6 +148,7 @@ const de = {
             introLabel: 'Erklärung',
             defaultLabel: 'Standard:',
             tooLong: 'Höchstens {max} Zeichen.',
+            bidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
         },
     },
     // Spec 7.2: the renewal popup was blocked or closed.

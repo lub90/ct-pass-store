@@ -216,9 +216,12 @@ Cards the person can't use are shown disabled with the missing right, not hidden
 unknown). Leaving a page with unsaved changes asks first.
 
 **Stored problems:** parts a read dropped (e.g. invalid `texts`, dropped as a whole) are listed before any save, since a
-save removes them. An invalid stored `settings` value is repaired explicitly on „Passwortregeln“: its valid fields are
-kept, broken rules get the stricter value, and the save uses the stored `revision`. If `backendUrl` or `oauthClientId`
-is invalid, no repair is offered there: the rules and texts pages never write these two fields (E15).
+save removes them. `settings` that are invalid at startup are `setup-needed` (3.2) and no settings page shows; the
+repair below covers a value that became invalid during a visit. It's explicit, on „Passwortregeln“: valid fields are
+kept, broken rules get a safe value (confirmation on, custom passwords off, length 16, or 64 for a stored length above
+64), and the save uses the stored `revision`. No repair is offered there if `backendUrl` or `oauthClientId` is invalid
+(the rules and texts pages never write these two fields, E15) or if the value has no `schema` 2 with a usable
+`revision` (a safe integer from 0 to 2⁵³ − 2; a stored revision outside that range refuses every save).
 
 ### 4.5 Passwortregeln
 
@@ -231,7 +234,9 @@ is invalid, no repair is offered there: the rules and texts pages never write th
 ### 4.6 Texte
 
 One block per supported language (`de`, `en`), each with „Titel“ (at most 60 characters) and „Erklärung“ (one or two
-sentences, at most 300 characters). An empty field means the default text, shown below the field. Defaults:
+sentences, at most 300 characters). An empty field means the default text, shown below the field; a field holding only
+spaces and invisible format characters counts as empty. Bidi control characters (U+202A–U+202E, U+2066–U+2069) are
+refused at the field and by the store (stored texts with them are dropped on reading like other invalid texts). Defaults:
 
 | | Title | Explanation |
 | --- | --- | --- |

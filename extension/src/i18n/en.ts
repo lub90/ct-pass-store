@@ -142,6 +142,7 @@ const en: Messages = {
             introLabel: 'Explanation',
             defaultLabel: 'Default:',
             tooLong: 'At most {max} characters.',
+            bidi: 'Text direction control characters (such as U+202E) are not allowed.',
         },
     },
     session: {

@@ -43,12 +43,26 @@ async function loadClients(): Promise<void> {
     }
 }
 
+/** How long a self-test result is reused when the person comes back to the overview. */
+const SELF_TEST_TTL_MS = 5 * 60_000;
+
+const selfTestPill = (failed: number): Pill =>
+    failed === 0 ? { text: t('settings.selfTestOk'), kind: 'ok' } : { text: t('settings.selfTestProblems', { n: failed }), kind: 'warning' };
+
 async function runSelfTest(baseUrl: string): Promise<void> {
+    const cached = app.selfTestCache.value;
+    if (cached && cached.baseUrl === baseUrl && Date.now() - cached.at < SELF_TEST_TTL_MS) {
+        selfTest.value = selfTestPill(cached.failed);
+        return;
+    }
     try {
-        const result = await services.backend(baseUrl).selfTest();
+        // The read-only test; the write test (`?write=1`) runs only on request, on „Backend & Status“.
+        const result = await services.backend(baseUrl).selfTest(false);
         const failed = result.tests.filter((test) => test.status === 'fail').length;
-        selfTest.value = failed === 0 ? { text: t('settings.selfTestOk'), kind: 'ok' } : { text: t('settings.selfTestProblems', { n: failed }), kind: 'warning' };
+        app.selfTestCache.value = { baseUrl, at: Date.now(), failed };
+        selfTest.value = selfTestPill(failed);
     } catch {
+        // Not kept: the next visit asks again.
         selfTest.value = { text: t('settings.selfTestFailed'), kind: 'warning' };
     }
 }

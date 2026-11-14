@@ -16,9 +16,13 @@ function isPlainHttpsUrl(s: string): boolean {
     }
 }
 
+/** Bidi embedding/override (U+202A–U+202E) and isolate (U+2066–U+2069) controls: they can make a text read differently. */
+export const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069]/u;
+const noBidi = v.check((s: string) => !BIDI_CONTROLS.test(s), 'must not contain bidi control characters');
+
 const PageText = v.looseObject({
-    title: v.optional(v.pipe(v.string(), v.maxLength(60))),
-    intro: v.optional(v.pipe(v.string(), v.maxLength(300))),
+    title: v.optional(v.pipe(v.string(), v.maxLength(60), noBidi)),
+    intro: v.optional(v.pipe(v.string(), v.maxLength(300), noBidi)),
 });
 
 export const SettingsTextsSchema = v.pipe(
@@ -28,7 +32,12 @@ export const SettingsTextsSchema = v.pipe(
 );
 export type SettingsTexts = v.InferOutput<typeof SettingsTextsSchema>;
 
-const Revision = v.pipe(v.number(), v.integer(), v.minValue(0));
+/** The highest revision a value may hold: one more still is a safe integer, so a raise never rounds. */
+export const MAX_REVISION = Number.MAX_SAFE_INTEGER - 1;
+/** A revision a save can compare and raise exactly. */
+export const isUsableRevision = (x: unknown): x is number => Number.isSafeInteger(x) && (x as number) >= 0 && (x as number) <= MAX_REVISION;
+
+const Revision = v.pipe(v.number(), v.safeInteger(), v.minValue(0), v.maxValue(MAX_REVISION));
 
 /** `passwordLength` bounds (backend spec 3.2, Q7). */
 export const PASSWORD_LENGTH = { min: 12, max: 64 } as const;

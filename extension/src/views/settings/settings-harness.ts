@@ -144,10 +144,11 @@ export async function start(o: HarnessOptions) {
     };
     const admin = o.admin ?? true;
     const fakeBackend = createFakeBackend({ personId: ME, admin, ctOrigin: ORIGIN, version: '0.1.0' });
-    const selfTests: number[] = [];
+    /** The `write` argument of each self-test call. */
+    const selfTests: (boolean | undefined)[] = [];
     const backend: BackendApi = {
         ...fakeBackend,
-        selfTest: (write) => (selfTests.push(1), (o.selfTest ?? fakeBackend.selfTest)(write)),
+        selfTest: (write) => (selfTests.push(write), (o.selfTest ?? fakeBackend.selfTest)(write)),
     };
 
     const storage = new MemoryStorage();
@@ -208,7 +209,11 @@ export async function start(o: HarnessOptions) {
         await router.push(path);
         await settle();
     };
-    return { wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
+    /** Deletes the stored settings value (nothing stored any more). */
+    const removeStored = async (): Promise<void> => {
+        await fakeCt.deleteValue(7, SETTINGS_ID, SETTINGS_VALUE_ID);
+    };
+    return { removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
 }
 
 export async function settle(): Promise<void> {

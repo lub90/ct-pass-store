@@ -2,7 +2,7 @@
  * App layer (mounted): the settings overview (spec 4.4) by role and right, with its two status pills.
  */
 import type { VueWrapper } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BackendUnreachable } from '../../backend/problems';
 import { ACCESS, cleanup, settle, start, type SelfTestTests } from './settings-harness';
 
@@ -98,9 +98,10 @@ describe('settings overview (spec 4.4)', () => {
 });
 
 describe('Backend & Status pill (GET /v1/test)', () => {
-    it('shows ✓ for a passing self-test', async () => {
+    it('shows ✓ for a passing self-test (the read-only one)', async () => {
         const { wrapper, selfTests } = await start({ path: '/settings' });
         expect(selfTests).toHaveLength(1);
+        expect(selfTests[0]).toBeFalsy();
         expect(pill(wrapper, CARDS.backend[0])).toBe('✓');
         expect(card(wrapper, CARDS.backend[0]).find('.cps-pill--ok').exists()).toBe(true);
     });
@@ -127,7 +128,49 @@ describe('Backend & Status pill (GET /v1/test)', () => {
     });
 });
 
+describe('self-test cache (S4)', () => {
+    it('runs once per visit and is reused for 5 minutes when coming back', async () => {
+        const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+        const { wrapper, router, selfTests } = await start({ path: '/settings', selfTest: failing(2) });
+        expect(selfTests).toHaveLength(1);
+        await router.push('/settings/rules');
+        await settle();
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toHaveLength(1);
+        expect(pill(wrapper, CARDS.backend[0])).toBe('⚠ 2 Probleme');
+        now.mockReturnValue(1_000_000 + 5 * 60_000 - 1);
+        await router.push('/');
+        await settle();
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toHaveLength(1);
+        now.mockReturnValue(1_000_000 + 5 * 60_000);
+        await router.push('/');
+        await settle();
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toHaveLength(2);
+    });
+
+    it('a failed run is not kept: the next visit asks again', async () => {
+        let calls = 0;
+        const { router, selfTests } = await start({ path: '/settings', selfTest: () => (calls++ === 0 ? Promise.reject(new BackendUnreachable()) : failing(0)()) });
+        await router.push('/');
+        await settle();
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toHaveLength(2);
+    });
+});
+
 describe('Zugriff pill', () => {
+    it('an admin with the edit right on settings only still gets the Zugriff link and pill', async () => {
+        const { wrapper } = await start({ path: '/settings', edit: ['settings'], access: { ...ACCESS, machineClients: [client('wlan', KEY_A)] } });
+        expect(card(wrapper, CARDS.access[0]).element.tagName).toBe('A');
+        expect(pill(wrapper, CARDS.access[0])).toBe('1 Client');
+    });
+
     it('shows the number of machine clients', async () => {
         const two = await start({ path: '/settings', access: { ...ACCESS, machineClients: [client('wlan', KEY_A), client('radius', KEY_B)] } });
         expect(pill(two.wrapper, CARDS.access[0])).toBe('2 Clients');

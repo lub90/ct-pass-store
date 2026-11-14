@@ -2,23 +2,22 @@
 /**
  * „Passwortregeln“ (spec 4.5). Needs „edit custom data“ on `settings` (spec 3.1, 8.1); without it nothing is read.
  * Saves the whole value as read, so `backendUrl`, `oauthClientId`, the texts and unknown fields stay as stored (E15:
- * this page never writes the backend address). An invalid stored value is rebuilt from its valid fields with safe
- * rules, but only when `backendUrl` and `oauthClientId` are absent or valid — they are never invented or dropped here.
+ * this page never writes the backend address). An invalid stored value is rebuilt by `settingsRepair` (valid fields
+ * kept, safe rules), but only when `backendUrl` and `oauthClientId` are absent or valid.
  */
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
-import { useSettingsForm, type InvalidRead } from '../../admin/useSettingsForm';
-import { PASSWORD_LENGTH, SCHEMA_VERSION, type SettingsV2 } from '../../model/schemas';
+import { settingsRepair } from '../../admin/settings-repair';
+import { useSettingsForm } from '../../admin/useSettingsForm';
+import { PASSWORD_LENGTH, type SettingsV2 } from '../../model/schemas';
 import Field from '../../ui/Field.vue';
 import Toggle from '../../ui/Toggle.vue';
 import { useConfirm } from '../../ui/useConfirm';
 import SettingsFormPage from './SettingsFormPage.vue';
 
 const { min: MIN_LENGTH, max: MAX_LENGTH } = PASSWORD_LENGTH;
-/** For broken rules in a repair: the stricter choice each time. */
-const SAFE_RULES = { requirePasswordForPasswordChange: true, allowCustomPassword: false, passwordLength: 16 };
 
 const { t } = useI18n();
 const services = useServices();
@@ -27,23 +26,26 @@ const confirm = useConfirm();
 
 const allowed = computed(() => app.settingsEditor.value.settings);
 
-function repair(read: InvalidRead<SettingsV2>): SettingsV2 | null {
-    const r = read.repair;
-    if (!r || read.revision === undefined) return null;
-    if (r.broken.includes('backendUrl') || r.broken.includes('oauthClientId')) return null;
-    return { ...SAFE_RULES, ...r.kept, schema: SCHEMA_VERSION, revision: read.revision };
-}
-
 const form = useSettingsForm<SettingsV2>(
     () => services.store.readSettings(),
     (value, revision) => services.store.saveSettings(value, revision),
     {
-        repair,
+        repair: (read) => {
+            const r = settingsRepair(read);
+            return 'value' in r ? r.value : null;
+        },
         onSaved: () => app.reloadSettings(),
         confirm,
         leaveQuestion: () => ({ title: t('settings.leaveTitle'), text: t('settings.leaveText'), confirmLabel: t('settings.discard'), cancelLabel: t('settings.stay') }),
     },
 );
+
+/** Why the stored value can't be repaired here: version (or revision) vs. backend address / OAuth client. */
+const unrepairable = computed(() => {
+    const read = form.invalidRead.value;
+    const r = read ? settingsRepair(read) : null;
+    return { text: r && 'reason' in r && r.reason === 'backend' ? t('settings.noRepair') : t('settings.noRepairVersion') };
+});
 
 watch(
     allowed,
@@ -82,7 +84,7 @@ watch(
         :allowed="allowed"
         :missing-right="t('settings.missingRight', { right: 'edit custom data', category: 'settings' })"
         :form="form"
-        :unrepairable="{ text: t('settings.noRepair') }"
+        :unrepairable="unrepairable"
         :valid="lengthValid"
     >
         <template v-if="form.value.value">

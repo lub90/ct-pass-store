@@ -12,10 +12,11 @@ import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
+import { settingsRepair } from '../../admin/settings-repair';
 import { useSettingsForm } from '../../admin/useSettingsForm';
-import { DEFAULT_TEXTS } from '../../i18n/custom-texts';
+import { DEFAULT_TEXTS, isBlankText } from '../../i18n/custom-texts';
 import { SUPPORTED, type Language } from '../../i18n/language';
-import type { SettingsV2 } from '../../model/schemas';
+import { BIDI_CONTROLS, type SettingsV2 } from '../../model/schemas';
 import Field from '../../ui/Field.vue';
 import { useConfirm } from '../../ui/useConfirm';
 import SettingsFormPage from './SettingsFormPage.vue';
@@ -42,6 +43,16 @@ const form = useSettingsForm<SettingsV2>(
     },
 );
 
+/**
+ * An invalid stored value: repaired on „Passwortregeln“ if it can be repaired there; otherwise the reason, as there.
+ */
+const unrepairable = computed(() => {
+    const read = form.invalidRead.value;
+    const r = read ? settingsRepair(read) : null;
+    if (r && 'value' in r) return { text: t('settings.repairOnRules'), to: '/settings/rules', linkText: t('pages.rules') };
+    return { text: r?.reason === 'backend' ? t('settings.noRepair') : t('settings.noRepairVersion') };
+});
+
 watch(
     allowed,
     (ok) => {
@@ -64,7 +75,7 @@ function setText(lang: Language, part: Part, value: string): void {
     if (!settings) return;
     const texts: Record<string, unknown> = { ...(settings.texts ?? {}) };
     const block: Block = { ...((texts[lang] as Block | undefined) ?? {}) };
-    if (value.trim() === '') delete block[part];
+    if (isBlankText(value)) delete block[part];
     else block[part] = value;
     if (Object.keys(block).length > 0) texts[lang] = block;
     else delete texts[lang];
@@ -73,7 +84,14 @@ function setText(lang: Language, part: Part, value: string): void {
 }
 
 const tooLong = (lang: Language, part: Part): boolean => text(lang, part).length > LIMITS[part];
-const valid = computed(() => SUPPORTED.every((lang) => PARTS.every((part) => !tooLong(lang, part))));
+/** Bidi controls can make a text read differently than it is stored (the store refuses them too). */
+const hasBidi = (lang: Language, part: Part): boolean => BIDI_CONTROLS.test(text(lang, part));
+function fieldError(lang: Language, part: Part): string | undefined {
+    if (tooLong(lang, part)) return t('settings.texts.tooLong', { max: LIMITS[part] });
+    if (hasBidi(lang, part)) return t('settings.texts.bidi');
+    return undefined;
+}
+const valid = computed(() => SUPPORTED.every((lang) => PARTS.every((part) => fieldError(lang, part) === undefined)));
 </script>
 
 <template>
@@ -84,7 +102,7 @@ const valid = computed(() => SUPPORTED.every((lang) => PARTS.every((part) => !to
         :allowed="allowed"
         :missing-right="t('settings.missingRight', { right: 'edit custom data', category: 'settings' })"
         :form="form"
-        :unrepairable="{ text: t('settings.repairOnRules'), to: '/settings/rules', linkText: t('pages.rules') }"
+        :unrepairable="unrepairable"
         :valid="valid"
     >
         <section
@@ -102,7 +120,7 @@ const valid = computed(() => SUPPORTED.every((lang) => PARTS.every((part) => !to
                     :id="`cps-texts-${lang}-${part}`"
                     v-slot="{ id, describedby, invalid }"
                     :label="part === 'title' ? t('settings.texts.titleLabel') : t('settings.texts.introLabel')"
-                    :error="tooLong(lang, part) ? t('settings.texts.tooLong', { max: LIMITS[part] }) : undefined"
+                    :error="fieldError(lang, part)"
                 >
                     <input
                         v-if="part === 'title'"
@@ -130,7 +148,7 @@ const valid = computed(() => SUPPORTED.every((lang) => PARTS.every((part) => !to
                         class="cps-texts__meta"
                     >
                         <p
-                            v-if="text(lang, part).trim() === ''"
+                            v-if="isBlankText(text(lang, part))"
                             class="cps-texts__default"
                             :lang="lang"
                         >

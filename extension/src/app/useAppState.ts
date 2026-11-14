@@ -57,6 +57,11 @@ export interface AppStateHandle {
     admin: Ref<boolean>;
     /** True on `/auth/callback` until the login there is done. */
     onCallback: Ref<boolean>;
+    /**
+     * The overview's last successful self-test (`failed`: number of failed checks), so coming back to it doesn't run
+     * `GET /v1/test` again every time. Display only; the settings overview decides how long it is used.
+     */
+    selfTestCache: Ref<{ baseUrl: string; at: number; failed: number } | null>;
     start(): Promise<void>;
     /** „Erneut anmelden“: a page login on the person's request, past the loop guard. */
     loginAgain(): void;
@@ -89,6 +94,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
     const settings = ref<SettingsV2 | null>(null);
     const personId = ref<number | null>(null);
     const onCallback = ref(false);
+    const selfTestCache = ref<{ baseUrl: string; at: number; failed: number } | null>(null);
 
     /** The session reports a login loop later on (a token problem right after a page login). */
     const effectiveLoginError = computed(() => loginError.value ?? (session.loginLoop.value ? { error: new LoginLoop() } : null));
@@ -274,6 +280,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         backendVersion: session.backendVersion,
         admin: session.admin,
         onCallback,
+        selfTestCache,
         start,
         loginAgain,
     };
