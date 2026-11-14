@@ -305,6 +305,207 @@
     ]
   },
   {
+    "name": "createdAt 30 February",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-02-30"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-created-at"
+    ]
+  },
+  {
+    "name": "createdAt 29 February in a leap year",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2024-02-29"
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "createdAt 29 February in a common year",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2025-02-29"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-created-at"
+    ]
+  },
+  {
+    "name": "permissions is a string",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": "entries:read",
+      "createdAt": "2026-11-01"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-permissions"
+    ]
+  },
+  {
+    "name": "permissions is an object",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": {
+        "entries:read": true
+      },
+      "createdAt": "2026-11-01"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-permissions"
+    ]
+  },
+  {
+    "name": "entry is a string",
+    "client": "test-client",
+    "valid": false,
+    "reasons": [
+      "not-an-object"
+    ]
+  },
+  {
+    "name": "entry is a list",
+    "client": [
+      {
+        "id": "test-client",
+        "name": "Test client",
+        "publicKeys": [
+          "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+        ],
+        "permissions": [
+          "entries:read"
+        ],
+        "createdAt": "2026-11-01"
+      }
+    ],
+    "valid": false,
+    "reasons": [
+      "not-an-object"
+    ]
+  },
+  {
+    "name": "tab and newline around a key are trimmed",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "\tAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=\n"
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "non-breaking space around a key is not trimmed",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        " AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE= "
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-key"
+    ]
+  },
+  {
+    "name": "name of only non-breaking spaces is not empty",
+    "client": {
+      "id": "test-client",
+      "name": " ",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": true,
+    "reasons": []
+  },
+  {
+    "name": "several bad keys give one invalid-key",
+    "client": {
+      "id": "test-client",
+      "name": "Test client",
+      "publicKeys": [
+        "x",
+        "y"
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-key"
+    ]
+  },
+  {
+    "name": "uppercase id is only invalid-id",
+    "client": {
+      "id": "Test-Client",
+      "name": "Test client",
+      "publicKeys": [
+        "AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE="
+      ],
+      "permissions": [
+        "entries:read"
+      ],
+      "createdAt": "2026-11-01"
+    },
+    "valid": false,
+    "reasons": [
+      "invalid-id"
+    ]
+  },
+  {
     "name": "duplicate id disables both entries",
     "clients": [
       {
@@ -330,7 +531,13 @@
         "createdAt": "2026-11-01"
       }
     ],
-    "enabled": []
+    "enabled": [],
+    "reasons": [
+      [],
+      [
+        "duplicate-id"
+      ]
+    ]
   },
   {
     "name": "shared key disables both clients",
@@ -358,7 +565,11 @@
         "createdAt": "2026-11-01"
       }
     ],
-    "enabled": []
+    "enabled": [],
+    "reasons": [
+      [],
+      []
+    ]
   },
   {
     "name": "distinct ids and keys stay enabled",
@@ -389,6 +600,10 @@
     "enabled": [
       "client-one",
       "client-two"
+    ],
+    "reasons": [
+      [],
+      []
     ]
   },
   {
@@ -418,6 +633,12 @@
     ],
     "enabled": [
       "client-two"
+    ],
+    "reasons": [
+      [
+        "missing-name"
+      ],
+      []
     ]
   }
 ]

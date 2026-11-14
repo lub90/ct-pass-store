@@ -112,6 +112,15 @@ final class AccessParserTest extends TestCase
         } else {
             $parsed = AccessParser::parse(['groups' => ['admins' => ['groupId' => 12]], 'machineClients' => $case['clients']]);
             self::assertSame($case['enabled'], array_keys($parsed->machineClients));
+            $seen = [];
+            $reasons = [];
+            foreach ($case['clients'] as $client) {
+                $reasons[] = AccessParser::reasons($client, $seen);
+                if (is_array($client) && is_string($client['id'] ?? null)) {
+                    $seen[$client['id']] = true;
+                }
+            }
+            self::assertSame($case['reasons'], $reasons);
         }
     }
 
@@ -134,8 +143,9 @@ final class AccessParserTest extends TestCase
         $parsed = AccessParser::parse(['machineClients' => [['id' => 'ct-radius', 'publicKeys' => [base64_encode(str_repeat('k', 32))]]]]);
 
         self::assertSame([], $parsed->machineClients);
-        self::assertStringContainsString('ct-radius', $parsed->findings[1]);
-        self::assertStringContainsString('name', $parsed->findings[1]);
-        self::assertStringContainsString('createdAt', $parsed->findings[1]);
+        $finding = current(array_filter($parsed->findings, static fn(string $f): bool => str_contains($f, 'Machine client ct-radius is disabled')));
+        self::assertIsString($finding);
+        self::assertStringContainsString('name', $finding);
+        self::assertStringContainsString('createdAt', $finding);
     }
 }
