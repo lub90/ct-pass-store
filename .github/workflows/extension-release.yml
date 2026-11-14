@@ -1,0 +1,94 @@
+# Builds the extension release (spec 13.7, versioning.md): verifies tag, package.json, package-lock.json, the dated
+# CHANGELOG section and MAJOR.MINOR with the backend, runs the checks, builds the upload ZIP and publishes it as a GitHub
+# release with the CHANGELOG section as notes.
+name: Extension release
+
+on:
+  push:
+    tags:
+      - 'extension-v*.*.*'
+
+# Nothing by default; each job names what it needs.
+permissions: {}
+
+concurrency:
+  group: extension-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Installs and runs third-party code (npm packages), so it gets read access only; the ZIP leaves it as an artifact.
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Node 24 LTS, as in extension.yml.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+
+      - name: Release check (tag, package.json, package-lock.json, CHANGELOG, MAJOR.MINOR with the backend)
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          node scripts/release-check.js "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release/notes.md"
+
+      # No dependency cache on a release: a fresh install from package-lock.json.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+      # lint, typecheck, unit and app tests, `npm run build` with its build check. vite.config.ts refuses any build
+      # that isn't mode production with NODE_ENV production.
+      - name: Checks and production build
+        run: npm run check
+
+      - name: Zip it
+        run: |
+          VERSION="${GITHUB_REF_NAME#extension-v}"
+          # The app shows x.y.z only on a clean checkout of the tag (scripts/app-version.ts); never ship x.y.z+sha.
+          if grep -rqF -- "${VERSION}+" dist; then
+            echo "The build carries a ${VERSION}+<sha> version; a release must be built from the clean tag." >&2
+            exit 1
+          fi
+          # The minifier may quote the version with ", ' or a backtick.
+          if ! grep -rqF -e "\"${VERSION}\"" -e "'${VERSION}'" -e "\`${VERSION}\`" dist/assets; then
+            echo "The build doesn't carry the version ${VERSION}." >&2
+            exit 1
+          fi
+          zip -r -q "$RUNNER_TEMP/release/ctpassstore-extension-${VERSION}.zip" dist/ -x '*.map' '*.DS_Store'
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Only this job can write (create the release); it runs no project code.
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release
+          path: release
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file release/notes.md

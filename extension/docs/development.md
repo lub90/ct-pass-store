@@ -70,6 +70,11 @@ instance, through a Vite proxy for `/api`. It does **not** cover the backend:
    simple cross-site request to `localhost:5173/api` and act as the token's user. The browser's `Cookie` and `Origin`
    headers are dropped before forwarding.
 
+> **Accepted risk: use real mode only on a single-user machine.** While real mode runs, any other process or account
+> on the same machine can send requests to `localhost:5173/api` (with a `Host` of `localhost` and no `Origin`) and act
+> with the token's rights; the proxy's checks only keep out web pages in a browser. Don't run it on a shared machine,
+> stop it when you don't need it, and use a test account's token.
+
 > **Warning:** never expose the real-mode dev server to the network. `--host`, `0.0.0.0` or a LAN address would let
 > anyone who can reach your machine use the token through the proxy; the dev server refuses to start in mode `real`
 > on a host other than `localhost`, `127.0.0.1` or `::1`.
@@ -88,10 +93,16 @@ Notes:
 
 ## Builds and the demo
 
-`npm run build` runs `scripts/check-dist.js` after the build. Among other checks it fails if the build contains the demo
-marker `__DEMO__` (every module under `src/dev/` puts it into its code) or any of the demo data strings
-(`DEMO_STRINGS` in `src/dev/demo-data.ts`). `scripts/build.test.ts` builds the app in production, development and real
-mode and checks that only the development build contains the demo.
+`npm run build` builds in mode `production` only: `vite.config.ts` refuses a build in another mode or with `NODE_ENV`
+other than production (only `scripts/build.test.ts` passes it, with `CPS_ALLOW_NON_PRODUCTION_BUILD=1`, to build the
+app in production, development and real mode and check that only the development build contains the demo).
+
+After the build it runs `scripts/check-dist.js`. Among other checks it fails if the build contains the demo marker
+`__DEMO__` (every module under `src/dev/` puts it into its code) or any of the demo data strings (`DEMO_STRINGS` in
+`src/dev/demo-data.ts`). It also reads the local `.env` and `.env.*` files and fails if the value of any `CT_*`
+variable (or of an old `VITE_PASSWORD` or `VITE_BASE_URL`) of 8 or more characters appears in `dist/`; it names the
+variable and the file, never the value. CI has no `.env`, so this is a local safety net; CI scans the repository with
+gitleaks instead.
 
 ## Contract tests
 
@@ -260,3 +271,20 @@ ask the maintainer first) and a test account; never a production instance.
    answers `token-expired`, Safari may block the renewal popup. The expected fallback is the „Sitzung erneuern“
    banner, with everything typed kept; a click on its button opens the popup. The renewal popup tests are fixme in
    WebKit until a first WebKit run shows its popup-blocker default.
+
+## CI and releases
+
+`.github/workflows/extension.yml` runs on every push and pull request with read-only permissions, on Node 24 LTS:
+`npm ci`, lint, typecheck, unit and app tests, `npm run build` (with `check-dist`) and `npm audit --audit-level=high`.
+A second job scans the whole git history with gitleaks (pinned version, checked against its sha256); a reviewed false
+positive goes into `.gitleaksignore` by its fingerprint. The contract tests and the browser tests don't run in CI (see
+above).
+
+A release starts with a tag `extension-vX.Y.Z` (`specs/versioning.md`). `.github/workflows/extension-release.yml`
+first runs `node scripts/release-check.js <tag>`: the tag, `package.json`, `package-lock.json` and a section
+`## [X.Y.Z] - YYYY-MM-DD` with a real date in `CHANGELOG.md` must agree, `CHANGELOG.md` must have no `## [Unreleased]`
+section, and `X.Y` must equal the first two numbers of `backend/VERSION`; it names every mismatch. Run it locally before
+tagging. The workflow then runs the audit and `npm run check`, refuses a build whose version isn't exactly `X.Y.Z`
+(built from a clean checkout of the tag), zips `dist/` (`ctpassstore-extension-X.Y.Z.zip`, without sourcemaps) and
+publishes a GitHub release with the CHANGELOG section as notes. The build runs with read access only; a second job,
+which runs no project code, gets the write permission to create the release.

@@ -37,6 +37,11 @@ CtPassStore consists of:
 Begin by following the installation guide for the **CtPassStore ChurchTools Extension** provided [here](./extension/docs/setup.md).  
 The extension’s setup process will also walk you through configuring the accompanying PHP backend, ensuring both components are properly connected and ready to use.
 
+Install backend and extension with the same first two version numbers (e.g. backend `0.1.x` with extension `0.1.x`; see [specs/versioning.md](./specs/versioning.md)). Releases are tagged `extension-vX.Y.Z` and `backend-vX.Y.Z`.
+
+### Using CtPassStore
+The [user guide](./extension/docs/user-guide.md) shows the extension's pages for users and admins, on a computer and on a phone, and explains why the admin group must be as trustworthy as your ChurchTools administrators. What changed in each version is in the CHANGELOGs of the [extension](./extension/CHANGELOG.md) and the [backend](./backend/CHANGELOG.md).
+
 
 ## 🧩 CtPassStore Architecture
 

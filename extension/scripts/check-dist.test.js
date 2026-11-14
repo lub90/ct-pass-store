@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { checkDist } from './check-dist.js';
+import { checkDist, localSecrets } from './check-dist.js';
 
 let dir;
 
@@ -130,6 +130,66 @@ describe('checkDist', () => {
         expect(failures.join('\n')).toMatch(/THIRD-PARTY-LICENSES\.txt/);
     });
 
+    describe('values of local .env files (security MINOR 5 of Task 17)', () => {
+        const token = { name: 'CT_LOGIN_TOKEN', file: '.env', value: 'tok-9f8e7d6c5b4a' };
+
+        it('fails when the value of a local CT_* variable appears in any text file, without printing it', () => {
+            const failures = checkDist(
+                makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js.map'), `{"x":"Login ${token.value}"}`)),
+                { secrets: [token] },
+            );
+            expect(failures).toEqual(['the value of CT_LOGIN_TOKEN (from .env) in assets/index-abc.js.map']);
+            expect(failures.join('\n')).not.toContain(token.value);
+        });
+
+        it('passes when no value appears', () => {
+            expect(checkDist(makeDist(), { secrets: [token] })).toEqual([]);
+        });
+    });
+
+    describe('localSecrets', () => {
+        let envDir;
+        beforeEach(() => {
+            envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-dist-env-'));
+        });
+        afterEach(() => {
+            fs.rmSync(envDir, { recursive: true, force: true });
+        });
+        const env = (file, content) => fs.writeFileSync(path.join(envDir, file), content);
+
+        it('reads the CT_* values of .env and every .env.* file', () => {
+            env('.env', 'CT_BASE_URL=https://gemeinde.example.org\nCT_LOGIN_TOKEN="abc def 123 456"\n');
+            env('.env.real', "# comment\nexport CT_PASSWORD='s3cr3t-passw0rd'\nCT_API_TOKEN=api-token-value # note\r\n");
+            expect(localSecrets(envDir)).toEqual([
+                { name: 'CT_BASE_URL', file: '.env', value: 'https://gemeinde.example.org' },
+                { name: 'CT_LOGIN_TOKEN', file: '.env', value: 'abc def 123 456' },
+                { name: 'CT_PASSWORD', file: '.env.real', value: 's3cr3t-passw0rd' },
+                { name: 'CT_API_TOKEN', file: '.env.real', value: 'api-token-value' },
+            ]);
+        });
+
+        it('also reads the old VITE_PASSWORD and VITE_BASE_URL an unmigrated .env may still hold, not VITE_USERNAME', () => {
+            env('.env', 'VITE_USERNAME=someone@example.org\nVITE_PASSWORD=old-password-1\nVITE_BASE_URL=https://x.example.org\n');
+            expect(localSecrets(envDir).map((s) => s.name)).toEqual(['VITE_PASSWORD', 'VITE_BASE_URL']);
+        });
+
+        it('skips other variables, values shorter than 8 characters and .env-example', () => {
+            // `CT_LOGIN_TOKEN=   ` must not take the next line as its value (Node's util.parseEnv does).
+            env('.env', 'OTHER_TOKEN=long-enough-value\nCT_CONTRACT_RECORD=1\nCT_LOGIN_TOKEN=   \nCT_PATH=/api\n#CT_X=commented-out-value\n');
+            env('.env-example', 'CT_LOGIN_TOKEN=example-value-long\n');
+            expect(localSecrets(envDir)).toEqual([]);
+        });
+
+        it('is empty without any .env file', () => {
+            expect(localSecrets(envDir)).toEqual([]);
+        });
+
+        it('skips a folder named like an .env file', () => {
+            fs.mkdirSync(path.join(envDir, '.env.d'));
+            expect(localSecrets(envDir)).toEqual([]);
+        });
+    });
+
     describe('as a command', () => {
         const run = (d, ...more) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-dist.js'), d, ...more], { encoding: 'utf8' });
         /** A stand-in for src/dev/demo-data.ts (test only), next to the dist folder. */
@@ -172,6 +232,23 @@ describe('checkDist', () => {
             const result = run(makeDist(), path.join(dir, 'no-such-demo-data.ts'));
             expect(result.status).toBe(1);
             expect(result.stderr).toContain('demo data strings could not be loaded');
+        });
+
+        it('fails on a local .env value in the build, names the variable and never prints the value', () => {
+            const envDir = fs.mkdtempSync(path.join(os.tmpdir(), 'check-dist-env-'));
+            try {
+                fs.writeFileSync(path.join(envDir, '.env.real'), 'CT_LOGIN_TOKEN=tok-9f8e7d6c5b4a\n');
+                const result = run(
+                    makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"tok-9f8e7d6c5b4a"')),
+                    path.join(import.meta.dirname, '..', 'src', 'dev', 'demo-data.ts'),
+                    envDir,
+                );
+                expect(result.status).toBe(1);
+                expect(result.stderr).toContain('the value of CT_LOGIN_TOKEN (from .env.real) in assets/index-abc.js');
+                expect(result.stderr + result.stdout).not.toContain('tok-9f8e7d6c5b4a');
+            } finally {
+                fs.rmSync(envDir, { recursive: true, force: true });
+            }
         });
 
         it('uses the strings of the given demo data module', () => {

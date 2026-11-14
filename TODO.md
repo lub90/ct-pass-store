@@ -126,10 +126,11 @@ Open issues and planned improvements, roughly ordered by severity.
   - Add PHPUnit unit tests for `PasswordValidator`, `EncryptionService` (encrypt/decrypt round trip with the test keys) and the store logic against a mocked client.
   - Add frontend tests.
 
-- [ ] **Set up CI and static analysis**
-  - Add a GitHub Actions workflow that runs the unit tests, PHPStan and `vue-tsc`.
-  - Add linting (e.g. ESLint).
-  - Start tagging releases.
+- [x] **Set up CI and static analysis**
+  - Done: `.github/workflows/backend.yml` (PHPUnit, PHPStan, PHP-CS-Fixer, `composer audit`) and
+    `.github/workflows/extension.yml` (ESLint, `vue-tsc`, Vitest, build check, `npm audit`, gitleaks); release
+    workflows on the tags `backend-v*` and `extension-v*`.
+  - Open: the first tagged releases (they wait for the setup and migration assistant).
 
 ## Dependencies & Shared Code
 

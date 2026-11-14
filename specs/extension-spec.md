@@ -534,6 +534,9 @@ A test parses `backend/docs/problems.md` and fails if a documented slug has no m
 - Form buttons stretch to full width.
 - Inputs use a 16 px font (prevents iOS zoom).
 - No horizontal scrolling at 375 px.
+- Touch targets are at least 44 px high on a coarse pointer. Links inside running text are exempt (WCAG 2.5.8 exempts
+  inline targets) and keep the line height; a standalone link (alone in its paragraph, list item or footer) gets the
+  class `cps-link`, which makes it 44 px high.
 
 ### 9.4 Accessibility
 
@@ -691,6 +694,14 @@ Neither the unit nor the app layer needs network access.
   `package-lock.json` = a dated section in `extension/CHANGELOG.md`, and `MAJOR.MINOR` = `backend/VERSION`; it builds
   the ZIP and publishes a GitHub release with the CHANGELOG section as notes.
 - CHANGELOG in Keep a Changelog format, written for users, no "Unreleased" section on a release.
+- Only production builds: `vite.config.ts` refuses a build in another mode than `production` or with `NODE_ENV` other
+  than production (`import.meta.env.DEV` true); only the build tests pass it, with `CPS_ALLOW_NON_PRODUCTION_BUILD=1`.
+  CI runs `npm run build` (with its check), never a bare `vite build`.
+- A second CI job scans the whole git history with gitleaks (pinned version and checksum). Locally, `check-dist` also
+  fails when the value of a `CT_*` variable (or an old `VITE_PASSWORD`/`VITE_BASE_URL`) of `.env` or `.env.*` appears
+  in `dist/`, naming the variable, never the value.
+- Not in CI: the contract tests (they need the shared test instance and its credentials) and the browser tests (run by
+  hand before a release and after UI changes; their popup-activation tests depend on timing).
 
 ## 14. To measure before implementation
 

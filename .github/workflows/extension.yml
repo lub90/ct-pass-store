@@ -1,0 +1,83 @@
+# Checks for the ChurchTools extension (specs/extension-spec.md, section 13.7) and a secret scan of the repository.
+# Runs the unit and app tests only. Not here, by design (extension/docs/development.md):
+# - the contract tests (`npm run test:contract`) need the shared ChurchTools test instance and its credentials;
+# - the browser tests (`npm run test:browser`) are run by hand before a release and after UI changes.
+name: Extension
+
+# Every push and pull request (spec 13.7): the build also depends on files outside extension/ (backend/VERSION for
+# releases), and the secret scan covers the whole repository.
+on:
+  push:
+  pull_request:
+
+# Read only, explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Node 24 LTS: check-dist imports a .ts file (type stripping, Node >= 23.6); vue-i18n needs Node >= 22.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit and app tests
+        run: npm test
+
+      # `npm run build` = `vite build` + `scripts/check-dist.js` (the build check, spec 13.5). vite.config.ts refuses any
+      # build that isn't mode production with NODE_ENV production, so a development build can't get this far.
+      - name: Build and build check
+        run: npm run build
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+  secrets:
+    name: secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: 8.30.1
+      # sha256 of gitleaks_8.30.1_linux_x64.tar.gz, from the release's gitleaks_8.30.1_checksums.txt.
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Install gitleaks (pinned version and checksum)
+        run: |
+          cd "$RUNNER_TEMP"
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict
+          tar -xzf gitleaks.tar.gz gitleaks
+
+      # The whole history; findings are redacted in the log. A reviewed false positive goes into .gitleaksignore
+      # (its fingerprint), never into an allowlist by path.
+      - name: Scan the repository
+        run: '"$RUNNER_TEMP/gitleaks" git --redact --no-banner --exit-code 1 .'

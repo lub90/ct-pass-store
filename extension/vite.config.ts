@@ -43,6 +43,26 @@ function thirdPartyLicenses(): Plugin {
     };
 }
 
+/**
+ * Refuses every build that isn't a production build (mode `production` and `NODE_ENV` production, so
+ * `import.meta.env.DEV` is false): a release must never ship the demo or development code (spec 13.7). Only the build
+ * tests (`scripts/build.test.ts`) pass it with `CPS_ALLOW_NON_PRODUCTION_BUILD=1`, to show what such a build contains.
+ */
+function productionBuildsOnly(): Plugin {
+    return {
+        name: 'production-builds-only',
+        configResolved(config) {
+            if (config.command !== 'build' || process.env.CPS_ALLOW_NON_PRODUCTION_BUILD === '1') return;
+            if (config.mode !== 'production' || !config.isProduction) {
+                throw new Error(
+                    `only production builds are allowed: this one has mode "${config.mode}" and ` +
+                        `NODE_ENV "${process.env.NODE_ENV ?? ''}"; run \`npm run build\` without --mode and NODE_ENV`,
+                );
+            }
+        },
+    };
+}
+
 export interface ConfigEnv {
     mode: string;
     command: 'build' | 'serve';
@@ -61,7 +81,7 @@ export function appConfig({ mode, command, isPreview }: ConfigEnv, envDir: strin
     return {
         base: '/ccm/ctpassstore/',
         envPrefix: ENV_PREFIX,
-        plugins: [vue(), thirdPartyLicenses(), ...(proxy ? [realModeGuard()] : [])],
+        plugins: [productionBuildsOnly(), vue(), thirdPartyLicenses(), ...(proxy ? [realModeGuard()] : [])],
         define: { __APP_VERSION__: JSON.stringify(gitVersion()) },
         resolve: { alias: { '@': path.join(root, 'src') } },
         server: { proxy },

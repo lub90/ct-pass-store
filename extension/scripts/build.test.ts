@@ -18,6 +18,7 @@ const nodeEnv = process.env.NODE_ENV;
 
 afterEach(() => {
     process.env.NODE_ENV = nodeEnv;
+    delete process.env.CPS_ALLOW_NON_PRODUCTION_BUILD;
     while (dirs.length) fs.rmSync(dirs.pop()!, { recursive: true, force: true });
 });
 
@@ -28,13 +29,18 @@ afterEach(() => {
  * leak into other files. `afterEach` restores it.
  */
 async function buildApp(mode: string, env: 'production' | 'development'): Promise<string[]> {
-    return checkDist(await buildInto(mode, env), { demoStrings: DEMO_STRINGS });
+    return checkDist(await buildInto(mode, env, { allowNonProduction: true }), { demoStrings: DEMO_STRINGS });
 }
 
-async function buildInto(mode: string, env: 'production' | 'development'): Promise<string> {
+/**
+ * `allowNonProduction` sets `CPS_ALLOW_NON_PRODUCTION_BUILD=1`, the tests' only way past the production guard of
+ * `vite.config.ts` (spec 13.7); `afterEach` removes it again.
+ */
+async function buildInto(mode: string, env: 'production' | 'development', { allowNonProduction = false } = {}): Promise<string> {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-build-'));
     dirs.push(outDir);
     process.env.NODE_ENV = env;
+    if (allowNonProduction) process.env.CPS_ALLOW_NON_PRODUCTION_BUILD = '1';
     await build({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), mode, logLevel: 'silent', build: { outDir, emptyOutDir: true } });
     return outDir;
 }
@@ -65,5 +71,26 @@ describe('the demo in builds', () => {
         const code = bundleOf(await buildInto('production', 'production'));
         expect(code).toMatch(/\{backendLogin:(!0|true)\}/);
         expect(code).not.toMatch(/\{backendLogin:(!1|false)\}/);
+    }, 60_000);
+});
+
+describe('only production builds (spec 13.7, a release must never ship a development build)', () => {
+    it.each([
+        ['development', 'development'],
+        ['real', 'development'],
+        ['real', 'production'],
+        ['staging', 'production'],
+        ['production', 'development'],
+    ] as const)('refuses a build in mode %s with NODE_ENV %s', async (mode, env) => {
+        await expect(buildInto(mode, env)).rejects.toThrow(/only production builds/);
+    }, 60_000);
+
+    it('refuses a development build even when the guard variable has another value than 1', async () => {
+        process.env.CPS_ALLOW_NON_PRODUCTION_BUILD = 'true';
+        await expect(buildInto('development', 'development')).rejects.toThrow(/only production builds/);
+    }, 60_000);
+
+    it('builds in mode production with NODE_ENV production', async () => {
+        expect(bundleOf(await buildInto('production', 'production'))).not.toBe('');
     }, 60_000);
 });

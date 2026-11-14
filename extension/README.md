@@ -2,7 +2,8 @@
 
 The ChurchTools extension (Vue 3, Vite 8, strict TypeScript) of CtPassStore. It is served by ChurchTools under
 `/ccm/ctpassstore/`. The design is in [`specs/extension-spec.md`](../specs/extension-spec.md); installation of the
-extension and the backend is described in [docs/setup.md](./docs/setup.md).
+extension and the backend is described in [docs/setup.md](./docs/setup.md); how to use it, in the
+[user guide](./docs/user-guide.md). Changes are listed in the [CHANGELOG](./CHANGELOG.md).
 
 ## Development
 
@@ -38,11 +39,17 @@ credential files (backend `phpunit.xml`, recorded fixtures) are created with mod
 | `npm run build`         | production build into `dist/`, followed by `scripts/check-dist.js` |
 | `npm test`              | unit and app tests (Vitest)                                      |
 | `npm run test:contract` | contract tests against a real ChurchTools test instance          |
-| `npm run test:browser`  | browser tests (set up later)                                     |
+| `npm run test:browser`  | browser tests (Playwright, demo mode; by hand, not in CI)        |
+| `npm run docs:screenshots` | the user-guide pictures in `docs/images/` (Chromium)          |
 | `npm run lint`          | ESLint                                                           |
 | `npm run typecheck`     | `vue-tsc --noEmit`                                               |
 | `npm run check`         | lint, typecheck, tests and build with its check                  |
 | `npm run deploy`        | build and zip `dist/` into `releases/`                           |
+| `node scripts/release-check.js extension-vX.Y.Z` | the release check of the release workflow (versions, CHANGELOG) |
 
 `__APP_VERSION__` is the `package.json` version on an `extension-v<version>` tag, otherwise `<version>+<sha>`
 (plus `-dirty` with uncommitted changes).
+
+CI (`.github/workflows/extension.yml`) runs lint, typecheck, the tests, the build with its check and `npm audit` on
+every push, plus a gitleaks scan; a tag `extension-vX.Y.Z` builds and publishes a release
+(`.github/workflows/extension-release.yml`). Details: [docs/development.md](./docs/development.md#ci-and-releases).
