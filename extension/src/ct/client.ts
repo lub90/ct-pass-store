@@ -51,5 +51,7 @@ export function createClient(baseUrl: string = instanceBaseUrl()): ChurchToolsCl
     const client = new ChurchToolsClient();
     client.setBaseUrl(baseUrl);
     client.setLoadCSRFForAPI();
+    // `X-OnlyAuthenticated: 1`: an expired session answers 401 instead of serving anonymous (empty) data.
+    client.setNeedsAuthentication(true);
     return client;
 }

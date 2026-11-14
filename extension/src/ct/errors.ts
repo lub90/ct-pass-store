@@ -37,3 +37,11 @@ export class CtHttpError extends Error {
         this.status = status;
     }
 }
+
+/** A numeric ID that would end up in a request path isn't a positive safe integer. Thrown before any request. */
+export class CtInvalidIdError extends Error {
+    constructor(value: unknown) {
+        super(`Invalid ChurchTools id: ${String(value)}`);
+        this.name = 'CtInvalidIdError';
+    }
+}

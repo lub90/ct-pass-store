@@ -16,8 +16,14 @@ export type CtContractSubject = CtApi & {
     moduleKey: string;
     /** An API without a login. */
     anonymous?: () => Promise<CtApi>;
-    /** An API of a person without any rights on the module's categories. */
+    /** An API of a person with `view` on the module but no rights on its categories or their data. */
     limited?: () => Promise<CtApi>;
+    /** An API of a person who may read the categories and values but not create, edit or delete values. */
+    readOnly?: () => Promise<CtApi>;
+    /** A member of `knownGroupId` whose status isn't `active` (e.g. `waiting`); must not be listed or counted. */
+    inactiveMemberId?: number;
+    /** An archived member of `knownGroupId`; must not be listed or counted. */
+    archivedMemberId?: number;
 };
 
 /** The cases are written once and run against the fake now and against the real test instance later. */
@@ -54,14 +60,33 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
         it('categories without "view custom category" are absent', async (ctx) => {
             const s = await make();
             if (!s.limited) return ctx.skip();
-            const moduleId = await s.moduleId(s.moduleKey);
-            expect(moduleId).not.toBeNull();
-            const limited = await s.limited();
-            const visible = await limited.categories(moduleId as number).catch((e: unknown) => {
-                if (e instanceof CtForbiddenError) return [];
-                throw e;
-            });
-            expect(visible).toEqual([]);
+            const moduleId = (await s.moduleId(s.moduleKey)) as number;
+            expect(await (await s.limited()).categories(moduleId)).toEqual([]);
+        });
+
+        it('values without "view custom data" give CtForbiddenError', async (ctx) => {
+            const s = await make();
+            if (!s.limited) return ctx.skip();
+            const moduleId = (await s.moduleId(s.moduleKey)) as number;
+            const categoryId = (await s.categories(moduleId))[0]!.id;
+            await expect((await s.limited()).values(moduleId, categoryId)).rejects.toBeInstanceOf(CtForbiddenError);
+        });
+
+        it('writes without the create, edit or delete right give CtForbiddenError', async (ctx) => {
+            const s = await make();
+            if (!s.readOnly) return ctx.skip();
+            const readOnly = await s.readOnly();
+            const moduleId = (await s.moduleId(s.moduleKey)) as number;
+            const categoryId = (await s.categories(moduleId))[0]!.id;
+            await expect(readOnly.createValue(moduleId, categoryId, '{}')).rejects.toBeInstanceOf(CtForbiddenError);
+            const created = await s.createValue(moduleId, categoryId, '{"probe":0}');
+            try {
+                await expect(readOnly.updateValue(moduleId, categoryId, created.id, '{}')).rejects.toBeInstanceOf(CtForbiddenError);
+                await expect(readOnly.deleteValue(moduleId, categoryId, created.id)).rejects.toBeInstanceOf(CtForbiddenError);
+                expect((await s.values(moduleId, categoryId)).some((v) => v.id === created.id)).toBe(true);
+            } finally {
+                await s.deleteValue(moduleId, categoryId, created.id);
+            }
         });
 
         it('a value survives a create, read, update, delete round trip', async () => {
@@ -98,6 +123,9 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
             // Only active, non-archived members are listed (a `waiting` member or an archived person is not), and
             // the count is that list's length, never an `information` key of the group.
             expect(group.memberCount).toBe(members.length);
+            for (const excluded of [s.inactiveMemberId, s.archivedMemberId]) {
+                if (excluded !== undefined) expect(members.some((m) => m.id === excluded)).toBe(false);
+            }
         });
 
         it('another group gives CtForbiddenError', async () => {

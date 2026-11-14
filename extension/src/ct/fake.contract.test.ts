@@ -45,9 +45,19 @@ defineCtContract('in-memory fake', async () => ({
     moduleKey: 'ctpassstore',
     anonymous: async () => createFakeChurchTools(seed({ currentPersonId: null })),
     limited: async () => createFakeChurchTools(seed({ permissions: all([]) })),
+    readOnly: async () =>
+        createFakeChurchTools(seed({ permissions: { ...all([5]), 'create custom data': [], 'edit custom data': [], 'delete custom data': [] } })),
+    inactiveMemberId: 4,
+    archivedMemberId: 5,
 }));
 
 describe('fake controls', () => {
+    it('currentPersonId 0 or -1 is anonymous', async () => {
+        for (const id of [0, -1]) {
+            await expect(createFakeChurchTools(seed({ currentPersonId: id })).whoami()).rejects.toBeInstanceOf(NotAuthenticatedError);
+        }
+    });
+
     it('lists and counts only active, non-archived members', async () => {
         const fake = createFakeChurchTools(seed());
         expect((await fake.groupMembers(10)).map((m) => m.id)).toEqual([1, 2]);

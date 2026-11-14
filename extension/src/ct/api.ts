@@ -2,7 +2,7 @@ import type { ChurchToolsClient } from '@churchtools/churchtools-client';
 import { EXTENSION_KEY } from '@/config';
 import type { PersonOption } from '@/ui';
 import { createClient, retryAfterMs } from './client';
-import { CtForbiddenError, CtHttpError, CtRateLimitedError, NotAuthenticatedError } from './errors';
+import { CtForbiddenError, CtHttpError, CtInvalidIdError, CtRateLimitedError, NotAuthenticatedError } from './errors';
 import type { CtCategory, CtGroup, CtValue, CtWhoAmI, Permissions } from './types';
 
 /**
@@ -77,6 +77,10 @@ async function guarded<T>(call: () => Promise<T>, missing?: string): Promise<T> 
 }
 
 type Json = Record<string, unknown>;
+/** Every ID that ends up in a request path goes through this first: a positive safe integer, or no request. */
+function assertId(n: unknown): asserts n is number {
+    if (typeof n !== 'number' || !Number.isSafeInteger(n) || n <= 0) throw new CtInvalidIdError(n);
+}
 const text = (v: unknown): string => (typeof v === 'string' ? v : '');
 const fullName = (first: unknown, last: unknown): string => `${text(first)} ${text(last)}`.trim();
 
@@ -90,32 +94,40 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
      * who aren't archived. Paged: the default limit is 10, so all pages are read.
      */
     async function activeMembers(groupId: number): Promise<PersonOption[]> {
+        assertId(groupId);
         const members = await guarded(() => client.getAllPages<Json>(`/groups/${groupId}/members`), 'view group');
-        const result: PersonOption[] = [];
+        const result = new Map<number, PersonOption>();
         for (const m of members) {
             const person = (m.person ?? {}) as Json;
             const attrs = (person.domainAttributes ?? {}) as Json;
             if (m.groupMemberStatus !== 'active' || attrs.isArchived === true) continue;
             // `personId` is a number here; `domainIdentifier` is a string (as in persons/{id}/groups).
             const id = Number(m.personId ?? person.domainIdentifier);
-            if (!Number.isFinite(id) || id <= 0) continue;
-            result.push({ id, name: text(person.title) || fullName(attrs.firstName, attrs.lastName) });
+            if (!Number.isSafeInteger(id) || id <= 0 || result.has(id)) continue;
+            const name = text(person.title) || fullName(attrs.firstName, attrs.lastName);
+            if (name) result.set(id, { id, name });
         }
-        return result;
+        return [...result.values()];
     }
 
     return {
         async whoami() {
             const me = await guarded(() => client.get<Json>('/whoami'));
-            const id = Number(me.id);
-            if (!Number.isFinite(id) || id <= 0) throw new NotAuthenticatedError();
+            // Fail closed: anything but a positive integer (-1, 0, missing, a string) counts as not logged in.
+            const id = me.id;
+            if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) throw new NotAuthenticatedError();
             return { id, firstName: text(me.firstName), lastName: text(me.lastName) };
         },
 
         async globalPermissions() {
-            const all = await guarded(() => client.get<Record<string, Record<string, unknown> | undefined>>('/permissions/global'));
-            const own = all[moduleKey] ?? {};
-            const ids = (key: string): number[] => (Array.isArray(own[key]) ? (own[key] as unknown[]).map(Number) : []);
+            const all = await guarded(() => client.get<unknown>('/permissions/global'));
+            const entry = all && typeof all === 'object' ? (all as Record<string, unknown>)[moduleKey] : undefined;
+            const own: Record<string, unknown> = entry && typeof entry === 'object' ? (entry as Record<string, unknown>) : {};
+            // Only real positive integers count as category IDs; anything else grants nothing.
+            const ids = (key: string): number[] => {
+                const list = own[key];
+                return Array.isArray(list) ? list.filter((x): x is number => typeof x === 'number' && Number.isSafeInteger(x) && x > 0) : [];
+            };
             return {
                 view: own.view === true,
                 'create custom category': own['create custom category'] === true,
@@ -140,16 +152,21 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async categories(moduleId) {
+            assertId(moduleId);
             const list = await guarded(() => client.get<Json[]>(categoryPath(moduleId)));
             return list.map((c) => ({ id: Number(c.id), name: text(c.name), shorty: text(c.shorty) }));
         },
 
         async values(moduleId, categoryId) {
+            assertId(moduleId);
+            assertId(categoryId);
             const list = await guarded(() => client.get<Json[]>(valuesPath(moduleId, categoryId)), 'view custom data');
             return list.map((v) => toValue(v, categoryId));
         },
 
         async createValue(moduleId, categoryId, value) {
+            assertId(moduleId);
+            assertId(categoryId);
             const created = await guarded(
                 () => client.post<Json>(valuesPath(moduleId, categoryId), { dataCategoryId: categoryId, value }),
                 'create custom data',
@@ -158,6 +175,9 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async updateValue(moduleId, categoryId, valueId, value) {
+            assertId(moduleId);
+            assertId(categoryId);
+            assertId(valueId);
             const updated = await guarded(
                 () => client.put<Json>(`${valuesPath(moduleId, categoryId)}/${valueId}`, { dataCategoryId: categoryId, value }),
                 'edit custom data',
@@ -166,6 +186,9 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async deleteValue(moduleId, categoryId, valueId) {
+            assertId(moduleId);
+            assertId(categoryId);
+            assertId(valueId);
             await guarded(() => client.deleteApi<unknown>(`${valuesPath(moduleId, categoryId)}/${valueId}`), 'delete custom data');
         },
 
@@ -174,6 +197,7 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async group(groupId) {
+            assertId(groupId);
             // `GET /groups/{id}` has no member count (`information.memberCount` doesn't exist, `memberStatistics` is
             // null), so it is the length of the filtered member list. That list needs the same right as the group.
             const g = await guarded(() => client.get<Json>(`/groups/${groupId}`), 'view group');
@@ -181,6 +205,7 @@ export function createCtApi(client: ChurchToolsClient = createClient(), moduleKe
         },
 
         async person(id) {
+            assertId(id);
             const p = await guarded(() => client.get<Json>(`/persons/${id}`));
             return { id: Number(p.id), name: fullName(p.firstName, p.lastName) };
         },
