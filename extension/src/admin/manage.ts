@@ -45,4 +45,3 @@ export function parsePersonId(raw: unknown): number | null {
     const id = Number(raw);
     return Number.isSafeInteger(id) ? id : null;
 }
-

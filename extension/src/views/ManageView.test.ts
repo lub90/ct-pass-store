@@ -1068,6 +1068,16 @@ describe('„Löschen“', () => {
         expect(wrapper.find('.cps-manage__error').exists()).toBe(false);
     });
 
+    it('„Gelöscht“ is cleared when another person is chosen', async () => {
+        const { wrapper, router } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        await click(wrapper, TEXT.delete);
+        await answer(TEXT.delete);
+        expect(wrapper.find('.cps-manage__saved').text()).toBe(TEXT.deleted);
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        expect(wrapper.find('.cps-manage__saved').exists()).toBe(false);
+    });
+
     it('with the password required, an empty field can’t confirm', async () => {
         const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, requirePrimary: true });
         await click(wrapper, TEXT.delete);
