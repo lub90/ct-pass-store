@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -130,7 +131,18 @@ describe('checkDist', () => {
     });
 
     describe('as a command', () => {
-        const run = (d) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-dist.js'), d], { encoding: 'utf8' });
+        const run = (d, ...more) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-dist.js'), d, ...more], { encoding: 'utf8' });
+        /** A stand-in for src/dev/demo-data.ts (test only), next to the dist folder. */
+        const stub = (source) => {
+            const file = path.join(dir, '..', `${path.basename(dir)}-demo-data.mjs`);
+            fs.writeFileSync(file, source);
+            stubs.push(file);
+            return file;
+        };
+        const stubs = [];
+        afterEach(() => {
+            while (stubs.length) fs.rmSync(stubs.pop(), { force: true });
+        });
 
         it('passes a clean build', () => {
             const result = run(makeDist());
@@ -142,6 +154,30 @@ describe('checkDist', () => {
             const result = run(makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"Ada Beispielmann"')));
             expect(result.status).toBe(1);
             expect(result.stderr).toContain('demo data "Beispielmann" in assets/index-abc.js');
+        });
+
+        it('fails closed when the demo data module has no strings', () => {
+            const result = run(makeDist(), stub('export const DEMO_STRINGS = [];\n'));
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('no demo data strings');
+        });
+
+        it('fails closed when DEMO_STRINGS is not a list', () => {
+            const result = run(makeDist(), stub('export const DEMO_STRINGS = "Beispielmann";\n'));
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('no demo data strings');
+        });
+
+        it('fails closed when the demo data module is missing', () => {
+            const result = run(makeDist(), path.join(dir, 'no-such-demo-data.ts'));
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('demo data strings could not be loaded');
+        });
+
+        it('uses the strings of the given demo data module', () => {
+            const result = run(makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"Zyxwvutsrq"')), stub('export const DEMO_STRINGS = ["Zyxwvutsrq"];\n'));
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('demo data "Zyxwvutsrq"');
         });
     });
 });

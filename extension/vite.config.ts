@@ -3,9 +3,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
-import { defineConfig, loadEnv, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin, type UserConfig } from 'vite';
 import { appVersion } from './scripts/app-version.ts';
-import { devProxy, ENV_PREFIX } from './scripts/dev-proxy.ts';
+import { devProxy, ENV_PREFIX, realModeGuard } from './scripts/dev-proxy.ts';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
@@ -43,15 +43,25 @@ function thirdPartyLicenses(): Plugin {
     };
 }
 
-export default defineConfig(({ mode, command, isPreview }) => {
+export interface ConfigEnv {
+    mode: string;
+    command: 'build' | 'serve';
+    isPreview?: boolean;
+}
+
+/**
+ * The app's Vite config. `envDir` is where `.env` is read from (only by the dev server in mode `real`); tests pass a
+ * folder with invented values.
+ */
+export function appConfig({ mode, command, isPreview }: ConfigEnv, envDir: string = root): UserConfig {
     // CT_* variables have no VITE_ prefix: they are used here only (the dev proxy of --mode real), never in the bundle.
     // Only the dev server reads them; a build and `vite preview` (which would reuse `server.proxy`) never do.
-    const proxy = command === 'serve' && !isPreview ? devProxy(mode, loadEnv(mode, root, 'CT_')) : undefined;
+    const proxy = command === 'serve' && !isPreview ? devProxy(mode, loadEnv(mode, envDir, 'CT_')) : undefined;
 
     return {
         base: '/ccm/ctpassstore/',
         envPrefix: ENV_PREFIX,
-        plugins: [vue(), thirdPartyLicenses()],
+        plugins: [vue(), thirdPartyLicenses(), ...(proxy ? [realModeGuard()] : [])],
         define: { __APP_VERSION__: JSON.stringify(gitVersion()) },
         resolve: { alias: { '@': path.join(root, 'src') } },
         server: { proxy },
@@ -60,4 +70,6 @@ export default defineConfig(({ mode, command, isPreview }) => {
             rollupOptions: { output: { inlineDynamicImports: true } },
         },
     };
-});
+}
+
+export default defineConfig((env) => appConfig(env));

@@ -53,15 +53,26 @@ instance, through a Vite proxy for `/api`. It does **not** cover the backend:
    install -m 600 .env-example .env
    ```
 
+   `.env` and every `.env.*` file (e.g. `.env.real`) are ignored by git; `.env-example` holds no values.
+
    (This replaces an existing `.env`; if you already have one, fix its mode with `chmod 600 .env` instead. An old
    `.env` with `VITE_BASE_URL`, `VITE_USERNAME` and `VITE_PASSWORD` must be migrated: put the address into
    `CT_BASE_URL`, a login token into `CT_LOGIN_TOKEN`, and delete the old `VITE_*` lines, above all the password.) Then fill
    in `CT_BASE_URL` (`https://<instance>.church.tools`) and `CT_LOGIN_TOKEN` (a ChurchTools login token of a
    test account). Check the mode with `ls -l .env` (`-rw-------`).
 2. `vite.config.ts` reads the two variables (only when the dev server starts in mode `real`; never for a build or
-   `vite preview`) and forwards `/api` to the
-   instance with `Authorization: Login <token>`, so the browser never sees the token. The server refuses to start if
-   `CT_BASE_URL` isn't an `https://` address without credentials or if `CT_LOGIN_TOKEN` is empty.
+   `vite preview`) and forwards `/api` to the instance. The token is added per request, so the browser never sees it.
+   The server refuses to start if `CT_BASE_URL` isn't an `https://` address without credentials or if
+   `CT_LOGIN_TOKEN` is empty.
+3. The proxy acts with the token's rights, so it serves only the dev server's own page. It answers 404, and forwards
+   nothing, when `Sec-Fetch-Site` is sent and isn't `same-origin`, when `Origin` is sent and isn't the dev server, or
+   when the `Host` isn't `localhost`, `127.0.0.1` or `[::1]`. Without that check, any page you visit could send a
+   simple cross-site request to `localhost:5173/api` and act as the token's user. The browser's `Cookie` and `Origin`
+   headers are dropped before forwarding.
+
+> **Warning:** never expose the real-mode dev server to the network. `--host`, `0.0.0.0` or a LAN address would let
+> anyone who can reach your machine use the token through the proxy; the dev server refuses to start in mode `real`
+> on a host other than `localhost`, `127.0.0.1` or `::1`.
 
 Notes:
 

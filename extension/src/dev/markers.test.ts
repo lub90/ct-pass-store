@@ -55,7 +55,10 @@ async function bundle(file: string, name: string): Promise<string> {
 }
 
 describe('demo markers in src/dev', () => {
-    const modules = fs.readdirSync(DEV).filter((f) => f.endsWith('.ts') && !f.endsWith('.test.ts'));
+    /** Every file below src/dev (any depth, any kind) except tests. */
+    const walk = (dir: string): string[] =>
+        fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(dir, e.name)) : [path.relative(DEV, path.join(dir, e.name))]));
+    const modules = walk(DEV).filter((f) => !/\.test\.[jt]s$/.test(f));
 
     it('knows every dev module', () => {
         expect(modules.sort()).toEqual(Object.keys(MAIN_EXPORT).sort());

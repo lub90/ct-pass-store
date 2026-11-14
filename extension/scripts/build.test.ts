@@ -28,11 +28,22 @@ afterEach(() => {
  * leak into other files. `afterEach` restores it.
  */
 async function buildApp(mode: string, env: 'production' | 'development'): Promise<string[]> {
+    return checkDist(await buildInto(mode, env), { demoStrings: DEMO_STRINGS });
+}
+
+async function buildInto(mode: string, env: 'production' | 'development'): Promise<string> {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-build-'));
     dirs.push(outDir);
     process.env.NODE_ENV = env;
     await build({ root: ROOT, configFile: path.join(ROOT, 'vite.config.ts'), mode, logLevel: 'silent', build: { outDir, emptyOutDir: true } });
-    return checkDist(outDir, { demoStrings: DEMO_STRINGS });
+    return outDir;
+}
+
+/** The one JavaScript bundle of a build. */
+function bundleOf(outDir: string): string {
+    const assets = path.join(outDir, 'assets');
+    const [js] = fs.readdirSync(assets).filter((f) => f.endsWith('.js'));
+    return fs.readFileSync(path.join(assets, js!), 'utf8');
 }
 
 describe('the demo in builds', () => {
@@ -48,5 +59,11 @@ describe('the demo in builds', () => {
 
     it('real mode never contains the demo, also with DEV on', async () => {
         expect(await buildApp('real', 'development')).toEqual([]);
+    }, 60_000);
+
+    it('a production build keeps the backend login (main.ts passes backendLogin: true, minified !0)', async () => {
+        const code = bundleOf(await buildInto('production', 'production'));
+        expect(code).toMatch(/\{backendLogin:(!0|true)\}/);
+        expect(code).not.toMatch(/\{backendLogin:(!1|false)\}/);
     }, 60_000);
 });

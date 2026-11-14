@@ -1,6 +1,6 @@
 /** The backend factory of the app: the token is bound to the address each request goes to (security review F1). */
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Auth, LoginUnavailable, PopupBlocked, TOKEN_KEY, type AuthEnv } from '../backend/auth';
+import { Auth, LOGIN_KEY, LoginUnavailable, PopupBlocked, TOKEN_KEY, type AuthEnv } from '../backend/auth';
 import { backendFor, createServices } from './services';
 
 const BACKEND = 'https://pw.example';
@@ -73,10 +73,38 @@ describe('createServices (the wiring the app runs with)', () => {
             services.auth.configure({ backendUrl: BACKEND, clientId: 'c' });
             services.auth.bindPerson(1);
             await expect(services.auth.startPageLogin('/')).rejects.toBeInstanceOf(LoginUnavailable);
+            // The refused login leaves no login record behind.
+            expect(window.sessionStorage.getItem(LOGIN_KEY)).toBeNull();
             await expect(services.auth.loginInPopup()).rejects.toBeInstanceOf(PopupBlocked);
             expect(open).not.toHaveBeenCalled();
         } finally {
             open.mockRestore();
+        }
+    });
+
+    /** Settles to 'pending' while a page login has left (a navigation never resolves), or to what it rejected with. */
+    const outcome = (p: Promise<unknown>) =>
+        Promise.race([p.then(() => 'resolved', (e: unknown) => e), new Promise((resolve) => setTimeout(() => resolve('pending'), 50))]);
+
+    it.each([
+        ['backendLogin: true', { backendLogin: true }],
+        ['no options', undefined],
+    ] as const)('with %s the login opens the popup and the page login leaves (production)', async (_case, options) => {
+        const open = vi.spyOn(window, 'open').mockImplementation(() => null);
+        // jsdom can't navigate; it only reports that.
+        const quiet = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        try {
+            const services = createServices('de', options);
+            services.auth.configure({ backendUrl: BACKEND, clientId: 'c' });
+            services.auth.bindPerson(1);
+            await expect(services.auth.loginInPopup()).rejects.toBeInstanceOf(PopupBlocked);
+            expect(open).toHaveBeenCalledTimes(1);
+            expect(open.mock.calls[0]![0]).toBe('about:blank');
+            expect(await outcome(services.auth.startPageLogin('/'))).toBe('pending');
+            expect(window.sessionStorage.getItem(LOGIN_KEY)).not.toBeNull();
+        } finally {
+            open.mockRestore();
+            quiet.mockRestore();
         }
     });
 });

@@ -39,6 +39,20 @@ describe('dev boundary', () => {
         expect(found).toEqual(['main.ts -> ./dev/services']);
     });
 
+    it('no production code points at dev/ any other way (import.meta.glob, new URL, a path string)', () => {
+        const pathToDev = /['"`](?:\.{1,2}\/|@\/|\/src\/)(?:[^'"`\n]*\/)?dev(?:\/[^'"`\n]*)?['"`]/g;
+        const found = production.flatMap((f) => (fs.readFileSync(f, 'utf8').match(pathToDev) ?? []).map((m) => `${rel(f)}: ${m}`));
+        expect(found).toEqual(['main.ts: \'./dev/services\'']);
+    });
+
+    it('the path pattern finds the other ways (self-check)', () => {
+        const pathToDev = /['"`](?:\.{1,2}\/|@\/|\/src\/)(?:[^'"`\n]*\/)?dev(?:\/[^'"`\n]*)?['"`]/g;
+        const samples = ["import.meta.glob('./dev/*.ts')", "new URL('../dev/demo-data.ts', import.meta.url)", 'const p = `@/dev/fake-backend`', "'../../dev'"];
+        for (const sample of samples) expect(sample.match(pathToDev), sample).not.toBeNull();
+        expect("'./devices/x'".match(pathToDev)).toBeNull();
+        expect("'https://x.dev/a'".match(pathToDev)).toBeNull();
+    });
+
     it('main.ts chooses the demo with the literal build condition', () => {
         const main = fs.readFileSync(path.join(SRC, 'main.ts'), 'utf8');
         expect(main).toContain(

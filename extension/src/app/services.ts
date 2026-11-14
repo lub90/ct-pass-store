@@ -4,7 +4,7 @@
  */
 import { inject, provide, type App, type InjectionKey } from 'vue';
 import { createBackendApi, type BackendApi } from '../backend/api';
-import { Auth, LoginUnavailable, windowEnv } from '../backend/auth';
+import { Auth, LOGIN_KEY, LoginUnavailable, windowEnv } from '../backend/auth';
 import { EXTENSION_KEY } from '../config';
 import { createCtApi, type CtApi } from '../ct/api';
 import type { Language } from '../i18n';
@@ -64,6 +64,12 @@ export function createServices(language: Language, options: ServicesOptions = {}
     const env = windowEnv();
     if (options.backendLogin === false) {
         env.assign = () => {
+            // The login record `startPageLogin` just wrote would never be used.
+            try {
+                env.storage()?.removeItem(LOGIN_KEY);
+            } catch {
+                // Storage gone: nothing to clean up.
+            }
             throw new LoginUnavailable();
         };
         env.open = () => null;

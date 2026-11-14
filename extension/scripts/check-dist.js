@@ -75,11 +75,19 @@ export function checkDist(dist, { demoStrings = [] } = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    // `node scripts/check-dist.js [dist] [demo data module]`; the second argument exists for the tests.
     const dist = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, '..', 'dist'));
+    const demoData = path.resolve(process.argv[3] ?? path.join(import.meta.dirname, '..', 'src', 'dev', 'demo-data.ts'));
     // Fails closed: without the demo data strings the check would pass silently.
-    const { DEMO_STRINGS } = await import('../src/dev/demo-data.ts');
-    if (!Array.isArray(DEMO_STRINGS) || DEMO_STRINGS.length === 0) {
-        console.error('dist check failed: no demo data strings loaded from src/dev/demo-data.ts');
+    let DEMO_STRINGS;
+    try {
+        ({ DEMO_STRINGS } = await import(/* @vite-ignore */ pathToFileURL(demoData).href));
+    } catch {
+        console.error(`dist check failed: the demo data strings could not be loaded from ${path.relative(process.cwd(), demoData)}`);
+        process.exit(1);
+    }
+    if (!Array.isArray(DEMO_STRINGS) || DEMO_STRINGS.length === 0 || !DEMO_STRINGS.every((s) => typeof s === 'string' && s !== '')) {
+        console.error('dist check failed: no demo data strings in the demo data module');
         process.exit(1);
     }
     const failures = checkDist(dist, { demoStrings: DEMO_STRINGS });

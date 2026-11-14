@@ -663,7 +663,8 @@ Neither the unit nor the app layer needs network access.
 - `.env` has `CT_BASE_URL` and `CT_LOGIN_TOKEN`, **without** the `VITE_` prefix, so they never reach the bundle. A Vite
   dev proxy forwards `/api` to the instance and adds `Authorization: Login <token>`.
 - **Demo mode is the default** for `npm run dev`: `FakeChurchTools` and `FakeBackend` with invented data, so
-  development never writes into a real instance. A switch uses the real instance and a real backend instead.
+  development never writes into a real instance. `--mode real` uses the real instance instead, for the ChurchTools
+  side only (see below).
   - Selected in `main.ts` by the literal `import.meta.env.DEV && import.meta.env.MODE !== 'real'`, so a build drops it.
     A floating switch picks the scenario (user, admin, setup missing, no access, ChurchTools error, version mismatch);
     the demo state lives in `localStorage` (development only; the production app never uses it).
@@ -674,6 +675,9 @@ Neither the unit nor the app layer needs network access.
     404. Backend flows (login, entries, self-test) are tested in the build hosted on the test instance and in the
     contract and browser checks. The backend client accepts `https://` only, in every mode. `envPrefix` is not
     `VITE_`, so no `.env` value can be inlined into a build; `vite preview` gets no proxy.
+  - The real-mode proxy adds the login token only to requests from the dev server's own page (loopback `Host`,
+    `Sec-Fetch-Site: same-origin` or none, `Origin` the dev server or none; anything else gets a 404) and drops
+    `Cookie` and `Origin`. The dev server refuses mode `real` on a non-loopback host (`--host`).
 - `__APP_VERSION__` from `git describe` (`x.y.z`, `x.y.z+sha`, `x.y.z+sha-dirty`).
 - `modulePreload.polyfill: false` (CSP).
 - Credential files (`.env`, recorded fixtures) are created with mode `600`; the testing docs say so.

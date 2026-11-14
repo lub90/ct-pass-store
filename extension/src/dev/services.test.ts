@@ -165,7 +165,10 @@ describe('createDemoServices', () => {
         ['not JSON', '{'],
         ['an array', '[]'],
         ['an unknown scenario', '{"scenario":"root"}'],
-        ['broken values', '{"values":[{"id":"x"}],"entries":{"a":1}}'],
+        ['broken values only', '{"scenario":"admin","values":[{"id":"x"}]}'],
+        ['broken entries only (not a string)', '{"scenario":"admin","entries":{"9002":1}}'],
+        ['an entries key 0', '{"scenario":"admin","entries":{"0":"x"}}'],
+        ['an entries key with a leading zero', '{"scenario":"admin","entries":{"09002":"x"}}'],
     ])('starts from the invented data when the stored state is %s', async (_case, raw) => {
         const storage = new MemoryStorage();
         storage.setItem(DEMO_STORAGE_KEY, raw);
@@ -193,16 +196,74 @@ describe('createDemoServices', () => {
         }
     });
 
-    it('switches the scenario (kept, then reload) and resets everything', () => {
+    it('ignores an entries key __proto__ (dropped, nothing polluted)', async () => {
+        const storage = new MemoryStorage();
+        storage.setItem(DEMO_STORAGE_KEY, '{"scenario":"admin","entries":{"__proto__":{"polluted":"x"}}}');
+        const services = createDemoServices('de', env(storage));
+        expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+        await login(services);
+        // The schema drops the key (valibot skips `__proto__`), so the kept entries are empty: Ada has no password.
+        expect(services.demo.scenario).toBe('admin');
+        await expect(services.backend(DEMO_BACKEND_URL).getEntry(DEMO_ADMIN_ID)).resolves.toBe('none');
+    });
+
+    it('keeps a valid stored state (control for the cases above)', () => {
+        const storage = new MemoryStorage();
+        storage.setItem(DEMO_STORAGE_KEY, '{"scenario":"admin","entries":{"9002":"x"}}');
+        expect(createDemoServices('de', env(storage)).demo.scenario).toBe('admin');
+    });
+
+    it.each([
+        ['empty', ''],
+        ['not a string', 42],
+    ])('binds the token to the demo backend when the stored address is %s', async (_case, backendUrl) => {
+        const storage = new MemoryStorage();
+        const values = [
+            { id: 1, dataCategoryId: DEMO_SETTINGS_CATEGORY, value: JSON.stringify({ schema: 2, revision: 1, backendUrl }) },
+        ];
+        storage.setItem(DEMO_STORAGE_KEY, JSON.stringify({ scenario: 'admin', values }));
+        const services = createDemoServices('de', env(storage));
+        services.auth.configure({ backendUrl: DEMO_BACKEND_URL, clientId: 'c' });
+        services.auth.bindPerson(DEMO_ADMIN_ID);
+        expect(services.auth.tokenFor(DEMO_BACKEND_URL)).not.toBeNull();
+    });
+
+    it.each([
+        ['a refused password change', (s: Services) => s.backend(DEMO_BACKEND_URL).putEntry(DEMO_USER_ID, { primaryPwd: 'wrong' })],
+        ['a refused ChurchTools write', async (s: Services) => s.ct.createValue((await s.ct.moduleId(EXTENSION_KEY))!, DEMO_SETTINGS_CATEGORY, '{}')],
+    ])('keeps the state also after %s', async (_case, write) => {
+        const storage = new MemoryStorage();
+        const services = createDemoServices('de', env(storage));
+        await expect(write(services)).rejects.toBeDefined();
+        const kept = JSON.parse(storage.getItem(DEMO_STORAGE_KEY)!) as { scenario: string; entries: Record<string, string> };
+        expect(kept.scenario).toBe('user');
+        expect(Object.keys(kept.entries)).toEqual([String(DEMO_ADMIN_ID)]);
+    });
+
+    it('switches the scenario: kept, then reload', () => {
         const storage = new MemoryStorage();
         const e = env(storage);
-        const services = createDemoServices('de', e);
-        services.demo.setScenario('admin');
+        createDemoServices('de', e).demo.setScenario('admin');
         expect(JSON.parse(storage.getItem(DEMO_STORAGE_KEY)!).scenario).toBe('admin');
         expect(e.reload).toHaveBeenCalledTimes(1);
-        services.demo.reset();
+    });
+
+    it('resets everything, then reloads', () => {
+        const storage = withScenario('admin');
+        const e = env(storage);
+        createDemoServices('de', e).demo.reset();
         expect(storage.getItem(DEMO_STORAGE_KEY)).toBeNull();
-        expect(e.reload).toHaveBeenCalledTimes(2);
+        expect(e.reload).toHaveBeenCalledTimes(1);
+    });
+
+    it('reloads on reset also when the storage refuses to remove', () => {
+        const storage = withScenario('admin');
+        storage.removeItem = () => {
+            throw new Error('blocked');
+        };
+        const e = env(storage);
+        expect(() => createDemoServices('de', e).demo.reset()).not.toThrow();
+        expect(e.reload).toHaveBeenCalledTimes(1);
     });
 
     it('shows the password page with the demo data', async () => {
