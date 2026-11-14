@@ -23,6 +23,9 @@ that proves it.
 "Gone-persons load test paused"), or from `main` after that branch is merged. Never on top of uncommitted work of
 another agent: check `git status` first.
 
+Tasks marked **[security-critical]** get, after Superpowers' own task review, a `test-reviewer` and a
+`security-reviewer` pass on their diff (project `.claude/CLAUDE.md`, review point A; added 2026-11-14).
+
 ## Global Constraints
 
 - One commit per task. Every commit passes `composer check` in `backend/`.
@@ -141,7 +144,7 @@ Carry extension spec section 11 into the backend's documents before any code cha
 - [ ] **Step 5:** Record both results in `ct-extension-info.md` section 4 and tick spec 14.1 and 14.3 in
   `extension-spec.md`. Commit: `"Tests: measure OAuth group membership and the callback URI (AG-10, AG-11)"`.
 
-### Task 3: Client: group memberships with the user's token
+### Task 3: Client: group memberships with the user's token [security-critical]
 
 **Files:**
 - Modify: `backend/src/Infrastructure/ChurchTools/ChurchToolsClient.php`,
@@ -175,7 +178,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   `X-OnlyAuthenticated: 1`; all pages).
 - [ ] **Step 5: Run** `composer check` → PASS. Commit: `"Backend: read a person's active groups with their token (AG-01)"`.
 
-### Task 4: `access` category in the settings repository
+### Task 4: `access` category in the settings repository [security-critical]
 
 **Files:**
 - Modify: `backend/src/Infrastructure/Kv/KvSchema.php`, `SettingsParser.php`, `KvSettingsRepository.php`,
@@ -206,7 +209,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   before). Run `composer check` → PASS.
 - [ ] **Step 5: Commit:** `"Backend: admin group and machine clients from the access category (AG-04, AG-09)"`.
 
-### Task 5: Admin claim at login and in authorization
+### Task 5: Admin claim at login and in authorization [security-critical]
 
 **Files:**
 - Modify: `backend/src/Domain/PersonPrincipal.php`, `AccessPolicy.php`,
@@ -240,7 +243,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
 - [ ] **Step 4: Run** `composer check` → PASS. Also run the existing `AX-*` login cases unchanged.
 - [ ] **Step 5: Commit:** `"Backend: admin role from the admin group, signed into the token (AG-02, AG-03, AG-05–AG-07)"`.
 
-### Task 6: Self-check and cleanup without `adminUsers`
+### Task 6: Self-check and cleanup without `adminUsers` [security-critical]
 
 **Files:**
 - Delete: `backend/src/Infrastructure/SelfCheck/AdminUsersCheck.php`, `backend/src/Application/GoneAdmins.php` and
