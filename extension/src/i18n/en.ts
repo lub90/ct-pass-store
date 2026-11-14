@@ -15,6 +15,9 @@ const en: Messages = {
         defaultTitle: 'My secondary password',
         defaultIntro: "A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password.",
     },
+    auth: {
+        finishing: 'Finishing the login …',
+    },
     problems: {
         entryNotFound: 'No password yet',
         primaryPasswordRequired: 'Please enter your ChurchTools password.',

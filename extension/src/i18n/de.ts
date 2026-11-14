@@ -16,6 +16,9 @@ const de = {
         defaultIntro:
             'Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort.',
     },
+    auth: {
+        finishing: 'Anmeldung wird abgeschlossen …',
+    },
     problems: {
         entryNotFound: 'Noch kein Passwort',
         primaryPasswordRequired: 'Bitte gib dein ChurchTools-Passwort ein.',
