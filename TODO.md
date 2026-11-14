@@ -132,6 +132,13 @@ Open issues and planned improvements, roughly ordered by severity.
     workflows on the tags `backend-v*` and `extension-v*`.
   - Open: the first tagged releases (they wait for the setup and migration assistant).
 
+- [ ] **Make the extension tests less tied to markup and wording (later refactor)**
+  The tests pin behaviour well, but many find elements by styling class (373 uses of 103 `.cps-…` classes) and 91
+  expectations repeat German sentences verbatim. Moving pages around or renaming classes then means many test edits.
+  - Find elements by role, label or a dedicated `data-test` attribute instead of styling classes.
+  - Compare texts through their translation keys, except where the spec fixes the exact wording.
+  - Not urgent; do it before a larger UI restructuring.
+
 ## Dependencies & Shared Code
 
 - [ ] **Fix shared code upstream, not in the subtree copies**
