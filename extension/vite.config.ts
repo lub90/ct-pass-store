@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 import { defineConfig, loadEnv, type Plugin } from 'vite';
 import { appVersion } from './scripts/app-version.ts';
+import { devProxy, ENV_PREFIX } from './scripts/dev-proxy.ts';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
@@ -42,22 +43,14 @@ function thirdPartyLicenses(): Plugin {
     };
 }
 
-export default defineConfig(({ mode }) => {
-    // CT_* variables have no VITE_ prefix: they are used here only and never reach the bundle.
-    const env = loadEnv(mode, root, 'CT_');
-    const proxy =
-        mode === 'real' && env.CT_BASE_URL
-            ? {
-                  '/api': {
-                      target: env.CT_BASE_URL,
-                      changeOrigin: true,
-                      headers: { Authorization: `Login ${env.CT_LOGIN_TOKEN ?? ''}` },
-                  },
-              }
-            : undefined;
+export default defineConfig(({ mode, command }) => {
+    // CT_* variables have no VITE_ prefix: they are used here only (the dev proxy of --mode real), never in the bundle.
+    // A build never reads them.
+    const proxy = command === 'serve' ? devProxy(mode, loadEnv(mode, root, 'CT_')) : undefined;
 
     return {
         base: '/ccm/ctpassstore/',
+        envPrefix: ENV_PREFIX,
         plugins: [vue(), thirdPartyLicenses()],
         define: { __APP_VERSION__: JSON.stringify(gitVersion()) },
         resolve: { alias: { '@': path.join(root, 'src') } },

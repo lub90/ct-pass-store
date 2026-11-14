@@ -8,18 +8,30 @@ extension and the backend is described in [docs/setup.md](./docs/setup.md).
 
 ```sh
 npm install
-cp .env-example .env     # only for --mode real; demo mode needs no values. Keep .env at mode 600.
-npm run dev              # development server
+npm run dev                          # demo mode: invented data, nothing leaves the browser
+npm run dev -- --mode real           # real mode: a ChurchTools test instance through the dev proxy
 ```
 
-`CT_BASE_URL` and `CT_LOGIN_TOKEN` have no `VITE_` prefix on purpose: they are read by the Vite dev proxy
-(`npm run dev -- --mode real`) and never reach the bundle.
+**Demo mode** is the default: the app runs against in-memory fakes of ChurchTools and the backend with invented data
+(`src/dev/`). A small switch at the bottom right changes the scenario (user, admin, setup missing, ...); the state is
+kept in `localStorage` (development only) and can be reset there. The demo ChurchTools password is `demo-passwort`.
+
+**Real mode** needs `CT_BASE_URL` and `CT_LOGIN_TOKEN` in `.env`. Create the file with mode `600` before filling it in:
+
+```sh
+install -m 600 .env-example .env     # once (it replaces an existing .env); then edit. ls -l .env: -rw-------
+```
+
+The variables have no `VITE_` prefix on purpose: only `vite.config.ts` reads them, for the dev proxy that forwards
+`/api` with `Authorization: Login <token>`; they never reach the bundle. Treat the login token like a password. Other
+credential files (backend `phpunit.xml`, recorded fixtures) are created with mode `600` as well. Details:
+[docs/development.md](./docs/development.md).
 
 ## Scripts
 
 | Script                  | Purpose                                                          |
 | ----------------------- | ---------------------------------------------------------------- |
-| `npm run dev`           | development server                                               |
+| `npm run dev`           | development server (demo mode; `-- --mode real` for an instance) |
 | `npm run build`         | production build into `dist/`, followed by `scripts/check-dist.js` |
 | `npm test`              | unit and app tests (Vitest)                                      |
 | `npm run test:contract` | contract tests against a real ChurchTools test instance          |

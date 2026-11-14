@@ -1,6 +1,7 @@
 import type { BackendApi, LoginResult, SelfTestResult } from '@/backend/api';
 import { BackendProblem, BackendUnreachable, UnexpectedResponse } from '@/backend/problems';
 import { checkPassword, DIGITS, LETTERS, SYMBOLS } from '@/password/rules';
+import { tagDemo } from './marker';
 
 /**
  * In-memory backend for tests and the demo. Applies the backend's rules (backend spec 4.1, 4.3 to 4.9, 5.1) in the
@@ -168,7 +169,7 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
         if (primaryPwd !== primaryPassword) throw problem('invalid-primary-password', 403);
     };
 
-    return {
+    return tagDemo({
         get entries() {
             return store;
         },
@@ -250,5 +251,5 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
             if (write) tests.push({ name: 'write', status: 'ok', message: 'The service user can write a test value.' });
             return { version, summary: `${tests.length} of ${tests.length} checks passed`, tests };
         },
-    };
+    });
 }

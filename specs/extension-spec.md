@@ -655,7 +655,7 @@ Neither the unit nor the app layer needs network access.
 
 - exactly one JS bundle and no inline `<script>` (ChurchTools' CSP)
 - no instance host (`*.church.tools` except `example.church.tools`), no dev credentials in `dist/`
-- no external fonts, no demo code (`dev/`)
+- no external fonts, no demo code (`dev/`: the marker `__DEMO__` in every module) and no demo data string
 - the third-party license file is present
 
 ### 13.6 Development setup
@@ -664,6 +664,11 @@ Neither the unit nor the app layer needs network access.
   dev proxy forwards `/api` to the instance and adds `Authorization: Login <token>`.
 - **Demo mode is the default** for `npm run dev`: `FakeChurchTools` and `FakeBackend` with invented data, so
   development never writes into a real instance. A switch uses the real instance and a real backend instead.
+  - Selected in `main.ts` by the literal `import.meta.env.DEV && import.meta.env.MODE !== 'real'`, so a build drops it.
+    A floating switch picks the scenario (user, admin, setup missing, no access, ChurchTools error, version mismatch);
+    the demo state lives in `localStorage` (development only; the production app never uses it).
+  - `npm run dev -- --mode real` uses the dev proxy and the backend from the instance's settings (`https://` only; the
+    app never enables local `http`). `envPrefix` is not `VITE_`, so no `.env` value can be inlined into a build.
 - `__APP_VERSION__` from `git describe` (`x.y.z`, `x.y.z+sha`, `x.y.z+sha-dirty`).
 - `modulePreload.polyfill: false` (CSP).
 - Credential files (`.env`, recorded fixtures) are created with mode `600`; the testing docs say so.

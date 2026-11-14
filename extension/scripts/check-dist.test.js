@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -96,8 +97,51 @@ describe('checkDist', () => {
         expect(failures.join('\n')).toMatch(/demo/i);
     });
 
+    it('fails for the demo marker inside a sourcemap or another text file', () => {
+        const failures = checkDist(
+            makeDist((d) => {
+                fs.writeFileSync(path.join(d, 'assets', 'index-abc.js.map'), '{"sourcesContent":["const m = \\"__DEMO__\\""]}');
+                fs.writeFileSync(path.join(d, 'assets', 'index-abc.css'), '/* __DEMO__ */');
+            }),
+        );
+        expect(failures).toContain('demo code (__DEMO__) in assets/index-abc.js.map');
+        expect(failures).toContain('demo code (__DEMO__) in assets/index-abc.css');
+    });
+
+    it('fails for a demo data string in any text file', () => {
+        const failures = checkDist(
+            makeDist((d) => {
+                fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), 'const p = "Ada Beispielmann";');
+                fs.appendFileSync(path.join(d, 'index.html'), '<!-- demo-oauth-client -->');
+            }),
+            { demoStrings: ['Ada Beispielmann', 'demo-oauth-client'] },
+        );
+        expect(failures).toContain('demo data "Ada Beispielmann" in assets/index-abc.js');
+        expect(failures).toContain('demo data "demo-oauth-client" in index.html');
+    });
+
+    it('passes when no demo data string appears', () => {
+        expect(checkDist(makeDist(), { demoStrings: ['Ada Beispielmann'] })).toEqual([]);
+    });
+
     it('fails when THIRD-PARTY-LICENSES.txt is missing', () => {
         const failures = checkDist(makeDist((d) => fs.rmSync(path.join(d, 'THIRD-PARTY-LICENSES.txt'))));
         expect(failures.join('\n')).toMatch(/THIRD-PARTY-LICENSES\.txt/);
+    });
+
+    describe('as a command', () => {
+        const run = (d) => spawnSync(process.execPath, [path.join(import.meta.dirname, 'check-dist.js'), d], { encoding: 'utf8' });
+
+        it('passes a clean build', () => {
+            const result = run(makeDist());
+            expect(result.stderr).toBe('');
+            expect(result.status).toBe(0);
+        });
+
+        it('fails on the demo data strings of src/dev/demo-data.ts', () => {
+            const result = run(makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"Ada Beispielmann"')));
+            expect(result.status).toBe(1);
+            expect(result.stderr).toContain('demo data "Beispielmann" in assets/index-abc.js');
+        });
     });
 });

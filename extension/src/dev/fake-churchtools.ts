@@ -2,6 +2,7 @@ import type { CtApi } from '@/ct/api';
 import { CtForbiddenError, CtHttpError, CtRateLimitedError, NotAuthenticatedError } from '@/ct/errors';
 import type { CtCategory, CtValue, Permissions } from '@/ct/types';
 import type { PersonOption } from '@/ui';
+import { tagDemo } from './marker';
 
 /**
  * In-memory ChurchTools for tests and the demo. Behaves like the measured instance (specs/ct-extension-info.md):
@@ -32,6 +33,8 @@ export interface FakeGroup {
 }
 
 export interface FakeControls {
+    /** Every stored value of every category, whatever the rights (for the demo's persistence). */
+    dumpValues(): CtValue[];
     setCurrentPerson(id: number | null): void;
     setPermissions(permissions: Permissions): void;
     setGroups(groups: FakeGroup[]): void;
@@ -85,7 +88,8 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
         if (!seed.categories.some((c) => c.id === categoryId)) throw new CtHttpError(404, 'Category not found');
     };
 
-    return {
+    return tagDemo({
+        dumpValues: () => values.map((v) => ({ ...v })),
         setCurrentPerson: (id) => void (current = id),
         setPermissions: (p) => void (permissions = p),
         setGroups: (g) => void (groups = g.map((x) => ({ ...x, memberIds: [...x.memberIds] }))),
@@ -160,5 +164,5 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
             if (!visible || !seed.persons.some((p) => p.id === id)) throw new CtHttpError(404, 'Person not found');
             return { id, name: nameOf(id) };
         },
-    };
+    });
 }

@@ -11,8 +11,11 @@ function walk(dir) {
     });
 }
 
-/** Checks a build folder and returns the list of failures (empty when it passes). */
-export function checkDist(dist) {
+/**
+ * Checks a build folder and returns the list of failures (empty when it passes). `demoStrings`: texts of the demo data
+ * (`src/dev/demo-data.ts`) that must not appear anywhere in the build.
+ */
+export function checkDist(dist, { demoStrings = [] } = {}) {
     const failures = [];
     const files = walk(dist);
     // Everything that is not a known binary type is scanned as text: sourcemaps, licence texts, JSON, SVG, ...
@@ -56,9 +59,13 @@ export function checkDist(dist) {
         if (hit) failures.push(`external font source "${hit}" in ${rel(file)}`);
     }
 
-    // 5. No demo code: it exists for development only.
-    for (const file of scripts) {
-        if (fs.readFileSync(file, 'utf8').includes('__DEMO__')) failures.push(`demo code (__DEMO__) in ${rel(file)}`);
+    // 5. No demo code or data: every module under src/dev/ carries the marker; it exists for development only.
+    for (const file of text) {
+        const content = fs.readFileSync(file, 'utf8');
+        if (content.includes('__DEMO__')) failures.push(`demo code (__DEMO__) in ${rel(file)}`);
+        for (const demo of demoStrings) {
+            if (content.includes(demo)) failures.push(`demo data "${demo}" in ${rel(file)}`);
+        }
     }
 
     // 6. Licence texts of the bundled packages travel with the build.
@@ -69,10 +76,16 @@ export function checkDist(dist) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     const dist = path.resolve(process.argv[2] ?? path.join(import.meta.dirname, '..', 'dist'));
-    const failures = checkDist(dist);
+    // Fails closed: without the demo data strings the check would pass silently.
+    const { DEMO_STRINGS } = await import('../src/dev/demo-data.ts');
+    if (!Array.isArray(DEMO_STRINGS) || DEMO_STRINGS.length === 0) {
+        console.error('dist check failed: no demo data strings loaded from src/dev/demo-data.ts');
+        process.exit(1);
+    }
+    const failures = checkDist(dist, { demoStrings: DEMO_STRINGS });
     if (failures.length) {
         console.error('dist check failed:\n  - ' + failures.join('\n  - '));
         process.exit(1);
     }
-    console.log('dist check passed (one bundle, no inline script, no instance host, no external fonts, no demo, licenses present)');
+    console.log('dist check passed (one bundle, no inline script, no instance host, no external fonts, no demo code or data, licenses present)');
 }
