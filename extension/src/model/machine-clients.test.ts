@@ -45,6 +45,13 @@ describe('access reader matches the backend fixture', () => {
         ]);
     });
 
+    it('gives the earlier entries of a duplicate id the code too, in canonical order', () => {
+        const key = (c: string) => btoa(c.repeat(32));
+        const entry = { id: 'same', name: 'n', publicKeys: [key('a')], createdAt: '2026-01-01' };
+        const r = readMachineClients([{ ...entry, name: '' }, { ...entry, publicKeys: [key('b')] }, { ...entry, publicKeys: [key('c')] }]);
+        expect(r.entries.map((e) => e.reasons)).toEqual([['duplicate-id', 'missing-name'], ['duplicate-id'], ['duplicate-id']]);
+    });
+
     it('trims the name (PHP set) in the parsed client and treats missing permissions as none', () => {
         const entry = { id: 'abc', name: ' \tName\n', publicKeys: ['AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='], createdAt: '2026-01-01' };
         const r = readMachineClients([entry]);

@@ -66,9 +66,9 @@ export interface UnusableClient {
 export interface ClientsRead {
     /** The clients the backend enables. */
     clients: MachineClient[];
-    /** The reason codes of every stored entry, in order (empty = fine, or disabled only by a later duplicate id). */
+    /** The reason codes of every stored entry, in order (empty = fine). */
     entries: { index: number; id?: string; reasons: ClientReason[] }[];
-    /** Every entry that is not in `clients`. */
+    /** Every entry that is not in `clients`; its reasons are never empty. */
     unusable: UnusableClient[];
     /** `machineClients` exists but isn't a list: all clients are disabled. */
     notAList: boolean;
@@ -80,7 +80,7 @@ export function readMachineClients(raw: unknown): ClientsRead {
     if (raw === undefined || raw === null) return { clients: [], entries: [], unusable: [], notAList: false, dropped: [] };
     if (!Array.isArray(raw)) return { clients: [], entries: [], unusable: [], notAList: true, dropped: [] };
 
-    const seen = new Set<string>();
+    const seen = new Map<string, number[]>();
     const entries: ClientsRead['entries'] = [];
     const enabled = new Map<string, { index: number; client: MachineClient }>();
     const disabledByDuplicate = new Set<number>();
@@ -90,7 +90,14 @@ export function readMachineClients(raw: unknown): ClientsRead {
         const id = isObject(entry) && typeof entry.id === 'string' ? entry.id : undefined;
         const reasons = entryReasons(entry, seen);
         entries.push(id === undefined ? { index, reasons } : { index, id, reasons });
-        if (id !== undefined) seen.add(id);
+        if (id !== undefined) seen.set(id, [...(seen.get(id) ?? []), index]);
+        if (reasons.includes('duplicate-id') && id !== undefined) {
+            // The earlier entries with this id carry the code too (which of them is meant can't be decided).
+            for (const earlier of seen.get(id) ?? []) {
+                const r = entries[earlier]?.reasons;
+                if (r && !r.includes('duplicate-id')) r.splice(0, r.length, ...sortReasons([...r, 'duplicate-id']));
+            }
+        }
         if (reasons.length > 0) {
             // A duplicate disables the earlier entry as well: which of the two is meant can't be decided.
             const earlier = id === undefined ? undefined : enabled.get(id);
@@ -136,8 +143,7 @@ export function readMachineClients(raw: unknown): ClientsRead {
     const unusable: UnusableClient[] = entries
         .filter((e) => !enabledIndices.has(e.index))
         .map((e) => {
-            const reasons: ClientReason[] = e.reasons.length > 0 ? e.reasons : ['duplicate-id'];
-            return e.id === undefined ? { index: e.index, reasons } : { index: e.index, id: e.id, reasons };
+            return e.id === undefined ? { index: e.index, reasons: e.reasons } : { index: e.index, id: e.id, reasons: e.reasons };
         });
     return {
         clients: [...enabled.values()].sort((a, b) => a.index - b.index).map((e) => e.client),
@@ -148,7 +154,11 @@ export function readMachineClients(raw: unknown): ClientsRead {
     };
 }
 
-function entryReasons(entry: unknown, seen: ReadonlySet<string>): ClientReason[] {
+/** The order the backend reports reason codes in (spec 3.2). */
+const REASON_ORDER: readonly ClientReason[] = ['not-an-object', 'invalid-id', 'duplicate-id', 'missing-name', 'invalid-created-at', 'no-keys', 'invalid-key', 'invalid-permissions', 'shared-key'];
+const sortReasons = (r: ClientReason[]): ClientReason[] => [...r].sort((a, b) => REASON_ORDER.indexOf(a) - REASON_ORDER.indexOf(b));
+
+function entryReasons(entry: unknown, seen: ReadonlyMap<string, number[]>): ClientReason[] {
     if (!isObject(entry)) return ['not-an-object'];
     const reasons: ClientReason[] = [];
     const id = entry.id;
