@@ -15,13 +15,15 @@ import { VALUE_LIMIT, type Read } from '../store/repository';
 import type { ConfirmOptions, ConfirmResult } from '../ui/useConfirm';
 
 export type InvalidRead<T> = Extract<Read<T>, { state: 'invalid' }>;
+export type DuplicatesRead<T> = Extract<Read<T>, { state: 'duplicates' }>;
 
 /**
  * - `idle`: nothing loaded (the page hasn't allowed it).
  * - `ready`: `value` holds the form; with `repairing`, it was rebuilt from an invalid stored value.
  * - `invalid`: the stored value is invalid and this page can't repair it.
+ * - `duplicates`: the category holds several values (E1): nothing to edit until an editor chose one (`duplicatesRead`).
  */
-export type FormStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'newer' | 'invalid' | 'error';
+export type FormStatus = 'idle' | 'loading' | 'ready' | 'missing' | 'newer' | 'invalid' | 'duplicates' | 'error';
 
 export interface SettingsFormOptions<T> {
     /**
@@ -58,6 +60,8 @@ export interface SettingsForm<T> {
     savedAt: Ref<number | null>;
     /** The last read, when it was `invalid` (whether or not this page repairs it). */
     invalidRead: Ref<InvalidRead<T> | null>;
+    /** The last read, when it found several values (E1). */
+    duplicatesRead: Ref<DuplicatesRead<T> | null>;
     /** The last save failed (not a conflict). */
     error: Ref<unknown>;
     /** The load failed. */
@@ -96,6 +100,7 @@ export function useSettingsForm<T extends { revision: number }>(
     const loadError = shallowRef<unknown>(null);
     const conflict = ref(false);
     const invalidRead = shallowRef<InvalidRead<T> | null>(null);
+    const duplicatesRead = shallowRef<DuplicatesRead<T> | null>(null);
     /** The stored value as read (canonical JSON); `null` while repairing (then every state is a change). */
     let baseline: string | null = null;
     let revision = 0;
@@ -125,6 +130,7 @@ export function useSettingsForm<T extends { revision: number }>(
         if (mine !== run) return;
         issues.value = read.state === 'ok' || read.state === 'invalid' ? (read.issues ?? []) : [];
         invalidRead.value = read.state === 'invalid' ? read : null;
+        duplicatesRead.value = read.state === 'duplicates' ? read : null;
         repairing.value = false;
         if (read.state === 'ok') {
             const shown = options.prepare ? options.prepare(copy(read.value)) : read.value;
@@ -216,7 +222,7 @@ export function useSettingsForm<T extends { revision: number }>(
     window.addEventListener('beforeunload', onUnload);
     onBeforeUnmount(() => window.removeEventListener('beforeunload', onUnload));
 
-    return { status, value, issues, repairing, dirty, saving, savedAt, error, loadError, conflict, invalidRead, load: reload, save: doSave, discard };
+    return { status, value, issues, repairing, dirty, saving, savedAt, error, loadError, conflict, invalidRead, duplicatesRead, load: reload, save: doSave, discard };
 }
 
 /** The text (i18n key and params) for a failed load or save of `settings` (or `category`). */

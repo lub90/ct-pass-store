@@ -61,6 +61,8 @@ interface Options {
     settings?: unknown;
     access?: unknown;
     setupCompletedCategory?: boolean;
+    /** More values stored next to `settings` and `access` (duplicates, E1), with value ids from 201. */
+    extra?: { category: 'settings' | 'access'; value: unknown }[];
     /** A usable stored token (role and version from the login answer); `null` = none. */
     token?: { admin: boolean; version?: string; person?: number } | null;
     appVersion?: string;
@@ -109,6 +111,7 @@ async function build(o: Options = {}) {
     const access = o.access === undefined ? ACCESS : o.access;
     if (settings !== null) values.push({ id: 101, dataCategoryId: SETTINGS_ID, value: raw(settings) });
     if (access !== null) values.push({ id: 102, dataCategoryId: ACCESS_ID, value: raw(access) });
+    (o.extra ?? []).forEach((x, i) => values.push({ id: 201 + i, dataCategoryId: x.category === 'settings' ? SETTINGS_ID : ACCESS_ID, value: raw(x.value) }));
     const categories = [
         { id: SETTINGS_ID, name: 'settings', shorty: 'settings' },
         { id: ACCESS_ID, name: 'access', shorty: 'access' },
@@ -152,7 +155,15 @@ async function build(o: Options = {}) {
         );
     }
     const fakeBackend = createFakeBackend({ personId: ME, ctOrigin: ORIGIN, validCodes: ['good-code'], version: '0.1.2+abc', ...o.backend });
-    const backendApi: BackendApi = o.login ? { ...fakeBackend, login: o.login } : fakeBackend;
+    const plainApi: BackendApi = o.login ? { ...fakeBackend, login: o.login } : fakeBackend;
+    /** Every backend API call (name), whichever page or step makes it. */
+    const backendCalls: string[] = [];
+    const backendApi = new Proxy(plainApi, {
+        get: (target, name, receiver) => {
+            const member = Reflect.get(target, name, receiver) as unknown;
+            return typeof member === 'function' ? (...args: unknown[]) => (backendCalls.push(String(name)), (member as (...a: unknown[]) => unknown).apply(target, args)) : member;
+        },
+    });
     const auth = new Auth(() => backendApi, env);
     const calls: string[] = [];
     for (const name of ['configure', 'bindPerson', 'startPageLogin', 'completePageLogin', 'recentPageLogin'] as const) {
@@ -174,7 +185,7 @@ async function build(o: Options = {}) {
     };
     const win: CallbackWindow = { opener: o.opener ?? null, origin: ORIGIN, close: vi.fn() };
     await router.push(o.path ?? '/');
-    return { router, auth, storage, assigned, calls, win, fakeCt, fakeBackend, services, session };
+    return { router, auth, storage, assigned, calls, win, fakeCt, fakeBackend, services, session, backendCalls };
 }
 
 async function start(o: Options = {}) {
@@ -216,6 +227,7 @@ const TEXT = {
     needsEditor: 'Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.',
     /** „Mein Passwort“ shows the title of the settings texts (default of spec 4.6). */
     passwordTitle: 'Mein Zweitpasswort',
+    duplicates: 'In ChurchTools sind mehrere Werte für „settings, access“ gespeichert. Die Erweiterung verwendet keinen davon, bis unter „Einstellungen“ ausgewählt ist, welcher bleibt.',
 };
 
 const navLinks = (w: VueWrapper) => w.findAll('nav a').map((a) => [a.text(), a.attributes('href')]);
@@ -823,6 +835,41 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('main').text()).toContain(TEXT.update);
         expect(assigned).toEqual([]);
         expect(calls).toEqual([]);
+    });
+
+    const planted = { ...SETTINGS, backendUrl: 'https://evil.example' };
+    it.each([
+        ['settings', { category: 'settings' as const, value: planted }, undefined],
+        ['access, for a user who can read it', { category: 'access' as const, value: ACCESS }, { 'view custom data': [SETTINGS_ID, ACCESS_ID] }],
+    ])('row 4a: duplicate %s → backend-error, no login and nothing sent to any backend, even with a token (E1)', async (_n, extra, perms) => {
+        for (const token of [null, { admin: false }]) {
+            const { wrapper, assigned, calls, backendCalls } = await start({ extra: [extra], token, ...(perms ? { perms } : {}) });
+            expect(wrapper.find('main').text()).toBe(TEXT.unavailable);
+            expect(assigned).toEqual([]);
+            expect(calls).toEqual([]);
+            expect(backendCalls).toEqual([]);
+            expect(wrapper.find('main button').exists()).toBe(false);
+            expect(showsPasswordPage(wrapper)).toBe(false);
+        }
+    });
+
+    it('row 4a: settings editors are told which category holds several values, with a link to „Einstellungen“', async () => {
+        const { wrapper, calls, backendCalls } = await start({ extra: [{ category: 'settings', value: planted }, { category: 'access', value: ACCESS }], perms: EDITOR, token: { admin: true } });
+        expect(wrapper.find('main .cps-banner').text()).toBe(TEXT.duplicates);
+        expect(wrapper.find('main a[href="/settings"]').text()).toBe('Zu den Einstellungen');
+        expect(wrapper.find('main a[href="/settings/backend"]').exists()).toBe(false);
+        expect(navLinks(wrapper)).toEqual([
+            ['Mein Passwort', '/'],
+            ['Einstellungen', '/settings'],
+        ]);
+        expect(wrapper.find('main').text()).not.toContain('evil');
+        expect(calls).toEqual([]);
+        expect(backendCalls).toEqual([]);
+    });
+
+    it('row 4 beats row 4a: one of the duplicates has a newer schema → update-needed', async () => {
+        const { wrapper } = await start({ extra: [{ category: 'settings', value: { ...SETTINGS, schema: 3 } }] });
+        expect(wrapper.find('main').text()).toBe(TEXT.update);
     });
 
     it('row 4: setup-capable people who are no settings editors see the versions too (no login, so no admin claim)', async () => {

@@ -87,7 +87,7 @@ describe('ExtensionStore reads', () => {
 
     it('reads a valid value', async () => {
         const r = await setup().store.readSettings();
-        expect(r).toMatchObject({ state: 'ok', value: settings, duplicates: 0 });
+        expect(r).toMatchObject({ state: 'ok', value: settings });
     });
 
     it('reports newer schemas, invalid values and broken JSON without throwing', async () => {
@@ -99,11 +99,10 @@ describe('ExtensionStore reads', () => {
         expect((await setup(['[]']).store.readSettings()).state).toBe('invalid');
     });
 
-    it('reads the highest value ID and counts duplicates', async () => {
+    it('never lets the highest value ID win: several values read as duplicates (E1)', async () => {
         const { store } = setup([JSON.stringify({ ...settings, backendUrl: 'https://old.example' }), JSON.stringify({ ...settings, backendUrl: 'https://new.example' })]);
         const r = await store.readSettings();
-        expect(r.state === 'ok' && r.value.backendUrl).toBe('https://new.example');
-        expect(r.state === 'ok' && r.duplicates).toBe(1);
+        expect(r.state).toBe('duplicates');
     });
 });
 
@@ -163,18 +162,11 @@ describe('ExtensionStore writes', () => {
         expect(await store.readSettings()).toMatchObject({ value: { revision: 1 } });
     });
 
-    it('writes the value first and deletes duplicates last', async () => {
+    it('never deletes values the caller has not seen: a save over duplicates is a conflict, nothing written (E1)', async () => {
         const { kv, store } = setup([JSON.stringify(settings), JSON.stringify(settings), JSON.stringify(settings)]);
-        await store.saveSettings(settings, 1);
-        expect(kv.writes.map((w) => `${w.kind}:${w.valueId}`)).toEqual(['update:3', 'delete:2', 'delete:1']);
-        expect(await store.readSettings()).toMatchObject({ state: 'ok', duplicates: 0 });
-    });
-
-    it('never loses the value when interrupted before the deletions', async () => {
-        const { kv, store } = setup([JSON.stringify(settings), JSON.stringify(settings)]);
-        kv.failFromWrite = 2;
-        await expect(store.saveSettings({ ...settings, passwordLength: 30 }, 1)).rejects.toThrow();
-        expect(await store.readSettings()).toMatchObject({ state: 'ok', value: { passwordLength: 30 }, duplicates: 1 });
+        await expect(store.saveSettings(settings, 1)).rejects.toBeInstanceOf(ConflictError);
+        await expect(store.saveAccess(access, 1)).resolves.toBeUndefined();
+        expect(kv.writes.map((w) => `${w.kind}:${w.category}`)).toEqual(['update:access']);
     });
 });
 
@@ -227,26 +219,181 @@ describe('ExtensionStore malformed keys', () => {
 /** Fixed values in the given order, records writes. */
 class StubKv implements KvBackend {
     writes: string[] = [];
+    /** The text of each update, by value id. */
+    updated: Record<number, string> = {};
     private list: CtValue[];
     constructor(list: CtValue[]) {
         this.list = list;
     }
+    /** Changes behind the store's back (another tab or person). */
+    add(v: CtValue) { this.list.push(v); }
+    remove(id: number) { this.list = this.list.filter((v) => v.id !== id); }
+    replace(v: CtValue) { this.list = this.list.map((x) => (x.id === v.id ? v : x)); }
     async categoryNames() { return ['settings']; }
     async values() { return this.list.map((v) => ({ ...v })); }
     async create(_c: string, value: string) { this.writes.push('create'); return { id: 100, dataCategoryId: 1, value }; }
-    async update(_c: string, id: number) { this.writes.push(`update:${id}`); return { id, dataCategoryId: 1, value: '' }; }
+    async update(_c: string, id: number, value: string) { this.writes.push(`update:${id}`); this.updated[id] = value; return { id, dataCategoryId: 1, value }; }
     async delete(_c: string, id: number) { this.writes.push(`delete:${id}`); }
 }
 const stored = (id: number, value: unknown): CtValue => ({ id, dataCategoryId: 1, value: JSON.stringify(value) });
 
-describe('highest value ID', () => {
-    it('wins regardless of the order the KV returns; save deletes the others', async () => {
-        const kv = new StubKv([stored(5, { ...settings, backendUrl: 'https://five.example' }), stored(9, { ...settings, backendUrl: 'https://nine.example' }), stored(2, settings)]);
+describe('duplicates (point B E1): never the highest value ID silently', () => {
+    const five = { ...settings, revision: 3, backendUrl: 'https://five.example' };
+    const nine = { ...settings, revision: 7, backendUrl: 'https://nine.example', future: { a: 1 } };
+    const list = () => [stored(5, five), stored(9, nine), stored(2, settings)];
+
+    it('lists every value, highest value ID first, whatever order the KV returns, each read on its own', async () => {
+        const r = await new ExtensionStore(new StubKv(list())).readSettings();
+        expect(r.state).toBe('duplicates');
+        if (r.state !== 'duplicates') return;
+        expect(r.values.map((x) => x.valueId)).toEqual([9, 5, 2]);
+        expect(r.values[0]).toMatchObject({ valueId: 9, text: JSON.stringify(nine), keepable: true, read: { state: 'ok', valueId: 9, value: { backendUrl: 'https://nine.example', revision: 7 } } });
+        expect(r.values[1]!.read).toMatchObject({ state: 'ok', value: { backendUrl: 'https://five.example' } });
+        expect(r.values[2]!.text).toBe(JSON.stringify(settings));
+    });
+
+    it('reads invalid, newer and broken values among them as such; only JSON objects without a newer schema can be kept', async () => {
+        const kv = new StubKv([
+            stored(1, { ...settings, passwordLength: 5 }),
+            stored(2, { ...settings, schema: 3 }),
+            { id: 3, dataCategoryId: 1, value: '{nope' },
+            { id: 4, dataCategoryId: 1, value: '[1]' },
+            stored(5, { ...settings, revision: 2 ** 53 }),
+        ]);
+        const r = await new ExtensionStore(kv).readSettings();
+        if (r.state !== 'duplicates') throw new Error('not duplicates');
+        expect(r.values.map((x) => [x.valueId, x.read.state, x.keepable])).toEqual([
+            [5, 'invalid', false],
+            [4, 'invalid', false],
+            [3, 'invalid', false],
+            [2, 'newer', false],
+            [1, 'invalid', true],
+        ]);
+    });
+
+    it('access duplicates carry each value\'s clients (the extra reader of a planted value is visible)', async () => {
+        const reader = { id: 'reader', name: 'R', publicKeys: [btoa('r'.repeat(32))], permissions: ['entries:read'], createdAt: '2026-01-01' };
+        const kv = new MemoryKv({ access: [JSON.stringify(access), JSON.stringify({ ...access, machineClients: [reader] })] });
+        const r = await new ExtensionStore(kv).readAccess();
+        if (r.state !== 'duplicates') throw new Error('not duplicates');
+        const planted = r.values[0]!.read;
+        expect(planted.state === 'ok' && planted.clientEntries?.map((e) => e.client?.id)).toEqual(['reader']);
+        expect(r.values[1]!.read).toMatchObject({ state: 'ok', value: { machineClients: [] } });
+    });
+
+    it('readStartup reports them too (no settings value wins at startup)', async () => {
+        const startup = await new ExtensionStore(new StubKv(list())).readStartup();
+        expect(startup.settings.state).toBe('duplicates');
+    });
+
+    it('save and removeClients over duplicates are conflicts; nothing is written or deleted', async () => {
+        const kv = new StubKv(list());
         const store = new ExtensionStore(kv);
-        const r = await store.readSettings();
-        expect(r).toMatchObject({ state: 'ok', valueId: 9, duplicates: 2, value: { backendUrl: 'https://nine.example' } });
-        await store.saveSettings(settings, 1);
-        expect(kv.writes).toEqual(['update:9', 'delete:5', 'delete:2']);
+        await expect(store.saveSettings(settings, 7)).rejects.toBeInstanceOf(ConflictError);
+        const reader = { id: 'reader', name: 'R', publicKeys: [btoa('r'.repeat(32))], permissions: ['entries:read'], createdAt: '2026-01-01' };
+        const akv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: [reader] }), JSON.stringify({ ...access, machineClients: [reader] })] });
+        await expect(new ExtensionStore(akv).removeClients(1, [{ index: 0, id: 'reader', entry: reader }])).rejects.toBeInstanceOf(ConflictError);
+        await expect(new ExtensionStore(akv).saveAccess(access, 1)).rejects.toBeInstanceOf(ConflictError);
+        expect(kv.writes).toEqual([]);
+        expect(akv.writes).toEqual([]);
+    });
+
+    describe('resolveDuplicates', () => {
+        const seen = async (store: ExtensionStore) => {
+            const r = await store.readSettings();
+            if (r.state !== 'duplicates') throw new Error('not duplicates');
+            return r.values;
+        };
+
+        it('keeps the chosen value unchanged but for a revision above every seen one, then deletes the others (value first)', async () => {
+            const kv = new StubKv(list());
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 5, await seen(store));
+            expect(kv.writes).toEqual(['update:5', 'delete:9', 'delete:2']);
+            expect(JSON.parse(kv.updated[5]!)).toEqual({ ...five, revision: 8 });
+        });
+
+        it('keeps unknown fields of the chosen value and counts a revision that is no integer as 0', async () => {
+            const kv = new MemoryKv({ settings: [JSON.stringify({ ...settings, revision: 'x', future: [1] }), JSON.stringify({ ...settings, revision: 'y' })] });
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 1, await seen(store));
+            expect(await store.readSettings()).toMatchObject({ state: 'ok', value: { revision: 1, future: [1] } });
+        });
+
+        it('works for access: the planted value with the extra reader is gone, the chosen one stays', async () => {
+            const reader = { id: 'reader', name: 'R', publicKeys: [btoa('r'.repeat(32))], permissions: ['entries:read'], createdAt: '2026-01-01' };
+            const kv = new MemoryKv({ access: [JSON.stringify(access), JSON.stringify({ ...access, machineClients: [reader] })] });
+            const store = new ExtensionStore(kv);
+            const r = await store.readAccess();
+            if (r.state !== 'duplicates') throw new Error('not duplicates');
+            await store.resolveDuplicates('access', 1, r.values);
+            expect(await store.readAccess()).toMatchObject({ state: 'ok', valueId: 1, value: { revision: 2, machineClients: [] } });
+        });
+
+        it.each([
+            ['a value appeared meanwhile', (kv: StubKv) => kv.add(stored(11, settings))],
+            ['a seen value is gone', (kv: StubKv) => kv.remove(2)],
+            ['a seen value changed (same id)', (kv: StubKv) => kv.replace(stored(9, { ...nine, backendUrl: 'https://evil.example' }))],
+            ['the chosen value changed', (kv: StubKv) => kv.replace(stored(5, { ...five, passwordLength: 20 }))],
+            ['only one value is left', (kv: StubKv) => (kv.remove(9), kv.remove(2))],
+        ])('refuses when %s: ConflictError, nothing written or deleted', async (_n, change) => {
+            const kv = new StubKv(list());
+            const store = new ExtensionStore(kv);
+            const values = await seen(store);
+            change(kv);
+            await expect(store.resolveDuplicates('settings', 5, values)).rejects.toBeInstanceOf(ConflictError);
+            expect(kv.writes).toEqual([]);
+        });
+
+        it('refuses a chosen id that was not seen, and a seen list that is not the stored one', async () => {
+            const kv = new StubKv(list());
+            const store = new ExtensionStore(kv);
+            const values = await seen(store);
+            await expect(store.resolveDuplicates('settings', 4, values)).rejects.toBeInstanceOf(ConflictError);
+            await expect(store.resolveDuplicates('settings', 5, values.slice(0, 2))).rejects.toBeInstanceOf(ConflictError);
+            await expect(store.resolveDuplicates('settings', 5, [...values, { valueId: 77, text: '{}' }])).rejects.toBeInstanceOf(ConflictError);
+            await expect(store.resolveDuplicates('settings', 5, values.map((v) => (v.valueId === 9 ? { ...v, valueId: 5 } : v)))).rejects.toBeInstanceOf(ConflictError);
+            expect(kv.writes).toEqual([]);
+        });
+
+        it.each([
+            ['broken JSON', '{nope'],
+            ['no object', '[1]'],
+            ['a newer schema', JSON.stringify({ ...settings, schema: 3 })],
+            ['an integer revision out of range', JSON.stringify({ ...settings, revision: -1 })],
+        ])('refuses to keep a value with %s (InvalidValueError), nothing written', async (_n, text) => {
+            const kv = new StubKv([{ id: 1, dataCategoryId: 1, value: text }, stored(2, settings)]);
+            const store = new ExtensionStore(kv);
+            await expect(store.resolveDuplicates('settings', 1, await seen(store))).rejects.toBeInstanceOf(InvalidValueError);
+            expect(kv.writes).toEqual([]);
+        });
+
+        it('refuses when the kept value would grow over 10,000 characters', async () => {
+            const big = { ...settings, revision: 9, pad: 'x'.repeat(10_000 - JSON.stringify({ ...settings, revision: 9, pad: '' }).length) };
+            expect(JSON.stringify(big).length).toBe(10_000);
+            const kv = new StubKv([stored(1, big), stored(2, settings)]);
+            const store = new ExtensionStore(kv);
+            await expect(store.resolveDuplicates('settings', 1, await seen(store))).rejects.toBeInstanceOf(ValueTooLargeError);
+            expect(kv.writes).toEqual([]);
+        });
+
+        it('refuses when there are no duplicates (nothing to choose)', async () => {
+            const kv = new StubKv([stored(1, settings)]);
+            const store = new ExtensionStore(kv);
+            await expect(store.resolveDuplicates('settings', 1, [{ valueId: 1, text: JSON.stringify(settings) }])).rejects.toBeInstanceOf(ConflictError);
+            expect(kv.writes).toEqual([]);
+        });
+
+        it('an interruption after the update leaves duplicates (never a lost value), and the stale list is refused', async () => {
+            const kv = new MemoryKv({ settings: [JSON.stringify(settings), JSON.stringify({ ...settings, passwordLength: 30 })] });
+            const store = new ExtensionStore(kv);
+            const values = await seen(store);
+            kv.failFromWrite = 2;
+            await expect(store.resolveDuplicates('settings', 2, values)).rejects.toThrow();
+            expect((await store.readSettings()).state).toBe('duplicates');
+            kv.failFromWrite = undefined;
+            await expect(store.resolveDuplicates('settings', 2, values)).rejects.toBeInstanceOf(ConflictError);
+        });
     });
 });
 
@@ -812,14 +959,12 @@ describe('stored machine client entries, and removing them from a value of any s
         expect(kv.writes).toEqual([]);
     });
 
-    it('removes duplicate access values after writing the newest (spec 6.2)', async () => {
+    it('never removes from one of several access values, nor deletes the others (spec 6.2, E1)', async () => {
         const kv = new MemoryKv({ access: [JSON.stringify(invalidAccess([])), JSON.stringify(invalidAccess([ok('reader', 'r')]))] });
         const store = new ExtensionStore(kv);
-        await store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }]);
-        const values = await kv.values('access');
-        expect(values).toHaveLength(1);
-        expect((JSON.parse(values[0]!.value) as { machineClients: unknown[] }).machineClients).toEqual([]);
-        expect(kv.writes.map((w) => w.kind)).toEqual(['update', 'delete']);
+        await expect(store.removeClients(1, [{ index: 0, id: 'reader', entry: ok('reader', 'r') }])).rejects.toBeInstanceOf(ConflictError);
+        expect(await kv.values('access')).toHaveLength(2);
+        expect(kv.writes).toEqual([]);
     });
 
     it('refuses when machineClients is no list (any more), or nothing is stored, or nothing is to be removed', async () => {

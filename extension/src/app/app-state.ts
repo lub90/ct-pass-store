@@ -43,6 +43,11 @@ export interface AppStateInputs {
     oldLayout: boolean;
     /** Row 4: `settings` or `access` has a newer `schema`. */
     newerSchema: boolean;
+    /**
+     * Row 4a: the categories (`settings`, `access`) that hold more than one value (E1). None of them is used, like the
+     * backend refuses them: no login, nothing sent to any backend address.
+     */
+    duplicates: readonly ('settings' | 'access')[];
     /** Row 5: `settings` ok, with `backendUrl` and `oauthClientId`. */
     settingsReady: boolean;
     /** Rows 6 and 7. */
@@ -63,6 +68,7 @@ export function computeAppState(i: AppStateInputs): AppState {
     if (i.view !== true) return 'no-access';
     if (i.oldLayout) return 'migration-needed';
     if (i.newerSchema) return 'update-needed';
+    if (i.duplicates.length > 0) return 'backend-error';
     if (!i.settingsReady) return 'setup-needed';
     if (i.login === 'no-service-access') return 'no-access';
     if (i.login === 'failed') return 'backend-error';
@@ -145,13 +151,16 @@ export function currentNav(path: string, nav: readonly string[]): string {
     return best ?? path;
 }
 
-/** Why the state is `backend-error`: ChurchTools couldn't be read, or the backend login failed. */
-export type Failure = { kind: 'churchtools'; error: unknown } | { kind: 'login'; error: unknown };
+/**
+ * Why the state is `backend-error`: ChurchTools couldn't be read, a settings category holds several values (row 4a),
+ * or the backend login failed.
+ */
+export type Failure = { kind: 'churchtools'; error: unknown } | { kind: 'duplicates'; categories: readonly ('settings' | 'access')[] } | { kind: 'login'; error: unknown };
 
 export interface FailureMessage {
     /** i18n key. */
     key: string;
-    params: { status?: number; n?: number };
+    params: { status?: number; n?: number; categories?: string };
     /** Offer „Erneut anmelden“. */
     loginAction: boolean;
     /** The backend's technical `detail` (English), plain text, only for settings editors (spec 8.2). */
@@ -176,6 +185,10 @@ function isLoginFlowError(error: unknown): boolean {
  * text; everyone else only that the service is unreachable.
  */
 export function failureMessage(failure: Failure, detailed: boolean): FailureMessage {
+    // Settings editors choose which value stays (spec 6.2); a login can't help.
+    if (failure.kind === 'duplicates') {
+        return detailed ? { key: 'state.duplicates', params: { categories: failure.categories.join(', ') }, loginAction: false } : { key: 'state.unavailable', params: {}, loginAction: false };
+    }
     const { error } = failure;
     if (failure.kind === 'churchtools') {
         if (error instanceof CtRateLimitedError) return { key: 'state.ctRateLimited', params: { n: minutes(error.retryAfterMs / 1000) }, loginAction: false };

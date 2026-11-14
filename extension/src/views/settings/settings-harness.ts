@@ -77,6 +77,8 @@ export interface HarnessOptions {
     backendVersion?: string;
     /** Stands in for `location.reload()`. */
     reloadPage?: () => void;
+    /** More values stored next to `settings` and `access` (duplicates, E1), with value ids from 301. */
+    extra?: { category: 'settings' | 'access'; value: unknown }[];
 }
 
 const mounted: VueWrapper[] = [];
@@ -132,6 +134,7 @@ export async function start(o: HarnessOptions) {
     const access = o.access === undefined ? ACCESS : o.access;
     const values: CtValue[] = [{ id: SETTINGS_VALUE_ID, dataCategoryId: SETTINGS_ID, value: encode(settings) }];
     if (access !== null) values.push({ id: ACCESS_VALUE_ID, dataCategoryId: ACCESS_ID, value: encode(access) });
+    (o.extra ?? []).forEach((x, i) => values.push({ id: 301 + i, dataCategoryId: x.category === 'settings' ? SETTINGS_ID : ACCESS_ID, value: encode(x.value) }));
     const fakeCt = createFakeChurchTools({
         moduleKey: 'ctpassstore',
         moduleId: 7,
@@ -255,7 +258,18 @@ export async function start(o: HarnessOptions) {
     const replaceAccess = async (value: unknown): Promise<void> => {
         await fakeCt.updateValue(7, ACCESS_ID, ACCESS_VALUE_ID, encode(value));
     };
-    return { session, auth, backendUrls, storedAccess, changeAccessElsewhere, replaceAccess, removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
+    /** Another value appears next to the stored one (a duplicate, E1); returns its value id. */
+    const plant = async (category: 'settings' | 'access', value: unknown): Promise<number> => (await fakeCt.createValue(7, category === 'settings' ? SETTINGS_ID : ACCESS_ID, encode(value))).id;
+    /** Every stored value of a category (id and parsed JSON, or the raw text if it isn't JSON). */
+    const all = async (category: 'settings' | 'access'): Promise<{ id: number; value: unknown }[]> =>
+        (await fakeCt.values(7, category === 'settings' ? SETTINGS_ID : ACCESS_ID)).map((x) => {
+            try {
+                return { id: x.id, value: JSON.parse(x.value) as unknown };
+            } catch {
+                return { id: x.id, value: x.value };
+            }
+        });
+    return { plant, all, session, auth, backendUrls, storedAccess, changeAccessElsewhere, replaceAccess, removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
 }
 
 export async function settle(): Promise<void> {

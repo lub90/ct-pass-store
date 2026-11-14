@@ -210,6 +210,7 @@ describe('self-test cache key', () => {
         const selfTestCache = ref<{ baseUrl: string; at: number; failed: number } | null>(cache);
         const app = {
             state: computed(() => 'admin'),
+            failure: computed(() => null),
             settingsEditor: ref({ settings: true, access: false }),
             setupCapable: ref(false),
             settings: ref({ ...SETTINGS }),

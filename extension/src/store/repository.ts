@@ -28,7 +28,27 @@ export type Read<T> =
      * texts and permissions; `unusable` (access only: stored entries the backend disables, with their reasons) are
      * kept unchanged unless `saveAccess` is told to drop them.
      */
-    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] };
+    | { state: 'ok'; value: T; valueId: number; issues?: string[]; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] }
+    /**
+     * More than one value in a one-value category (spec 6.2, point B E1). None of them is used: the backend refuses
+     * them too. Every value is listed (highest value ID first), read on its own, so an editor can see each one and
+     * choose which stays (`resolveDuplicates`); every save and removal is refused meanwhile.
+     */
+    | { state: 'duplicates'; values: StoredValue<T>[] };
+
+/** One of several values of a one-value category, as read. */
+export interface StoredValue<T> {
+    valueId: number;
+    /** The stored text as it is: what `resolveDuplicates` compares (unchecked data, never markup). */
+    text: string;
+    /** This value read on its own. */
+    read: SingleRead<T>;
+    /** `resolveDuplicates` may keep it: a JSON object without a newer schema and without an integer revision out of range. */
+    keepable: boolean;
+}
+
+/** What one stored value reads as. */
+export type SingleRead<T> = Exclude<Read<T>, { state: 'missing' } | { state: 'duplicates' }>;
 
 /**
  * One stored `machineClients` entry as read (access only), in stored order: its raw value (unchecked data, never
@@ -119,6 +139,23 @@ function collision(clients: readonly MachineClient[], preserved: readonly unknow
 
 type Loaded = { newest: CtValue | undefined; duplicates: CtValue[] };
 
+/**
+ * A stored value `resolveDuplicates` may keep, parsed; else why not (as for a save: no newer schema, no integer
+ * revision out of range; a revision that is no integer counts as 0).
+ */
+function keepableOf(text: string): { raw: Record<string, unknown>; revision: number } | { problem: string } {
+    let raw: unknown;
+    try {
+        raw = JSON.parse(text);
+    } catch {
+        return { problem: '(value): not valid JSON' };
+    }
+    if (!isObject(raw)) return { problem: '(value): not an object' };
+    if (typeof raw.schema === 'number' && raw.schema > SCHEMA_VERSION) return { problem: `stored value has newer schema ${raw.schema}` };
+    if (Number.isInteger(raw.revision) && !isUsableRevision(raw.revision)) return { problem: `stored revision ${clip(String(raw.revision))} is out of range` };
+    return { raw, revision: isUsableRevision(raw.revision) ? raw.revision : 0 };
+}
+
 /** Spec 6.3 on the newest raw `settings` value (broken JSON is no old layout) and the category names. */
 function layoutOf(newest: CtValue | undefined, names: string[]): boolean {
     let raw: unknown = null;
@@ -174,7 +211,7 @@ export class ExtensionStore {
     async removeClients(expectedRevision: number, drop: readonly DropRef[]): Promise<void> {
         if (drop.length === 0) throw new InvalidValueError(['machineClients: nothing to remove']);
         const { newest, duplicates } = await this.load('access');
-        if (!newest) throw new ConflictError(0);
+        if (!newest || duplicates.length > 0) throw new ConflictError(0);
         let raw: unknown;
         try {
             raw = JSON.parse(newest.value);
@@ -193,7 +230,33 @@ export class ExtensionStore {
         const json = JSON.stringify({ ...raw, machineClients: list.filter((_, i) => !gone.has(i)), revision: expectedRevision + 1 });
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
         await this.kv.update('access', newest.id, json);
-        for (const d of duplicates) await this.kv.delete('access', d.id);
+    }
+
+    /**
+     * Resolves duplicates (E1): keeps the value `keep` and deletes every other one, but only if the stored values are
+     * still exactly `seen` (the same value ids with the same texts, as `Read.values` listed them); otherwise nothing is
+     * written (`ConflictError`). So nothing the editor hasn't seen is ever deleted. The kept value stays as stored
+     * except its `revision`, raised above every seen revision, so a page that read any of the values before gets a
+     * conflict instead of overwriting the kept one. Value first, deletions last: an interruption leaves duplicates,
+     * never a lost value. A value that can't be kept (see `StoredValue.keepable`) is refused (`InvalidValueError`).
+     */
+    async resolveDuplicates(category: 'settings' | 'access', keep: number, seen: readonly { valueId: number; text: string }[]): Promise<void> {
+        const values = await this.kv.values(category);
+        const texts = new Map(seen.map((v) => [v.valueId, v.text] as const));
+        const same = values.length > 1 && texts.size === seen.length && values.length === seen.length && values.every((v) => texts.get(v.id) === v.value);
+        const kept = values.find((v) => v.id === keep);
+        if (!same || !kept) throw new ConflictError(0);
+        const parsed = keepableOf(kept.value);
+        if ('problem' in parsed) throw new InvalidValueError([parsed.problem]);
+        const highest = Math.max(...values.map((v) => {
+            const k = keepableOf(v.value);
+            return 'problem' in k ? 0 : k.revision;
+        }));
+        if (!isUsableRevision(highest + 1)) throw new InvalidValueError([`stored revision ${highest} is out of range`]);
+        const json = JSON.stringify({ ...parsed.raw, revision: highest + 1 });
+        if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
+        await this.kv.update(category, kept.id, json);
+        for (const v of values) if (v.id !== kept.id) await this.kv.delete(category, v.id);
     }
 
     /** Startup: spec 6.3 (old layout) and `readSettings()` from one listing of `settings`. KV errors propagate. */
@@ -214,6 +277,19 @@ export class ExtensionStore {
 
     private parse<S extends Schema>(category: 'settings' | 'access', schema: S, { newest, duplicates }: Loaded): Read<v.InferOutput<S>> {
         if (!newest) return { state: 'missing' };
+        if (duplicates.length > 0) {
+            const values = [newest, ...duplicates].map((value) => ({
+                valueId: value.id,
+                text: value.value,
+                read: this.parseOne(category, schema, value),
+                keepable: !('problem' in keepableOf(value.value)),
+            }));
+            return { state: 'duplicates', values };
+        }
+        return this.parseOne(category, schema, newest);
+    }
+
+    private parseOne<S extends Schema>(category: 'settings' | 'access', schema: S, newest: CtValue): SingleRead<v.InferOutput<S>> {
         let raw: unknown;
         try {
             raw = JSON.parse(newest.value);
@@ -265,7 +341,7 @@ export class ExtensionStore {
             if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
             return { ...invalid, repair: repairOf(raw) as Repair<v.InferOutput<S>> };
         }
-        const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
+        const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id };
         const withUnusable = { ...ok, ...(unusable && unusable.length > 0 ? { unusable } : {}), ...(clientEntries ? { clientEntries } : {}) };
         return issues.length > 0 ? { ...withUnusable, issues } : withUnusable;
     }
@@ -277,6 +353,9 @@ export class ExtensionStore {
 
         // Read right before writing (no version/ETag exists, so this narrows the race as far as possible).
         const { newest, duplicates } = await this.load(category);
+        // Duplicates are resolved only by `resolveDuplicates`, after the editor saw each of them: a save never deletes
+        // a value nobody has seen (E1).
+        if (duplicates.length > 0) throw new ConflictError(0);
         let stored: Record<string, unknown> = {};
         let currentRevision = 0;
         if (newest) {
@@ -340,9 +419,7 @@ export class ExtensionStore {
         const json = JSON.stringify(merged);
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
 
-        // Value first, deletions last: an interruption leaves duplicates, never a lost value.
         if (newest) await this.kv.update(category, newest.id, json);
         else await this.kv.create(category, json);
-        for (const d of duplicates) await this.kv.delete(category, d.id);
     }
 }

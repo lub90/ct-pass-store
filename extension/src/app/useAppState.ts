@@ -5,7 +5,7 @@
  * 1. On `/auth/callback`: keep the query in memory and replace the address with the bare callback path, so code and
  *    state are neither in the address bar, the history nor a `Referer` while ChurchTools is read. In a login popup:
  *    hand the code to the opener and stop (nothing else is read).
- * 2. `whoami` and the extension's rights (row 2), the layout and the settings (rows 3 to 5).
+ * 2. `whoami` and the extension's rights (row 2), the layout and the settings (rows 3 to 5, with 4a: duplicates).
  * 3. `auth.configure()` with the settings and `auth.bindPerson()` with whoami's id, before any login decision.
  * 4. On `/auth/callback` as a page: complete the login (a token of another person is refused); `oauth-code-invalid`
  *    retries the login once (spec 8.2). Otherwise without a usable token: a page login, unless one just completed
@@ -87,6 +87,8 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
     const ctError = ref<{ error: unknown } | null>(null);
     const oldLayout = ref(false);
     const storedSchema = ref<number | null>(null);
+    /** Row 4a: categories with several values (E1). */
+    const duplicates = ref<('settings' | 'access')[]>([]);
     const ready = ref(false);
     const loginError = ref<{ error: unknown } | null>(null);
     const settingsEditor = ref<SettingsEditor>({ settings: false, access: false });
@@ -107,6 +109,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             ctFailed: ctError.value !== null,
             oldLayout: oldLayout.value,
             newerSchema: storedSchema.value !== null,
+            duplicates: duplicates.value,
             settingsReady: ready.value,
             login: loginOutcome(effectiveLoginError.value?.error ?? null),
             backendVersion: session.backendVersion.value,
@@ -118,6 +121,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
     const failure = computed<Failure | null>(() => {
         if (state.value !== 'backend-error') return null;
         if (ctError.value) return { kind: 'churchtools', error: ctError.value.error };
+        if (duplicates.value.length > 0) return { kind: 'duplicates', categories: duplicates.value };
         return { kind: 'login', error: effectiveLoginError.value?.error ?? null };
     });
 
@@ -156,14 +160,18 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             setupCapable.value = setupCapableFrom(permissions);
             const [{ oldLayout: old, settings: read }, access, editor] = await Promise.all([
                 store.readStartup(),
-                // `access` matters here only for a newer schema; people who can't read it are not affected by it.
+                // `access` matters here only for a newer schema and duplicates (row 4a); people who can't read it
+                // aren't stopped by it here (the backend refuses duplicates anyway).
                 store.readAccess().catch(() => null),
                 readEditor(permissions),
             ]);
             settingsEditor.value = editor;
             oldLayout.value = old;
-            const newer = [read, access].find((r): r is Extract<Read<unknown>, { state: 'newer' }> => r?.state === 'newer');
+            // Each value of a duplicated category counts on its own: one newer value is row 4.
+            const reads = [read, access].flatMap((r): Read<unknown>[] => (r === null ? [] : r.state === 'duplicates' ? r.values.map((x) => x.read) : [r]));
+            const newer = reads.find((r): r is Extract<Read<unknown>, { state: 'newer' }> => r.state === 'newer');
             if (newer) storedSchema.value = newer.schema;
+            duplicates.value = [read.state === 'duplicates' ? ('settings' as const) : null, access?.state === 'duplicates' ? ('access' as const) : null].filter((c) => c !== null);
             ready.value = settingsReady(read);
             if (read.state === 'ok') settings.value = read.value;
             personId.value = person;
@@ -171,7 +179,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             ctFailed(error);
             return null;
         }
-        if (oldLayout.value || storedSchema.value !== null || !ready.value) return null;
+        if (oldLayout.value || storedSchema.value !== null || duplicates.value.length > 0 || !ready.value) return null;
         const { backendUrl, oauthClientId } = settings.value ?? {};
         if (!backendUrl || !oauthClientId) return null;
         return { personId: person, backendUrl, clientId: oauthClientId };

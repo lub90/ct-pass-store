@@ -14,6 +14,9 @@
  *   raw id and the entry as read) and changes nothing else, so this works on an invalid value too, as long as it has
  *   a usable revision.
  *
+ * - Several stored values (E1): the values to choose from (`DuplicatesChooser`) instead of the page; nothing of any of
+ *   them is listed as active, since the backend uses none of them.
+ *
  * Every name, id and group name is plain text.
  */
 import { computed, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
@@ -32,6 +35,7 @@ import Banner from '../../ui/Banner.vue';
 import PageHeader from '../../ui/PageHeader.vue';
 import StatusLine from '../../ui/StatusLine.vue';
 import { useConfirm } from '../../ui/useConfirm';
+import DuplicatesChooser from './DuplicatesChooser.vue';
 
 type Role = 'users' | 'admins';
 type GroupView =
@@ -58,6 +62,18 @@ const busy = ref(false);
 const actionError = ref<string | null>(null);
 const conflict = ref(false);
 const done = ref(false);
+/** Duplicates were resolved here: the value kept (E1). */
+const keptId = ref<number | null>(null);
+/** The app started without these values (row 4a): only a page load uses the kept one. */
+const needsPageLoad = computed(() => app.failure.value?.kind === 'duplicates' && app.failure.value.categories.includes('access'));
+function resolved(valueId: number): void {
+    keptId.value = valueId;
+    void load();
+}
+function reloadPage(): void {
+    if (services.reloadPage) services.reloadPage();
+    else window.location.reload();
+}
 let run = 0;
 let alive = true;
 onBeforeUnmount(() => {
@@ -265,6 +281,25 @@ async function remove(row: Row): Promise<void> {
                 <p>{{ t('access.warning') }}</p>
                 <p>{{ t('access.warningAdmins') }}</p>
             </Banner>
+            <Banner
+                v-if="keptId !== null"
+                kind="info"
+                class="cps-access__kept"
+            >
+                <p>{{ t('duplicates.done', { id: keptId }) }}</p>
+                <template v-if="needsPageLoad">
+                    <p>{{ t('duplicates.reloadNote') }}</p>
+                    <div class="cps-form-actions">
+                        <button
+                            type="button"
+                            class="cps-btn cps-btn--primary"
+                            @click="reloadPage()"
+                        >
+                            {{ t('duplicates.reloadPage') }}
+                        </button>
+                    </div>
+                </template>
+            </Banner>
             <template v-if="loadError !== null">
                 <StatusLine
                     kind="error"
@@ -294,6 +329,13 @@ async function remove(row: Row): Promise<void> {
                 v-else-if="read.state === 'newer'"
                 kind="empty"
                 :text="t('access.newer')"
+            />
+            <DuplicatesChooser
+                v-else-if="read.state === 'duplicates'"
+                category="access"
+                :values="read.values"
+                @resolved="resolved"
+                @reload="load()"
             />
             <template v-else>
                 <Banner

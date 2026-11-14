@@ -47,6 +47,17 @@ const message = computed(() => (app.failure.value ? failureMessage(app.failure.v
                 {{ t('state.toBackend') }}
             </RouterLink>
         </p>
+        <p
+            v-if="editor && app.failure.value?.kind === 'duplicates'"
+            class="cps-state__link"
+        >
+            <RouterLink
+                to="/settings"
+                class="cps-link"
+            >
+                {{ t('state.toSettings') }}
+            </RouterLink>
+        </p>
         <p v-if="message.loginAction">
             <button
                 type="button"

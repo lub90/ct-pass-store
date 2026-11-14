@@ -87,6 +87,10 @@ watch(
     { immediate: true },
 );
 
+/** Row 4a (E1): the categories with several values, and the page that lets an editor choose one. */
+const duplicates = computed(() => (app.failure.value?.kind === 'duplicates' ? app.failure.value.categories : []));
+const DUPLICATE_PAGES = { settings: { to: '/settings/rules', page: 'pages.rules' }, access: { to: '/settings/access', page: 'pages.access' } } as const;
+
 const missing = (category: 'settings' | 'access'): string => t('settings.missingRight', { right: 'edit custom data', category });
 
 interface Card {
@@ -145,6 +149,21 @@ const cards = computed<Card[]>(() => {
             <p>{{ t('state.needsEditor') }}</p>
         </Banner>
         <template v-else>
+            <Banner
+                v-if="duplicates.length > 0"
+                kind="error"
+                class="cps-settings__duplicates"
+            >
+                <p>{{ t('state.duplicates', { categories: duplicates.join(', ') }) }}</p>
+                <p
+                    v-for="category in duplicates"
+                    :key="category"
+                >
+                    <RouterLink :to="DUPLICATE_PAGES[category].to">
+                        {{ t(DUPLICATE_PAGES[category].page) }}
+                    </RouterLink>
+                </p>
+            </Banner>
             <LinkCard
                 v-for="card in cards"
                 :key="card.to"

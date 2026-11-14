@@ -2,15 +2,19 @@
 /**
  * The frame of a settings page with a form (spec 4.4): header, back link, the page's own rights check, the states of
  * the read, what the stored value lacks (shown before any save), the form itself (slot) and the actions with
- * „Gespeichert“, the conflict and errors. Issues and right names are plain text.
+ * „Gespeichert“, the conflict and errors. Issues and right names are plain text. Several stored values (E1): the
+ * values to choose from instead of the form (`DuplicatesChooser`), then the form of the kept one.
  */
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { settingsErrorText, type SettingsForm } from '../../admin/useSettingsForm';
+import { useServices } from '../../app/services';
+import { useAppState } from '../../app/useAppState';
 import Banner from '../../ui/Banner.vue';
 import type { IconName } from '../../ui/Icon.vue';
 import PageHeader from '../../ui/PageHeader.vue';
 import StatusLine from '../../ui/StatusLine.vue';
+import DuplicatesChooser from './DuplicatesChooser.vue';
 
 const props = defineProps<{
     icon: IconName;
@@ -52,6 +56,21 @@ const loadErrorText = computed(() => (props.form.loadError.value === null ? null
 const saveErrorText = computed(() => (props.form.error.value === null ? null : message(props.form.error.value)));
 const showSaved = computed(() => props.form.savedAt.value !== null && !props.form.dirty.value);
 const invalidStored = computed(() => props.form.status.value === 'invalid' || props.form.repairing.value);
+
+const services = useServices();
+const app = useAppState();
+/** Duplicates were resolved here: the value kept (E1). */
+const keptId = ref<number | null>(null);
+/** The app started without these values (row 4a): only a page load uses the kept one. */
+const needsPageLoad = computed(() => app.failure.value?.kind === 'duplicates' && app.failure.value.categories.includes(category.value));
+function resolved(valueId: number): void {
+    keptId.value = valueId;
+    void props.form.load();
+}
+function reloadPage(): void {
+    if (services.reloadPage) services.reloadPage();
+    else window.location.reload();
+}
 </script>
 
 <template>
@@ -69,6 +88,25 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
         :intro="intro"
     />
     <div class="cps-settings-form">
+        <Banner
+            v-if="allowed && keptId !== null"
+            kind="info"
+            class="cps-settings-form__kept"
+        >
+            <p>{{ t('duplicates.done', { id: keptId }) }}</p>
+            <template v-if="needsPageLoad">
+                <p>{{ t('duplicates.reloadNote') }}</p>
+                <div class="cps-form-actions">
+                    <button
+                        type="button"
+                        class="cps-btn cps-btn--primary"
+                        @click="reloadPage()"
+                    >
+                        {{ t('duplicates.reloadPage') }}
+                    </button>
+                </div>
+            </template>
+        </Banner>
         <Banner
             v-if="!allowed"
             kind="warning"
@@ -104,6 +142,13 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
             v-else-if="form.status.value === 'newer'"
             kind="empty"
             :text="stored.newer"
+        />
+        <DuplicatesChooser
+            v-else-if="form.status.value === 'duplicates' && form.duplicatesRead.value"
+            :category="category"
+            :values="form.duplicatesRead.value.values"
+            @resolved="resolved"
+            @reload="form.load()"
         />
         <template v-else>
             <Banner

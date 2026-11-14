@@ -140,6 +140,20 @@ may change between versions, so verify anything critical against your own instan
     bogus one alike; `GET /api/csrftoken` without a cookie answers `200` and sets cookies. So a proxy that drops the
     browser's cookies and adds the login token (the real-mode dev proxy) can write; nothing ties the CSRF token to a
     session for REST writes today.
+  - **Measured 2026-11-14 (cookie-only cross-site writes, Chromium, test instance, a throwaway category only):**
+    - The session cookies are `SameSite=None; Secure; HttpOnly`, so the browser may send them on cross-site requests.
+    - Same-origin JSON writes with the session cookie succeed **without** a `CSRF-Token` header (`201`); same-origin
+      `text/plain` bodies answer `500`.
+    - A cross-site top-level form post (`text/plain`, a body a form can send without a preflight) **does** carry the
+      cookie, and ChurchTools answers `401` „CSRF-Token is invalid“; nothing is created. Same after more than two
+      minutes.
+    - A cross-site `fetch` in `no-cors` mode doesn't send the cookie at all (third-party cookie blocking); nothing is
+      created. A cross-site JSON request needs a CORS preflight, which ChurchTools doesn't grant.
+    - So on this ChurchTools version a foreign site can't make an editor's browser create or change KV values: the
+      protection is ChurchTools' server-side CSRF check for cookie-authenticated cross-site requests, plus the
+      browser's cookie blocking. Both are outside an extension's control. Firefox wasn't measured.
+    - The extension doesn't rely on it: a second value in a one-value category is never used and never deleted
+      unseen (extension spec 6.2).
   - Never send a CSRF token with `POST /login`.
 - Checking a user's password via `POST /api/login` creates a real session each time. Rate-limit that yourself.
   - The response is `{"data": {"status", "message", "personId", "location"}}`. `status` is `success` for a complete

@@ -35,7 +35,7 @@ describe('settingsErrorText for another category', () => {
 
 describe('useSettingsForm: overlapping loads', () => {
     type V = { revision: number; name: string };
-    const ok = (name: string): Read<V> => ({ state: 'ok', value: { revision: 1, name }, valueId: 1, duplicates: 0 });
+    const ok = (name: string): Read<V> => ({ state: 'ok', value: { revision: 1, name }, valueId: 1 });
 
     /** Mounts a page that only holds the form; each `load()` waits for its own `resolve`/`reject`. */
     function setup() {
@@ -68,6 +68,24 @@ describe('useSettingsForm: overlapping loads', () => {
         wrapper.unmount();
     });
 
+    it('a duplicates read: no value to edit, the values for the page to show (E1); a later ok read clears them', async () => {
+        const { form, pending, wrapper } = setup();
+        const one = ok('one');
+        const duplicates: Read<V> = { state: 'duplicates', values: [{ valueId: 2, text: '{}', read: one as Extract<Read<V>, { state: 'ok' }>, keepable: true }, { valueId: 1, text: '{}', read: one as Extract<Read<V>, { state: 'ok' }>, keepable: true }] };
+        void form().load();
+        pending[0]!.resolve(duplicates);
+        await flushPromises();
+        expect(form().status.value).toBe('duplicates');
+        expect(form().value.value).toBeNull();
+        expect(form().duplicatesRead.value).toBe(duplicates);
+        expect(form().dirty.value).toBe(false);
+        void form().load();
+        pending[1]!.resolve(one);
+        await flushPromises();
+        expect(form().duplicatesRead.value).toBeNull();
+        wrapper.unmount();
+    });
+
     it('an older read failing last changes nothing', async () => {
         const { form, pending, wrapper } = setup();
         void form().load();
@@ -91,7 +109,7 @@ describe('useSettingsForm: prepare', () => {
         const Page = defineComponent({
             setup() {
                 form = useSettingsForm<V>(
-                    () => Promise.resolve({ state: 'ok', value: { revision: 3, list: ['a'] }, valueId: 1, duplicates: 0 }),
+                    () => Promise.resolve({ state: 'ok', value: { revision: 3, list: ['a'] }, valueId: 1 }),
                     (value) => (saved.push(value), Promise.resolve()),
                     {
                         prepare: (stored) => ({ ...stored, list: [...stored.list, 'draft'] }),
@@ -128,7 +146,7 @@ describe('useSettingsForm: beforeSave', () => {
         const Page = defineComponent({
             setup() {
                 form = useSettingsForm<V>(
-                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1, duplicates: 0 }),
+                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1 }),
                     (value) => (saved.push(value), Promise.resolve()),
                     {
                         beforeSave: (next, previous) => {
@@ -219,7 +237,7 @@ describe('useSettingsForm: beforeSave', () => {
         const Page = defineComponent({
             setup() {
                 form = useSettingsForm<V>(
-                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1, duplicates: 0 }),
+                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1 }),
                     (value) => (saved.push(value), Promise.resolve()),
                     {
                         beforeSave: () => (++asked === 1 ? Promise.reject(new Error('dialog gone')) : Promise.resolve(true)),

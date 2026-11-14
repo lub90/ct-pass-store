@@ -26,6 +26,7 @@ const base = (): AppStateInputs => ({
     ctFailed: false,
     oldLayout: false,
     newerSchema: false,
+    duplicates: [],
     settingsReady: true,
     login: 'ok',
     backendVersion: '0.1.4+abc',
@@ -41,6 +42,7 @@ const rows: { name: string; apply: (i: AppStateInputs) => void; state: AppState 
     { name: '2b ChurchTools read failed', apply: (i) => (i.ctFailed = true), state: 'backend-error' },
     { name: '3 old layout', apply: (i) => (i.oldLayout = true), state: 'migration-needed' },
     { name: '4 newer schema', apply: (i) => (i.newerSchema = true), state: 'update-needed' },
+    { name: '4a duplicates', apply: (i) => (i.duplicates = ['access']), state: 'backend-error' },
     { name: '5 settings not ready', apply: (i) => (i.settingsReady = false), state: 'setup-needed' },
     { name: '6 no-service-access', apply: (i) => (i.login = 'no-service-access'), state: 'no-access' },
     { name: '7 login failed', apply: (i) => (i.login = 'failed'), state: 'backend-error' },
@@ -100,6 +102,7 @@ describe('computeAppState (spec 3.2)', () => {
                 ctFailed: true,
                 oldLayout: true,
                 newerSchema: true,
+                duplicates: ['settings', 'access'],
                 settingsReady: false,
                 login: 'failed',
                 backendVersion: null,
@@ -148,7 +151,7 @@ describe('loginOutcome', () => {
 
 describe('settingsReady (row 5)', () => {
     const value = { schema: 2 as const, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16 };
-    const ok = (extra: Record<string, unknown>) => ({ state: 'ok' as const, value: { ...value, ...extra }, valueId: 1, duplicates: 0 });
+    const ok = (extra: Record<string, unknown>) => ({ state: 'ok' as const, value: { ...value, ...extra }, valueId: 1 });
 
     it('needs backendUrl and oauthClientId', () => {
         expect(settingsReady(ok({ backendUrl: 'https://b.example', oauthClientId: 'abc' }))).toBe(true);
@@ -339,6 +342,11 @@ describe('failureMessage (spec 3.2 row 7, 8.2, 8.3)', () => {
         expect(ct(new CtRateLimitedError(60_000), false)).toEqual({ key: 'state.ctRateLimited', params: { n: 1 }, loginAction: false });
         expect(ct(new CtRateLimitedError(150_000), true)).toEqual({ key: 'state.ctRateLimited', params: { n: 3 }, loginAction: false });
         expect(ct(new CtRateLimitedError(1e10), true).params).toEqual({ n: 60 });
+    });
+
+    it('duplicates (row 4a, E1): editors are told to choose a value, users only that the service is unreachable; no login helps', () => {
+        expect(failureMessage({ kind: 'duplicates', categories: ['settings', 'access'] }, true)).toEqual({ key: 'state.duplicates', params: { categories: 'settings, access' }, loginAction: false });
+        expect(failureMessage({ kind: 'duplicates', categories: ['access'] }, false)).toEqual({ key: 'state.unavailable', params: {}, loginAction: false });
     });
 
     it('never puts a detail into the message for users', () => {
