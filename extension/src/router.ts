@@ -23,6 +23,8 @@ declare module 'vue-router' {
         titleKey?: string;
         /** Who the page is for (spec 4.1); without it, everyone with access. */
         requires?: RouteRequirement;
+        /** The page reads its params once: a new path mounts it afresh (`App.vue`). */
+        remount?: boolean;
     }
 }
 
@@ -42,7 +44,7 @@ export const routes: RouteRecordRaw[] = [
     { path: '/settings/access', component: AccessView, meta: { requires: 'editor' } },
     // `new` is matched first; an id `new` can't be edited here (a client named so is still listed and removable).
     { path: '/settings/access/clients/new', component: ClientFormView, meta: { requires: 'editor' } },
-    { path: '/settings/access/clients/:id', component: ClientFormView, meta: { requires: 'editor' } },
+    { path: '/settings/access/clients/:id', component: ClientFormView, meta: { requires: 'editor', remount: true } },
     placeholder('/settings/backend', 'pages.backend', 'editor'),
     placeholder('/settings/backup', 'pages.backup', 'admin'),
     placeholder('/settings/setup', 'pages.setup', 'admin'),

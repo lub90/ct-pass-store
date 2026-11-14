@@ -165,10 +165,12 @@ describe('self-test cache (S4)', () => {
 });
 
 describe('Zugriff pill', () => {
-    it('an admin with the edit right on settings only still gets the Zugriff link and pill', async () => {
+    it('an admin without the edit right on access gets Zugriff disabled, naming the right (the page needs it)', async () => {
         const { wrapper } = await start({ path: '/settings', edit: ['settings'], access: { ...ACCESS, machineClients: [client('wlan', KEY_A)] } });
-        expect(card(wrapper, CARDS.access[0]).element.tagName).toBe('A');
-        expect(pill(wrapper, CARDS.access[0])).toBe('1 Client');
+        const c = card(wrapper, CARDS.access[0]);
+        expect(c.element.tagName).toBe('DIV');
+        expect(c.find('.cps-linkcard__reason').text()).toBe(missing('access'));
+        expect(pill(wrapper, CARDS.access[0])).toBeNull();
     });
 
     it('shows the number of machine clients', async () => {

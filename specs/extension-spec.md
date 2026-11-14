@@ -252,25 +252,45 @@ refused at the field and by the store (stored texts with them are dropped on rea
   status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
   ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
   The service user's group is shown on „Einrichtung“, not here.
-- **Machine clients:** a list with name, `id`, permissions („darf lesen“), number of keys, `createdAt` (and who
-  created it), and „Bearbeiten“ / „Entfernen“. A green „+ Client hinzufügen“ button.
+- **Machine clients:** every stored entry the backend enables, with name (isolated, `<bdi>`), `id`, permissions
+  („darf lesen“), number of keys, a fingerprint per key, `createdAt` (and who created it), and „Bearbeiten“ /
+  „Entfernen“. A green „+ Client hinzufügen“ button.
+- **Key fingerprint:** the first 8 characters of base64url(SHA-256(the 32 key bytes)), the same whichever encoding was
+  pasted. An admin compares it with the service's key, e.g. for a key in base64url:
+  `printf %s '<key>' | tr '_-' '/+' | base64 -d | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-8`
+  (add the `=` padding first if `base64 -d` asks for it). Look-alike entries (same name, different key) are told
+  apart by it.
 - **Falsch konfiguriert:** every stored entry the backend disables (backend spec 3.2: e.g. without `name` or
   `createdAt`, a duplicate `id`, a shared key) is listed with its position, its raw `id` (plain text, isolated, cut
-  to 40 characters) and the reasons in words, each with „Entfernen“ (danger confirm). Removal sends the entry's index
-  and raw `id` with the read's `revision`; the store refuses it if either no longer matches. If `access` is invalid
-  as a whole, the entries are still listed, but nothing can be removed here.
+  to 40 characters), its name, permission, `createdAt`/`createdBy` and key fingerprints as far as present, and the
+  reasons in words, each with „Entfernen“ (danger confirm).
+- **Removing** (any entry): the store removes exactly that entry and changes nothing else in `access` (only
+  `machineClients` and `revision`; no schema repair). It compares the read's `revision`, the entry's index, its raw
+  `id` and the entry itself, and refuses if any of them no longer matches. Before confirming, the dialog names every
+  entry the removal would turn on (removing one of two entries with the same `id`, or one of two clients sharing a
+  key, enables the other one: name, `id`, permission and fingerprints) and, for a duplicate `id`, suggests removing all
+  entries with it.
+- **`access` invalid here** (e.g. `groups.service` broken) while `machineClients` is a list: the backend reads only
+  `groups.admins` and `machineClients`, so it may still enable clients. The page lists the active clients (read-only,
+  no „Bearbeiten“) and the broken entries, and removing works as above if the stored `revision` is usable; otherwise
+  nothing can be removed here. Groups and „+ Client hinzufügen“ need a valid value.
 - The page and the client form need `edit custom data` on `access`; without it they name the right and read nothing.
 - Until the setup assistant exists (12.6), „Gruppe ändern“ is shown disabled with „Kommt mit dem
   Einrichtungsassistenten.“, and no status dot is shown (the rights check comes with it).
 - **Client form** (`/settings/access/clients/new` and `/:id`):
-  - Name; ID proposed from the name (`^[a-z0-9-]{3,40}$`, unique, fixed after creation).
+  - Name; ID proposed from the name (`^[a-z0-9-]{3,40}$`, unique, fixed after creation). A new or changed name with
+    bidi control characters (U+202A–U+202E, U+2066–U+2069) is refused at the field and by the store on save; a stored
+    name with them is still read (parity with the backend) and kept unchanged when other things are saved.
   - Public keys: one or more, each pasted as base64 or base64url and checked on the spot (decodes to 32 bytes; not a
-    key another client uses, backend spec 3.2).
+    key another client uses, including stored entries the backend disables; backend spec 3.2).
+  - The form opens afresh for each client path, asking first if there are unsaved changes.
   - Permission „Passwörter lesen“ (`entries:read`), off for a new client until turned on.
   - A new client gets `createdAt` as the admin's **local** calendar date (`YYYY-MM-DD`; the backend only checks that
     it is a real date) and `createdBy` = the logged-in ChurchTools person (`whoami`). Both are notes only: the client
     stays valid when that person leaves the church or the admin group. „Zugriff“ says so, and clients nobody needs
-    any more are removed there. A creator ChurchTools no longer shows is listed by ID.
+    any more are removed there. A creator ChurchTools no longer shows is listed by ID. `createdBy` is personal data
+    (a person ID kept as long as the client exists; readable by everyone who can read `access`, 6.1); removing the
+    client removes it.
 - „Entfernen“: confirm dialog with „Wirkt innerhalb von 5 Minuten.“
 - The page validates with the same rules as backend spec 3.2, so the backend never disables a client the extension
   saved.
@@ -361,7 +381,8 @@ extension/src/
   extension needs it for `/oauth/authorize` (7.1). Without it, the state is `setup-needed`.
 - `texts`: `{ "de"?: { "title"?: string, "intro"?: string }, "en"?: {…} }`; title ≤ 60, intro ≤ 300 characters.
 - `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`). The extension also
-  writes `createdBy` (the ChurchTools person ID of whoever added the client, 4.7); the backend ignores it.
+  writes `createdBy` (the ChurchTools person ID of whoever added the client, 4.7; personal data, kept while the
+  client exists); the backend ignores it, and an invalid `createdBy` never disables a client (shared fixture).
 - `groups`: `{ "users": {…}, "admins": {…}, "service": {…} }`, each `{ "groupId": <positive integer>,
   "createdBySetup": <boolean> }`. `createdBySetup` decides what may be deleted later (16.5): the extension never
   deletes a group it didn't create.

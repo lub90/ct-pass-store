@@ -81,7 +81,13 @@ function navigate(to: string): void {
         <template v-else-if="view === 'page'">
             <!-- Spec 7.2: on every page, so a blocked renewal can be retried wherever the person is. -->
             <SessionBanner class="cps-app__session" />
-            <RouterView />
+            <!-- A page whose route says so is a fresh instance per path (e.g. one machine client after another). -->
+            <RouterView v-slot="{ Component, route: shown }">
+                <component
+                    :is="Component"
+                    :key="shown.meta.remount ? shown.path : undefined"
+                />
+            </RouterView>
         </template>
         <template v-else-if="view === 'missing-rights'">
             <Banner kind="warning">

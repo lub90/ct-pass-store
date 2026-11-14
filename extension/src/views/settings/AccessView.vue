@@ -5,26 +5,29 @@
  * - The users and admins groups (from `access.groups`): name, active member count, a link to the group in ChurchTools
  *   (built from the ChurchTools base URL and the group id only). A group ChurchTools doesn't know any more, or one
  *   the person may not see, shows the error. „Gruppe ändern“ comes with the setup assistant (spec 12.6, 16.5).
- * - The machine clients, each removable after a dangerous confirm.
- * - Stored entries the backend can't use („falsch konfiguriert“, USER DECISION 2026-11-14), with their reasons and a
- *   removal, so no stored client is ever invisible or unremovable. Removal saves with the revision of the read and the
- *   entry's raw id (the store refuses a stale index).
+ * - Every stored machine client entry, from the store's `clientEntries`: those the backend enables („aktiv“), and
+ *   those it disables („falsch konfiguriert“, USER DECISION 2026-11-14) with their reasons. Each row shows the name
+ *   (isolated, `<bdi>`), the permission, when and by whom it was created, and a fingerprint per key, so look-alikes
+ *   can be told apart. Also when the value is invalid as a whole: the backend may still enable clients then (F1).
+ * - Removal: a dangerous confirm that names every entry the removal would turn on (a duplicate id or a shared key
+ *   disables both entries; removing one enables the other). The store removes exactly that entry (revision, index,
+ *   raw id and the entry as read) and changes nothing else, so this works on an invalid value too, as long as it has
+ *   a usable revision.
  *
  * Every name, id and group name is plain text.
  */
 import { computed, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { groupPageUrl } from '../../admin/machine-clients';
+import { describeEntry, groupPageUrl, isolate, newlyEnabled, type EntryInfo } from '../../admin/machine-clients';
 import { settingsErrorText } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
 import { instanceBaseUrl } from '../../ct/client';
 import { CtForbiddenError, CtHttpError } from '../../ct/errors';
 import { ConflictError } from '../../model/errors';
-import type { UnusableClient } from '../../model/machine-clients';
-import type { AccessV2, MachineClient } from '../../model/schemas';
-import type { Read } from '../../store/repository';
+import type { AccessV2 } from '../../model/schemas';
+import type { ClientEntry, Read } from '../../store/repository';
 import Banner from '../../ui/Banner.vue';
 import PageHeader from '../../ui/PageHeader.vue';
 import StatusLine from '../../ui/StatusLine.vue';
@@ -74,14 +77,20 @@ async function load(): Promise<void> {
         const r = await services.store.readAccess();
         if (mine !== run) return;
         read.value = r;
-        if (r.state === 'ok') {
-            void loadGroups(r.value, mine);
-            void loadCreators(r.value.machineClients, mine);
-        }
+        if (r.state === 'ok') void loadGroups(r.value, mine);
+        if (r.state === 'ok' || r.state === 'invalid') void loadCreators(r.clientEntries ?? [], mine);
     } catch (e) {
         if (mine !== run) return;
         loadError.value = e;
     }
+}
+
+/** The reload a conflict offers: the old outcome goes with the old read. */
+function reload(): void {
+    conflict.value = false;
+    actionError.value = null;
+    done.value = false;
+    void load();
 }
 
 async function loadGroup(role: Role, id: number, mine: number): Promise<void> {
@@ -102,13 +111,8 @@ async function loadGroups(value: AccessV2, mine: number): Promise<void> {
     await Promise.all(roles.map((role) => loadGroup(role, value.groups[role].groupId, mine)));
 }
 
-const creatorOf = (c: MachineClient): number | null => {
-    const id = (c as { createdBy?: unknown }).createdBy;
-    return typeof id === 'number' && Number.isSafeInteger(id) && id > 0 ? id : null;
-};
-
-async function loadCreators(clients: readonly MachineClient[], mine: number): Promise<void> {
-    const ids = [...new Set(clients.map(creatorOf).filter((id): id is number => id !== null))].filter((id) => !(id in creators.value));
+async function loadCreators(list: readonly ClientEntry[], mine: number): Promise<void> {
+    const ids = [...new Set(list.map((e) => describeEntry(e.raw).createdBy).filter((id): id is number => id !== undefined))].filter((id) => !(id in creators.value));
     const found = await Promise.all(
         ids.map((id) =>
             services.ct.person(id).then(
@@ -129,8 +133,24 @@ watch(
 );
 
 const value = computed(() => (read.value?.state === 'ok' ? read.value.value : null));
-const unusable = computed<UnusableClient[]>(() => (read.value?.state === 'ok' || read.value?.state === 'invalid' ? (read.value.unusable ?? []) : []));
-/** What an `ok` read dropped other than whole entries (unknown permissions): gone with the next save. */
+interface Row {
+    entry: ClientEntry;
+    info: EntryInfo;
+}
+const rows = computed<Row[]>(() => {
+    const r = read.value;
+    const list = r?.state === 'ok' || r?.state === 'invalid' ? (r.clientEntries ?? []) : [];
+    return list.map((entry) => ({ entry, info: describeEntry(entry.raw) }));
+});
+const active = computed(() => rows.value.filter((row) => row.entry.client !== undefined));
+const broken = computed(() => rows.value.filter((row) => row.entry.reasons.length > 0));
+/** The revision a removal compares; `null`: nothing can be removed (no usable revision). */
+const revision = computed<number | null>(() => {
+    const r = read.value;
+    if (r?.state === 'ok') return r.value.revision;
+    return r?.state === 'invalid' && r.revision !== undefined && r.clientEntries ? r.revision : null;
+});
+/** What an `ok` read dropped other than whole entries (unknown permissions): gone with the next save of the form. */
 const dropped = computed(() => (read.value?.state === 'ok' ? (read.value.issues ?? []).filter((i) => !/^machineClients\.\d+: /.test(i)) : []));
 const invalidIssues = computed(() => (read.value?.state === 'invalid' ? read.value.issues : []));
 const setupFix = computed(() => (app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk')));
@@ -144,12 +164,9 @@ const groupText = (view: GroupView): string => {
     return t('state.ctUnavailable');
 };
 
-const createdText = (c: MachineClient): string => {
-    const by = creatorOf(c);
-    if (by === null) return t('access.created', { date: c.createdAt });
-    const name = creators.value[by];
-    return t('access.createdBy', { date: c.createdAt, name: name ?? t('access.personById', { id: by }) });
-};
+const creatorName = (id: number): string => creators.value[id] ?? t('access.personById', { id });
+const fingerprintText = (fp: string | null): string => fp ?? t('access.keyInvalid');
+const permissionText = (info: EntryInfo): string => (info.canRead ? t('access.canRead') : t('access.canNothing'));
 
 /** Writes, then shows the outcome; on success the page reads again. A conflict writes nothing. */
 async function write(save: () => Promise<void>): Promise<void> {
@@ -169,42 +186,50 @@ async function write(save: () => Promise<void>): Promise<void> {
     done.value = true;
 }
 
-async function removeClient(client: MachineClient): Promise<void> {
+/** The question's text: what removing does, and every entry it would turn on (F2). */
+function questionText(row: Row): string {
+    const parts = [row.entry.client ? t('access.removeText') : t('access.brokenRemoveText')];
+    if (row.entry.reasons.includes('duplicate-id')) parts.push(t('access.duplicateHint'));
+    const all = rows.value;
+    const turnsOn = newlyEnabled(
+        all.map((x) => x.entry.raw),
+        [row.entry.index],
+    ).map((i) => all[i]!);
+    if (turnsOn.length > 0) {
+        const items = turnsOn.map(({ entry, info }) =>
+            t('access.turnsOnItem', {
+                name: isolate(info.name ?? '–'),
+                id: isolate(entry.id ?? '–'),
+                permission: permissionText(info),
+                keys: info.fingerprints.map(fingerprintText).join(', '),
+            }),
+        );
+        parts.push(t('access.turnsOn', { list: items.join('; ') }));
+    }
+    return parts.join(' ');
+}
+
+async function remove(row: Row): Promise<void> {
     const r = read.value;
-    if (busy.value || r?.state !== 'ok') return;
+    const expected = revision.value;
+    if (busy.value || expected === null) return;
+    const { entry } = row;
     busy.value = true;
     try {
         const answer = await confirm({
-            title: t('access.removeTitle'),
-            text: t('access.removeText'),
+            title: entry.client ? t('access.removeTitle') : t('access.brokenRemoveTitle'),
+            text: questionText(row),
             confirmLabel: t('access.remove'),
             cancelLabel: t('common.cancel'),
             danger: true,
-            subject: { name: client.name, detail: client.id },
+            subject: entry.client
+                ? { name: isolate(entry.client.name), detail: entry.client.id }
+                : { name: t('access.brokenEntry', { n: entry.index + 1 }), ...(entry.id === undefined ? {} : { detail: isolate(shownId(entry.id)) }) },
         });
         // Left the page or read again meanwhile: nothing is sent.
         if (!answer.confirmed || !alive || read.value !== r) return;
-        await write(() => services.store.saveAccess({ ...r.value, machineClients: r.value.machineClients.filter((c) => c.id !== client.id) }, r.value.revision));
-    } finally {
-        busy.value = false;
-    }
-}
-
-async function removeBroken(entry: UnusableClient): Promise<void> {
-    const r = read.value;
-    if (busy.value || r?.state !== 'ok') return;
-    busy.value = true;
-    try {
-        const answer = await confirm({
-            title: t('access.brokenRemoveTitle'),
-            text: t('access.brokenRemoveText'),
-            confirmLabel: t('access.remove'),
-            cancelLabel: t('common.cancel'),
-            danger: true,
-            subject: { name: t('access.brokenEntry', { n: entry.index + 1 }), ...(entry.id === undefined ? {} : { detail: shownId(entry.id) }) },
-        });
-        if (!answer.confirmed || !alive || read.value !== r) return;
-        await write(() => services.store.saveAccess(r.value, r.value.revision, [entry.id === undefined ? { index: entry.index } : { index: entry.index, id: entry.id }]));
+        const ref = entry.id === undefined ? { index: entry.index, entry: entry.raw } : { index: entry.index, id: entry.id, entry: entry.raw };
+        await write(() => services.store.removeClients(expected, [ref]));
     } finally {
         busy.value = false;
     }
@@ -283,10 +308,14 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                         </li>
                     </ul>
                     <p>{{ setupFix }}</p>
+                    <p v-if="rows.length > 0">
+                        {{ revision === null ? t('access.noRemove') : t('access.stillActive') }}
+                    </p>
                 </Banner>
                 <Banner
                     v-if="dropped.length > 0"
                     kind="warning"
+                    class="cps-access__dropped"
                     :title="t('settings.issuesTitle')"
                 >
                     <ul>
@@ -309,7 +338,7 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                     <button
                         type="button"
                         class="cps-btn cps-btn--ghost"
-                        @click="load()"
+                        @click="reload()"
                     >
                         {{ t('settings.reload') }}
                     </button>
@@ -347,7 +376,7 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                         </p>
                         <template v-if="groups[role]?.state === 'ok'">
                             <p>
-                                <span class="cps-access__group-name">{{ groups[role].name }}</span>
+                                <bdi class="cps-access__group-name">{{ groups[role].name }}</bdi>
                                 ·
                                 <span class="cps-access__group-count">{{ t('access.members', { n: groups[role].count }) }}</span>
                             </p>
@@ -361,7 +390,7 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                         </p>
                         <p
                             v-else
-                            class="cps-access__muted"
+                            class="cps-access__muted cps-access__group-loading"
                         >
                             {{ t('state.loading') }}
                         </p>
@@ -393,14 +422,14 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                 </section>
 
                 <section
-                    v-if="value"
+                    v-if="value || active.length > 0"
                     class="cps-access__section"
                 >
                     <h2 class="cps-access__heading">
                         {{ t('access.clientsTitle') }}
                     </h2>
                     <p
-                        v-if="value.machineClients.length === 0"
+                        v-if="active.length === 0"
                         class="cps-access__clients-empty cps-access__muted"
                     >
                         {{ t('access.clientsEmpty') }}
@@ -410,34 +439,43 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                         class="cps-access__clients"
                     >
                         <li
-                            v-for="client in value.machineClients"
-                            :key="client.id"
+                            v-for="row in active"
+                            :key="row.entry.index"
                             class="cps-access__client"
-                            :data-client-id="client.id"
+                            :data-client-id="row.entry.client!.id"
                         >
                             <div class="cps-access__client-text">
                                 <p>
-                                    <span class="cps-access__client-name">{{ client.name }}</span>
-                                    <span class="cps-access__client-id">{{ client.id }}</span>
+                                    <bdi class="cps-access__client-name">{{ row.entry.client!.name }}</bdi>
+                                    <span class="cps-access__client-id">{{ row.entry.client!.id }}</span>
                                 </p>
                                 <p class="cps-access__muted">
-                                    {{ client.permissions.includes('entries:read') ? t('access.canRead') : t('access.canNothing') }}
-                                    · {{ t('access.keys', { n: client.publicKeys.length }) }}
-                                    · {{ createdText(client) }}
+                                    {{ permissionText(row.info) }}
+                                    · {{ t('access.keys', { n: row.entry.client!.publicKeys.length }) }}
+                                    · <span class="cps-access__created">{{ t('access.created', { date: row.entry.client!.createdAt }) }}<span v-if="row.info.createdBy !== undefined">{{ ` ${t('access.by')} ` }}<bdi>{{ creatorName(row.info.createdBy) }}</bdi></span></span>
+                                </p>
+                                <p class="cps-access__muted cps-access__fingerprints">
+                                    {{ t('access.fingerprints') }}
+                                    <code
+                                        v-for="(fp, i) in row.info.fingerprints"
+                                        :key="i"
+                                    >{{ fingerprintText(fp) }}</code>
                                 </p>
                             </div>
                             <div class="cps-access__client-actions">
                                 <RouterLink
-                                    :to="`/settings/access/clients/${client.id}`"
+                                    v-if="value"
+                                    :to="`/settings/access/clients/${row.entry.client!.id}`"
                                     class="cps-btn cps-btn--ghost"
                                 >
                                     {{ t('access.edit') }}
                                 </RouterLink>
                                 <button
+                                    v-if="revision !== null"
                                     type="button"
                                     class="cps-btn cps-btn--danger"
                                     :disabled="busy"
-                                    @click="removeClient(client)"
+                                    @click="remove(row)"
                                 >
                                     {{ t('access.remove') }}
                                 </button>
@@ -447,7 +485,10 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                     <p class="cps-access__muted">
                         {{ t('access.creatorNote') }}
                     </p>
-                    <div class="cps-form-actions">
+                    <div
+                        v-if="value"
+                        class="cps-form-actions"
+                    >
                         <button
                             type="button"
                             class="cps-btn cps-btn--create"
@@ -459,33 +500,51 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                 </section>
 
                 <section
-                    v-if="unusable.length > 0"
+                    v-if="broken.length > 0"
                     class="cps-access__section cps-access__broken"
                 >
                     <h2 class="cps-access__heading">
                         {{ t('access.brokenTitle') }}
                     </h2>
                     <p class="cps-access__muted">
-                        {{ value ? t('access.brokenIntro') : t('access.brokenNoRemove') }}
+                        {{ revision === null ? t('access.noRemove') : t('access.brokenIntro') }}
                     </p>
                     <ul class="cps-access__clients">
                         <li
-                            v-for="entry in unusable"
-                            :key="entry.index"
+                            v-for="row in broken"
+                            :key="row.entry.index"
                             class="cps-access__client cps-access__broken-entry"
                         >
                             <div class="cps-access__client-text">
                                 <p class="cps-access__broken-name">
-                                    <template v-if="entry.id === undefined">
-                                        {{ t('access.brokenEntry', { n: entry.index + 1 }) }}
+                                    <template v-if="row.entry.id === undefined">
+                                        {{ t('access.brokenEntry', { n: row.entry.index + 1 }) }}
                                     </template>
                                     <template v-else>
-                                        {{ t('access.brokenEntryId', { n: entry.index + 1 }) }}<bdi>{{ shownId(entry.id) }}</bdi>
+                                        {{ t('access.brokenEntryId', { n: row.entry.index + 1 }) }}<bdi>{{ shownId(row.entry.id) }}</bdi>
                                     </template>
+                                </p>
+                                <p v-if="row.info.name !== undefined">
+                                    <bdi class="cps-access__broken-label">{{ row.info.name }}</bdi>
+                                </p>
+                                <p class="cps-access__muted">
+                                    {{ permissionText(row.info) }}<template v-if="row.info.createdAt !== undefined">
+                                        · <span class="cps-access__created">{{ t('access.created', { date: row.info.createdAt }) }}<span v-if="row.info.createdBy !== undefined">{{ ` ${t('access.by')} ` }}<bdi>{{ creatorName(row.info.createdBy) }}</bdi></span></span>
+                                    </template>
+                                </p>
+                                <p
+                                    v-if="row.info.fingerprints.length > 0"
+                                    class="cps-access__muted cps-access__fingerprints"
+                                >
+                                    {{ t('access.fingerprints') }}
+                                    <code
+                                        v-for="(fp, i) in row.info.fingerprints"
+                                        :key="i"
+                                    >{{ fingerprintText(fp) }}</code>
                                 </p>
                                 <ul class="cps-access__reasons">
                                     <li
-                                        v-for="reason in entry.reasons"
+                                        v-for="reason in row.entry.reasons"
                                         :key="reason"
                                     >
                                         {{ t(`access.reasons.${reason}`) }}
@@ -493,14 +552,14 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
                                 </ul>
                             </div>
                             <div
-                                v-if="value"
+                                v-if="revision !== null"
                                 class="cps-access__client-actions"
                             >
                                 <button
                                     type="button"
                                     class="cps-btn cps-btn--danger"
                                     :disabled="busy"
-                                    @click="removeBroken(entry)"
+                                    @click="remove(row)"
                                 >
                                     {{ t('access.remove') }}
                                 </button>
@@ -583,6 +642,10 @@ async function removeBroken(entry: UnusableClient): Promise<void> {
 .cps-access__muted {
     color: var(--cps-text-muted);
     font-size: var(--cps-size-sm);
+}
+.cps-access__fingerprints code {
+    margin-left: var(--cps-space-1);
+    font-family: monospace;
 }
 .cps-access__reasons {
     font-size: var(--cps-size-sm);

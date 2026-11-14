@@ -16,12 +16,12 @@
 import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { parsePublicKey, slugFromName, todayIso, validateClients } from '../../admin/machine-clients';
+import { draftClient, finalizeClient, parsePublicKey, slugFromName, validateClients } from '../../admin/machine-clients';
 import { useSettingsForm } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
 import { CLIENT_ID_PATTERN, PERMISSION_READ_ENTRIES, phpTrim } from '../../model/machine-clients';
-import type { AccessV2, MachineClient } from '../../model/schemas';
+import { BIDI_CONTROLS, type AccessV2, type MachineClient } from '../../model/schemas';
 import Field from '../../ui/Field.vue';
 import Toggle from '../../ui/Toggle.vue';
 import { useConfirm } from '../../ui/useConfirm';
@@ -39,35 +39,32 @@ const editId = typeof route.params.id === 'string' ? route.params.id : null;
 const isNew = editId === null;
 
 const allowed = computed(() => app.settingsEditor.value.access);
-/** Raw ids of stored entries the backend can't use: a new client must not take one (the store would refuse it). */
+/**
+ * Raw ids and decoded keys of stored entries the backend can't use: a client here must not take one (the store would
+ * refuse it on save; here it shows at the field).
+ */
 const unusableIds = ref<string[]>([]);
-
-function draft(): MachineClient {
-    const by = app.personId.value;
-    return { id: '', name: '', publicKeys: [''], permissions: [], createdAt: todayIso(new Date()), ...(by === null ? {} : { createdBy: by }) };
-}
+const unusableKeys = ref<Uint8Array[]>([]);
 
 function indexIn(value: AccessV2): number {
     return isNew ? value.machineClients.length - 1 : value.machineClients.findIndex((c) => c.id === editId);
 }
 
-/** The edited client as it is stored: name and keys trimmed like the backend trims them. */
-function finalize(value: AccessV2, index: number): AccessV2 {
-    return {
-        ...value,
-        machineClients: value.machineClients.map((c, i) => (i === index ? { ...c, name: phpTrim(c.name), publicKeys: c.publicKeys.map(phpTrim) } : c)),
-    };
-}
 
 const form = useSettingsForm<AccessV2>(
     async () => {
         const read = await services.store.readAccess();
-        unusableIds.value = read.state === 'ok' ? (read.unusable ?? []).flatMap((u) => (u.id === undefined ? [] : [u.id])) : [];
+        const broken = read.state === 'ok' ? (read.clientEntries ?? []).filter((e) => e.reasons.length > 0) : [];
+        unusableIds.value = broken.flatMap((e) => (e.id === undefined ? [] : [e.id]));
+        unusableKeys.value = broken.flatMap((e) => {
+            const keys = (e.raw as { publicKeys?: unknown } | null)?.publicKeys;
+            return Array.isArray(keys) ? keys.flatMap((k) => (typeof k === 'string' ? (parsePublicKey(k) ?? []) : [])) : [];
+        });
         return read;
     },
-    (value, revision) => services.store.saveAccess(finalize(value, indexIn(value)), revision),
+    (value, revision) => services.store.saveAccess(finalizeClient(value, indexIn(value)), revision),
     {
-        prepare: isNew ? (stored) => ({ ...stored, machineClients: [...stored.machineClients, draft()] }) : undefined,
+        prepare: isNew ? (stored) => ({ ...stored, machineClients: [...stored.machineClients, draftClient(app.personId.value, new Date())] }) : undefined,
         onSaved: async () => {
             await router.push('/settings/access');
         },
@@ -103,8 +100,12 @@ function typeId(text: string): void {
     current.value.id = text;
 }
 
-const nameValid = computed(() => current.value !== null && phpTrim(current.value.name) !== '');
-const nameError = computed(() => (nameTouched.value && !nameValid.value ? t('access.client.nameError') : undefined));
+const nameBidi = computed(() => current.value !== null && BIDI_CONTROLS.test(current.value.name));
+const nameValid = computed(() => current.value !== null && phpTrim(current.value.name) !== '' && !nameBidi.value);
+const nameError = computed(() => {
+    if (nameBidi.value) return t('settings.texts.bidi');
+    return nameTouched.value && !nameValid.value ? t('access.client.nameError') : undefined;
+});
 const idTaken = computed(() => {
     const id = current.value?.id ?? '';
     return isNew && (others.value.some((c) => c.id === id) || unusableIds.value.includes(id));
@@ -118,7 +119,7 @@ const idError = computed(() => {
 
 // Keys: compared as bytes (base64 and base64url of the same key are the same key).
 const sameBytes = (a: Uint8Array, b: Uint8Array) => a.length === b.length && a.every((x, i) => x === b[i]);
-const otherKeys = computed(() => others.value.flatMap((c) => c.publicKeys.map(parsePublicKey).filter((k): k is Uint8Array => k !== null)));
+const otherKeys = computed(() => [...others.value.flatMap((c) => c.publicKeys.map(parsePublicKey).filter((k): k is Uint8Array => k !== null)), ...unusableKeys.value]);
 const keyErrors = computed<(string | undefined)[]>(() => {
     const parsed = (current.value?.publicKeys ?? []).map((text) => ({ text, bytes: parsePublicKey(text) }));
     return parsed.map(({ text, bytes }, i) => {
@@ -155,7 +156,8 @@ const valid = computed(() => {
     const value = form.value.value;
     if (!value || index.value < 0 || !nameValid.value || !keysValid.value) return false;
     if (isNew && (!idPatternOk.value || idTaken.value)) return false;
-    return validateClients(finalize(value, index.value).machineClients).length === 0;
+    // Defence in depth: the checks above already cover every reason no input here can get past them.
+    return validateClients(finalizeClient(value, index.value).machineClients).length === 0;
 });
 
 const unrepairable = computed(() => ({ text: app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk') }));

@@ -7,7 +7,7 @@
  * (`repair`): a page that can't rebuild the value without writing fields it doesn't own offers no repair.
  */
 import { computed, onBeforeUnmount, ref, shallowRef, type ComputedRef, type Ref } from 'vue';
-import { onBeforeRouteLeave } from 'vue-router';
+import { onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { CtForbiddenError, CtRateLimitedError, NotAuthenticatedError } from '../ct/errors';
 import { CategoryMissingError, ConflictError, InvalidValueError, ValueTooLargeError } from '../model/errors';
 import { retryMinutes } from '../backend/problems';
@@ -178,11 +178,14 @@ export function useSettingsForm<T extends { revision: number }>(
         conflict.value = false;
     }
 
-    onBeforeRouteLeave(async () => {
+    const askBeforeLeaving = async (): Promise<boolean> => {
         if (!dirty.value) return true;
         const answer = await options.confirm(options.leaveQuestion());
         return answer.confirmed;
-    });
+    };
+    onBeforeRouteLeave(askBeforeLeaving);
+    // Same page, other params (e.g. another machine client): the page is mounted afresh, so this is a leave too.
+    onBeforeRouteUpdate(askBeforeLeaving);
 
     const onUnload = (event: BeforeUnloadEvent | Event): void => {
         if (!dirty.value) return;

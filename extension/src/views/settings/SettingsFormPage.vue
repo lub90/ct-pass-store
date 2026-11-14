@@ -37,9 +37,13 @@ const category = computed(() => props.category ?? 'settings');
 /** Texts that name what is stored: the settings, or the access data. */
 const stored = computed(() =>
     category.value === 'access'
-        ? { missing: t('access.missing'), newer: t('access.newer'), invalidTitle: t('access.invalidTitle'), issuesNote: t('access.issuesNote') }
-        : { missing: t('settings.missing'), newer: t('settings.newer'), invalidTitle: t('settings.invalidTitle'), issuesNote: t('settings.issuesNote') },
+        ? { missing: t('access.missing'), newer: t('access.newer'), invalidTitle: t('access.invalidTitle') }
+        : { missing: t('settings.missing'), newer: t('settings.newer'), invalidTitle: t('settings.invalidTitle') },
 );
+/** `access`: stored entries the backend can't use are kept on save and listed on „Zugriff“; here only counted. */
+const ENTRY_ISSUE = /^machineClients\.\d+: /;
+const brokenEntries = computed(() => (category.value === 'access' ? props.form.issues.value.filter((i: string) => ENTRY_ISSUE.test(i)).length : 0));
+const shownIssues = computed<string[]>(() => (category.value === 'access' ? props.form.issues.value.filter((i: string) => !ENTRY_ISSUE.test(i)) : props.form.issues.value));
 const message = (error: unknown): string => {
     const { key, params } = settingsErrorText(error, category.value);
     return t(key, params);
@@ -100,14 +104,14 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
         />
         <template v-else>
             <Banner
-                v-if="invalidStored || form.issues.value.length > 0"
+                v-if="invalidStored || shownIssues.length > 0"
                 :kind="invalidStored ? 'error' : 'warning'"
                 class="cps-settings-form__issues"
                 :title="invalidStored ? stored.invalidTitle : t('settings.issuesTitle')"
             >
                 <ul>
                     <li
-                        v-for="(issue, i) in form.issues.value"
+                        v-for="(issue, i) in shownIssues"
                         :key="i"
                     >
                         {{ issue }}
@@ -126,7 +130,19 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
                     </RouterLink>
                 </p>
                 <p v-else>
-                    {{ stored.issuesNote }}
+                    {{ t('settings.issuesNote') }}
+                </p>
+            </Banner>
+            <Banner
+                v-if="brokenEntries > 0"
+                kind="warning"
+                class="cps-settings-form__broken"
+            >
+                <p>
+                    {{ t('access.brokenCount', { n: brokenEntries }) }}
+                    <RouterLink to="/settings/access">
+                        {{ t('pages.access') }}
+                    </RouterLink>
                 </p>
             </Banner>
             <slot

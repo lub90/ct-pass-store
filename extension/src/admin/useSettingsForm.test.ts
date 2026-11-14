@@ -8,7 +8,7 @@ import type { Read } from '../store/repository';
 import { settingsErrorText, useSettingsForm, type SettingsForm } from './useSettingsForm';
 
 // The form asks before leaving through the router; these tests mount it without one.
-vi.mock('vue-router', () => ({ onBeforeRouteLeave: () => undefined }));
+vi.mock('vue-router', () => ({ onBeforeRouteLeave: () => undefined, onBeforeRouteUpdate: () => undefined }));
 
 describe('settingsErrorText', () => {
     it.each([

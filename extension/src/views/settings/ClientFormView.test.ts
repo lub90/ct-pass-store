@@ -4,11 +4,13 @@
  * every settings page (spec 4.4).
  */
 import type { VueWrapper } from '@vue/test-utils';
-import { afterEach, describe, expect, it } from 'vitest';
-import { todayIso } from '../../admin/machine-clients';
-import { ACCESS, ME, button, cleanup, click, settle, start } from './settings-harness';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ACCESS, ME, answer, button, cleanup, click, dialog, settle, start } from './settings-harness';
 
-afterEach(cleanup);
+afterEach(() => {
+    vi.useRealTimers();
+    cleanup();
+});
 
 const TEXT = {
     missingRight: 'Dir fehlt in ChurchTools das Recht „edit custom data“ auf die Kategorie „access“.',
@@ -24,7 +26,12 @@ const TEXT = {
     notFound: 'Diesen Client gibt es nicht (mehr).',
     conflict: 'Jemand hat die Einstellungen inzwischen geändert. Lade neu, um die Änderungen zu sehen.',
     notSaved: 'Der Zugriff wurde nicht gespeichert: Ein Wert ist ungültig oder kollidiert mit einem falsch konfigurierten Eintrag. Prüf die Liste unter „Zugriff“.',
-    issuesNote: 'Falsch konfigurierte Einträge bleiben beim Speichern erhalten; entfernen kannst du sie unter „Zugriff“.',
+    brokenOne: 'Ein gespeicherter Eintrag ist falsch konfiguriert und bleibt beim Speichern erhalten.',
+    brokenTwo: '2 gespeicherte Einträge sind falsch konfiguriert und bleiben beim Speichern erhalten.',
+    nameError: 'Gib einen Namen ein.',
+    nameBidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
+    leaveTitle: 'Änderungen verwerfen?',
+    discard: 'Verwerfen',
 };
 
 const key = (n: number, length = 32) => Buffer.alloc(length, n).toString('base64');
@@ -90,6 +97,57 @@ describe('client form (spec 4.7)', () => {
         expect(errorOf(wrapper, 'cps-client-id')).toBe('');
     });
 
+    it.each([
+        ['an id that breaks the pattern', 'AB'],
+        ['an id another client has', 'taken'],
+        ['an id an unusable entry has', 'broken-one'],
+        ['no id', ''],
+    ])('blocks saving with %s: Save disabled, a submit writes nothing (I4)', async (_n, id) => {
+        const noName = { id: 'broken-one', publicKeys: [key(9)], createdAt: '2026-11-01' };
+        const { wrapper, writes } = await start({ path: '/settings/access/clients/new', access: access([client('taken', 'T', [key(1)]), noName]) });
+        await type(wrapper, 'cps-client-name', 'Neu');
+        await type(wrapper, 'cps-client-key-0', key(2));
+        expect(saveDisabled(wrapper)).toBe(false);
+        await type(wrapper, 'cps-client-id', id);
+        expect(saveDisabled(wrapper)).toBe(true);
+        await wrapper.find('form').trigger('submit');
+        await settle();
+        expect(writes).toEqual([]);
+    });
+
+    it.each([
+        ['empty', ''],
+        ['only spaces and tabs', ' \t '],
+    ])('blocks saving with a name that is %s, and says so once touched (I4)', async (_n, name) => {
+        const { wrapper, writes } = await start({ path: '/settings/access/clients/new' });
+        await type(wrapper, 'cps-client-id', 'my-client');
+        await type(wrapper, 'cps-client-key-0', key(2));
+        expect(errorOf(wrapper, 'cps-client-name')).toBe('');
+        await type(wrapper, 'cps-client-name', name);
+        expect(errorOf(wrapper, 'cps-client-name')).toBe(TEXT.nameError);
+        expect(saveDisabled(wrapper)).toBe(true);
+        await wrapper.find('form').trigger('submit');
+        await settle();
+        expect(writes).toEqual([]);
+    });
+
+    it('refuses bidi controls in the name (M1)', async () => {
+        const { wrapper } = await start({ path: '/settings/access/clients/new' });
+        await type(wrapper, 'cps-client-name', 'Rad\u202Eius');
+        await type(wrapper, 'cps-client-key-0', key(2));
+        expect(errorOf(wrapper, 'cps-client-name')).toBe(TEXT.nameBidi);
+        expect(saveDisabled(wrapper)).toBe(true);
+    });
+
+    it('an extra empty key row blocks saving (I4)', async () => {
+        const { wrapper } = await start({ path: '/settings/access/clients/new' });
+        await type(wrapper, 'cps-client-name', 'Neu');
+        await type(wrapper, 'cps-client-key-0', key(2));
+        expect(saveDisabled(wrapper)).toBe(false);
+        await click(wrapper, TEXT.addKey);
+        expect(saveDisabled(wrapper)).toBe(true);
+    });
+
     it('checks each key on the spot: 31 and 33 bytes rejected, a key of another client rejected, twice in one client rejected', async () => {
         const { wrapper } = await start({ path: '/settings/access/clients/new', access: access([client('other', 'Anderer', [key(1)])]) });
         await type(wrapper, 'cps-client-name', 'Neu');
@@ -102,6 +160,9 @@ describe('client form (spec 4.7)', () => {
         await type(wrapper, 'cps-client-key-0', Buffer.alloc(32, 1).toString('base64url'));
         expect(errorOf(wrapper, 'cps-client-key-0')).toBe(TEXT.keyTaken);
         expect(saveDisabled(wrapper)).toBe(true);
+        await wrapper.find('form').trigger('submit');
+        await settle();
+        expect(saveDisabled(wrapper)).toBe(true);
         await type(wrapper, 'cps-client-key-0', key(2));
         expect(errorOf(wrapper, 'cps-client-key-0')).toBe('');
         await click(wrapper, TEXT.addKey);
@@ -113,6 +174,9 @@ describe('client form (spec 4.7)', () => {
     });
 
     it('saves a new client with createdAt (today, local) and createdBy (whoami), trimmed key and name; back to „Zugriff“', async () => {
+        // Shortly before local midnight: the date of the admin's own calendar.
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(new Date(2026, 0, 1, 23, 59, 30));
         const { wrapper, storedAccess, router } = await start({ path: '/settings/access/clients/new', access: access([client('other', 'Anderer', [key(1)])]) });
         await type(wrapper, 'cps-client-name', '  WLAN RADIUS ');
         await type(wrapper, 'cps-client-key-0', ` ${key(2)}\n`);
@@ -123,7 +187,7 @@ describe('client form (spec 4.7)', () => {
         expect(stored.revision).toBe(2);
         expect(stored.machineClients).toEqual([
             client('other', 'Anderer', [key(1)]),
-            { id: 'wlan-radius', name: 'WLAN RADIUS', publicKeys: [key(2)], permissions: ['entries:read'], createdAt: todayIso(new Date()), createdBy: ME },
+            { id: 'wlan-radius', name: 'WLAN RADIUS', publicKeys: [key(2)], permissions: ['entries:read'], createdAt: '2026-01-01', createdBy: ME },
         ]);
         expect(router.currentRoute.value.path).toBe('/settings/access');
     });
@@ -180,15 +244,79 @@ describe('client form (spec 4.7)', () => {
         expect(wrapper.text()).toContain(TEXT.conflict);
     });
 
-    it('a key of an entry the backend can’t use: the store refuses, the form says why', async () => {
+    it('a key of an entry the backend can’t use is flagged on the spot; the entries are counted with a link, not listed', async () => {
         const hidden = { id: 'hidden', publicKeys: [key(7)], createdAt: '2026-11-01' };
-        const { wrapper, writes } = await start({ path: '/settings/access/clients/new', access: access([hidden]) });
-        expect(wrapper.find('.cps-settings-form__issues').text()).toContain(TEXT.issuesNote);
+        const { wrapper } = await start({ path: '/settings/access/clients/new', access: access([hidden, 'text']) });
+        const broken = wrapper.find('.cps-settings-form__broken');
+        expect(broken.text()).toContain(TEXT.brokenTwo);
+        expect(broken.find('a').attributes('href')).toBe('/settings/access');
+        expect(wrapper.text()).not.toContain('machineClients.0');
+        expect(wrapper.find('.cps-settings-form__issues').exists()).toBe(false);
         await type(wrapper, 'cps-client-name', 'Neu');
         await type(wrapper, 'cps-client-key-0', key(7));
+        expect(errorOf(wrapper, 'cps-client-key-0')).toBe(TEXT.keyTaken);
+        expect(saveDisabled(wrapper)).toBe(true);
+    });
+
+    it('one unusable entry: the sentence in the singular; dropped permissions are listed as going away on save', async () => {
+        const hidden = { id: 'hidden', publicKeys: [key(7)], createdAt: '2026-11-01' };
+        const { wrapper } = await start({ path: '/settings/access/clients/new', access: access([hidden, client('star', 'Stern', [key(8)], { permissions: ['entries:read', '*'] })]) });
+        expect(wrapper.find('.cps-settings-form__broken').text()).toContain(TEXT.brokenOne);
+        const issues = wrapper.find('.cps-settings-form__issues');
+        expect(issues.text()).toContain('machineClients.1.permissions: unknown permission dropped');
+        expect(issues.text()).toContain('Beim nächsten Speichern wird er entfernt.');
+        expect(issues.text()).not.toContain('machineClients.0:');
+    });
+
+    it('a stored entry that appeared after the read (same revision) with the same key: the store refuses, the form says why', async () => {
+        const { wrapper, writes, replaceAccess } = await start({ path: '/settings/access/clients/new' });
+        await type(wrapper, 'cps-client-name', 'Neu');
+        await type(wrapper, 'cps-client-key-0', key(7));
+        await replaceAccess(access([{ id: 'hidden', publicKeys: [key(7)], createdAt: '2026-11-01' }]));
         await click(wrapper, TEXT.save);
         expect(writes).toEqual([]);
         expect(wrapper.find('.cps-settings-form__error').text()).toBe(TEXT.notSaved);
+    });
+
+    it('editing a client that is not first: shows and saves that one; the first stays byte for byte (I2)', async () => {
+        const first = client('first', 'Erster', [key(1)], { note: 'x' });
+        const { wrapper, storedAccess } = await start({ path: '/settings/access/clients/second', access: access([first, client('second', 'Zweiter', [key(2)])]) });
+        expect(input(wrapper, 'cps-client-name').element.value).toBe('Zweiter');
+        expect(input(wrapper, 'cps-client-key-0').element.value).toBe(key(2));
+        await type(wrapper, 'cps-client-name', 'Zweiter neu');
+        await click(wrapper, TEXT.save);
+        const clients = (await storedAccess()).machineClients as unknown[];
+        expect(clients).toEqual([first, client('second', 'Zweiter neu', [key(2)])]);
+    });
+
+    it('removing key 1 of 2 and turning reading off is stored; with one key left there is no remove button (I5)', async () => {
+        const { wrapper, storedAccess } = await start({ path: '/settings/access/clients/rot', access: access([client('rot', 'Rotation', [key(1), key(2)])]) });
+        const removeButtons = () => wrapper.findAll('button').filter((b) => b.text() === 'Entfernen');
+        expect(removeButtons()).toHaveLength(2);
+        expect(removeButtons()[0]!.attributes('aria-label')).toBe('Schlüssel 1 entfernen');
+        removeButtons()[0]!.element.click();
+        await settle();
+        expect(removeButtons()).toHaveLength(0);
+        expect(input(wrapper, 'cps-client-key-0').element.value).toBe(key(2));
+        permissionToggle(wrapper).element.click();
+        await settle();
+        await click(wrapper, TEXT.save);
+        const stored = ((await storedAccess()).machineClients as { publicKeys: string[]; permissions: string[] }[])[0]!;
+        expect(stored.publicKeys).toEqual([key(2)]);
+        expect(stored.permissions).toEqual([]);
+    });
+
+    it('jumping from one client to another shows the other one; unsaved changes are asked about first (M4)', async () => {
+        const { wrapper, router } = await start({ path: '/settings/access/clients/bbb', access: access([client('aaa', 'A', [key(1)]), client('bbb', 'B', [key(2)])]) });
+        expect(input(wrapper, 'cps-client-name').element.value).toBe('B');
+        await type(wrapper, 'cps-client-name', 'B neu');
+        void router.push('/settings/access/clients/aaa');
+        await settle();
+        expect(dialog()?.querySelector('.cps-confirm__title')?.textContent).toBe(TEXT.leaveTitle);
+        await answer(TEXT.discard);
+        expect(router.currentRoute.value.path).toBe('/settings/access/clients/aaa');
+        expect(input(wrapper, 'cps-client-name').element.value).toBe('A');
+        expect(input(wrapper, 'cps-client-id').element.value).toBe('aaa');
     });
 
     it('a name is plain text: kept as typed (trimmed), never markup', async () => {

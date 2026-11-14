@@ -4,7 +4,7 @@
  * the missing ChurchTools right; „Sicherung“ and „Einrichtung“ are left out unless the person is an admin who is also
  * setup-capable (spec 3.1.3). Display only: ChurchTools and the backend decide every request.
  *
- * Two pills, each read only when the person may read it: the number of machine clients (`access`, for admins and
+ * Two pills, each read only when the person may read it: the number of machine clients (`access`, for
  * editors of `access`) and the self-test (`GET /v1/test`, admins only — the backend answers it for admins only), sent
  * through `services.backend`, which carries the token only to the configured backend. The pill shows counts only,
  * never the backend's messages.
@@ -26,7 +26,7 @@ const app = useAppState();
 const admin = computed(() => app.state.value === 'admin');
 const editor = computed(() => app.settingsEditor.value);
 const allowed = computed(() => admin.value || isSettingsEditor(editor.value));
-const canAccess = computed(() => admin.value || editor.value.access);
+const canAccess = computed(() => editor.value.access);
 const canSettings = computed(() => editor.value.settings);
 
 type Pill = { text: string; kind: 'ok' | 'neutral' | 'warning' };
@@ -108,6 +108,7 @@ const cards = computed<Card[]>(() => {
             title: t('pages.access'),
             text: t('settings.cards.access'),
             pill: clients.value === null ? null : { text: t('settings.clients', { n: clients.value }), kind: 'neutral' },
+            // The page needs the edit right (spec 4.7), admins too.
             disabledReason: canAccess.value ? undefined : missing('access'),
         },
         {
