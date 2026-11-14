@@ -1,10 +1,13 @@
+import { SECRET_KEY } from '../../scripts/sanitize-fixture.js';
+
 /**
  * Makes a response body safe for an assertion or error message (port of the backend's `Redact` helper): JSON only,
- * every value under a key that contains `token`, `secret`, `password`, `pwd` or `code` (any case) blanked at any depth,
- * cut to 300 characters; anything that isn't JSON becomes a placeholder, so no part of it is shown.
+ * every value under a secret key (the sanitizer's `SECRET_KEY`: token, secret, password, pwd, code, csrf, cookie,
+ * authorization, session, jwt, key; any case) blanked at any depth, cut to 300 characters; anything that isn't JSON
+ * becomes a placeholder, so no part of it is shown.
  */
 const MAX = 300;
-const SECRET = /token|secret|password|pwd|code/i;
+const SECRET = SECRET_KEY;
 
 function blank(value: unknown): unknown {
     if (Array.isArray(value)) return value.map(blank);

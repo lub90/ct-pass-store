@@ -24,7 +24,20 @@ export type CtContractSubject = CtApi & {
     inactiveMemberId?: number;
     /** An archived member of `knownGroupId`; must not be listed or counted. */
     archivedMemberId?: number;
+    /**
+     * The category the write cases use (the subject must see it and may write it). Without it, the first category the
+     * subject sees. The real instance names one explicitly, so probes never land in a category by accident.
+     */
+    writeCategoryId?: number;
 };
+
+/** The category the cases read and write. */
+async function caseCategory(s: CtContractSubject, moduleId: number) {
+    const categories = await s.categories(moduleId);
+    const category = s.writeCategoryId === undefined ? categories[0] : categories.find((c) => c.id === s.writeCategoryId);
+    expect(category, 'the subject sees the category the cases use').toBeDefined();
+    return category!;
+}
 
 /** The cases are written once and run against the fake now and against the real test instance later. */
 export function defineCtContract(name: string, make: () => Promise<CtContractSubject>): void {
@@ -68,7 +81,7 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
             const s = await make();
             if (!s.limited) return ctx.skip();
             const moduleId = (await s.moduleId(s.moduleKey)) as number;
-            const categoryId = (await s.categories(moduleId))[0]!.id;
+            const categoryId = (await caseCategory(s, moduleId)).id;
             await expect((await s.limited()).values(moduleId, categoryId)).rejects.toBeInstanceOf(CtForbiddenError);
         });
 
@@ -77,7 +90,7 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
             if (!s.readOnly) return ctx.skip();
             const readOnly = await s.readOnly();
             const moduleId = (await s.moduleId(s.moduleKey)) as number;
-            const categoryId = (await s.categories(moduleId))[0]!.id;
+            const categoryId = (await caseCategory(s, moduleId)).id;
             await expect(readOnly.createValue(moduleId, categoryId, '{}')).rejects.toBeInstanceOf(CtForbiddenError);
             const created = await s.createValue(moduleId, categoryId, '{"probe":0}');
             try {
@@ -92,7 +105,7 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
         it('a value survives a create, read, update, delete round trip', async () => {
             const s = await make();
             const moduleId = (await s.moduleId(s.moduleKey)) as number;
-            const category = (await s.categories(moduleId))[0];
+            const category = await caseCategory(s, moduleId);
             expect(category).toBeDefined();
             const categoryId = category!.id;
             expect(typeof category!.name).toBe('string');
@@ -113,18 +126,18 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
 
         it('a value may have 10,000 characters, counted as code points (multibyte too), not one more', async () => {
             // Measured 2026-11-14: ChurchTools counts characters (code points), not bytes or UTF-16 units: 10,000 × "ä"
-            // (20,000 bytes) and 10,000 × "😀" (20,000 UTF-16 units) are stored and read back unchanged; 10,001
+            // (20,000 bytes), "€" (30,000 bytes) and "😀" (20,000 UTF-16 units) are stored and read back unchanged; 10,001
             // characters give 400 validation.error. The repository's own limit counts UTF-16 units, so it stays below.
             const s = await make();
             const moduleId = (await s.moduleId(s.moduleKey)) as number;
-            const categoryId = (await s.categories(moduleId))[0]!.id;
+            const categoryId = (await caseCategory(s, moduleId)).id;
             // A write that wrongly succeeds is removed again before the assertion fails.
             const refused = async (write: Promise<{ id: number }>, keep?: number) => {
                 const result = await write.catch((e: unknown) => e);
                 if (!(result instanceof Error) && (result as { id: number }).id !== keep) await s.deleteValue(moduleId, categoryId, (result as { id: number }).id);
                 return result;
             };
-            for (const char of ['a', 'ä', '😀']) {
+            for (const char of ['a', 'ä', '€', '😀']) {
                 const value = char.repeat(10_000);
                 const created = await s.createValue(moduleId, categoryId, value);
                 try {

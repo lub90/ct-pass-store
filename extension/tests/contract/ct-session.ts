@@ -1,4 +1,4 @@
-import type { AxiosInstance } from 'axios';
+import type { AxiosAdapter, AxiosInstance } from 'axios';
 import { createCtApi, type CtApi } from '@/ct/api';
 import { createClient } from '@/ct/client';
 import { redactBody } from './redact';
@@ -57,7 +57,7 @@ export class CtSession {
     }
 
     async request(method: string, pathOrUrl: string, options: { json?: unknown; form?: Record<string, string>; headers?: Record<string, string>; csrf?: boolean } = {}): Promise<Answer> {
-        const url = /^https:\/\//.test(pathOrUrl) ? pathOrUrl : `${this.env.apiUrl}${pathOrUrl}`;
+        const url = /^[a-z][a-z0-9+.-]*:/i.test(pathOrUrl) ? pathOrUrl : `${this.env.apiUrl}${pathOrUrl}`;
         if (new URL(url).origin !== this.env.root) throw new Error('CtSession only talks to the test instance');
         const headers: Record<string, string> = { Accept: 'application/json', ...options.headers };
         if (this.loginToken) headers.Authorization = `Login ${this.loginToken}`;
@@ -111,31 +111,54 @@ export class CtSession {
 
 type Auth = { loginToken: string } | { jar: CookieJar } | null;
 
+interface AxiosLikeError {
+    code?: unknown;
+    response?: { status?: unknown; headers?: unknown; data?: unknown };
+}
+
+/**
+ * What of an axios error may leave the test client: an HTTP error keeps `status`, `headers` and `data` (all that
+ * `mapCtError` reads), a network error only its code. `config` and `request` hold the `Authorization` header with the
+ * login token, so they never get into an unhandled rejection or a test report.
+ */
+export function scrubAxiosError(error: unknown): unknown {
+    const e = (error ?? {}) as AxiosLikeError;
+    if (e.response && typeof e.response.status === 'number') {
+        return { response: { status: e.response.status, headers: e.response.headers, data: e.response.data } };
+    }
+    return new Error(`ChurchTools network error ${typeof e.code === 'string' ? e.code : 'without a code'}`);
+}
+
 /**
  * The app's real `CtApi` (`createClient` + `createCtApi`) in Node. Inside ChurchTools the browser carries the session
  * cookie; here a login token (`Authorization: Login`, no cookies at all — as the real-mode dev proxy sends it) or a
- * session's cookie jar stands in for it. `null`: nobody is logged in.
+ * session's cookie jar stands in for it. `null`: nobody is logged in. `adapter` (unit tests only) replaces the network.
+ * `onRequest` sees the headers of every request (to check what was sent).
  */
-export function ctApiFor(env: ContractEnv, auth: Auth): CtApi {
+export function ctApiFor(env: ContractEnv, auth: Auth, adapter?: AxiosAdapter, onRequest?: (headers: Record<string, unknown>) => void): CtApi {
     const client = createClient(env.root);
     // The client's axios instance is private; reaching into it is test-only, to attach the credentials of the run.
     const ax = (client as unknown as { ax: AxiosInstance }).ax;
+    if (adapter) ax.defaults.adapter = adapter;
     ax.interceptors.request.use((config) => {
         if (auth && 'loginToken' in auth) config.headers.set('Authorization', `Login ${auth.loginToken}`);
         if (auth && 'jar' in auth) {
             const cookie = auth.jar.header();
             if (cookie) config.headers.set('Cookie', cookie);
         }
+        onRequest?.(config.headers.toJSON());
         return config;
     });
-    if (auth && 'jar' in auth) {
-        ax.interceptors.response.use(
-            (response) => (auth.jar.store(response.headers['set-cookie']), response),
-            (error: { response?: { headers?: Record<string, string[] | undefined> } }) => {
-                auth.jar.store(error.response?.headers?.['set-cookie']);
-                return Promise.reject(error);
-            },
-        );
-    }
+    // Registered after the client's own interceptors, so it runs last and nothing sees the raw error afterwards.
+    ax.interceptors.response.use(
+        (response) => {
+            if (auth && 'jar' in auth) auth.jar.store(response.headers['set-cookie'] as string[] | undefined);
+            return response;
+        },
+        (error: { response?: { headers?: Record<string, string[] | undefined> } }) => {
+            if (auth && 'jar' in auth) auth.jar.store(error.response?.headers?.['set-cookie']);
+            return Promise.reject(scrubAxiosError(error));
+        },
+    );
     return createCtApi(client, 'ctpassstore');
 }

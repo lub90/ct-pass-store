@@ -140,8 +140,22 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
   code only) with one that sends those requests to the sandbox. The sandbox's router sets `HTTPS=on`, as a TLS
   terminator does in production, so the backend's own HTTPS check passes.
 - **Cleanup:** every temporary object is removed in `afterAll`, also after a failure; each step runs even if an earlier
-  one fails, and a failed step fails the run with „check the test instance by hand“. Objects left by a crashed run
-  are found by their name and removed at the next start.
+  one fails, and a failed step fails the run with „check the test instance by hand“.
+- **After a crash** (the test process killed, the machine off), the next run recovers what it can:
+  - OAuth clients named „ctpassstore extension contract test“ are deleted, each after removing the normal test user's
+    „login to external system“ right for it (the only right the run grants).
+  - Groups of that name are deleted.
+  - Sandbox folders (`$TMPDIR/cps-backend-sandbox-*`) are deleted. The PHP server is killed when the test process exits
+    or gets `SIGINT`/`SIGTERM`; after a `SIGKILL` of the test process it keeps running until you stop it
+    (`pkill -f 'php -S 127.0.0.1'`).
+  - **Not recovered:** a password entry the backend cases left for one of the touched persons (the normal test user
+    and the active, archived and deleted fixture persons). The next run fails closed: it refuses to start and names
+    those persons. Delete the entry by hand (as an admin in the extension, or the value in `passwordStore`).
+  - A probe value in `passwordStore` without `personId` (from the ChurchTools cases) is not found automatically either;
+    it is harmless to the backend but should be deleted by hand.
+- **One contract run per instance at a time.** The runs (this suite and the backend's PHP contract suite) grant and
+  remove the same right and look for leftovers by name; two runs at once would undo each other's objects. There is no
+  lock.
 - **Skipped cases**, by design: the read-only-rights case (no test user may read without writing), the
   primary-password cases while the instance doesn't require it, and the cases for the other value of
   `allowCustomPassword`. Vitest lists them as skipped.

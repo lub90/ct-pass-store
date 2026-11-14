@@ -84,6 +84,7 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
         if (!permissions[right].includes(categoryId)) throw new CtForbiddenError(`Missing right: ${right}`, right);
     };
     // Measured: ChurchTools stores at most 10,000 characters (code points) per value; more is `400 validation.error`.
+    // ASSUMPTION (not measured): the right is checked before the size, so a forbidden write is a 403 whatever its size.
     const requireSize = (value: string) => {
         if ([...value].length > 10_000) throw new CtHttpError(400, 'validation.error');
     };

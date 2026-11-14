@@ -49,6 +49,7 @@ defineCtContract('in-memory fake', async () => ({
         createFakeChurchTools(seed({ permissions: { ...all([5]), 'create custom data': [], 'edit custom data': [], 'delete custom data': [] } })),
     inactiveMemberId: 4,
     archivedMemberId: 5,
+    writeCategoryId: 5,
 }));
 
 describe('fake controls', () => {

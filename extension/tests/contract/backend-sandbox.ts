@@ -13,6 +13,8 @@ import { BACKEND_DIR, type ContractEnv } from './setup';
  */
 export const SANDBOX_BASE = 'https://backend.contract.invalid';
 
+const DIR_PREFIX = 'cps-backend-sandbox-';
+
 export interface SandboxOptions {
     oauthClientId: string;
     oauthClientSecret: string;
@@ -36,6 +38,8 @@ export class BackendSandbox {
     private process: ChildProcess | null = null;
     private dir: string | null = null;
     private port = 0;
+    private onExit: (() => void) | null = null;
+    private onSignal: ((signal: NodeJS.Signals) => void) | null = null;
 
     private readonly env: ContractEnv;
     private readonly options: SandboxOptions;
@@ -51,7 +55,11 @@ export class BackendSandbox {
 
     async start(): Promise<void> {
         this.port = await freePort();
-        this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-backend-sandbox-'));
+        // Folders of a crashed run (one contract run per instance at a time, so none of them is in use).
+        for (const name of fs.readdirSync(os.tmpdir())) {
+            if (name.startsWith(DIR_PREFIX)) fs.rmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
+        }
+        this.dir = fs.mkdtempSync(path.join(os.tmpdir(), DIR_PREFIX));
         fs.mkdirSync(path.join(this.dir, 'cache'), { mode: 0o700 });
         fs.mkdirSync(path.join(this.dir, 'logs'), { mode: 0o700 });
         const childEnv: NodeJS.ProcessEnv = {
@@ -72,6 +80,19 @@ export class BackendSandbox {
             cwd: path.join(BACKEND_DIR, 'public'),
             stdio: 'ignore',
         });
+        // If the test process ends without afterAll (Ctrl-C, a crash), the server must not keep running with the token.
+        const child = this.process;
+        this.onExit = () => {
+            if (child.exitCode === null) child.kill('SIGKILL');
+        };
+        this.onSignal = (signal: NodeJS.Signals) => {
+            this.onExit?.();
+            this.removeExitHooks();
+            process.kill(process.pid, signal);
+        };
+        process.once('exit', this.onExit);
+        process.once('SIGINT', this.onSignal);
+        process.once('SIGTERM', this.onSignal);
         // An unknown route answers 404 once the app is up; a misconfigured backend answers 500 to everything.
         let last = 'no answer';
         for (let i = 0; i < 50; i++) {
@@ -87,7 +108,18 @@ export class BackendSandbox {
         throw new Error(`The backend sandbox did not start within 5 s (${last}).`);
     }
 
+    private removeExitHooks(): void {
+        if (this.onExit) process.removeListener('exit', this.onExit);
+        if (this.onSignal) {
+            process.removeListener('SIGINT', this.onSignal);
+            process.removeListener('SIGTERM', this.onSignal);
+        }
+        this.onExit = null;
+        this.onSignal = null;
+    }
+
     async stop(): Promise<void> {
+        this.removeExitHooks();
         const child = this.process;
         this.process = null;
         if (child && child.exitCode === null) {

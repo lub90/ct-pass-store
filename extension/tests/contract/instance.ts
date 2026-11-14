@@ -1,3 +1,4 @@
+import type { Cleanup } from './cleanup';
 import { CtSession, dataOf, listOf } from './ct-session';
 import type { ContractEnv, FixtureUser } from './setup';
 
@@ -5,37 +6,6 @@ import type { ContractEnv, FixtureUser } from './setup';
 export const TEMP_NAME = 'ctpassstore extension contract test';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-/**
- * Undo steps, run last-in first-out. Every step runs even when an earlier one fails; the failures are thrown together
- * at the end, so a cleanup problem is never hidden. `done` lists what was removed or restored (for the report).
- */
-export class Cleanup {
-    private steps: { label: string; run: () => Promise<void> }[] = [];
-    readonly done: string[] = [];
-
-    add(label: string, run: () => Promise<void>): void {
-        this.steps.push({ label, run });
-    }
-
-    async runAll(): Promise<void> {
-        const failures: string[] = [];
-        while (this.steps.length > 0) {
-            const step = this.steps.pop()!;
-            try {
-                await step.run();
-                this.done.push(step.label);
-            } catch (e) {
-                failures.push(`${step.label}: ${e instanceof Error ? e.message : String(e)}`);
-            }
-        }
-        if (this.done.length > 0) console.info(`[contract cleanup] ${this.done.join('; ')}`);
-        if (failures.length > 0) {
-            console.error(`[contract cleanup] WARNING, check by hand: ${failures.join('; ')}`);
-            throw new Error(`Cleanup failed, check the test instance by hand: ${failures.join('; ')}`);
-        }
-    }
-}
 
 export async function adminSession(env: ContractEnv): Promise<CtSession> {
     return new CtSession(env).login(env.admin);
@@ -107,10 +77,29 @@ async function deleteOAuthClient(admin: CtSession, identifier: string): Promise<
     if ((await oauthClients(admin)).some((c) => c.identifier === identifier)) throw new Error('the temporary OAuth client is still listed after DELETE');
 }
 
-/** A confidential OAuth client with the extension's deep redirect URI, removed by `cleanup`. The secret stays in memory. */
-export async function createTempOAuthClient(env: ContractEnv, admin: CtSession, cleanup: Cleanup): Promise<TempOAuthClient> {
-    for (const c of await oauthClients(admin)) {
-        if (c.name === TEMP_NAME && typeof c.identifier === 'string') await deleteOAuthClient(admin, c.identifier);
+/** The auth id of „login to external system“ (from the rights master data). */
+async function loginAuthId(env: ContractEnv, admin: CtSession): Promise<number> {
+    const master = await admin.ok('POST', `${env.root}/index.php?q=churchauth/ajax`, { form: { func: 'getMasterData' }, csrf: true });
+    const table = (master.json as { data?: { auth_table?: Record<string, Record<string, { id?: unknown }>> } }).data?.auth_table;
+    const authId = table?.churchcore?.['login to external system']?.id;
+    if (typeof authId !== 'number') throw new Error('no auth id for "login to external system" in the rights master data');
+    return authId;
+}
+
+/**
+ * A confidential OAuth client with the extension's deep redirect URI, removed by `cleanup`. The secret stays in memory.
+ * Clients named `TEMP_NAME` left by a crashed run are removed first, after `user`'s login right for each of them
+ * (the right is granted for nothing else, so this removes only what such a run left).
+ */
+export async function createTempOAuthClient(env: ContractEnv, admin: CtSession, cleanup: Cleanup, user: FixtureUser): Promise<TempOAuthClient> {
+    const stale = (await oauthClients(admin)).filter((c) => c.name === TEMP_NAME && typeof c.identifier === 'string');
+    if (stale.length > 0) {
+        const authId = await loginAuthId(env, admin);
+        for (const c of stale) {
+            const revoke = await admin.request('DELETE', `/permissions/person/${user.id}`, { json: { authId, dataId: [Number(c.id)] }, csrf: true });
+            if (revoke.status >= 500) throw new Error(`removing the login right for a stale client answered ${revoke.status}`);
+            await deleteOAuthClient(admin, c.identifier as string);
+        }
     }
     const redirectUri = `${env.root}/ccm/ctpassstore/auth/callback`;
     const created = await admin.ok('POST', '/oauthclients', { json: { name: TEMP_NAME, redirectUri, confidential: true }, csrf: true });
@@ -137,10 +126,7 @@ async function grants(admin: CtSession, personId: number): Promise<string[]> {
  * that all of the person's own grants are as before.
  */
 export async function grantLoginRight(env: ContractEnv, admin: CtSession, cleanup: Cleanup, user: FixtureUser, client: TempOAuthClient): Promise<void> {
-    const master = await admin.ok('POST', `${env.root}/index.php?q=churchauth/ajax`, { form: { func: 'getMasterData' }, csrf: true });
-    const table = (master.json as { data?: { auth_table?: Record<string, Record<string, { id?: unknown }>> } }).data?.auth_table;
-    const authId = table?.churchcore?.['login to external system']?.id;
-    if (typeof authId !== 'number') throw new Error('no auth id for "login to external system" in the rights master data');
+    const authId = await loginAuthId(env, admin);
     const before = await grants(admin, user.id);
     const body = { authId, dataId: [client.numericId] };
     cleanup.add(`login right of person ${user.id} for the temporary client removed, own grants as before`, async () => {

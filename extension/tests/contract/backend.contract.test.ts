@@ -6,7 +6,8 @@ import { BackendProblem } from '@/backend/problems';
 import { tokenPerson } from '@/backend/jwt';
 import { BackendSandbox, SANDBOX_BASE } from './backend-sandbox';
 import { ctApiFor } from './ct-session';
-import { Cleanup, adminSession, createTempOAuthClient, grantLoginRight, type TempOAuthClient } from './instance';
+import { Cleanup } from './cleanup';
+import { adminSession, createTempOAuthClient, grantLoginRight, type TempOAuthClient } from './instance';
 import { exchangeCode, fetchOAuthCode } from './oauth-code';
 import { record } from './record';
 import { redactBody } from './redact';
@@ -84,7 +85,7 @@ beforeAll(async () => {
     settings = await readSettings();
     const admin = await adminSession(env);
     try {
-        client = await createTempOAuthClient(env, admin, cleanup);
+        client = await createTempOAuthClient(env, admin, cleanup, env.normal);
         await grantLoginRight(env, admin, cleanup, env.normal, client);
         sandbox = new BackendSandbox(env, { oauthClientId: client.identifier, oauthClientSecret: client.secret });
         cleanup.add('password entries of the touched persons removed', async () => {
@@ -150,14 +151,13 @@ defineBackendContract('real backend, admin (token minted as the login issues it)
 
 describe('ChurchTools OAuth, measured on the test instance', () => {
     it('refuses to exchange a code without the client secret (invalid_request) or with a wrong one (invalid_client)', async () => {
-        const cases: [secret: string | null, error: string][] = [
-            [null, 'invalid_request'],
-            [`${client.secret.slice(0, -1)}${client.secret.endsWith('x') ? 'y' : 'x'}`, 'invalid_client'],
+        const cases: [secret: string | null, status: number, error: string][] = [
+            [null, 400, 'invalid_request'],
+            [`${client.secret.slice(0, -1)}${client.secret.endsWith('x') ? 'y' : 'x'}`, 401, 'invalid_client'],
         ];
-        for (const [secret, error] of cases) {
+        for (const [secret, status, error] of cases) {
             const answer = await exchangeCode(env, client.identifier, secret, client.redirectUri, await freshCode());
-            expect(answer.status, redactBody(answer.text)).toBeGreaterThanOrEqual(400);
-            expect(answer.status).toBeLessThan(500);
+            expect(answer.status, redactBody(answer.text)).toBe(status);
             expect((answer.json as { error?: unknown }).error, redactBody(answer.text)).toBe(error);
             expect((answer.json as { access_token?: unknown }).access_token).toBeUndefined();
             record(env, `oauth-exchange-${secret === null ? 'without' : 'wrong'}-secret`, { status: answer.status, body: answer.json });
@@ -198,9 +198,18 @@ describe('Backend on the wire, as the browser sees it', () => {
         const methods = (answer.headers.get('Access-Control-Allow-Methods') ?? '').split(',').map((m) => m.trim().toUpperCase());
         const allowed = (answer.headers.get('Access-Control-Allow-Headers') ?? '').split(',').map((h) => h.trim().toLowerCase());
         record(env, 'backend-preflight', Object.fromEntries(answer.headers));
-        // Every request the contract runs above sent through the app's client: its methods and its non-safelisted
-        // headers (Accept is safelisted) must pass the browser's CORS check.
-        expect(sandbox.seen.length).toBeGreaterThan(10);
+        // The app's client sends one request of every kind here (independent of the other cases): its methods and
+        // its non-safelisted headers (Accept is safelisted) must pass the browser's CORS check.
+        sandbox.seen.length = 0;
+        const token = sandbox.mintToken(env.normal.id, env.normal.username, false);
+        const user = api(() => token);
+        await user.getEntry(env.normal.id);
+        await user.deleteEntry(env.normal.id, settings.requirePasswordForPasswordChange ? env.normal.pwd : undefined);
+        await user.putEntry(env.normal.id, { secondaryPwd: 'abc' }).catch((e: unknown) => expect(e).toMatchObject({ slug: expect.stringMatching(/password-invalid|custom-password-not-allowed|primary-password-required/) }));
+        await user.selfTest().catch((e: unknown) => expect(e).toMatchObject({ slug: 'forbidden' }));
+        await api(() => null).login('not-a-code', 'verifier', client.redirectUri).catch((e: unknown) => expect(e).toMatchObject({ slug: 'oauth-code-invalid' }));
+        expect(new Set(sandbox.seen.map((r) => r.method.toUpperCase()))).toEqual(new Set(['GET', 'DELETE', 'PUT', 'POST']));
+        expect(sandbox.seen.some((r) => r.headerNames.includes('authorization')) && sandbox.seen.some((r) => r.headerNames.includes('content-type'))).toBe(true);
         for (const request of sandbox.seen) {
             expect(methods, request.method).toContain(request.method.toUpperCase());
             for (const name of request.headerNames) if (name !== 'accept') expect(allowed, name).toContain(name);

@@ -9,6 +9,8 @@ export default defineConfig({
     test: {
         environment: 'node',
         include: ['tests/contract/**/*.test.ts'],
+        // The helpers' own unit tests run in the unit suite (vitest.config.ts).
+        exclude: ['tests/contract/**/*.unit.test.ts', '**/node_modules/**'],
         globalSetup: ['tests/contract/setup.ts'],
         passWithNoTests: false,
         // The files share the test instance (rights, temporary objects): one at a time.

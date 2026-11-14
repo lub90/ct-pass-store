@@ -7,17 +7,20 @@ import fs from 'node:fs';
 import { URL, pathToFileURL } from 'node:url';
 
 /** Keys whose value is a secret, whatever it looks like (as the backend's Redact helper, plus a few more). */
-const SECRET_KEY = /token|secret|password|pwd|code|csrf|cookie|authorization|session|jwt|key/i;
-/** Keys holding names or contact data of a person or group. */
-const PERSONAL_KEY = /^(first|last|nick|user|birth|display)?name$|^title$|^initials$|^cmsuserid$|^login|^birth|^e-?mail|^(mobile|phone|fax|street|city|zip|address)/i;
+export const SECRET_KEY = /token|secret|password|pwd|code|csrf|cookie|authorization|session|jwt|key/i;
+/** Keys holding names, contact data or other personal data of a person or group (prefix match for contact fields). */
+const PERSONAL_KEY =
+    /^(first|last|nick|user|birth|display)?name$|^title$|^initials$|^cmsuserid$|^login|^birth|^dateofbirth$|^e-?mail|^(mobile|phone|fax|street|city|zip|address|country|comment|memo|job|sexid|imageurl|familyimageurl)/i;
 
 const JWT = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 /**
- * Long runs of hex or base64(url) characters: login tokens, hashes, fingerprints, ciphertexts. A run with `/` is only
- * opaque if it also has `+`, `=` or several digits, so URL paths (problem types, API paths) stay readable.
+ * Long runs of hex or base64(url) characters: login tokens, hashes, fingerprints, ciphertexts. Only one shape of run is
+ * kept: a URL path (problem types, API paths), i.e. a run with a `/` whose segments are all lower-case letters, digits,
+ * `-` and `_`. Random base64 practically never looks like that (every one of 32+ characters would have to be lower
+ * case or a digit), so it is replaced whatever its digits, padding or slashes.
  */
 const LONG_RUN = /[A-Za-z0-9+/_-]{32,}={0,2}/g;
-const opaque = (run) => !run.includes('/') || /[+=]/.test(run) || (run.match(/[0-9]/g) ?? []).length >= 6;
+const opaque = (run) => !(run.includes('/') && run.split('/').every((segment) => /^[a-z0-9_-]*$/.test(segment)));
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -58,7 +61,14 @@ function main(argv) {
     const apiUrl = process.env.CT_API_URL;
     if (!input || !output) throw new Error('usage: sanitize-fixture.js <in.json> <out.json>');
     if (!apiUrl) throw new Error('CT_API_URL is not set; it names the host to remove');
-    const sanitized = sanitizeFixture(JSON.parse(fs.readFileSync(input, 'utf8')), { host: new URL(apiUrl).host });
+    let parsed;
+    try {
+        parsed = JSON.parse(fs.readFileSync(input, 'utf8'));
+    } catch {
+        // Without the parser's message: it can quote the input.
+        throw new Error(`${input} is not valid JSON`);
+    }
+    const sanitized = sanitizeFixture(parsed, { host: new URL(apiUrl).host });
     fs.writeFileSync(output, `${JSON.stringify(sanitized, null, 2)}\n`, { mode: 0o600 });
     fs.chmodSync(output, 0o600);
 }
