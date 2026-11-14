@@ -1,5 +1,6 @@
 import * as v from 'valibot';
 import { decodeKey, readMachineClients, type UnusableClient } from '@/model/machine-clients';
+import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
 import { AccessSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { KvBackend } from './kv';
@@ -84,6 +85,20 @@ export class ExtensionStore {
      */
     saveAccess(next: AccessV2, expectedRevision: number, dropUnusable: readonly number[] = []): Promise<void> {
         return this.save('access', AccessSchema, next, expectedRevision, dropUnusable);
+    }
+
+    /** Spec 6.3 on the newest `settings` value and the category names. KV errors propagate. */
+    async oldLayout(): Promise<boolean> {
+        const [names, { newest }] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
+        let raw: unknown = null;
+        if (newest) {
+            try {
+                raw = JSON.parse(newest.value);
+            } catch {
+                raw = null;
+            }
+        }
+        return isOldLayout(raw, names);
     }
 
     /** Highest value ID first. */

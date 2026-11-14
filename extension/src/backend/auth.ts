@@ -26,6 +26,8 @@ export const LOGIN_KEY = 'cps-login';
 export const TOKEN_KEY = 'cps-token';
 /** Epoch ms of the last completed page login (loop guard, `recentPageLogin`). */
 export const LAST_LOGIN_KEY = 'cps-login-done';
+/** Epoch ms of the last retried page login after `oauth-code-invalid` (spec 8.2, `claimLoginRetry`). */
+export const LOGIN_RETRY_KEY = 'cps-login-retry';
 /** A token problem this soon after a page login doesn't start another one. */
 const LOGIN_LOOP_MS = 60_000;
 /** `type` of the message the callback popup posts to its opener. */
@@ -238,6 +240,21 @@ export class Auth {
         return age >= 0 && age < LOGIN_LOOP_MS;
     }
 
+    /**
+     * Spec 8.2: after `oauth-code-invalid` the login is retried once. True (and remembered for 60 s in this tab) if no
+     * retry happened in the last 60 s; false otherwise, and always false when the marker can't be stored, so a broken
+     * storage can't cause a loop. A completed page login clears it.
+     */
+    claimLoginRetry(): boolean {
+        const raw = this.read(LOGIN_RETRY_KEY);
+        if (raw !== null && /^\d+$/.test(raw)) {
+            const age = this.env.now() - Number(raw);
+            if (age < LOGIN_LOOP_MS) return false;
+        }
+        const stamp = String(this.env.now());
+        return this.write(LOGIN_RETRY_KEY, stamp) && this.read(LOGIN_RETRY_KEY) === stamp;
+    }
+
     /** Called after `configure()`, `bindPerson()` and every new token (not on `clear()`); returns the unsubscribe. */
     subscribe(listener: () => void): () => void {
         this.listeners.add(listener);
@@ -298,6 +315,7 @@ export class Auth {
         const result = await this.backend(login.backendUrl).login(code, login.verifier, this.redirectUri());
         this.storeToken(result, login.backendUrl);
         this.write(LAST_LOGIN_KEY, String(this.env.now()));
+        this.remove(LOGIN_RETRY_KEY);
         return login.returnPath;
     }
 

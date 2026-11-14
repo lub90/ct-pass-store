@@ -22,6 +22,34 @@ const setup = (values: string[] = [JSON.stringify(settings)]) => {
     return { kv, store: new ExtensionStore(kv) };
 };
 
+describe('ExtensionStore.oldLayout (spec 6.3)', () => {
+    const old = JSON.stringify({ adminUsers: [1], readAccessUsers: [2] });
+    it('is true for an unversioned settings value with old fields', async () => {
+        expect(await new ExtensionStore(new MemoryKv({ settings: [old] })).oldLayout()).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ readAccessUsers: [] })] })).oldLayout()).toBe(true);
+    });
+    it('is true when a setupCompleted category exists', async () => {
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings)], setupCompleted: [] })).oldLayout()).toBe(true);
+    });
+    it('reads the newest settings value', async () => {
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify(settings), old] })).oldLayout()).toBe(true);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [old, JSON.stringify(settings)] })).oldLayout()).toBe(false);
+    });
+    it('is false for the new layout, nothing stored and broken JSON', async () => {
+        expect(await setup().store.oldLayout()).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv()).oldLayout()).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv({ settings: ['{nope'] })).oldLayout()).toBe(false);
+        expect(await new ExtensionStore(new MemoryKv({ settings: [JSON.stringify({ ...settings, adminUsers: [1] })] })).oldLayout()).toBe(false);
+    });
+    it('passes KV errors on (an outage is not a layout)', async () => {
+        const kv = new MemoryKv({ settings: [old] });
+        kv.categoryNames = async () => {
+            throw new CtForbiddenError();
+        };
+        await expect(new ExtensionStore(kv).oldLayout()).rejects.toBeInstanceOf(CtForbiddenError);
+    });
+});
+
 describe('ExtensionStore reads', () => {
     it('reports a missing value', async () => {
         expect(await setup([]).store.readSettings()).toEqual({ state: 'missing' });

@@ -4,6 +4,7 @@ import type { BackendApi, LoginResult } from './api';
 import {
     Auth,
     LAST_LOGIN_KEY,
+    LOGIN_RETRY_KEY,
     LOGIN_KEY,
     LoginStateError,
     LoginUnavailable,
@@ -541,6 +542,57 @@ describe('Auth.recentPageLogin', () => {
         h.send({ origin: ORIGIN, source: h.popup, data: { type: POPUP_MESSAGE, code: 'c', state } });
         await done;
         expect(auth.recentPageLogin()).toBe(false);
+    });
+});
+
+describe('Auth.claimLoginRetry (spec 8.2: oauth-code-invalid retries the login once)', () => {
+    it('allows one retry, then none for 60 s, also on the next page', () => {
+        const { h, auth } = setup();
+        expect(auth.claimLoginRetry()).toBe(true);
+        expect(h.storage.getItem(LOGIN_RETRY_KEY)).toBe(String(NOW));
+        expect(auth.claimLoginRetry()).toBe(false);
+        h.now.value = NOW + 59_999;
+        expect(new Auth(fakeBackend().factory, h.env).claimLoginRetry()).toBe(false);
+        h.now.value = NOW + 60_000;
+        expect(auth.claimLoginRetry()).toBe(true);
+        expect(auth.claimLoginRetry()).toBe(false);
+    });
+
+    it('allows a retry again after a completed page login', async () => {
+        const { h, auth } = setup();
+        expect(auth.claimLoginRetry()).toBe(true);
+        const { stored } = await startLogin(auth, h);
+        await auth.completePageLogin({ code: 'c', state: stored.state });
+        expect(h.storage.getItem(LOGIN_RETRY_KEY)).toBeNull();
+        expect(auth.claimLoginRetry()).toBe(true);
+    });
+
+    it('a failed page login keeps the marker', async () => {
+        const { h, auth } = setup();
+        expect(auth.claimLoginRetry()).toBe(true);
+        await expect(auth.completePageLogin({ code: 'c', state: 'nope' })).rejects.toBeInstanceOf(LoginStateError);
+        expect(h.storage.getItem(LOGIN_RETRY_KEY)).toBe(String(NOW));
+    });
+
+    it('never retries without a storage that keeps the marker (no loop)', () => {
+        const { h, auth } = setup();
+        h.env.storage = () => null;
+        expect(auth.claimLoginRetry()).toBe(false);
+        const dropping = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+        h.env.storage = () => dropping;
+        expect(auth.claimLoginRetry()).toBe(false);
+        h.env.storage = () => {
+            throw new Error('denied');
+        };
+        expect(auth.claimLoginRetry()).toBe(false);
+    });
+
+    it('treats a marker in the future or garbage as no retry left until it is old enough', () => {
+        const { h, auth } = setup();
+        h.storage.setItem(LOGIN_RETRY_KEY, String(NOW + 5));
+        expect(auth.claimLoginRetry()).toBe(false);
+        h.storage.setItem(LOGIN_RETRY_KEY, 'x');
+        expect(auth.claimLoginRetry()).toBe(true);
     });
 });
 
