@@ -45,7 +45,18 @@ describe('missingPrerequisites', () => {
     });
 
     it('refuses an address that is not https://<instance>/api', () => {
-        for (const url of ['http://test.church.tools/api', 'https://user:pw@test.church.tools/api', 'https://test.church.tools/', 'https://test.church.tools/apix', 'not a url']) {
+        for (const url of [
+            'http://test.church.tools/api',
+            'https://user:pw@test.church.tools/api',
+            'https://user@test.church.tools/api',
+            'https://:pw@test.church.tools/api',
+            'https://test.church.tools/',
+            'https://test.church.tools/apix',
+            'https://test.church.tools/x/api',
+            'https://test.church.tools/api?x=1',
+            'https://test.church.tools/api#x',
+            'not a url',
+        ]) {
             expect(missingPrerequisites({ ...GOOD, CT_API_URL: url }, deps), url).toEqual([expect.stringMatching(/CT_API_URL as https:\/\/<instance>\/api/)]);
         }
     });
@@ -64,7 +75,7 @@ describe('missingPrerequisites', () => {
     });
 
     it('names a fixture without a usable first user', () => {
-        for (const bad of [[], [{ id: 947, username: 'x' }], [{ id: '947', username: 'x', pwd: PWD }], [{ id: 0, username: 'x', pwd: PWD }], { id: 947, username: 'x', pwd: PWD }, '{broken']) {
+        for (const bad of [[], [{ id: 947, username: 'x' }], [{ id: '947', username: 'x', pwd: PWD }], [{ id: 0, username: 'x', pwd: PWD }], [{ id: 947, username: '', pwd: PWD }], [{ id: 947, username: 'x', pwd: '' }], { id: 947, username: 'x', pwd: PWD }, '{broken']) {
             write('normal_users.json', bad);
             expect(missingPrerequisites(GOOD, deps), JSON.stringify(bad)).toEqual([expect.stringMatching(/first user .*normal_users\.json/)]);
         }

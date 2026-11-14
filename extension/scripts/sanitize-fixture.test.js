@@ -80,6 +80,14 @@ describe('sanitizeFixture', () => {
         expect(sanitizeFixture({ type, path }, { host: HOST })).toEqual({ type, path });
     });
 
+    it('replaces a hex segment of 32 or more characters inside a URL path', () => {
+        const hex = 'ab12'.repeat(16);
+        expect(sanitizeFixture({ u: `/files/${hex}/download`, v: `/files/${'ab12'.repeat(7)}abc/x` }, { host: HOST })).toEqual({
+            u: '<hash>',
+            v: `/files/${'ab12'.repeat(7)}abc/x`,
+        });
+    });
+
     it('replaces e-mail addresses found in strings', () => {
         expect(sanitizeFixture({ detail: 'mail anna.b@example.org now' }, { host: HOST })).toEqual({ detail: 'mail <email> now' });
     });
@@ -179,7 +187,7 @@ describe('sanitize-fixture CLI', () => {
         fs.writeFileSync(input, '{"accessToken": "abc"');
         const run = spawnSync(process.execPath, [script, input, output], { env: { ...process.env, CT_API_URL: `https://${HOST}/api` }, encoding: 'utf8' });
         expect(run.status).not.toBe(0);
-        expect(run.stderr).not.toContain('abc');
+        expect(run.stderr.trim()).toBe(`sanitize-fixture: ${input} is not valid JSON`);
         expect(fs.existsSync(output)).toBe(false);
     });
 

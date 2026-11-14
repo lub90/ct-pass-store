@@ -16,11 +16,12 @@ const JWT = /eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g;
 /**
  * Long runs of hex or base64(url) characters: login tokens, hashes, fingerprints, ciphertexts. Only one shape of run is
  * kept: a URL path (problem types, API paths), i.e. a run with a `/` whose segments are all lower-case letters, digits,
- * `-` and `_`. Random base64 practically never looks like that (every one of 32+ characters would have to be lower
+ * `-` and `_`, none with 32 or more hex characters (a hash in a path, e.g. `/files/<sha256>`). Random base64 practically never looks like that (every one of 32+ characters would have to be lower
  * case or a digit), so it is replaced whatever its digits, padding or slashes.
  */
 const LONG_RUN = /[A-Za-z0-9+/_-]{32,}={0,2}/g;
-const opaque = (run) => !(run.includes('/') && run.split('/').every((segment) => /^[a-z0-9_-]*$/.test(segment)));
+const opaque = (run) =>
+    !(run.includes('/') && run.split('/').every((segment) => /^[a-z0-9_-]*$/.test(segment) && !/[a-f0-9]{32,}/.test(segment)));
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 const escapeRegExp = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

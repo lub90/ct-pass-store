@@ -56,9 +56,7 @@ export class BackendSandbox {
     async start(): Promise<void> {
         this.port = await freePort();
         // Folders of a crashed run (one contract run per instance at a time, so none of them is in use).
-        for (const name of fs.readdirSync(os.tmpdir())) {
-            if (name.startsWith(DIR_PREFIX)) fs.rmSync(path.join(os.tmpdir(), name), { recursive: true, force: true });
-        }
+        sweepStaleDirs(os.tmpdir(), DIR_PREFIX, process.getuid?.() ?? -1);
         this.dir = fs.mkdtempSync(path.join(os.tmpdir(), DIR_PREFIX));
         fs.mkdirSync(path.join(this.dir, 'cache'), { mode: 0o700 });
         fs.mkdirSync(path.join(this.dir, 'logs'), { mode: 0o700 });
@@ -154,6 +152,24 @@ export class BackendSandbox {
         const part = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
         const unsigned = `${part({ typ: 'JWT', alg: 'HS256' })}.${part(claims)}`;
         return `${unsigned}.${createHmac('sha256', this.jwtSecret).update(unsigned).digest('base64url')}`;
+    }
+}
+
+/**
+ * Deletes the folders in `dir` whose name starts with `prefix` and that belong to `uid` (another user's folders are
+ * none of this run's business). A folder that can't be deleted is skipped; the sweep goes on.
+ */
+export function sweepStaleDirs(dir: string, prefix: string, uid: number): void {
+    for (const name of fs.readdirSync(dir)) {
+        if (!name.startsWith(prefix)) continue;
+        const full = path.join(dir, name);
+        try {
+            const stat = fs.lstatSync(full);
+            if (!stat.isDirectory() || stat.uid !== uid) continue;
+            fs.rmSync(full, { recursive: true, force: true });
+        } catch {
+            // left for the next run or for a person; never a reason to stop
+        }
     }
 }
 

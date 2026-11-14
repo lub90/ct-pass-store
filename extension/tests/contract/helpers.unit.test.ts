@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { sweepStaleDirs } from './backend-sandbox';
 import { Cleanup } from './cleanup';
 import { CtSession, ctApiFor, scrubAxiosError } from './ct-session';
 import { record } from './record';
@@ -175,9 +176,24 @@ describe('the test ChurchTools client never carries the token in an error', () =
     });
 
     it('scrubAxiosError keeps status, headers and data of an HTTP error, without config or request', () => {
-        const scrubbed = scrubAxiosError(axiosError({ status: 403, headers: { 'retry-after': '5' }, data: { message: 'no' }, config: { headers: { Authorization: TOKEN } }, request: {} }));
-        expect(scrubbed).toEqual({ response: { status: 403, headers: { 'retry-after': '5' }, data: { message: 'no' } } });
+        const scrubbed = scrubAxiosError(
+            axiosError({ status: 429, headers: { 'Retry-After': '5', 'set-cookie': [`ChurchTools_x=${TOKEN}`] }, data: { message: 'no' }, config: { headers: { Authorization: TOKEN } }, request: {} }),
+        );
+        expect(scrubbed).toEqual({ response: { status: 429, headers: { 'retry-after': '5' }, data: { message: 'no' } } });
         expect(inspect(scrubbed, { depth: 10 })).not.toContain(TOKEN);
+    });
+
+    it('scrubAxiosError reads retry-after from axios headers with get(), and keeps no headers without it', () => {
+        const withGet = { get: (n: string) => (n.toLowerCase() === 'retry-after' ? '7' : `ChurchTools_x=${TOKEN}`) };
+        expect(scrubAxiosError(axiosError({ status: 429, headers: withGet, data: {} }))).toEqual({ response: { status: 429, headers: { 'retry-after': '7' }, data: {} } });
+        expect(scrubAxiosError(axiosError({ status: 500, headers: { 'set-cookie': ['a=b'] }, data: {} }))).toEqual({ response: { status: 500, headers: {}, data: {} } });
+    });
+
+    it('a 429 through ctApiFor still gives the waiting time', async () => {
+        const api = ctApiFor(env, { loginToken: TOKEN }, (config) =>
+            Promise.reject(Object.assign(axiosError({ status: 429, headers: { 'retry-after': '120', 'set-cookie': ['a=b'] }, data: {}, config }), { config })),
+        );
+        expect(await api.whoami().catch((e: unknown) => e)).toMatchObject({ name: 'CtRateLimitedError', retryAfterMs: 120_000 });
     });
 
     it('a failing request through ctApiFor rejects without the token anywhere in the error', async () => {
@@ -193,5 +209,32 @@ describe('the test ChurchTools client never carries the token in an error', () =
         const error = await api.whoami().catch((e: unknown) => e);
         expect(error).toMatchObject({ name: 'CtForbiddenError' });
         expect(inspect(error, { depth: 10 })).not.toContain(TOKEN);
+    });
+});
+
+describe('sweepStaleDirs', () => {
+    let tmp: string;
+    beforeEach(() => {
+        tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'contract-sweep-'));
+    });
+    afterEach(() => {
+        for (const d of fs.readdirSync(tmp, { recursive: true }) as string[]) fs.chmodSync(path.join(tmp, d), 0o700);
+        fs.rmSync(tmp, { recursive: true, force: true });
+    });
+
+    it('deletes the prefixed folders of this user, keeps others, and goes on past one it cannot delete', () => {
+        for (const d of ['cps-backend-sandbox-a', 'cps-backend-sandbox-b', 'cps-backend-sandbox-locked', 'other-folder']) fs.mkdirSync(path.join(tmp, d));
+        // A folder whose content can't be removed (its subfolder isn't writable).
+        fs.mkdirSync(path.join(tmp, 'cps-backend-sandbox-locked/inner'));
+        fs.writeFileSync(path.join(tmp, 'cps-backend-sandbox-locked/inner/f'), 'x');
+        fs.chmodSync(path.join(tmp, 'cps-backend-sandbox-locked/inner'), 0o500);
+        sweepStaleDirs(tmp, 'cps-backend-sandbox-', process.getuid!());
+        expect(fs.readdirSync(tmp).sort()).toEqual(['cps-backend-sandbox-locked', 'other-folder']);
+    });
+
+    it('leaves folders of another user alone', () => {
+        fs.mkdirSync(path.join(tmp, 'cps-backend-sandbox-a'));
+        sweepStaleDirs(tmp, 'cps-backend-sandbox-', process.getuid!() + 1);
+        expect(fs.readdirSync(tmp)).toEqual(['cps-backend-sandbox-a']);
     });
 });

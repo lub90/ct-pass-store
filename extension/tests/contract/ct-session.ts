@@ -116,15 +116,28 @@ interface AxiosLikeError {
     response?: { status?: unknown; headers?: unknown; data?: unknown };
 }
 
+function headerValue(headers: unknown, name: string): string | undefined {
+    if (!headers || typeof headers !== 'object') return undefined;
+    const withGet = headers as { get?: (n: string) => unknown };
+    if (typeof withGet.get === 'function') {
+        const v = withGet.get(name);
+        return typeof v === 'string' ? v : undefined;
+    }
+    for (const [key, value] of Object.entries(headers)) if (key.toLowerCase() === name && typeof value === 'string') return value;
+    return undefined;
+}
+
 /**
- * What of an axios error may leave the test client: an HTTP error keeps `status`, `headers` and `data` (all that
- * `mapCtError` reads), a network error only its code. `config` and `request` hold the `Authorization` header with the
+ * What of an axios error may leave the test client: an HTTP error keeps `status`, `data` and only the `retry-after`
+ * header (all that `mapCtError` reads), a network error only its code. `config` and `request` hold the `Authorization` header with the
  * login token, so they never get into an unhandled rejection or a test report.
  */
 export function scrubAxiosError(error: unknown): unknown {
     const e = (error ?? {}) as AxiosLikeError;
     if (e.response && typeof e.response.status === 'number') {
-        return { response: { status: e.response.status, headers: e.response.headers, data: e.response.data } };
+        // Only the header mapCtError reads (retry-after for 429); never set-cookie or anything else.
+        const retryAfter = headerValue(e.response.headers, 'retry-after');
+        return { response: { status: e.response.status, headers: retryAfter === undefined ? {} : { 'retry-after': retryAfter }, data: e.response.data } };
     }
     return new Error(`ChurchTools network error ${typeof e.code === 'string' ? e.code : 'without a code'}`);
 }

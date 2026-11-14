@@ -205,9 +205,11 @@ describe('Backend on the wire, as the browser sees it', () => {
         const user = api(() => token);
         await user.getEntry(env.normal.id);
         await user.deleteEntry(env.normal.id, settings.requirePasswordForPasswordChange ? env.normal.pwd : undefined);
-        await user.putEntry(env.normal.id, { secondaryPwd: 'abc' }).catch((e: unknown) => expect(e).toMatchObject({ slug: expect.stringMatching(/password-invalid|custom-password-not-allowed|primary-password-required/) }));
-        await user.selfTest().catch((e: unknown) => expect(e).toMatchObject({ slug: 'forbidden' }));
-        await api(() => null).login('not-a-code', 'verifier', client.redirectUri).catch((e: unknown) => expect(e).toMatchObject({ slug: 'oauth-code-invalid' }));
+        await expect(user.putEntry(env.normal.id, { secondaryPwd: 'abc' })).rejects.toMatchObject({
+            slug: expect.stringMatching(/^(password-invalid|custom-password-not-allowed|primary-password-required)$/),
+        });
+        await expect(user.selfTest()).rejects.toMatchObject({ slug: 'forbidden' });
+        await expect(api(() => null).login('not-a-code', 'verifier', client.redirectUri)).rejects.toMatchObject({ slug: 'oauth-code-invalid' });
         expect(new Set(sandbox.seen.map((r) => r.method.toUpperCase()))).toEqual(new Set(['GET', 'DELETE', 'PUT', 'POST']));
         expect(sandbox.seen.some((r) => r.headerNames.includes('authorization')) && sandbox.seen.some((r) => r.headerNames.includes('content-type'))).toBe(true);
         for (const request of sandbox.seen) {
