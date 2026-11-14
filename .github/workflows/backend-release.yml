@@ -1,5 +1,9 @@
 # Builds the PHP backend release (spec 6.5, 6.6): runs the checks, verifies tag, VERSION, CHANGELOG and MAJOR.MINOR, builds the
-# upload-ready zip and publishes it as a GitHub release with the CHANGELOG section as notes.
+# upload-ready zip with its SHA-256, attests its build provenance and publishes both files as a GitHub release with the
+# CHANGELOG section as notes. Same job split as extension-release.yml.
+#
+# Every action is pinned by its full commit SHA (the tag in the comment); how to update one: extension/docs/development.md
+# („CI and releases“).
 name: Backend release
 
 on:
@@ -7,22 +11,29 @@ on:
     tags:
       - 'backend-v*.*.*'
 
-# Needed to create the release; nothing else.
-permissions:
-  contents: write
+# Nothing by default; each job names what it needs.
+permissions: {}
+
+concurrency:
+  group: backend-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  release:
+  # Installs and runs third-party code (Composer packages), so it gets read access only; the zip and its checksum leave
+  # it as an artifact.
+  build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - uses: shivammathur/setup-php@v2
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
         with:
           php-version: '8.3'
           extensions: curl, json, mbstring, sodium
@@ -30,7 +41,9 @@ jobs:
           tools: composer:v2
 
       - name: Release check (tag, VERSION, CHANGELOG, MAJOR.MINOR with the extension)
-        run: php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release/notes.md"
 
       - name: Install dependencies
         run: composer install --no-interaction --no-progress --prefer-dist
@@ -41,7 +54,8 @@ jobs:
       - name: Build the upload-ready folder
         run: bash setup/setup.sh "$RUNNER_TEMP/ctpassstore-backend"
 
-      - name: Zip it
+      # The checksum file names the zip without a path, so `sha256sum --check` works next to the downloaded zip.
+      - name: Zip it, with its SHA-256
         run: |
           VERSION="$(tr -d '[:space:]' < VERSION)"
           BUILT="$(tr -d '[:space:]' < "$RUNNER_TEMP/ctpassstore-backend/version.txt")"
@@ -49,11 +63,59 @@ jobs:
             echo "version.txt is '$BUILT' but VERSION is '$VERSION'; a release must not ship a +sha version." >&2
             exit 1
           fi
+          ZIP="ctpassstore-backend-$VERSION.zip"
           cd "$RUNNER_TEMP/ctpassstore-backend"
-          zip -r -q "$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" .
-          echo "ZIP=$RUNNER_TEMP/ctpassstore-backend-$VERSION.zip" >> "$GITHUB_ENV"
+          zip -r -q "$RUNNER_TEMP/release/$ZIP" .
+          cd "$RUNNER_TEMP/release"
+          sha256sum "$ZIP" > "$ZIP.sha256"
+          cat "$ZIP.sha256"
+
+      # Same pair of majors as extension-release.yml (see the comment there).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Signs a SLSA build provenance attestation for the zip (checked with `gh attestation verify`). Its own job, so the
+  # OIDC token permission never reaches the job that runs Composer packages; it runs no project code.
+  attest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release/*.zip
+
+  # Only this job can write (create the release); it runs no project code.
+  release:
+    needs: [build, attest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - name: Check the zip against its checksum
+        working-directory: release
+        run: sha256sum --check --strict -- *.zip.sha256
 
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" "$ZIP" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip release/*.zip.sha256 \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file release/notes.md

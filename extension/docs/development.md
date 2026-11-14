@@ -278,21 +278,49 @@ ask the maintainer first) and a test account; never a production instance.
 `npm ci`, lint, typecheck, unit and app tests, `npm run build` (with `check-dist`) and `npm audit --audit-level=high`.
 The contract tests and the browser tests don't run in CI (see above).
 
+All four workflows (`extension.yml`, `extension-release.yml`, `backend.yml`, `backend-release.yml`) pin every action by
+its full commit SHA, with the release tag in a trailing comment (`uses: actions/checkout@<40-hex> # v7.0.1`): a moved or
+re-pushed tag can't change what runs. To update an action, look up the commit of the new tag in the action's official
+repository and replace SHA and comment together:
+
+```sh
+git ls-remote https://github.com/actions/checkout refs/tags/v7.0.2 'refs/tags/v7.0.2^{}'
+```
+
+For an annotated tag the second line (`^{}`) is the commit; use it, not the tag object. Keep `upload-artifact` and
+`download-artifact` on majors that work together (today v7 and v8, both on the same artifact service; there is no
+upload-artifact v8); read both release notes before bumping either.
+
 ### Secret scan (gitleaks)
 
 A second job scans the whole git history with gitleaks (pinned version, checked against its sha256) and the committed
-configuration `.gitleaks.toml` at the repository root: all default rules, plus exceptions for a few committed **test**
-files by their exact path (test RSA keys, an invented JWT, invented tokens), each with its reason. gitleaks can't run
-on the development machine of this rework, so **the first CI run is what verifies this configuration**; if it reports a
-finding:
+configuration `.gitleaks.toml` at the repository root: all default rules, plus exceptions for committed **test** values,
+each with its reason. The two PEM test keys are allowed by their exact path; in the three test source files only the one
+invented value each is allowed (`condition = "AND"`: exact path and exact value), so anything else secret-looking added
+to those files is still reported. gitleaks can't run on the development machine of this rework, so **the first CI run
+is what verifies this configuration**; if it reports a finding:
 
 1. Look at the finding (file, commit, rule; the value is redacted in the log). If it may be a real secret, don't
    suppress it: treat it as leaked (change it where it is used) and tell the maintainer.
 2. If it is a reviewed test or example value: for a single finding, add its fingerprint (`<commit>:<file>:<rule>:<line>`,
    printed by gitleaks) to `.gitleaksignore` at the repository root, with a comment line above it saying why. For a
-   test file whose many values would all match, add a `[[allowlists]]` block with its exact path and a description
-   to `.gitleaks.toml`. Never disable a rule or allowlist by a value pattern.
+   test value in a committed test file, add a `[[allowlists]]` block with `condition = "AND"`, the file's exact path in
+   `paths` and the exact value in `regexes`, and a description. Only a multi-line test key file gets a path-only block.
+   Never disable a rule or allowlist by a broad value pattern.
 3. Both files are reviewed like code.
+
+**The historic root `.env`.** Commit `78b4913` added a root `.env` with real-looking ChurchTools credentials (removed
+again in `e4aca49`, but still in the history on `origin`); the scan may report it, and it is deliberately not
+allowlisted. That is the maintainer's call: first treat the values as leaked and change the password (and any token) at
+ChurchTools. Only then, if the history is not rewritten, add the findings' fingerprints to `.gitleaksignore`, e.g.
+
+```text
+# 78b4913: historic root .env, credentials changed on YYYY-MM-DD (maintainer); history kept.
+<full SHA of 78b4913>:.env:<rule-id>:<line>
+```
+
+with the full commit SHA, the rule and the line exactly as gitleaks prints them in the `Fingerprint:` line (one line per
+finding; `--redact` hides only the value, not the fingerprint).
 
 ### Releases
 
@@ -312,5 +340,23 @@ accepts only a real date, so it fails until then. Steps for a release:
 `dist/version.txt` (the app version the build carries, written by `vite.config.ts`) with the tag: a build from anything
 but a clean checkout of the tag carries `X.Y.Z+sha` and is refused. It zips `dist/`
 (`ctpassstore-extension-X.Y.Z.zip`, without sourcemaps) and publishes a GitHub release with the CHANGELOG section as
-notes. The build runs with read access only; a second job, which runs no project code, gets the write permission to
-create the release.
+notes. Next to the ZIP it publishes `ctpassstore-extension-X.Y.Z.zip.sha256` (computed in the build job, checked
+again before publishing) and signs a build provenance attestation for the ZIP (`actions/attest`, SLSA provenance via
+GitHub's Sigstore). Three jobs, each with only what it needs: the build (npm packages run here) has read access only;
+`attest` gets `id-token: write` and `attestations: write` and runs no project code, so the OIDC token never reaches npm
+code; `release` gets `contents: write` to create the release and runs no project code either. `backend-release.yml`
+does the same for `ctpassstore-backend-X.Y.Z.zip` (Composer packages instead of npm).
+
+**Checking a downloaded release ZIP** (do this before uploading it to ChurchTools or a web server):
+
+```sh
+# Both files from the release page in one folder:
+sha256sum --check ctpassstore-extension-X.Y.Z.zip.sha256
+# Proves the ZIP was built by this repository's release workflow from the tag (GitHub CLI, logged in):
+gh attestation verify ctpassstore-extension-X.Y.Z.zip --repo lub90/ct-pass-store \
+  --signer-workflow lub90/ct-pass-store/.github/workflows/extension-release.yml
+```
+
+The checksum catches a damaged or incomplete download; whoever can change the release page can replace both files, so
+the attestation is the stronger check (it is signed and names the workflow, the tag and the commit). For the backend, use
+`ctpassstore-backend-X.Y.Z.zip` and `backend-release.yml`.
