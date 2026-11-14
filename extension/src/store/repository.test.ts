@@ -242,14 +242,28 @@ describe('duplicates (point B E1): never the highest value ID silently', () => {
     const nine = { ...settings, revision: 7, backendUrl: 'https://nine.example', future: { a: 1 } };
     const list = () => [stored(5, five), stored(9, nine), stored(2, settings)];
 
-    it('lists every value, highest value ID first, whatever order the KV returns, each read on its own', async () => {
+    it('lists every value, oldest (lowest value ID) first, whatever order the KV returns, each read on its own (S2)', async () => {
         const r = await new ExtensionStore(new StubKv(list())).readSettings();
         expect(r.state).toBe('duplicates');
         if (r.state !== 'duplicates') return;
-        expect(r.values.map((x) => x.valueId)).toEqual([9, 5, 2]);
-        expect(r.values[0]).toMatchObject({ valueId: 9, text: JSON.stringify(nine), keepable: true, read: { state: 'ok', valueId: 9, value: { backendUrl: 'https://nine.example', revision: 7 } } });
+        expect(r.values.map((x) => x.valueId)).toEqual([2, 5, 9]);
+        expect(r.values[2]).toMatchObject({ valueId: 9, text: JSON.stringify(nine), keepable: true, read: { state: 'ok', valueId: 9, value: { backendUrl: 'https://nine.example', revision: 7 } } });
         expect(r.values[1]!.read).toMatchObject({ state: 'ok', value: { backendUrl: 'https://five.example' } });
-        expect(r.values[2]!.text).toBe(JSON.stringify(settings));
+        expect(r.values[0]!.text).toBe(JSON.stringify(settings));
+    });
+
+    it.each([
+        ['a host the browser rewrites', 'https://pw.example%2eevil.com'],
+        ['an IDN look-alike', 'https://g\u043E\u043Ed.example'],
+        ['invisible characters', 'https://p\u200Bw.example'],
+    ])('a settings value whose backendUrl has %s can\'t be kept (S6): not keepable, resolve refuses', async (_n, backendUrl) => {
+        const kv = new StubKv([stored(1, { ...settings, backendUrl }), stored(2, settings)]);
+        const store = new ExtensionStore(kv);
+        const r = await store.readSettings();
+        if (r.state !== 'duplicates') throw new Error('not duplicates');
+        expect(r.values.map((x) => x.keepable)).toEqual([false, true]);
+        await expect(store.resolveDuplicates('settings', 1, r.values)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
     });
 
     it('reads invalid, newer and broken values among them as such; only JSON objects without a newer schema can be kept', async () => {
@@ -263,11 +277,11 @@ describe('duplicates (point B E1): never the highest value ID silently', () => {
         const r = await new ExtensionStore(kv).readSettings();
         if (r.state !== 'duplicates') throw new Error('not duplicates');
         expect(r.values.map((x) => [x.valueId, x.read.state, x.keepable])).toEqual([
-            [5, 'invalid', false],
-            [4, 'invalid', false],
-            [3, 'invalid', false],
-            [2, 'newer', false],
             [1, 'invalid', true],
+            [2, 'newer', false],
+            [3, 'invalid', false],
+            [4, 'invalid', false],
+            [5, 'invalid', false],
         ]);
     });
 
@@ -276,9 +290,9 @@ describe('duplicates (point B E1): never the highest value ID silently', () => {
         const kv = new MemoryKv({ access: [JSON.stringify(access), JSON.stringify({ ...access, machineClients: [reader] })] });
         const r = await new ExtensionStore(kv).readAccess();
         if (r.state !== 'duplicates') throw new Error('not duplicates');
-        const planted = r.values[0]!.read;
+        const planted = r.values[1]!.read;
         expect(planted.state === 'ok' && planted.clientEntries?.map((e) => e.client?.id)).toEqual(['reader']);
-        expect(r.values[1]!.read).toMatchObject({ state: 'ok', value: { machineClients: [] } });
+        expect(r.values[0]!.read).toMatchObject({ state: 'ok', value: { machineClients: [] } });
     });
 
     it('readStartup reports them too (no settings value wins at startup)', async () => {
@@ -366,6 +380,33 @@ describe('duplicates (point B E1): never the highest value ID silently', () => {
             const store = new ExtensionStore(kv);
             await expect(store.resolveDuplicates('settings', 1, await seen(store))).rejects.toBeInstanceOf(InvalidValueError);
             expect(kv.writes).toEqual([]);
+        });
+
+        it('the raise ignores values that can\'t be kept (newer schema, revision out of range) (S5)', async () => {
+            const kv = new StubKv([stored(1, { ...settings, revision: 3 }), stored(2, { ...settings, schema: 3, revision: 500 }), stored(3, { ...settings, revision: 2 ** 53 })]);
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 1, await seen(store));
+            expect(JSON.parse(kv.updated[1]!)).toMatchObject({ revision: 4 });
+            expect(kv.writes).toEqual(['update:1', 'delete:2', 'delete:3']);
+        });
+
+        it('a keepable value at the top of the revision range blocks the raise: refused, the error names that value (R3)', async () => {
+            const kv = new StubKv([stored(1, settings), stored(2, { ...settings, revision: Number.MAX_SAFE_INTEGER - 1 })]);
+            const store = new ExtensionStore(kv);
+            const error = await store.resolveDuplicates('settings', 1, await seen(store)).catch((e: unknown) => e);
+            expect(error).toBeInstanceOf(InvalidValueError);
+            expect((error as InvalidValueError).issues.join(' ')).toContain('value 2');
+            expect(kv.writes).toEqual([]);
+        });
+
+        it('a kept value of exactly 10,000 characters after the raise is written (R4)', async () => {
+            const base = { ...settings, revision: 8, pad: '' };
+            const big = { ...base, pad: 'x'.repeat(10_000 - JSON.stringify(base).length) };
+            expect(JSON.stringify({ ...big, revision: 9 }).length).toBe(10_000);
+            const kv = new StubKv([stored(1, big), stored(2, settings)]);
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 1, await seen(store));
+            expect(kv.writes).toEqual(['update:1', 'delete:2']);
         });
 
         it('refuses when the kept value would grow over 10,000 characters', async () => {

@@ -48,8 +48,13 @@ describe('duplicate settings at startup', () => {
         expect(wrapper.text()).toContain(TEXT.warning);
         expect(button(wrapper, TEXT.save)).toBeUndefined();
         expect(wrapper.find('form').exists()).toBe(false);
-        // Highest value id first; each with its id, revision and address (isolated).
-        expect(wrapper.findAll('.cps-duplicates__value').map((c) => c.attributes('data-value-id'))).toEqual(['301', String(SETTINGS_VALUE_ID)]);
+        // Oldest first, the newest (most likely planted) labelled (S2); each with its id, revision and address (isolated).
+        expect(wrapper.findAll('.cps-duplicates__value').map((c) => c.attributes('data-value-id'))).toEqual([String(SETTINGS_VALUE_ID), '301']);
+        expect(card(wrapper, 301).find('.cps-duplicates__newest').text()).toBe('· zuletzt angelegt');
+        expect(card(wrapper, SETTINGS_VALUE_ID).find('.cps-duplicates__newest').exists()).toBe(false);
+        // Booleans as yes/no.
+        expect(card(wrapper, 301).find('[data-field="requirePasswordForPasswordChange"] dd').text()).toBe('Ja');
+        expect(card(wrapper, 301).find('[data-field="allowCustomPassword"] dd').text()).toBe('Nein');
         expect(card(wrapper, 301).text()).toContain('Wert 301');
         expect(card(wrapper, 301).text()).toContain('Revision 9');
         expect(card(wrapper, 301).find('[data-field="backendUrl"] bdi').text()).toBe('https://evil.example');
@@ -66,6 +71,14 @@ describe('duplicate settings at startup', () => {
         await keep(wrapper, SETTINGS_VALUE_ID);
         expect(dialog()?.textContent).toContain(`Wert ${SETTINGS_VALUE_ID}`);
         expect(dialog()?.textContent).toContain('Die anderen Werte werden gelöscht: Wert 301. Das lässt sich nicht rückgängig machen.');
+        // The address differs between the values: the dialog names the kept one's (S1); it is a danger dialog (I1).
+        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069.`);
+        expect(dialog()?.textContent).toContain('OAuth-Client-ID dieses Werts: \u2068oauth-client-1\u2069.');
+        expect(dialog()?.textContent).not.toContain('Passwortlänge');
+        expect(document.activeElement?.textContent?.trim()).toBe(TEXT.cancel);
+        expect(dialog()?.querySelector('.cps-btn--danger')?.textContent?.trim()).toBe(TEXT.confirm);
+        // Busy while asking: no second question (C12).
+        expect(keepButton(wrapper, 301)!.attributes('disabled')).toBeDefined();
         expect(writes).toEqual([]);
         await answer(TEXT.confirm);
         // Kept unchanged but for a revision above every value's revision, so no stale page overwrites it.
@@ -154,6 +167,71 @@ describe('duplicate settings at startup', () => {
         expect(wrapper.text()).not.toContain(TEXT.reloadNote);
     });
 
+    it.each([
+        ['without the delete right', { noDelete: true }, 'Dir fehlt in ChurchTools das Recht „delete custom data“ auf die Kategorie „settings“.'],
+        ['when ChurchTools fails the delete', { failDelete: true }, 'ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.'],
+    ])('a delete that fails after the update (%s): the error shows, nothing is reported done, the duplicates stay (I2)', async (_n, o, text) => {
+        const { wrapper, all } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: PLANTED }], ...o });
+        await keep(wrapper, SETTINGS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-duplicates__error[role="alert"]').text()).toBe(text);
+        expect(wrapper.text()).not.toContain(TEXT.done(SETTINGS_VALUE_ID));
+        expect(wrapper.find('.cps-duplicates').exists()).toBe(true);
+        // Value first: the kept one is updated (revision raised), the planted one is still there, so still no value wins.
+        expect(await all('settings')).toEqual([
+            { id: SETTINGS_VALUE_ID, value: { ...SETTINGS, revision: 10 } },
+            { id: 301, value: PLANTED },
+        ]);
+        // The shown list is stale now: keeping again is a conflict; reloading shows the current values.
+        await keep(wrapper, SETTINGS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-duplicates__error[role="alert"]').text()).toContain(TEXT.conflict);
+        await click(wrapper, TEXT.reload);
+        expect(card(wrapper, SETTINGS_VALUE_ID).text()).toContain('Revision 10');
+    });
+
+    it('leaving the page while the question is open sends nothing (C3)', async () => {
+        const { wrapper, all, store, router } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: PLANTED }] });
+        const resolve = vi.spyOn(store, 'resolveDuplicates');
+        await keep(wrapper, SETTINGS_VALUE_ID);
+        await router.push('/settings');
+        await settle();
+        await answer(TEXT.confirm);
+        expect(resolve).not.toHaveBeenCalled();
+        expect(await all('settings')).toHaveLength(2);
+    });
+
+    it('a value whose address a save would refuse has no keep button, with the reason (S6)', async () => {
+        const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: { ...SETTINGS, backendUrl: 'https://pw.example%2eevil.com' } }] });
+        expect(keepButton(wrapper, 301)).toBeUndefined();
+        expect(card(wrapper, 301).text()).toContain('Kann nicht behalten werden: Die Backend-Adresse enthält unsichtbare Zeichen oder einen Host, den der Browser anders schreibt.');
+        expect(keepButton(wrapper, SETTINGS_VALUE_ID)).toBeDefined();
+    });
+
+    it('a hostile revision, other field names and the real host are isolated in the page; the dialog names the kept address where they differ (C8, C15, S1)', async () => {
+        const odd = { ...SETTINGS, backendUrl: 'https://pw.example%2eevil.com', revision: 'r\u202Ex', ['x\u202Ey']: 1 };
+        const { wrapper } = await start({ path: '/settings/rules', settings: odd, extra: [{ category: 'settings', value: SETTINGS }] });
+        expect(card(wrapper, SETTINGS_VALUE_ID).find('.cps-duplicates__revision bdi').text()).toBe('r\u202Ex');
+        expect(card(wrapper, SETTINGS_VALUE_ID).find('.cps-duplicates__other bdi').text()).toBe('x\u202Ey');
+        expect(card(wrapper, 301).find('.cps-duplicates__revision bdi').exists()).toBe(false);
+        await keep(wrapper, 301);
+        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069.`);
+        await answer(TEXT.cancel);
+    });
+
+    it('after resolving during a visit, a kept address other than the running one asks for a page load (S7)', async () => {
+        const { wrapper, plant } = await start({ path: '/settings/rules' });
+        const planted = await plant('settings', { ...SETTINGS, backendUrl: 'https://other.example' });
+        await wrapper.find('#cps-rules-length').setValue('20');
+        await settle();
+        await click(wrapper, TEXT.save);
+        await click(wrapper, TEXT.reload);
+        await keep(wrapper, planted);
+        await answer(TEXT.confirm);
+        expect(wrapper.text()).toContain(TEXT.done(planted));
+        expect(wrapper.text()).toContain(TEXT.reloadNote);
+    });
+
     it('the overview names the category and links the page that resolves it', async () => {
         const { wrapper } = await start({ path: '/settings', extra: [{ category: 'settings', value: PLANTED }, { category: 'access', value: ACCESS }] });
         const banner = wrapper.find('.cps-settings__duplicates');
@@ -181,6 +259,27 @@ describe('duplicate access values („Zugriff“)', () => {
         expect(card(wrapper, ACCESS_VALUE_ID).text()).toContain('keine aktiven Maschinen-Clients');
     });
 
+    it('the dialog of the planted value names its other admin group and its active clients (S1)', async () => {
+        const { wrapper } = await start({ path: '/settings/access', extra: [{ category: 'access', value: plantedAccess }] });
+        await keep(wrapper, 301);
+        const text = dialog()?.textContent ?? '';
+        expect(text).toContain('Gruppe „Admins“ dieses Werts: 66.');
+        expect(text).not.toContain('Gruppe „Nutzer“');
+        expect(text).toMatch(/Aktive Maschinen-Clients dieses Werts: \u2068Spion\u2069 \(\u2068reader\u2069, darf lesen, Fingerabdrücke [A-Za-z0-9_-]{16}\)\./);
+        await answer(TEXT.cancel);
+        await keep(wrapper, ACCESS_VALUE_ID);
+        expect(dialog()?.textContent).toContain('Dieser Wert hat keine aktiven Maschinen-Clients.');
+        await answer(TEXT.cancel);
+    });
+
+    it('the active-client lists are marked when they differ, and disabled entries are counted (S3, C10)', async () => {
+        const { wrapper } = await start({ path: '/settings/access', extra: [{ category: 'access', value: { ...plantedAccess, machineClients: [READER, { id: 'kaputt' }] } }] });
+        expect(card(wrapper, 301).text()).toContain('Aktive Maschinen-Clients: · unterschiedlich');
+        expect(card(wrapper, ACCESS_VALUE_ID).text()).toContain('keine aktiven Maschinen-Clients · unterschiedlich');
+        expect(card(wrapper, 301).text()).toContain('Ein falsch konfigurierter Eintrag.');
+        expect(card(wrapper, ACCESS_VALUE_ID).text()).not.toContain('falsch konfiguriert');
+    });
+
     it('keeping the original removes the planted reader; the page then shows the kept value', async () => {
         const { wrapper, all } = await start({ path: '/settings/access', extra: [{ category: 'access', value: plantedAccess }] });
         await keep(wrapper, ACCESS_VALUE_ID);
@@ -188,6 +287,9 @@ describe('duplicate access values („Zugriff“)', () => {
         await answer(TEXT.confirm);
         expect(await all('access')).toEqual([{ id: ACCESS_VALUE_ID, value: { ...ACCESS, revision: 4 } }]);
         expect(wrapper.text()).toContain(TEXT.done(ACCESS_VALUE_ID));
+        // Startup access duplicates (row 4a): only a page load uses the kept value (P1).
+        expect(wrapper.text()).toContain(TEXT.reloadNote);
+        expect(button(wrapper, TEXT.reloadPage)).toBeDefined();
         expect(wrapper.find('.cps-duplicates').exists()).toBe(false);
         expect(wrapper.text()).toContain('Noch keine Clients.');
     });
@@ -206,6 +308,18 @@ describe('duplicate access values („Zugriff“)', () => {
             { id: ACCESS_VALUE_ID, value: ACCESS },
             { id: expect.any(Number), value: plantedAccess },
         ]);
+    });
+
+    it('access duplicates at startup, settings resolved later: no page-load hint for the settings (P2)', async () => {
+        const { wrapper, plant, router } = await start({ path: '/settings/access', extra: [{ category: 'access', value: plantedAccess }] });
+        const planted = await plant('settings', { ...SETTINGS, revision: 2 });
+        await router.push('/settings/rules');
+        await settle();
+        await keep(wrapper, SETTINGS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.text()).toContain(TEXT.done(SETTINGS_VALUE_ID));
+        expect(wrapper.text()).not.toContain(TEXT.reloadNote);
+        expect(planted).toBeGreaterThan(0);
     });
 
     it('the client form shows the values to choose from too', async () => {

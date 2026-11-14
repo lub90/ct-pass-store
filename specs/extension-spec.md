@@ -85,8 +85,8 @@ The app computes one state at startup (`src/app/`), in this order. The first mat
 | 1 | Still loading | `loading` | Frame with a muted „Lade …“ line |
 | 2 | `whoami` is anonymous, or the extension's `view` permission is missing | `no-access` | „Du hast keinen Zugriff auf diese Erweiterung. Wende dich an die Verantwortlichen in deiner Gemeinde.“ |
 | 3 | Old data layout (6.3) | `migration-needed` | Setup-capable: the migration wizard. Others: the waiting text (3.3). |
-| 4 | Stored data has a newer `schema` than the code (with duplicates: any of the values) | `update-needed` | „Bitte aktualisiere die Erweiterung.“ (admins: with the versions) |
-| 4a | `settings`, or `access` if the person can read it, holds more than one value (6.2) | `backend-error` | Users: as row 7. Settings editors: „In ChurchTools sind mehrere Werte für „{Kategorien}“ gespeichert. Die Erweiterung verwendet keinen davon, bis unter „Einstellungen“ ausgewählt ist, welcher bleibt.“ with a link to „Einstellungen“. No login, nothing is sent to any backend address. |
+| 4 | Stored data has a newer `schema` than the code (a single value; a newer value among several is row 4a) | `update-needed` | „Bitte aktualisiere die Erweiterung.“ (admins: with the versions) |
+| 4a | `settings`, or `access` if the person can read it, holds more than one value (6.2), also when one of them has a newer `schema` (it can't be kept) | `backend-error` | Users: as row 7. Settings editors: „In ChurchTools sind mehrere Werte für „{Kategorien}“ gespeichert. Die Erweiterung verwendet keinen davon, bis unter „Einstellungen“ ausgewählt ist, welcher bleibt.“ with a link to „Einstellungen“. No login, nothing is sent to any backend address. |
 | 5 | `settings` missing, invalid, or without `backendUrl` or `oauthClientId` | `setup-needed` | Setup-capable: the setup wizard. Others: the waiting text. |
 | 6 | Backend login fails with `no-service-access` | `no-access` | As in row 2 |
 | 7 | Backend unreachable, or login fails otherwise | `backend-error` | Users: „Der Dienst ist gerade nicht erreichbar. Versuch es später noch einmal.“ Settings editors (3.1): the problem text plus a link to „Backend & Status“. |
@@ -414,29 +414,39 @@ extension/src/
 - A `schema` greater than 2 → `update-needed` (3.2.4), never a misread.
 - **Duplicates** (several values in `settings` or `access`) are never used, as the backend refuses them (it requires
   exactly one value): no value wins by its value ID. At startup that is row 4a of 3.2 (no backend login, nothing sent
-  to any backend address). The read lists every value (highest value ID first), each read on its own, with its stored
-  text.
+  to any backend address). The read lists every value, oldest (lowest value ID) first, each read on its own, with its
+  stored text: the newest value is the one most likely planted, so it is never shown first, and it is labelled
+  „zuletzt angelegt“.
   - Every settings page of that category (Passwortregeln, Texte, Backend & Status for `settings`; Zugriff and the client
     form for `access`) shows the values instead of its form: value ID, revision, state (valid, invalid with the number
     of problems, newer version), and the fields that decide where passwords go and who may read them, marked where
-    they differ between the values: for `settings` the backend address (with the host the browser really connects to,
-    4.8, and a note on invisible characters), the OAuth client ID, the rules and whether custom texts exist; for
-    `access` the three group IDs and every machine client the backend would enable with that value (name, `id`,
-    permission, key fingerprints, 4.7) plus the number of disabled entries. The names of other stored fields are
+    they differ between the values (compared on the full stored values, not the cut text): for `settings` the backend
+    address (with the host the browser really connects to, 4.8, shown in full up to 253 characters, longer ones cut
+    from the left so the end stays visible, and a note on invisible characters), the OAuth client ID, the rules (yes/no
+    for booleans) and whether custom texts exist; for `access` the three group IDs and every machine client the backend
+    would enable with that value (name, `id`, permission, key fingerprints, 4.7; the set is marked when it differs,
+    compared in full and in any order) plus the number of disabled entries. The names of other stored fields are
     listed. Everything is plain text, cut (120 characters; client names and ids 40) and isolated (`<bdi>`). A warning
     says that a value nobody created may have been planted. The overview names the categories, with a link to
     Passwortregeln or Zugriff.
-  - „Diesen Wert behalten“ (not offered for a value that is no JSON object, has a newer schema or an integer revision
-    out of range) asks in a danger dialog naming the values to be deleted. The store then compares the stored values
+  - „Diesen Wert behalten“ is not offered for a value that is no JSON object, has a newer schema or an integer revision
+    out of range, nor for `settings` whose `backendUrl` a save would refuse as new (invisible characters or a host the
+    browser rewrites, 4.8; the page says why): keeping it would make an address active nobody could type. It asks in a
+    danger dialog naming the values to be deleted and, where the values differ, what the kept one makes active: its
+    backend address and the other differing fields (`settings`), its differing group IDs and its enabled clients with
+    fingerprints, or that it has none (`access`). The store then compares the stored values
     with the ones shown (the same value IDs, each with exactly the same text) and refuses with a conflict, deleting
     nothing, if anything differs (a value appeared, disappeared or changed). Otherwise it writes the kept value as
-    stored, with only its `revision` raised above every shown revision (so a page that read any of the values before
-    gets a conflict instead of overwriting it), then deletes the others (value first: an interruption leaves
+    stored, with only its `revision` raised above the revision of every value that could be kept (so a page that read
+    any of them before gets a conflict instead of overwriting it; values that can't be kept don't count, a page can't
+    save over them; if that raise would leave the safe range, the store refuses and names the value), then deletes the others (value first: an interruption leaves
     duplicates, never a lost value). Deleting needs `delete custom data` on the category.
   - Every save and every removal of machine clients is refused as a conflict while a category holds several values: a
     save never deletes a value nobody has seen. Reloading the page shows the values to choose from.
-  - After resolving a duplicate found at startup, the page says that only a page load makes the extension use the
-    kept value (the app keeps its startup state and address, 4.8).
+  - After resolving a duplicate found at startup, or keeping a `settings` value whose address isn't the one the app
+    runs with, the page says that only a page load makes the extension use the kept value (the app keeps its startup
+    state and address, 4.8). If the delete fails after the kept value was written, the error shows and the values stay
+    (still not used); the list read before is then stale, and reloading shows the current values.
 
 ### 6.3 Detecting the old layout
 

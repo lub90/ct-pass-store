@@ -167,9 +167,8 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             ]);
             settingsEditor.value = editor;
             oldLayout.value = old;
-            // Each value of a duplicated category counts on its own: one newer value is row 4.
-            const reads = [read, access].flatMap((r): Read<unknown>[] => (r === null ? [] : r.state === 'duplicates' ? r.values.map((x) => x.read) : [r]));
-            const newer = reads.find((r): r is Extract<Read<unknown>, { state: 'newer' }> => r.state === 'newer');
+            // A newer value among several is row 4a, not 4 (S4): editors choose one (the newer one can't be kept).
+            const newer = [read, access].find((r): r is Extract<Read<unknown>, { state: 'newer' }> => r?.state === 'newer');
             if (newer) storedSchema.value = newer.schema;
             duplicates.value = [read.state === 'duplicates' ? ('settings' as const) : null, access?.state === 'duplicates' ? ('access' as const) : null].filter((c) => c !== null);
             ready.value = settingsReady(read);

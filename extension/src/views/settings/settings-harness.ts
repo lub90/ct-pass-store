@@ -14,6 +14,7 @@ import type { BackendApi, SelfTestResult } from '../../backend/api';
 import { Auth, CALLBACK_WINDOW_KEY, TOKEN_KEY, type AuthEnv, type CallbackWindow } from '../../backend/auth';
 import { backendBase } from '../../backend/http';
 import type { CtApi } from '../../ct/api';
+import { CtHttpError } from '../../ct/errors';
 import type { CtValue, Permissions } from '../../ct/types';
 import { createFakeBackend } from '../../dev/fake-backend';
 import { createFakeChurchTools, type FakeCtSeed, type FakeGroup } from '../../dev/fake-churchtools';
@@ -79,6 +80,10 @@ export interface HarnessOptions {
     reloadPage?: () => void;
     /** More values stored next to `settings` and `access` (duplicates, E1), with value ids from 301. */
     extra?: { category: 'settings' | 'access'; value: unknown }[];
+    /** Withholds `delete custom data` (the other rights stay). */
+    noDelete?: boolean;
+    /** Every delete of a value fails (ChurchTools answers 500). */
+    failDelete?: boolean;
 }
 
 const mounted: VueWrapper[] = [];
@@ -107,7 +112,7 @@ class MemoryStorage {
 const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
 const jwt = (sub: number) => `${b64({ alg: 'HS256', typ: 'JWT' })}.${b64({ sub: String(sub) })}.c2ln`;
 
-export function permissions(o: Pick<HarnessOptions, 'edit' | 'viewAccess' | 'setupCapable'>): Permissions {
+export function permissions(o: Pick<HarnessOptions, 'edit' | 'viewAccess' | 'setupCapable' | 'noDelete'>): Permissions {
     const edit = (o.edit ?? ['settings', 'access']).map((c) => (c === 'settings' ? SETTINGS_ID : ACCESS_ID));
     const view = o.viewAccess === false ? [SETTINGS_ID] : [SETTINGS_ID, ACCESS_ID];
     return {
@@ -119,7 +124,7 @@ export function permissions(o: Pick<HarnessOptions, 'edit' | 'viewAccess' | 'set
         'view custom data': view,
         'create custom data': edit,
         'edit custom data': edit,
-        'delete custom data': edit,
+        'delete custom data': o.noDelete ? [] : edit,
     };
 }
 
@@ -160,6 +165,7 @@ export async function start(o: HarnessOptions) {
         },
         updateValue: (moduleId, categoryId, valueId, value) => (writes.push({ categoryId, value }), fakeCt.updateValue(moduleId, categoryId, valueId, value)),
         createValue: (moduleId, categoryId, value) => (writes.push({ categoryId, value }), fakeCt.createValue(moduleId, categoryId, value)),
+        deleteValue: (moduleId, categoryId, valueId) => (o.failDelete ? Promise.reject(new CtHttpError(500, 'boom')) : fakeCt.deleteValue(moduleId, categoryId, valueId)),
     };
     const admin = o.admin ?? true;
     const fakeBackend = createFakeBackend({ personId: ME, admin, ctOrigin: ORIGIN, version: '0.1.0' });

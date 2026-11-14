@@ -5,11 +5,14 @@
  * host, OAuth client, rules; groups and the clients the backend would enable, with key fingerprints), and the fields
  * that differ are marked. The editor chooses which value stays; after a danger confirm naming the values to delete,
  * the store deletes the others only if the stored values are still exactly the ones shown (else a conflict, nothing
- * deleted). Every stored part is plain text, cut and isolated (`<bdi>`).
+ * deleted). Every stored part is plain text, cut and isolated (`<bdi>`). Oldest value first; the newest (the one
+ * most likely planted) is labelled „zuletzt angelegt“ (S2). The dialog names what keeping a value makes active where
+ * the values differ (address and real host; groups and enabled clients, S1).
  */
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { describeDuplicates } from '../../admin/duplicates';
+import { describeDuplicates, type ShownField, type ShownValue } from '../../admin/duplicates';
+import { isolate } from '../../admin/machine-clients';
 import { settingsErrorText } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { ConflictError } from '../../model/errors';
@@ -37,12 +40,40 @@ onBeforeUnmount(() => {
 });
 
 const fieldLabel = (name: string): string => t(`duplicates.fields.${name.replace('.', '_')}`);
+/** A field's value as shown: booleans as yes/no, everything else as its (cut) text. */
+const fieldText = (field: ShownField): string => (field.bool === undefined ? field.text : t(field.bool ? 'duplicates.yes' : 'duplicates.no'));
+const clientText = (c: NonNullable<ShownValue['clients']>[number]): string =>
+    t('duplicates.confirmClient', {
+        name: isolate(c.name),
+        id: isolate(c.id),
+        permission: c.canRead ? t('access.canRead') : t('access.canNothing'),
+        keys: c.fingerprints.map((fp) => fp ?? t('access.keyInvalid')).join(', '),
+    });
+
+/**
+ * What the dialog says about the kept value beyond its id (S1): where it sends passwords (address and real host) when
+ * that differs between the values; for `access`, the differing groups and the clients it turns on.
+ */
+function keptDetails(value: ShownValue): string[] {
+    const parts: string[] = [];
+    for (const field of value.fields) {
+        const hostDiffers = field.name === 'backendUrl' && shown.value.some((v) => v.fields.find((f) => f.name === 'backendUrl')?.host !== field.host);
+        if (!field.differs && !hostDiffers) continue;
+        // A kept address never has a host the browser rewrites (such a value can't be kept, S6): it is its real host.
+        parts.push(t('duplicates.confirmField', { field: fieldLabel(field.name), value: field.isolate ? isolate(field.text) : fieldText(field) }));
+    }
+    if (value.clients && value.clientsDiffer) {
+        parts.push(value.clients.length === 0 ? t('duplicates.confirmNoClients') : t('duplicates.confirmClients', { list: value.clients.map(clientText).join('; ') }));
+    }
+    return parts;
+}
 const stateText = (state: 'ok' | 'invalid' | 'newer', issues: number): string => (state === 'invalid' ? t('duplicates.states.invalid', { n: issues }) : t(`duplicates.states.${state}`));
 
 async function keep(valueId: number): Promise<void> {
     if (busy.value) return;
     const values = props.values;
     const others = values.filter((v) => v.valueId !== valueId).map((v) => t('duplicates.value', { id: v.valueId }));
+    const kept = shown.value.find((v) => v.valueId === valueId);
     busy.value = true;
     conflict.value = false;
     error.value = null;
@@ -50,7 +81,7 @@ async function keep(valueId: number): Promise<void> {
         const answer = await confirm({
             title: t('duplicates.confirmTitle'),
             subject: { name: t('duplicates.value', { id: valueId }), detail: props.category },
-            text: t('duplicates.confirmText', { others: others.join(', ') }),
+            text: [...(kept ? keptDetails(kept) : []), t('duplicates.confirmText', { others: others.join(', ') })].join(' '),
             confirmLabel: t('duplicates.confirm'),
             cancelLabel: t('common.cancel'),
             danger: true,
@@ -113,8 +144,12 @@ async function keep(valueId: number): Promise<void> {
                 <h2 class="cps-duplicates__heading">
                     {{ t('duplicates.value', { id: value.valueId }) }}
                     <span class="cps-duplicates__muted">· {{ stateText(value.state, value.issues) }}</span>
+                    <span
+                        v-if="value.newest"
+                        class="cps-duplicates__newest"
+                    >· {{ t('duplicates.newest') }}</span>
                 </h2>
-                <p class="cps-duplicates__muted">
+                <p class="cps-duplicates__muted cps-duplicates__revision">
                     {{ `${t('duplicates.revision')} ` }}<bdi v-if="value.revision.isolate">{{ value.revision.text }}</bdi><span v-else>{{ value.revision.text }}</span>
                 </p>
                 <dl class="cps-duplicates__fields">
@@ -126,7 +161,7 @@ async function keep(valueId: number): Promise<void> {
                     >
                         <dt>{{ fieldLabel(field.name) }}</dt>
                         <dd>
-                            <bdi v-if="field.isolate">{{ field.text }}</bdi><span v-else>{{ field.text }}</span>
+                            <bdi v-if="field.isolate">{{ field.text }}</bdi><span v-else>{{ fieldText(field) }}</span>
                             <span
                                 v-if="field.host"
                                 class="cps-duplicates__host"
@@ -144,7 +179,7 @@ async function keep(valueId: number): Promise<void> {
                 </dl>
                 <p
                     v-if="value.otherFields"
-                    class="cps-duplicates__muted"
+                    class="cps-duplicates__muted cps-duplicates__other"
                 >
                     {{ `${t('duplicates.otherFields')} ` }}<bdi>{{ value.otherFields.text }}</bdi>
                 </p>
@@ -153,10 +188,18 @@ async function keep(valueId: number): Promise<void> {
                         v-if="value.clients.length === 0"
                         class="cps-duplicates__muted"
                     >
-                        {{ t('duplicates.noClients') }}
+                        {{ t('duplicates.noClients') }}<span
+                            v-if="value.clientsDiffer"
+                            class="cps-duplicates__flag"
+                        >{{ ` · ${t('duplicates.differs')}` }}</span>
                     </p>
                     <template v-else>
-                        <p>{{ t('duplicates.clients') }}</p>
+                        <p>
+                            {{ t('duplicates.clients') }}<span
+                                v-if="value.clientsDiffer"
+                                class="cps-duplicates__flag"
+                            >{{ ` · ${t('duplicates.differs')}` }}</span>
+                        </p>
                         <ul class="cps-duplicates__clients">
                             <li
                                 v-for="(client, i) in value.clients"
@@ -192,7 +235,7 @@ async function keep(valueId: number): Promise<void> {
                     <span
                         v-else
                         class="cps-duplicates__muted"
-                    >{{ t('duplicates.notKeepable') }}</span>
+                    >{{ value.notKeepable === 'address' ? t('duplicates.notKeepableAddress') : t('duplicates.notKeepable') }}</span>
                 </div>
             </li>
         </ul>
@@ -249,6 +292,10 @@ async function keep(valueId: number): Promise<void> {
 }
 .cps-duplicates__field dd {
     margin: 0;
+}
+.cps-duplicates__newest {
+    font-weight: var(--cps-weight-strong);
+    color: var(--cps-danger);
 }
 .cps-duplicates__flag {
     color: var(--cps-danger);

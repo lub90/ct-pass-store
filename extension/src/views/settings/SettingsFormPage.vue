@@ -59,11 +59,28 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
 
 const services = useServices();
 const app = useAppState();
-/** Duplicates were resolved here: the value kept (E1). */
+/** Duplicates were resolved here: the value kept (E1), and its `backendUrl` as stored (settings only). */
 const keptId = ref<number | null>(null);
-/** The app started without these values (row 4a): only a page load uses the kept one. */
-const needsPageLoad = computed(() => app.failure.value?.kind === 'duplicates' && app.failure.value.categories.includes(category.value));
+const keptUrl = ref<string | null>(null);
+const bare = (url: string | null | undefined): string | null => (typeof url === 'string' ? url.replace(/\/+$/, '') : null);
+/**
+ * Only a page load makes the app use the kept value: when the app started without these values (row 4a), or when the
+ * kept address isn't the one the app runs with (S7, like „Backend & Status“).
+ */
+const needsPageLoad = computed(
+    () =>
+        (app.failure.value?.kind === 'duplicates' && app.failure.value.categories.includes(category.value)) ||
+        (category.value === 'settings' && keptId.value !== null && keptUrl.value !== bare(app.settings.value?.backendUrl)),
+);
 function resolved(valueId: number): void {
+    const text = props.form.duplicatesRead.value?.values.find((v) => v.valueId === valueId)?.text;
+    let url: unknown;
+    try {
+        url = text === undefined ? undefined : (JSON.parse(text) as { backendUrl?: unknown } | null)?.backendUrl;
+    } catch {
+        url = undefined;
+    }
+    keptUrl.value = typeof url === 'string' ? bare(url) : null;
     keptId.value = valueId;
     void props.form.load();
 }

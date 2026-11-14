@@ -867,9 +867,22 @@ describe('app states as shown (spec 3.2)', () => {
         expect(backendCalls).toEqual([]);
     });
 
-    it('row 4 beats row 4a: one of the duplicates has a newer schema → update-needed', async () => {
-        const { wrapper } = await start({ extra: [{ category: 'settings', value: { ...SETTINGS, schema: 3 } }] });
-        expect(wrapper.find('main').text()).toBe(TEXT.update);
+    it.each([
+        ['settings, newer value at the higher id', { extra: [{ category: 'settings' as const, value: { ...SETTINGS, schema: 3 } }] }, 'settings'],
+        ['settings, newer value at the lower id', { settings: { ...SETTINGS, schema: 3 }, extra: [{ category: 'settings' as const, value: SETTINGS }] }, 'settings'],
+        ['access, newer value at the higher id', { extra: [{ category: 'access' as const, value: { ...ACCESS, schema: 3 } }] }, 'access'],
+        ['access, newer value at the lower id', { access: { ...ACCESS, schema: 3 }, extra: [{ category: 'access' as const, value: ACCESS }] }, 'access'],
+    ])('row 4a, not row 4, when one of several values has a newer schema (%s): editors get the values to choose from (S4)', async (_n, o, category) => {
+        const { wrapper, calls } = await start({ ...o, perms: EDITOR, token: { admin: true } });
+        expect(wrapper.find('main .cps-banner').text()).toBe(TEXT.duplicates.replace('settings, access', category));
+        expect(wrapper.text()).not.toContain(TEXT.update);
+        expect(calls).toEqual([]);
+    });
+
+    it('row 4a only when the person can read access: a user without that right gets the password page (the backend decides)', async () => {
+        const { wrapper, calls } = await start({ extra: [{ category: 'access', value: ACCESS }], token: { admin: false } });
+        expect(showsPasswordPage(wrapper)).toBe(true);
+        expect(calls).toContain('configure');
     });
 
     it('row 4: setup-capable people who are no settings editors see the versions too (no login, so no admin claim)', async () => {

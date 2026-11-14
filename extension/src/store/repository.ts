@@ -31,7 +31,7 @@ export type Read<T> =
     | { state: 'ok'; value: T; valueId: number; issues?: string[]; unusable?: UnusableClient[]; clientEntries?: ClientEntry[] }
     /**
      * More than one value in a one-value category (spec 6.2, point B E1). None of them is used: the backend refuses
-     * them too. Every value is listed (highest value ID first), read on its own, so an editor can see each one and
+     * them too. Every value is listed (lowest value ID first), read on its own, so an editor can see each one and
      * choose which stays (`resolveDuplicates`); every save and removal is refused meanwhile.
      */
     | { state: 'duplicates'; values: StoredValue<T>[] };
@@ -141,9 +141,11 @@ type Loaded = { newest: CtValue | undefined; duplicates: CtValue[] };
 
 /**
  * A stored value `resolveDuplicates` may keep, parsed; else why not (as for a save: no newer schema, no integer
- * revision out of range; a revision that is no integer counts as 0).
+ * revision out of range; a revision that is no integer counts as 0). For `settings` also no `backendUrl` a save would
+ * refuse as new (invisible characters, a host the browser connects to differently, S6): keeping such a value would
+ * make an address active nobody could type.
  */
-function keepableOf(text: string): { raw: Record<string, unknown>; revision: number } | { problem: string } {
+function keepableOf(category: 'settings' | 'access', text: string): { raw: Record<string, unknown>; revision: number } | { problem: string } {
     let raw: unknown;
     try {
         raw = JSON.parse(text);
@@ -153,6 +155,7 @@ function keepableOf(text: string): { raw: Record<string, unknown>; revision: num
     if (!isObject(raw)) return { problem: '(value): not an object' };
     if (typeof raw.schema === 'number' && raw.schema > SCHEMA_VERSION) return { problem: `stored value has newer schema ${raw.schema}` };
     if (Number.isInteger(raw.revision) && !isUsableRevision(raw.revision)) return { problem: `stored revision ${clip(String(raw.revision))} is out of range` };
+    if (category === 'settings' && typeof raw.backendUrl === 'string' && newBackendUrlProblem(raw.backendUrl) !== null) return { problem: 'backendUrl: contains invisible characters or a host the browser rewrites' };
     return { raw, revision: isUsableRevision(raw.revision) ? raw.revision : 0 };
 }
 
@@ -246,13 +249,16 @@ export class ExtensionStore {
         const same = values.length > 1 && texts.size === seen.length && values.length === seen.length && values.every((v) => texts.get(v.id) === v.value);
         const kept = values.find((v) => v.id === keep);
         if (!same || !kept) throw new ConflictError(0);
-        const parsed = keepableOf(kept.value);
+        const parsed = keepableOf(category, kept.value);
         if ('problem' in parsed) throw new InvalidValueError([parsed.problem]);
-        const highest = Math.max(...values.map((v) => {
-            const k = keepableOf(v.value);
-            return 'problem' in k ? 0 : k.revision;
-        }));
-        if (!isUsableRevision(highest + 1)) throw new InvalidValueError([`stored revision ${highest} is out of range`]);
+        // Only values that could be kept count (S5): a page can't save over the others anyway.
+        const revisions = values.map((v) => {
+            const k = keepableOf(category, v.value);
+            return { id: v.id, revision: 'problem' in k ? 0 : k.revision };
+        });
+        const top = revisions.reduce((a, b) => (b.revision > a.revision ? b : a));
+        if (!isUsableRevision(top.revision + 1)) throw new InvalidValueError([`value ${top.id}: revision ${top.revision} leaves no room to raise it`]);
+        const highest = top.revision;
         const json = JSON.stringify({ ...parsed.raw, revision: highest + 1 });
         if (json.length > VALUE_LIMIT) throw new ValueTooLargeError(json.length, VALUE_LIMIT);
         await this.kv.update(category, kept.id, json);
@@ -278,11 +284,12 @@ export class ExtensionStore {
     private parse<S extends Schema>(category: 'settings' | 'access', schema: S, { newest, duplicates }: Loaded): Read<v.InferOutput<S>> {
         if (!newest) return { state: 'missing' };
         if (duplicates.length > 0) {
-            const values = [newest, ...duplicates].map((value) => ({
+            // Oldest first (S2): the newest value is the one most likely planted, so it is never the first one shown.
+            const values = [newest, ...duplicates].reverse().map((value) => ({
                 valueId: value.id,
                 text: value.value,
                 read: this.parseOne(category, schema, value),
-                keepable: !('problem' in keepableOf(value.value)),
+                keepable: !('problem' in keepableOf(category, value.value)),
             }));
             return { state: 'duplicates', values };
         }
