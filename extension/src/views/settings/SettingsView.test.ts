@@ -1,10 +1,18 @@
 /**
  * App layer (mounted): the settings overview (spec 4.4) by role and right, with its two status pills.
  */
-import type { VueWrapper } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { computed, ref } from 'vue';
+import { createMemoryHistory } from 'vue-router';
+import { SERVICES_KEY, type Services } from '../../app/services';
+import { APP_STATE_KEY, type AppStateHandle } from '../../app/useAppState';
+import type { BackendApi } from '../../backend/api';
 import { BackendUnreachable } from '../../backend/problems';
-import { ACCESS, cleanup, settle, start, type SelfTestTests } from './settings-harness';
+import { createAppI18n } from '../../i18n';
+import { createAppRouter } from '../../router';
+import SettingsView from './SettingsView.vue';
+import { ACCESS, BACKEND, SETTINGS, cleanup, settle, start, type SelfTestTests } from './settings-harness';
 
 afterEach(cleanup);
 
@@ -191,5 +199,46 @@ describe('Zugriff pill', () => {
         await settle();
         expect(reads.access).toBe(before);
         expect(pill(wrapper, CARDS.access[0])).toBeNull();
+    });
+});
+
+describe('self-test cache key', () => {
+    /** The overview alone, with a hand-made app state, so the cache can hold an entry for another address. */
+    async function mountOverview(cache: { baseUrl: string; at: number; failed: number }) {
+        vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+        const asked: string[] = [];
+        const selfTestCache = ref<{ baseUrl: string; at: number; failed: number } | null>(cache);
+        const app = {
+            state: computed(() => 'admin'),
+            settingsEditor: ref({ settings: true, access: false }),
+            setupCapable: ref(false),
+            settings: ref({ ...SETTINGS }),
+            selfTestCache,
+        } as unknown as AppStateHandle;
+        const services = {
+            backend: (url: string) => ({ selfTest: () => (asked.push(url), failing(2)()) }) as unknown as BackendApi,
+        } as unknown as Services;
+        const router = createAppRouter(createMemoryHistory());
+        await router.push('/settings');
+        const wrapper = mount(SettingsView, {
+            global: { plugins: [router, createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: services, [APP_STATE_KEY as symbol]: app } },
+        });
+        await settle();
+        return { wrapper, asked, selfTestCache };
+    }
+
+    it('a fresh entry for another backend address is not used: the configured one is asked and replaces it', async () => {
+        const { wrapper, asked, selfTestCache } = await mountOverview({ baseUrl: 'https://other.example', at: 1_000_000, failed: 0 });
+        expect(asked).toEqual([BACKEND]);
+        expect(selfTestCache.value).toEqual({ baseUrl: BACKEND, at: 1_000_000, failed: 2 });
+        expect(wrapper.find('.cps-pill').text()).toBe('⚠ 2 Probleme');
+        wrapper.unmount();
+    });
+
+    it('a fresh entry for the configured address is used as is', async () => {
+        const { wrapper, asked } = await mountOverview({ baseUrl: BACKEND, at: 1_000_000, failed: 0 });
+        expect(asked).toEqual([]);
+        expect(wrapper.find('.cps-pill').text()).toBe('✓');
+        wrapper.unmount();
     });
 });

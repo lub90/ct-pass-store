@@ -240,6 +240,55 @@ const de = {
             notFound: 'Diesen Client gibt es nicht (mehr).',
         },
     },
+    // „Backend & Status“ (spec 4.8). Addresses, check names and messages only come in as params or through {{ }}.
+    backend: {
+        intro: 'Die Adresse des Backends und ob dort alles richtig eingerichtet ist.',
+        urlLabel: 'Backend-Adresse',
+        urlHelp: 'Beginnt mit https://, ohne Benutzername, „?“ oder „#“. Ein Schrägstrich am Ende wird entfernt.',
+        urlErrors: {
+            notHttps: 'Die Adresse muss mit https:// beginnen.',
+            credentials: 'Die Adresse darf keinen Benutzernamen und kein Passwort enthalten.',
+            query: 'Die Adresse darf kein „?“ enthalten.',
+            fragment: 'Die Adresse darf kein „#“ enthalten.',
+            invalid: 'Gib eine vollständige Adresse ein, z. B. https://passwort.example.org.',
+        },
+        warningTitle: 'Nur eine Adresse eintragen, der du vertraust',
+        warning:
+            'Das Backend unter dieser Adresse bekommt jedes neue Zweitpasswort und, wenn die Bestätigung verlangt ist, das ChurchTools-Passwort der Person, die es festlegt. Wer die Adresse ändert, kann so an die ChurchTools-Passwörter kommen. Trag nur ein Backend ein, das du selbst betreibst oder dem du vertraust.',
+        warningEffect:
+            'Nach dem Neuladen meldet sich jede Person beim neuen Backend an; die Anmeldungen beim bisherigen gelten dann nicht mehr. Maschinen-Clients stellen ihre Tokens für diese Adresse aus und müssen umgestellt werden.',
+        confirmTitle: 'Backend-Adresse ändern?',
+        confirmText: 'Bisher: {old}. Neu: {new}. Ab dem nächsten Laden gehen Anmeldungen und Passwörter an die neue Adresse.',
+        confirm: 'Adresse ändern',
+        noAddress: 'keine',
+        reloadNote: 'Die neue Adresse gilt erst, wenn die Seite neu geladen ist. Bis dahin arbeitet die Erweiterung mit der bisherigen.',
+        reload: 'Seite neu laden',
+        noRepair: 'Hier lassen sie sich nicht reparieren.',
+        selfTest: 'Selbsttest',
+        tested: 'Geprüft wird das Backend unter {url}.',
+        adminsOnly: 'Den Selbsttest dürfen nur Admins ausführen, die beim Backend angemeldet sind.',
+        running: 'Prüft …',
+        passed: '{ok} von {total} Prüfungen bestanden.',
+        withWrite: 'Mit Schreibtest.',
+        checkOk: 'OK',
+        checkFail: 'Fehler',
+        runAgain: 'Erneut prüfen',
+        writeHelp: 'Der Schreibtest legt einen Testwert im Passwortspeicher an, liest ihn und löscht ihn wieder. Echte Passwörter bleiben unberührt.',
+        runWrite: 'Schreibtest ausführen',
+        version: 'Backend-Version: {version}',
+    },
+    // „Über“ (spec 4.9).
+    about: {
+        intro:
+            'CtPassStore gibt jeder Person ein eigenes Zweitpasswort für angebundene Dienste wie das WLAN, unabhängig von ihrem ChurchTools-Passwort. Die Passwörter liegen verschlüsselt in ChurchTools; ein eigenes Backend entscheidet, wer sie festlegen und abrufen darf.',
+        extensionVersion: 'Erweiterung: Version {version}',
+        backendVersion: 'Backend: Version {version}',
+        backendUnknown: 'Backend: Version noch nicht bekannt',
+        guide: 'Anleitung für diese Version',
+        news: 'Neuigkeiten',
+        copyright: '© 2025 Lukas Block · MIT-Lizenz',
+        thirdParty: 'Lizenzen der verwendeten Bibliotheken',
+    },
     // Spec 7.2: the renewal popup was blocked or closed.
     session: {
         expired: 'Deine Sitzung ist abgelaufen.',

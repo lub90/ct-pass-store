@@ -4,17 +4,32 @@ import { CLIENT_ID_PATTERN, decodeKey, isCalendarDate, phpTrim } from './machine
 /** Layout version of the data this code reads and writes. */
 export const SCHEMA_VERSION = 2;
 
-/** `https://`, no credentials, no query, no fragment (mirrors backend spec 3.2). */
-function isPlainHttpsUrl(s: string): boolean {
-    // Scheme compared case-sensitively and no whitespace, like the backend's parse_url based check.
-    if (!/^https:\/\/\S+$/.test(s)) return false;
+/** Why a `backendUrl` is refused; `null` if it is fine. */
+export type BackendUrlProblem = 'not-https' | 'credentials' | 'query' | 'fragment' | 'invalid';
+
+/**
+ * `https://` (compared case-sensitively), a host, no credentials (not even empty ones), no query, no fragment, no
+ * whitespace, control characters or backslashes — the same as the backend's `parse_url` check (backend spec 3.2).
+ * Trailing slashes are not looked at here: the store and the form remove them first.
+ */
+export function backendUrlProblem(s: string): BackendUrlProblem | null {
+    // eslint-disable-next-line no-control-regex -- control characters are exactly what is refused
+    if (s === '' || /[\s\u0000-\u001F\u007F\\]/u.test(s)) return 'invalid';
+    if (!s.startsWith('https://')) return 'not-https';
+    const authority = s.slice('https://'.length).split(/[/?#]/, 1)[0]!;
+    if (authority.includes('@')) return 'credentials';
+    if (s.includes('?')) return 'query';
+    if (s.includes('#')) return 'fragment';
+    if (authority === '') return 'invalid';
     try {
         const u = new URL(s);
-        return u.protocol === 'https:' && u.username === '' && u.password === '' && u.search === '' && u.hash === '' && !s.includes('?') && !s.includes('#');
+        return u.protocol === 'https:' && u.hostname !== '' ? null : 'invalid';
     } catch {
-        return false;
+        return 'invalid';
     }
 }
+
+const isPlainHttpsUrl = (s: string): boolean => backendUrlProblem(s) === null;
 
 /** Bidi embedding/override (U+202A–U+202E) and isolate (U+2066–U+2069) controls: they can make a text read differently. */
 export const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069]/u;

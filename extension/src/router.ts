@@ -1,17 +1,19 @@
 /**
  * All routes of spec 4.1, below `/ccm/ctpassstore/`. There are no route guards: `App.vue` draws a page only when the
  * app state and the route's `requires` allow it (`routeView`), and each page checks the rights it needs. Pages of
- * later steps are placeholders until then.
+ * later steps (backup, setup) are placeholders until then.
  */
 import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory } from 'vue-router';
 import type { RouteRequirement } from './app/app-state';
 import { BASE_PATH, CALLBACK_PATH } from './config';
+import AboutView from './views/AboutView.vue';
 import AuthCallbackView from './views/AuthCallbackView.vue';
 import ManageView from './views/ManageView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import PasswordView from './views/PasswordView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
 import AccessView from './views/settings/AccessView.vue';
+import BackendView from './views/settings/BackendView.vue';
 import ClientFormView from './views/settings/ClientFormView.vue';
 import RulesView from './views/settings/RulesView.vue';
 import SettingsView from './views/settings/SettingsView.vue';
@@ -45,10 +47,10 @@ export const routes: RouteRecordRaw[] = [
     // `new` is matched first; an id `new` can't be edited here (a client named so is still listed and removable).
     { path: '/settings/access/clients/new', component: ClientFormView, meta: { requires: 'editor' } },
     { path: '/settings/access/clients/:id', component: ClientFormView, meta: { requires: 'editor', remount: true } },
-    placeholder('/settings/backend', 'pages.backend', 'editor'),
+    { path: '/settings/backend', component: BackendView, meta: { requires: 'editor' } },
     placeholder('/settings/backup', 'pages.backup', 'admin'),
     placeholder('/settings/setup', 'pages.setup', 'admin'),
-    placeholder('/about', 'nav.about'),
+    { path: '/about', component: AboutView },
     { path: `/${CALLBACK_PATH}`, component: AuthCallbackView },
     { path: '/:pathMatch(.*)*', component: NotFoundView },
 ];

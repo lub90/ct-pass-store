@@ -87,6 +87,14 @@ describe('settings (mirror of backend 3.2)', () => {
         ['javascript:', { backendUrl: 'javascript:alert(1)' }, false],
         ['uppercase scheme (backend compares case-sensitively)', { backendUrl: 'HTTPS://b.example' }, false],
         ['http', { backendUrl: 'http://b.example' }, false],
+        // Parity with the backend's parse_url check: an empty user or password still counts as credentials, and a
+        // URL needs a host (WHATWG would read `https:///x` as host `x`).
+        ['empty credentials', { backendUrl: 'https://:@b.example' }, false],
+        ['empty user', { backendUrl: 'https://@b.example' }, false],
+        ['no host', { backendUrl: 'https:///b.example' }, false],
+        ['backslash', { backendUrl: 'https://b.example\\@evil.example' }, false],
+        ['tab', { backendUrl: 'https://b.example\t' }, false],
+        ['port', { backendUrl: 'https://b.example:8443/api' }, true],
         ['wrong schema 1', { schema: 1 }, false],
         ['wrong schema "2"', { schema: '2' }, false],
     ]);

@@ -153,7 +153,7 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
                 v-else-if="form.value.value !== null"
                 class="cps-settings-form__form"
                 novalidate
-                @submit.prevent="form.save()"
+                @submit.prevent="valid && form.save()"
             >
                 <slot />
                 <p

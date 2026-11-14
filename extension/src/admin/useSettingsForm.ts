@@ -31,6 +31,11 @@ export interface SettingsFormOptions<T> {
     prepare?: (stored: T) => T;
     /** The value an explicit repair save of an `invalid` read starts from; `null`: not repairable here. */
     repair?: (read: InvalidRead<T>) => T | null;
+    /**
+     * Asked right before writing, with what would be written and the value as stored (`null` while repairing): `false`
+     * writes nothing and keeps the change (e.g. a confirm dialog for a risky field).
+     */
+    beforeSave?: (next: T, previous: T | null) => Promise<boolean>;
     /** After a successful save (e.g. the app reloads its settings). */
     onSaved?: () => void | Promise<void>;
     /** Asks before leaving with unsaved changes (`useConfirm`). */
@@ -95,6 +100,8 @@ export function useSettingsForm<T extends { revision: number }>(
     let baseline: string | null = null;
     let revision = 0;
     let run = 0;
+    /** `beforeSave` is waiting for its answer. */
+    let asking = false;
 
     const dirty = computed(() => value.value !== null && (repairing.value || canonical(value.value) !== baseline));
 
@@ -143,11 +150,24 @@ export function useSettingsForm<T extends { revision: number }>(
 
     async function doSave(): Promise<void> {
         const current = value.value;
-        if (current === null || saving.value || !dirty.value) return;
+        if (current === null || saving.value || asking || !dirty.value) return;
+        // What is asked about is what gets written, even if the form changes while the question is open.
+        const sent = copy(current);
+        if (options.beforeSave) {
+            const loaded = run;
+            asking = true;
+            let go: boolean;
+            try {
+                go = await options.beforeSave(copy(sent), baseline === null ? null : (JSON.parse(baseline) as T));
+            } finally {
+                asking = false;
+            }
+            // A reload meanwhile replaced what was asked about (and the revision the save would compare).
+            if (!go || loaded !== run) return;
+        }
         saving.value = true;
         error.value = null;
         conflict.value = false;
-        const sent = copy(current);
         try {
             await save(sent, revision);
         } catch (e) {

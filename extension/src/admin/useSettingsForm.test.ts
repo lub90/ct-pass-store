@@ -116,3 +116,99 @@ describe('useSettingsForm: prepare', () => {
         wrapper.unmount();
     });
 });
+
+describe('useSettingsForm: beforeSave', () => {
+    type V = { revision: number; url: string };
+
+    function setup(answers: boolean[]) {
+        let form!: SettingsForm<V>;
+        const saved: V[] = [];
+        const asked: { next: V; previous: V | null }[] = [];
+        const gates: ((ok: boolean) => void)[] = [];
+        const Page = defineComponent({
+            setup() {
+                form = useSettingsForm<V>(
+                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1, duplicates: 0 }),
+                    (value) => (saved.push(value), Promise.resolve()),
+                    {
+                        beforeSave: (next, previous) => {
+                            asked.push({ next, previous });
+                            const answer = answers.shift();
+                            return answer === undefined ? new Promise<boolean>((resolve) => gates.push(resolve)) : Promise.resolve(answer);
+                        },
+                        confirm: () => Promise.resolve({ confirmed: true }),
+                        leaveQuestion: () => ({ title: 't', text: 't', confirmLabel: 'c', cancelLabel: 'x' }),
+                    },
+                );
+                return () => h('div');
+            },
+        });
+        const wrapper = mount(Page);
+        return { form: () => form, saved, asked, gates, wrapper };
+    }
+
+    it('is asked with the new and the stored value; a no writes nothing and keeps the change', async () => {
+        const { form, saved, asked, wrapper } = setup([false]);
+        await form().load();
+        form().value.value!.url = 'new';
+        await form().save();
+        expect(asked).toEqual([{ next: { revision: 3, url: 'new' }, previous: { revision: 3, url: 'old' } }]);
+        expect(saved).toEqual([]);
+        expect(form().dirty.value).toBe(true);
+        expect(form().savedAt.value).toBeNull();
+        expect(form().error.value).toBeNull();
+        wrapper.unmount();
+    });
+
+    it('a yes saves; the next question compares with what was saved', async () => {
+        const { form, saved, asked, wrapper } = setup([true, true]);
+        await form().load();
+        form().value.value!.url = 'new';
+        await form().save();
+        expect(saved).toEqual([{ revision: 3, url: 'new' }]);
+        form().value.value!.url = 'newer';
+        await form().save();
+        expect(asked[1]).toEqual({ next: { revision: 4, url: 'newer' }, previous: { revision: 4, url: 'new' } });
+        wrapper.unmount();
+    });
+
+    it('a second save while the question is open asks nothing more and writes once', async () => {
+        const { form, saved, asked, gates, wrapper } = setup([]);
+        await form().load();
+        form().value.value!.url = 'new';
+        const first = form().save();
+        void form().save();
+        await flushPromises();
+        expect(asked).toHaveLength(1);
+        gates[0]!(true);
+        await first;
+        expect(saved).toHaveLength(1);
+        wrapper.unmount();
+    });
+
+    it('a change made while the question is open is not saved under the old answer', async () => {
+        const { form, saved, gates, wrapper } = setup([]);
+        await form().load();
+        form().value.value!.url = 'new';
+        const first = form().save();
+        await flushPromises();
+        form().value.value!.url = 'other';
+        gates[0]!(true);
+        await first;
+        expect(saved).toEqual([{ revision: 3, url: 'new' }]);
+        wrapper.unmount();
+    });
+
+    it('a reload while the question is open drops the save (it would carry the newer revision)', async () => {
+        const { form, saved, gates, wrapper } = setup([]);
+        await form().load();
+        form().value.value!.url = 'new';
+        const first = form().save();
+        await flushPromises();
+        await form().load();
+        gates[0]!(true);
+        await first;
+        expect(saved).toEqual([]);
+        wrapper.unmount();
+    });
+});

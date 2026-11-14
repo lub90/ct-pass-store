@@ -302,10 +302,18 @@ refused at the field and by the store (stored texts with them are dropped on rea
   Changing it shows a warning that machine clients sign tokens for this address (backend spec 4.4a).
   Whoever can change this address (the admin group and everyone who controls its membership) can make users' browsers
   send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another
-  server; the admin group must therefore be as trustworthy as ChurchTools administrators (E15). The page warns about this
-  when the address is changed (built in Task 16).
-- „Selbsttest“: the checks of `GET /v1/test` as a list with colored dots and messages; a button runs it again. The
-  write test (`?write=1`) is a separate button with a short explanation.
+  server; the admin group must therefore be as trustworthy as ChurchTools administrators (E15). As soon as the field
+  differs from the stored address, the page warns about this, and saving asks in a danger dialog naming the old and the
+  new address. The save writes only `backendUrl` into the value as read (revision-guarded). The app keeps using the
+  address it started with; the new one takes effect with the next page load (everyone then logs in to the new backend),
+  which the page says after saving, with a reload button. The field's rules are the store's (and the backend's
+  `parse_url` check): also no empty credentials (`https://:@host`), no missing host, no whitespace, control characters
+  or backslashes. A typed address is never contacted, not even without a token: there is no reachability check before
+  saving; the self-test after the reload is that check.
+- „Selbsttest“ (admins only, as the backend requires; settings editors who aren't admins see a note): the checks of
+  `GET /v1/test` as a list with colored dots and messages (plain text); it runs once when the page opens, and a button
+  runs it again. The write test (`?write=1`) is a separate button with a short explanation and never runs on its own.
+  Both go to the address the app runs with. A read-only run also updates the overview's pill.
 - Shows the backend version.
 
 ### 4.9 Über

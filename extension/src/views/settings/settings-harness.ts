@@ -72,6 +72,9 @@ export interface HarnessOptions {
     viewGroupIds?: number[];
     /** More persons than the logged-in one (ME, „Anna Admin“). */
     persons?: FakeCtSeed['persons'];
+    /** The extension's version (default 0.1.0) and the backend's from the login answer (default 0.1.0). */
+    appVersion?: string;
+    backendVersion?: string;
 }
 
 const mounted: VueWrapper[] = [];
@@ -172,7 +175,7 @@ export async function start(o: HarnessOptions) {
     };
     storage.setItem(
         TOKEN_KEY,
-        JSON.stringify({ accessToken: jwt(ME), expiresAt: NOW + 600_000, admin, version: '0.1.0', backend: backendBase(BACKEND), person: ME }),
+        JSON.stringify({ accessToken: jwt(ME), expiresAt: NOW + 600_000, admin, version: o.backendVersion ?? '0.1.0', backend: backendBase(BACKEND), person: ME }),
     );
     const router: Router = createAppRouter(createMemoryHistory());
     const auth = new Auth(() => backend, env);
@@ -184,7 +187,18 @@ export async function start(o: HarnessOptions) {
     const readAccess = store.readAccess.bind(store);
     store.readSettings = () => (storeReads.settings++, readSettings());
     store.readAccess = () => (storeReads.access++, readAccess());
-    const services: Services = { session, ct, store, auth, backend: () => backend, language: 'de', appVersion: '0.1.0', ctBaseUrl: ORIGIN };
+    /** Every address a backend API was asked for (only the configured one may ever get the token). */
+    const backendUrls: string[] = [];
+    const services: Services = {
+        session,
+        ct,
+        store,
+        auth,
+        backend: (url) => (backendUrls.push(url), backend),
+        language: 'de',
+        appVersion: o.appVersion ?? '0.1.0',
+        ctBaseUrl: ORIGIN,
+    };
     const win: CallbackWindow = { opener: null, origin: ORIGIN, close: vi.fn() };
     await router.push(o.path);
     const wrapper = mount(App, {
@@ -234,7 +248,7 @@ export async function start(o: HarnessOptions) {
     const replaceAccess = async (value: unknown): Promise<void> => {
         await fakeCt.updateValue(7, ACCESS_ID, ACCESS_VALUE_ID, encode(value));
     };
-    return { storedAccess, changeAccessElsewhere, replaceAccess, removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
+    return { session, auth, backendUrls, storedAccess, changeAccessElsewhere, replaceAccess, removeStored, wrapper, router, fakeCt, ct, store, reads, storeReads, writes, selfTests, stored, changeElsewhere, replaceStored, openWith };
 }
 
 export async function settle(): Promise<void> {
