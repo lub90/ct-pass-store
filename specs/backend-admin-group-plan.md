@@ -334,3 +334,31 @@ Test review findings 1 and 2 (IMPORTANT) and minors 3–5.
 - [ ] **Step 4:** `UserTokensTest` ~227: split into "missing admin claim is rejected" and "admin true and false round-trip".
 - [ ] **Step 5: Run** the new tests; if one fails, fix the production code (TDD) and say so. `composer check` → PASS.
   **Commit:** `"Tests: unknown membership statuses, MAJOR.MINOR mutants, malformed groups answer"`.
+
+### Task 10: Machine clients need a name and a creation date [security-critical]
+
+Added 2026-11-14 after review point A of the extension (security finding N1) and the maintainer's decision: a machine
+client without `name` or `createdAt` is invalid on both sides. The backend disables it (like any invalid entry: only
+`401 invalid-token`, a `warning` log, reported by `/v1/test`); the extension lists it as misconfigured with a delete
+action.
+
+**Files:**
+- Modify: `specs/backend-spec.md` 3.2 (machine client rules), `specs/backend-test-catalog.md` (new case AG-13)
+- Modify: `backend/src/Infrastructure/Kv/AccessParser.php` (`machineClientProblem`)
+- Create: `shared/access-client-cases.json` (repository root) — the parity fixture
+- Modify/Test: `backend/tests/Unit/Infrastructure/Kv/AccessParserTest.php`
+
+**Interfaces:**
+- Produces: `shared/access-client-cases.json`: `[{ "name": "<case>", "client": { …raw entry… }, "valid": true|false,
+  "reasons": ["missing-name", …] }]` with at least: a complete valid client; missing `name`; empty or whitespace-only
+  `name`; non-string `name`; missing `createdAt`; `createdAt` not `YYYY-MM-DD`; missing `permissions` (valid, grants
+  nothing); a key padded with spaces (valid after trimming); a 31-byte key; an `id` with uppercase; a duplicate-id pair
+  and a shared-key pair (as two-entry cases with `"clients": […]` and the expected enabled ids). The extension's tests
+  (extension plan, point-A fix) read the same file.
+
+- [ ] **Step 1:** Spec 3.2: `name` is a non-empty string (after trimming) and `createdAt` a `YYYY-MM-DD` date;
+  otherwise the client is disabled and reported. Catalog AG-13 (! · U): every case of the shared fixture gives the
+  expected enabled/disabled result.
+- [ ] **Step 2: Failing test:** `AccessParserTest` iterates the fixture → FAIL for the new rules.
+- [ ] **Step 3: Implement** in `machineClientProblem`; the finding text names the client id and the missing field.
+- [ ] **Step 4: Run** `composer check` → PASS. **Commit:** `"Backend: machine clients need a name and a creation date (AG-13)"`.
