@@ -10,8 +10,13 @@ export const VALUE_LIMIT = 10_000;
 
 export type Read<T> =
     | { state: 'missing' }
-    /** `revision`: the stored integer revision, if any, so an explicit repair save can pass it as `expectedRevision`. */
-    | { state: 'invalid'; issues: string[]; revision?: number }
+    /**
+     * `revision`: the stored integer revision, if any, so an explicit repair save can pass it as `expectedRevision`.
+     * `repair` (settings only, for a value with `schema` 2 and such a revision): the known fields that are valid on
+     * their own (`kept`) and the ones present but invalid (`broken`), so a page can rebuild a value without losing
+     * what it may not write. Invalid `texts` are dropped as on an `ok` read (an issue, in neither list).
+     */
+    | { state: 'invalid'; issues: string[]; revision?: number; repair?: Repair<T> }
     | { state: 'newer'; schema: number }
     /**
      * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
@@ -21,7 +26,25 @@ export type Read<T> =
      */
     | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[] };
 
+export interface Repair<T> {
+    kept: Partial<T>;
+    broken: string[];
+}
+
 type Schema = typeof SettingsSchema | typeof AccessSchema;
+
+/** The known settings fields (other than `schema` and `revision`) checked one by one. */
+function repairOf(raw: Record<string, unknown>): Repair<SettingsV2> {
+    const kept: Record<string, unknown> = {};
+    const broken: string[] = [];
+    for (const [key, entry] of Object.entries(SettingsSchema.entries)) {
+        if (key === 'schema' || key === 'revision' || !(key in raw)) continue;
+        const field = v.safeParse(entry, raw[key]);
+        if (field.success) kept[key] = field.output;
+        else broken.push(key);
+    }
+    return { kept: kept as Partial<SettingsV2>, broken };
+}
 
 /** Removes trailing slashes of `backendUrl` (backend spec 3.2). */
 function normalize<T>(value: T): T {
@@ -155,7 +178,10 @@ export class ExtensionStore {
         const result = v.safeParse(schema, raw);
         if (!result.success) {
             const revision = isObject(raw) && Number.isInteger(raw.revision) ? (raw.revision as number) : undefined;
-            return revision === undefined ? { state: 'invalid', issues: issuesOf(result.issues) } : { state: 'invalid', issues: issuesOf(result.issues), revision };
+            if (revision === undefined) return { state: 'invalid', issues: issuesOf(result.issues) };
+            const invalid = { state: 'invalid' as const, issues: [...issues, ...issuesOf(result.issues)], revision };
+            if (schema !== SettingsSchema || !isObject(raw) || raw.schema !== SCHEMA_VERSION) return invalid;
+            return { ...invalid, repair: repairOf(raw) as Repair<v.InferOutput<S>> };
         }
         const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
         const withUnusable = unusable && unusable.length > 0 ? { ...ok, unusable } : ok;

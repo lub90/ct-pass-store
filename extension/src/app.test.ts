@@ -219,7 +219,8 @@ const TEXT = {
 };
 
 const navLinks = (w: VueWrapper) => w.findAll('nav a').map((a) => [a.text(), a.attributes('href')]);
-const showsPage = (w: VueWrapper) => w.text().includes(TEXT.page);
+/** A placeholder, or a real page (each draws its own header; state views and the missing-rights banner don't). */
+const showsPage = (w: VueWrapper) => w.text().includes(TEXT.page) || w.find('main .cps-page-head').exists();
 /** „Mein Passwort“ (Task 12) is a real page now, no placeholder. */
 const showsPasswordPage = (w: VueWrapper) => w.find('h1').exists() && w.find('h1').text() === TEXT.passwordTitle;
 

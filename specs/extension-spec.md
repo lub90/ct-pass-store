@@ -215,6 +215,11 @@ Cards the person can't use are shown disabled with the missing right, not hidden
 „{Name} hat die Einstellungen inzwischen geändert. Lade neu, um die Änderungen zu sehen.“ (or without a name if
 unknown). Leaving a page with unsaved changes asks first.
 
+**Stored problems:** parts a read dropped (e.g. invalid `texts`, dropped as a whole) are listed before any save, since a
+save removes them. An invalid stored `settings` value is repaired explicitly on „Passwortregeln“: its valid fields are
+kept, broken rules get the stricter value, and the save uses the stored `revision`. If `backendUrl` or `oauthClientId`
+is invalid, no repair is offered there: the rules and texts pages never write these two fields (E15).
+
 ### 4.5 Passwortregeln
 
 - Toggle „ChurchTools-Passwort zur Bestätigung verlangen“ (`requirePasswordForPasswordChange`).

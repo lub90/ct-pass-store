@@ -3,6 +3,7 @@ export {
     mdiAccountMultipleOutline as people,
     mdiAlertCircleOutline as error,
     mdiAlertOutline as warning,
+    mdiBackupRestore as backup,
     mdiCheck as check,
     mdiChevronDown as chevronDown,
     mdiChevronRight as chevronRight,
@@ -14,4 +15,8 @@ export {
     mdiInformationOutline as info,
     mdiKeyOutline as key,
     mdiLockOutline as lock,
+    mdiServerNetwork as server,
+    mdiShieldAccountOutline as shield,
+    mdiTextBoxOutline as text,
+    mdiWrenchOutline as wrench,
 } from '@mdi/js';

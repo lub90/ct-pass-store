@@ -30,13 +30,16 @@ export type SettingsTexts = v.InferOutput<typeof SettingsTextsSchema>;
 
 const Revision = v.pipe(v.number(), v.integer(), v.minValue(0));
 
+/** `passwordLength` bounds (backend spec 3.2, Q7). */
+export const PASSWORD_LENGTH = { min: 12, max: 64 } as const;
+
 /** Unknown fields are allowed (and kept) by `looseObject`. */
 export const SettingsSchema = v.looseObject({
     schema: v.literal(SCHEMA_VERSION),
     revision: Revision,
     requirePasswordForPasswordChange: v.boolean(),
     allowCustomPassword: v.boolean(),
-    passwordLength: v.pipe(v.number(), v.integer(), v.minValue(12), v.maxValue(64)),
+    passwordLength: v.pipe(v.number(), v.integer(), v.minValue(PASSWORD_LENGTH.min), v.maxValue(PASSWORD_LENGTH.max)),
     backendUrl: v.optional(v.pipe(v.string(), v.check(isPlainHttpsUrl, 'must be an https:// URL without credentials, query or fragment'))),
     oauthClientId: v.optional(v.pipe(v.string(), v.minLength(1))),
     texts: v.optional(SettingsTextsSchema),

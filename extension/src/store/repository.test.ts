@@ -471,6 +471,49 @@ describe('invalid reads carry their revision', () => {
     });
 });
 
+describe('invalid reads say what a repair keeps', () => {
+    it('lists the known fields valid on their own (kept) and the ones present but invalid (broken)', async () => {
+        const stored = { ...settings, revision: 3, passwordLength: 99, allowCustomPassword: 'yes', oauthClientId: 'oauth-1', future: 1 };
+        const r = await setup([JSON.stringify(stored)]).store.readSettings();
+        expect(r).toMatchObject({ state: 'invalid', revision: 3 });
+        if (r.state !== 'invalid') throw new Error('not invalid');
+        expect(r.repair).toEqual({
+            kept: { requirePasswordForPasswordChange: false, backendUrl: 'https://b.example', oauthClientId: 'oauth-1' },
+            broken: ['allowCustomPassword', 'passwordLength'],
+        });
+    });
+    it('names an invalid backendUrl or oauthClientId as broken, never kept', async () => {
+        const r = await setup([JSON.stringify({ ...settings, passwordLength: 99, backendUrl: 'http://b.example', oauthClientId: '' })]).store.readSettings();
+        expect(r.state === 'invalid' && r.repair).toEqual({
+            kept: { requirePasswordForPasswordChange: false, allowCustomPassword: true },
+            broken: ['passwordLength', 'backendUrl', 'oauthClientId'],
+        });
+    });
+    it('keeps valid texts; invalid texts are dropped as before (an issue, neither kept nor broken)', async () => {
+        const texts = { de: { title: 'Hallo' } };
+        const kept = await setup([JSON.stringify({ ...settings, passwordLength: 99, texts })]).store.readSettings();
+        expect(kept.state === 'invalid' && kept.repair?.kept.texts).toEqual(texts);
+        const dropped = await setup([JSON.stringify({ ...settings, passwordLength: 99, texts: { de: { title: 'x'.repeat(61) } } })]).store.readSettings();
+        expect(dropped.state === 'invalid' && dropped.repair).toEqual({ kept: expect.not.objectContaining({ texts: expect.anything() }), broken: ['passwordLength'] });
+        expect(dropped.state === 'invalid' && dropped.issues.some((i) => i.startsWith('texts.'))).toBe(true);
+    });
+    it('offers no repair without schema 2 or without a usable revision (old layout, garbage, unversioned)', async () => {
+        for (const content of [
+            '{nope',
+            '5',
+            JSON.stringify({ adminUsers: [1], readAccessUsers: [2] }),
+            JSON.stringify({ ...settings, schema: 1 }),
+            JSON.stringify({ ...settings, schema: undefined, passwordLength: 99 }),
+            JSON.stringify({ ...settings, revision: 'x' }),
+            JSON.stringify({ ...settings, revision: 1.5 }),
+        ]) {
+            const r = await setup([content]).store.readSettings();
+            expect(r.state, content).toBe('invalid');
+            expect(r.state === 'invalid' && r.repair, content).toBeUndefined();
+        }
+    });
+});
+
 describe('unusable machine clients are listed and removable', () => {
     const key = (c: string) => btoa(c.repeat(32));
     const ok = (id: string, c: string) => ({ id, name: id, publicKeys: [key(c)], permissions: ['entries:read'], createdAt: '2026-01-01' });

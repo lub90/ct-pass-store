@@ -11,6 +11,9 @@ import ManageView from './views/ManageView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import PasswordView from './views/PasswordView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
+import RulesView from './views/settings/RulesView.vue';
+import SettingsView from './views/settings/SettingsView.vue';
+import TextsView from './views/settings/TextsView.vue';
 
 declare module 'vue-router' {
     interface RouteMeta {
@@ -31,9 +34,9 @@ export const routes: RouteRecordRaw[] = [
     { path: '/', component: PasswordView },
     // One record for both, so choosing another person keeps the page (and its loaded members).
     { path: '/manage/:personId?', component: ManageView, meta: { requires: 'admin' } },
-    placeholder('/settings', 'nav.settings', 'editor'),
-    placeholder('/settings/rules', 'pages.rules', 'editor'),
-    placeholder('/settings/texts', 'pages.texts', 'editor'),
+    { path: '/settings', component: SettingsView, meta: { requires: 'editor' } },
+    { path: '/settings/rules', component: RulesView, meta: { requires: 'editor' } },
+    { path: '/settings/texts', component: TextsView, meta: { requires: 'editor' } },
     placeholder('/settings/access', 'pages.access', 'editor'),
     placeholder('/settings/access/clients/new', 'pages.client', 'editor'),
     placeholder('/settings/access/clients/:id', 'pages.client', 'editor'),
