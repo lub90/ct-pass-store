@@ -867,3 +867,5 @@ Cases for the admin role from a ChurchTools group, the `access` category and the
   the authorize step redirects there with `code` and `state` (measures extension spec 14.1) — 3.3
 - [x] **AG-12** (N · U) Release check: tag `backend-vX.Y.Z`; `MAJOR.MINOR` differing from `extension/package.json`
   fails — 6.5, `versioning.md`
+- [x] **AG-13** (! · U) Every case of `shared/access-client-cases.json` gives the expected enabled/disabled result and
+  reason codes; a client without `name` or `createdAt` is disabled — 3.2

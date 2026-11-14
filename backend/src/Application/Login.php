@@ -43,7 +43,8 @@ final class Login
         $adminGroupId = $this->settings->settings()->adminGroupId;
 
         $person = $this->identities->authenticate($code, $codeVerifier, $redirectUri, $adminGroupId);
-        $this->logger->info(ucfirst($person->describe()) . ' logged in.');
+        // The role is logged because it comes from the membership of a ChurchTools group (spec 4.4, D9); no token, no name.
+        $this->logger->info(ucfirst($person->describe()) . ($person->admin ? ' logged in as admin.' : ' logged in.'));
 
         return $this->tokens->issue($person);
     }

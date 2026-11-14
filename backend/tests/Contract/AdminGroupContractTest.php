@@ -8,6 +8,7 @@ use CtPassStore\Infrastructure\ChurchTools\Credential;
 use CtPassStore\Infrastructure\ChurchTools\GuzzleChurchToolsClient;
 use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use CtPassStore\Tests\Contract\Helpers\OAuthCodeFetcher;
+use CtPassStore\Tests\Contract\Helpers\Redact;
 use GuzzleHttp\Client;
 use GuzzleHttp\Cookie\CookieJar;
 use GuzzleHttp\RequestOptions;
@@ -73,7 +74,7 @@ final class AdminGroupContractTest extends TestCase
             self::$clientId = (string) ($client['identifier'] ?? '');
             self::$clientSecret = (string) ($client['clientSecret'] ?? '');
             self::$clientNumericId = (int) ($client['id'] ?? 0);
-            self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . substr((string) $create->getBody(), 0, 300));
+            self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . Redact::body((string) $create->getBody()));
             self::assertNotSame('', self::$clientId);
             self::grantLogin();
         } catch (\Throwable $e) {
@@ -244,7 +245,7 @@ final class AdminGroupContractTest extends TestCase
             self::$root . '/api/persons/' . self::$user['id'] . '/groups',
             [RequestOptions::HEADERS => ['Authorization' => 'Bearer ' . $token, 'X-OnlyAuthenticated' => '1', 'Accept' => 'application/json']],
         );
-        self::assertSame(200, $response->getStatusCode(), substr((string) $response->getBody(), 0, 300));
+        self::assertSame(200, $response->getStatusCode(), Redact::body((string) $response->getBody()));
         $actual = [];
         foreach ((self::json($response)['data'] ?? []) as $entry) {
             self::assertIsString($entry['group']['domainIdentifier'] ?? null, 'group.domainIdentifier is a string');
@@ -279,7 +280,7 @@ final class AdminGroupContractTest extends TestCase
                 'code_verifier' => self::$verifier,
             ],
         ]);
-        self::assertSame(200, $response->getStatusCode(), 'Token exchange: ' . substr(preg_replace('/"[A-Za-z_]*token"\s*:\s*"[^"]*"/', '"…":"…"', (string) $response->getBody()) ?? '', 0, 300));
+        self::assertSame(200, $response->getStatusCode(), 'Token exchange: ' . Redact::body((string) $response->getBody()));
 
         return (string) (self::json($response)['access_token'] ?? '');
     }
@@ -297,6 +298,8 @@ final class AdminGroupContractTest extends TestCase
     private static function json(\Psr\Http\Message\ResponseInterface $response): array
     {
         $data = json_decode((string) $response->getBody(), true);
+        // Rewound, so an assertion message can still read the body.
+        $response->getBody()->rewind();
 
         return is_array($data) ? $data : [];
     }

@@ -133,6 +133,28 @@ final class ReleaseCheckTest extends TestCase
         self::assertStringContainsString("MAJOR.MINOR 0.1 differs from the extension's 0.2 (versioning.md)", $result['output']);
     }
 
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function lookalikeExtensionVersions(): iterable
+    {
+        yield 'other major, same minor' => ['1.1.0'];
+        yield 'minor with the backend as prefix' => ['0.10.0'];
+        yield 'minor 11' => ['0.11.0'];
+        yield 'major with the backend major as suffix' => ['10.1.0'];
+    }
+
+    #[DataProvider('lookalikeExtensionVersions')]
+    public function testMajorAndMinorMustMatchExactly(string $extensionVersion): void
+    {
+        file_put_contents($this->root . '/extension/package.json', '{"version": "' . $extensionVersion . '"}');
+
+        $result = $this->check('backend-v0.1.0');
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('MAJOR.MINOR 0.1 differs', $result['output']);
+    }
+
     public function testADifferentExtensionPatchPasses(): void
     {
         file_put_contents($this->root . '/extension/package.json', '{"version": "0.1.9"}');

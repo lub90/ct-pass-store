@@ -228,6 +228,10 @@ final class UserTokensTest extends TestCase
     {
         // As issued before the admin group existed (AG-07): the client logs in again.
         $this->assertInvalid(self::sign($this->claims(['admin' => null])));
+    }
+
+    public function testAdminTrueAndFalseClaimsAreAccepted(): void
+    {
         self::assertTrue($this->tokens->verify(self::sign($this->claims(['admin' => true])))->admin);
         self::assertFalse($this->tokens->verify(self::sign($this->claims()))->admin);
     }

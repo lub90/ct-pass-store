@@ -8,6 +8,7 @@ use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
@@ -453,6 +454,29 @@ final class LoginApiTest extends ApiTestCase
         self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
     }
 
+    public function testTheLoginLogLineNamesTheAdminRoleWithoutSecrets(): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in as admin.'));
+        foreach ($this->log->getRecords() as $record) {
+            self::assertStringNotContainsString(self::CODE, (string) $record['message']);
+        }
+    }
+
+    public function testTheLoginLogLineOfAPlainUserHasNoRole(): void
+    {
+        $this->grant();
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
+        self::assertFalse($this->log->hasInfoThatContains('as admin'));
+    }
+
     // ---------------------------------------------------------------- AG-02, AG-03
 
     /**
@@ -619,6 +643,7 @@ final class LoginApiTest extends ApiTestCase
         yield 'timeout' => [new UnavailableException('GET persons/{id}/groups: ChurchTools is unreachable (ConnectException).'), ProblemType::UpstreamUnavailable];
         yield '429' => [new RateLimitedException('GET persons/{id}/groups: ChurchTools answered 429.', 30), ProblemType::UpstreamRateLimited];
         yield '401' => [new NotAuthenticatedException('GET persons/{id}/groups: ChurchTools answered 401.'), ProblemType::UpstreamInvalid];
+        yield 'malformed answer' => [new InvalidResponseException('GET persons/{id}/groups: a membership has no groupMemberStatus.'), ProblemType::UpstreamInvalid];
     }
 
     #[DataProvider('failingGroups')]

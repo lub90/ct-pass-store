@@ -134,6 +134,9 @@ Data lives in three KV categories of the `ctpassstore` module:
       registered client).
     - `publicKeys` is a non-empty list of valid Ed25519 public keys (the raw 32 bytes, base64 or base64url encoded, as
       Node.js exports them in a JWK's `x`). Several keys allow rotation without downtime.
+    - `name` is a non-empty string (after trimming) and `createdAt` a real `YYYY-MM-DD` date. Without them the client is
+      disabled and reported, because the extension couldn't list it (decided 2026-11-14). A missing `permissions`
+      field is valid and grants nothing.
     - `permissions` may contain only known values; today that's just `entries:read`. Unknown values (`entries:write`,
       `*`) grant nothing and are reported by `/test`.
     - A missing `machineClients` field means an empty list.
@@ -145,6 +148,20 @@ Data lives in three KV categories of the `ctpassstore` module:
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
       client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
+    - **Parity fixture** `shared/access-client-cases.json` pins these rules for the backend (`AccessParserTest`, AG-13)
+      and the extension's reader. It is a JSON list of cases, each with a `name` and either
+      `{ "client": <raw entry>, "valid": true|false, "reasons": [<codes>] }` (one entry; `reasons` is empty if valid)
+      or `{ "clients": [<raw entries>], "enabled": [<ids of enabled clients>], "reasons": [[<codes>], …] }` (several
+      entries, for duplicate ids and shared keys; `reasons` has one list per entry, computed in order, so an entry
+      whose id an earlier entry already used gets `duplicate-id`; a shared key is not a reason code, it only shows in
+      `enabled`). Reason codes: `not-an-object`, `invalid-id`, `duplicate-id`, `missing-name`, `invalid-created-at`,
+      `no-keys`, `invalid-key`, `invalid-permissions`, listed in the order they are reported. `invalid-id` and
+      `duplicate-id` exclude each other; `invalid-key` appears once per client however many keys are bad. Trimming
+      removes exactly PHP's `trim()` default characters (space, tab, LF, CR, NUL, vertical tab) and nothing else: a
+      key is trimmed before decoding, a name is trimmed before the emptiness check, and a non-breaking space (U+00A0)
+      is not trimmed (a key padded with it is `invalid-key`; a name of only U+00A0 is non-empty and valid).
+      `createdAt` must be a real calendar date (`2024-02-29` is valid, `2025-02-29` and `2026-02-30` are not).
+      Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
 - Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 
@@ -331,7 +348,9 @@ All three fields are required, non-empty strings of at most 2,048 characters.
      `admin` is `false`. `404` or `403` from ChurchTools means `admin: false` and a `warning` in the log; `5xx` or a
      timeout → `502 upstream-unavailable`, so no token is issued with a guessed role.
 5. **The ChurchTools access and refresh tokens are discarded.** They're never stored or logged.
-6. It issues its own access token.
+6. It issues its own access token and logs at `info`: `User <id> logged in as admin.` for an admin, `User <id> logged in.`
+   otherwise. No token, code or username is in the line. The admin role comes from a group membership that others may
+   control (D9), so the log shows when it was used.
 
 **Response `200`:**
 
@@ -1503,6 +1522,12 @@ group `access.groups.admins.groupId`. At login the backend asks ChurchTools with
   their token expires (15 minutes), like revoking `view`.
 - Gone admins can't be reported or cleaned any more, and needn't be: membership lives in ChurchTools, and a deleted or
   archived person can't log in.
+
+**Consequence:** whoever controls the membership of the admin group in ChurchTools holds the admin role. That includes
+leaders whose group role may edit members, holders of `edit group memberships` (also `of group` or `of grouptype`),
+`administer groups` or `administer persons`, and anyone who can join an open, auto-accepting or dynamic group. They
+become admin at their next login. The backend can't check this; the extension's rights check does (extension spec 16.4,
+rule 6) and `backend/docs/setup.md` tells the admin how to choose the group.
 
 **Fail closed:** a missing or invalid group ID means no admins; `404` or `403` for the groups means `admin: false`; a
 `5xx` or timeout refuses the login (`502`) rather than issue a token with a guessed role.

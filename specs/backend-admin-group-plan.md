@@ -23,6 +23,9 @@ that proves it.
 "Gone-persons load test paused"), or from `main` after that branch is merged. Never on top of uncommitted work of
 another agent: check `git status` first.
 
+Tasks marked **[security-critical]** get, after Superpowers' own task review, a `test-reviewer` and a
+`security-reviewer` pass on their diff (project `.claude/CLAUDE.md`, review point A; added 2026-11-14).
+
 ## Global Constraints
 
 - One commit per task. Every commit passes `composer check` in `backend/`.
@@ -141,7 +144,7 @@ Carry extension spec section 11 into the backend's documents before any code cha
 - [ ] **Step 5:** Record both results in `ct-extension-info.md` section 4 and tick spec 14.1 and 14.3 in
   `extension-spec.md`. Commit: `"Tests: measure OAuth group membership and the callback URI (AG-10, AG-11)"`.
 
-### Task 3: Client: group memberships with the user's token
+### Task 3: Client: group memberships with the user's token [security-critical]
 
 **Files:**
 - Modify: `backend/src/Infrastructure/ChurchTools/ChurchToolsClient.php`,
@@ -175,7 +178,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   `X-OnlyAuthenticated: 1`; all pages).
 - [ ] **Step 5: Run** `composer check` → PASS. Commit: `"Backend: read a person's active groups with their token (AG-01)"`.
 
-### Task 4: `access` category in the settings repository
+### Task 4: `access` category in the settings repository [security-critical]
 
 **Files:**
 - Modify: `backend/src/Infrastructure/Kv/KvSchema.php`, `SettingsParser.php`, `KvSettingsRepository.php`,
@@ -206,7 +209,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   before). Run `composer check` → PASS.
 - [ ] **Step 5: Commit:** `"Backend: admin group and machine clients from the access category (AG-04, AG-09)"`.
 
-### Task 5: Admin claim at login and in authorization
+### Task 5: Admin claim at login and in authorization [security-critical]
 
 **Files:**
 - Modify: `backend/src/Domain/PersonPrincipal.php`, `AccessPolicy.php`,
@@ -240,7 +243,7 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
 - [ ] **Step 4: Run** `composer check` → PASS. Also run the existing `AX-*` login cases unchanged.
 - [ ] **Step 5: Commit:** `"Backend: admin role from the admin group, signed into the token (AG-02, AG-03, AG-05–AG-07)"`.
 
-### Task 6: Self-check and cleanup without `adminUsers`
+### Task 6: Self-check and cleanup without `adminUsers` [security-critical]
 
 **Files:**
 - Delete: `backend/src/Infrastructure/SelfCheck/AdminUsersCheck.php`, `backend/src/Application/GoneAdmins.php` and
@@ -279,3 +282,83 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   in extension plan Task 1; until then this check fails, which is correct: no backend release before the extension.)
 - [ ] **Step 4: Run** `composer check` → PASS.
 - [ ] **Step 5: Commit:** `"Backend: release tags backend-v*, shared MAJOR.MINOR with the extension (AG-12)"`.
+
+---
+
+## Tasks from review point B (2026-11-14)
+
+Added after the end-of-branch reviews (project `.claude/CLAUDE.md`, review point B, round 1). Findings are quoted in
+`.superpowers/sdd/backend-admin-group-plan/progress.md`.
+
+### Task 8: Whoever controls the admin group's membership is admin [security-critical]
+
+Security review finding 1 (IMPORTANT) and minors 3 and 5.
+
+**Files:**
+- Modify: `specs/extension-spec.md` 16.4 (new rule at the end), 16.1, 4.7; `specs/backend-spec.md` D9 (consequence) and
+  4.4 (log line); `backend/docs/setup.md` (admin group section)
+- Modify: `backend/src/Application/Login.php`, `backend/tests/Api/LoggingApiTest.php` (or `LoginApiTest.php`)
+- Modify: `backend/tests/Contract/AdminGroupContractTest.php` (~line 76)
+
+- [ ] **Step 1: Spec and docs.** Extension spec 16.4 gets rule 6 "Who controls the admin group's membership": warn
+  about (a) group roles of the admin group whose rights let them edit memberships of that group, (b) open, sign-up or
+  auto-accepting groups, dynamic or automatically filled groups, (c) persons, statuses and group roles holding
+  membership-editing rights for that group or its group type (`edit group memberships`, `edit group memberships of
+  group`/`of grouptype`, `administer groups`, `administer persons`), read from `getMasterData`; if any of this can't be
+  determined, the check says so instead of reporting ok. 16.1 and 4.7 state: controlling the admin group's membership
+  equals the admin role. Backend D9 states the same consequence. `backend/docs/setup.md` tells the admin to use a group
+  whose membership only the intended people can change (closed, no sign-up, no leader rights to edit members).
+- [ ] **Step 2: Failing test** in the API/logging tests: a successful login logs at `info` "user N logged in as admin."
+  for an admin and "user N logged in." for a user; no token or username in the line.
+- [ ] **Step 3: Run** → FAIL. **Step 4: Implement** the log line in `Login::execute`.
+- [ ] **Step 5:** `AdminGroupContractTest.php` ~76: the assertion message must never contain `clientSecret`; remove it
+  from the body before building the message (unit-check the redaction helper if it's a function).
+- [ ] **Step 6: Run** `composer check` → PASS. **Commit:** `"Spec, backend: membership control of the admin group is the admin role; log the role at login"`.
+
+### Task 9: Tests that pin the active-only rule and the shared MAJOR.MINOR [security-critical]
+
+Test review findings 1 and 2 (IMPORTANT) and minors 3–5.
+
+**Files:**
+- Modify: `backend/tests/Unit/Infrastructure/ChurchTools/GuzzleChurchToolsClientTest.php`,
+  `backend/tests/Unit/Deploy/ReleaseCheckTest.php`, `backend/tests/Api/LoginApiTest.php`,
+  `backend/tests/Unit/Application/Auth/UserTokensTest.php`
+- Modify production code only if a new test exposes a bug.
+
+- [ ] **Step 1:** `GuzzleChurchToolsClientTest`: memberships of the admin group with statuses `'inactive'`, `'Active'`,
+  `'ACTIVE'`, `''`, `' active'` are left out of `activeGroupIds`. `malformedGroupAnswers` gains `lastPage` `0`, `-1`,
+  `101`; a case where the admin group appears only on page 2 is returned.
+- [ ] **Step 2:** `ReleaseCheckTest`: backend 0.1.0 fails against extension `1.1.0`, `0.10.0`, `0.11.0` and `10.1.0`.
+- [ ] **Step 3:** `LoginApiTest`: a malformed groups answer (`InvalidResponseException`) gives `502 upstream-invalid` and
+  no token.
+- [ ] **Step 4:** `UserTokensTest` ~227: split into "missing admin claim is rejected" and "admin true and false round-trip".
+- [ ] **Step 5: Run** the new tests; if one fails, fix the production code (TDD) and say so. `composer check` → PASS.
+  **Commit:** `"Tests: unknown membership statuses, MAJOR.MINOR mutants, malformed groups answer"`.
+
+### Task 10: Machine clients need a name and a creation date [security-critical]
+
+Added 2026-11-14 after review point A of the extension (security finding N1) and the maintainer's decision: a machine
+client without `name` or `createdAt` is invalid on both sides. The backend disables it (like any invalid entry: only
+`401 invalid-token`, a `warning` log, reported by `/v1/test`); the extension lists it as misconfigured with a delete
+action.
+
+**Files:**
+- Modify: `specs/backend-spec.md` 3.2 (machine client rules), `specs/backend-test-catalog.md` (new case AG-13)
+- Modify: `backend/src/Infrastructure/Kv/AccessParser.php` (`machineClientProblem`)
+- Create: `shared/access-client-cases.json` (repository root) — the parity fixture
+- Modify/Test: `backend/tests/Unit/Infrastructure/Kv/AccessParserTest.php`
+
+**Interfaces:**
+- Produces: `shared/access-client-cases.json`: `[{ "name": "<case>", "client": { …raw entry… }, "valid": true|false,
+  "reasons": ["missing-name", …] }]` with at least: a complete valid client; missing `name`; empty or whitespace-only
+  `name`; non-string `name`; missing `createdAt`; `createdAt` not `YYYY-MM-DD`; missing `permissions` (valid, grants
+  nothing); a key padded with spaces (valid after trimming); a 31-byte key; an `id` with uppercase; a duplicate-id pair
+  and a shared-key pair (as two-entry cases with `"clients": […]` and the expected enabled ids). The extension's tests
+  (extension plan, point-A fix) read the same file.
+
+- [ ] **Step 1:** Spec 3.2: `name` is a non-empty string (after trimming) and `createdAt` a `YYYY-MM-DD` date;
+  otherwise the client is disabled and reported. Catalog AG-13 (! · U): every case of the shared fixture gives the
+  expected enabled/disabled result.
+- [ ] **Step 2: Failing test:** `AccessParserTest` iterates the fixture → FAIL for the new rules.
+- [ ] **Step 3: Implement** in `machineClientProblem`; the finding text names the client id and the missing field.
+- [ ] **Step 4: Run** `composer check` → PASS. **Commit:** `"Backend: machine clients need a name and a creation date (AG-13)"`.

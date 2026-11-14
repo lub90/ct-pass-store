@@ -16,6 +16,17 @@ use CtPassStore\Domain\MachineClient;
  */
 final class AccessParser
 {
+    private const REASON_TEXTS = [
+        'not-an-object' => 'the entry isn\'t an object',
+        'invalid-id' => 'the id must be 3 to 40 characters a–z, 0–9 or -',
+        'duplicate-id' => 'its id is used twice',
+        'missing-name' => 'name must be a non-empty string',
+        'invalid-created-at' => 'createdAt must be a date like 2026-11-01',
+        'no-keys' => 'publicKeys must be a non-empty list',
+        'invalid-key' => 'publicKeys contains a value that isn\'t a base64-encoded Ed25519 public key',
+        'invalid-permissions' => 'permissions must be a list',
+    ];
+
     /**
      * @param array<string, mixed>|null $raw null if the category or its value is missing
      */
@@ -81,7 +92,7 @@ final class AccessParser
 
                 continue;
             }
-            /** @var array{id: string, name?: mixed, publicKeys: list<string>, permissions?: mixed} $entry */
+            /** @var array{id: string, name: string, publicKeys: list<string>, permissions?: mixed} $entry */
             $permissions = [];
             foreach (is_array($entry['permissions'] ?? null) ? $entry['permissions'] : [] as $permission) {
                 if ($permission === MachineClient::PERMISSION_READ_ENTRIES) {
@@ -92,7 +103,7 @@ final class AccessParser
             }
             $clients[$entry['id']] = new MachineClient(
                 $entry['id'],
-                is_string($entry['name'] ?? null) ? $entry['name'] : $entry['id'],
+                trim($entry['name']),
                 array_map(self::ed25519Key(...), $entry['publicKeys']),
                 array_values(array_unique($permissions)),
             );
@@ -137,31 +148,64 @@ final class AccessParser
      */
     private static function machineClientProblem(mixed $entry, array $seen): ?string
     {
-        if (!is_array($entry) || array_is_list($entry)) {
-            return 'the entry isn\'t an object';
+        $reasons = self::reasons($entry, $seen);
+        if ($reasons === []) {
+            return null;
         }
+
+        return implode('; ', array_map(static fn(string $reason): string => self::REASON_TEXTS[$reason], $reasons));
+    }
+
+    /**
+     * The reason codes why an entry is invalid (empty if it's valid). The codes are pinned by
+     * `shared/access-client-cases.json`, which the extension's reader tests as well.
+     *
+     * @param array<string, true> $seen IDs of earlier entries
+     * @return list<string>
+     */
+    public static function reasons(mixed $entry, array $seen = []): array
+    {
+        if (!is_array($entry) || array_is_list($entry)) {
+            return ['not-an-object'];
+        }
+        $reasons = [];
         $id = $entry['id'] ?? null;
         if (!is_string($id) || preg_match(MachineClient::ID_PATTERN, $id) !== 1) {
-            return 'the id must be 3 to 40 characters a–z, 0–9 or -';
+            $reasons[] = 'invalid-id';
+        } elseif (isset($seen[$id])) {
+            $reasons[] = 'duplicate-id';
         }
-        if (isset($seen[$id])) {
-            return 'its id is used twice';
+        $name = $entry['name'] ?? null;
+        if (!is_string($name) || trim($name) === '') {
+            $reasons[] = 'missing-name';
+        }
+        if (!self::isDate($entry['createdAt'] ?? null)) {
+            $reasons[] = 'invalid-created-at';
         }
         $keys = $entry['publicKeys'] ?? null;
         if (!is_array($keys) || !array_is_list($keys) || $keys === []) {
-            return 'publicKeys must be a non-empty list';
-        }
-        foreach ($keys as $key) {
-            if (!is_string($key) || self::ed25519KeyOrNull($key) === null) {
-                return 'publicKeys contains a value that isn\'t a base64-encoded Ed25519 public key';
+            $reasons[] = 'no-keys';
+        } else {
+            foreach ($keys as $key) {
+                if (!is_string($key) || self::ed25519KeyOrNull($key) === null) {
+                    $reasons[] = 'invalid-key';
+                    break;
+                }
             }
         }
         $permissions = $entry['permissions'] ?? [];
         if (!is_array($permissions) || !array_is_list($permissions)) {
-            return 'permissions must be a list';
+            $reasons[] = 'invalid-permissions';
         }
 
-        return null;
+        return $reasons;
+    }
+
+    private static function isDate(mixed $value): bool
+    {
+        return is_string($value)
+            && preg_match('/^(\d{4})-(\d{2})-(\d{2})\z/', $value, $m) === 1
+            && checkdate((int) $m[2], (int) $m[3], (int) $m[1]);
     }
 
     private static function ed25519Key(string $base64): string

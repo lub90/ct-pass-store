@@ -224,6 +224,8 @@ sentences, at most 300 characters). An empty field means the default text, shown
 ### 4.7 Zugriff
 
 - A warning banner: „Wer hier etwas ändern kann, hat Zugriff auf alle Passwörter. Halt diesen Kreis sehr klein.“
+  The same holds for the admin group: whoever controls its membership is admin (16.1). The status dot of „Admins“
+  also shows the findings of rule 6 (16.4).
 - **Groups:** for the roles „Nutzer“ (users) and „Admins“, the mapped ChurchTools group with name, member count, a
   status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
   ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
@@ -648,6 +650,9 @@ Each role is a ChurchTools group, stored in `access.groups` (6.1):
    never granted by the extension.
 3. Instead of a group, a church might want to grant the user rights by person status (e.g. all members). That's out of
    scope; the user group can contain whoever the church wants.
+4. **Controlling the membership of the admin group equals the admin role.** The backend reads the role from the
+   membership at login (backend spec 4.4, D9). Anyone who can add themselves or others to that group is admin at the
+   next login. Rule 6 of 16.4 checks who can.
 
 ### 16.2 The rights table
 
@@ -698,6 +703,18 @@ per group and role, with the traffic-light levels ok / warn / fail:
    admins get no module rights implicitly. If the master data can't be loaded, the check says it couldn't verify this
    instead of reporting ok.
 5. **Mapping problems:** a mapped group is missing, deleted or inactive → **fail**.
+6. **Who controls the admin group's membership:** whoever can change the members of the admin group becomes admin at
+   their next login (16.1). The check **warns** about each of these, naming them:
+   - (a) a group role of the admin group whose rights let its holders edit memberships of that group (for example a
+     leader role with `+edit basic group memberships` or `+remove from group`-style rights);
+   - (b) an admin group that is open, has sign-up, accepts requests automatically, or is dynamic or filled
+     automatically;
+   - (c) persons, statuses and group roles holding a right to edit memberships of that group or of its group type:
+     `edit group memberships`, `edit group memberships of group`, `edit group memberships of grouptype`,
+     `administer groups`, `administer persons`.
+
+   It reads (a) to (c) from the group data and from `getMasterData`. If any of this can't be determined, the check
+   says so instead of reporting ok. Like rule 4, these findings are only reported, never changed automatically.
 
 It runs on „Einrichtung“ (full list) and feeds the status pills of „Zugriff“ and the settings overview. Repairing:
 „Fehlende Rechte ergänzen“ grants rule-1 rights. Removing rule-2 or rule-3 rights is offered per right, with a
