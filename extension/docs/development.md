@@ -291,6 +291,10 @@ For an annotated tag the second line (`^{}`) is the commit; use it, not the tag 
 `download-artifact` on majors that work together (today v7 and v8, both on the same artifact service; there is no
 upload-artifact v8); read both release notes before bumping either.
 
+`.github/CODEOWNERS` names the maintainer (`@lub90`) as owner of the workflows, `.gitleaks.toml`, `.gitleaksignore` and
+`CODEOWNERS` itself: a change to any of them needs the owner's review. That is enforced only when the branch protection
+of `main` requires code owner reviews, which the maintainer sets on GitHub; without it, the file is only a reviewer hint.
+
 ### Secret scan (gitleaks)
 
 A second job scans the whole git history with gitleaks (pinned version, checked against its sha256) and the committed
@@ -354,9 +358,13 @@ does the same for `ctpassstore-backend-X.Y.Z.zip` (Composer packages instead of 
 sha256sum --check ctpassstore-extension-X.Y.Z.zip.sha256
 # Proves the ZIP was built by this repository's release workflow from the tag (GitHub CLI, logged in):
 gh attestation verify ctpassstore-extension-X.Y.Z.zip --repo lub90/ct-pass-store \
-  --signer-workflow lub90/ct-pass-store/.github/workflows/extension-release.yml
+  --signer-workflow lub90/ct-pass-store/.github/workflows/extension-release.yml \
+  --source-ref refs/tags/extension-vX.Y.Z
 ```
+
+`--source-ref` binds the check to the release tag: without it, an attestation from any run of the release workflow (for
+example from another tag) would also pass.
 
 The checksum catches a damaged or incomplete download; whoever can change the release page can replace both files, so
 the attestation is the stronger check (it is signed and names the workflow, the tag and the commit). For the backend, use
-`ctpassstore-backend-X.Y.Z.zip` and `backend-release.yml`.
+`ctpassstore-backend-X.Y.Z.zip`, `backend-release.yml` and `--source-ref refs/tags/backend-vX.Y.Z`.

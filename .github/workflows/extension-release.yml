@@ -37,6 +37,8 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: '24'
+          # No cache on a release, also not the automatic one a future packageManager field in package.json would turn on.
+          package-manager-cache: false
 
       - name: Release check (tag, package.json, package-lock.json, CHANGELOG, MAJOR.MINOR with the backend)
         run: |

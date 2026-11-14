@@ -21,16 +21,16 @@ paths = ['''^backend/tests/keys/privateKey1Encrypted\.pem$''']
 description = "Invented JWT-shaped string (payload sub 947, signature 'signature-of-the-token') for the fixture sanitizer tests"
 condition = "AND"
 paths = ['''^extension/scripts/sanitize-fixture\.test\.js$''']
-regexes = ['''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiI5NDcifQ\.c2lnbmF0dXJlLW9mLXRoZS10b2tlbg''']
+regexes = ['''^eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiI5NDcifQ\.c2lnbmF0dXJlLW9mLXRoZS10b2tlbg$''']
 
 [[allowlists]]
 description = "Invented 64-hex cleanup token ('b4d1c0ffee' + counting hex digits) of the backend's cleanup API tests"
 condition = "AND"
 paths = ['''^backend/tests/Api/CleanupApiTest\.php$''']
-regexes = ['''b4d1c0ffee0123456789abcdef0123456789abcdef0123456789abcdef012345''']
+regexes = ['''^b4d1c0ffee0123456789abcdef0123456789abcdef0123456789abcdef012345$''']
 
 [[allowlists]]
 description = "Invented dummy login token (redaction tests of the contract helpers)"
 condition = "AND"
 paths = ['''^extension/tests/contract/helpers\.unit\.test\.ts$''']
-regexes = ['''dummy-login-token-QUJDREVGR0hJSktMTU5PUFFSU1RVVld''']
+regexes = ['''^dummy-login-token-QUJDREVGR0hJSktMTU5PUFFSU1RVVld$''']
