@@ -298,6 +298,8 @@ final class AdminGroupContractTest extends TestCase
     private static function json(\Psr\Http\Message\ResponseInterface $response): array
     {
         $data = json_decode((string) $response->getBody(), true);
+        // Rewound, so an assertion message can still read the body.
+        $response->getBody()->rewind();
 
         return is_array($data) ? $data : [];
     }

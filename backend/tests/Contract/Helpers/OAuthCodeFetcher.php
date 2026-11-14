@@ -84,11 +84,11 @@ final class OAuthCodeFetcher
     {
         $html = (string) $page->getBody();
         if ($page->getStatusCode() !== 200 || preg_match('/grantPermissionData\s*=\s*(\{.*?\});/s', $html, $match) !== 1) {
-            $text = (string) preg_replace('#<(style|script)\b.*?</\1>#s', '', $html);
+            // No page text in the message: the page can carry codes or tokens.
             throw new \RuntimeException(sprintf(
-                'OAuthCodeFetcher: the authorize step answered %d without a redirect or a consent page: %s',
+                'OAuthCodeFetcher: the authorize step answered %d without a redirect or a consent page (%s).',
                 $page->getStatusCode(),
-                substr(trim((string) preg_replace('/\s+/', ' ', strip_tags($text))), 0, 300),
+                Redact::body($html),
             ));
         }
         $data = json_decode($match[1], true, 8, JSON_THROW_ON_ERROR);
