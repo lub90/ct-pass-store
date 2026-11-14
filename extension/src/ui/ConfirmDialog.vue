@@ -14,6 +14,12 @@ const value = ref('');
 let opener: HTMLElement | null = null;
 
 const request = computed(() => pendingConfirm.value);
+/** Read in order: the subject's name, its detail, then the question. */
+const describedBy = computed(() => {
+    const subject = request.value?.subject;
+    const ids = subject ? [`${uid}-subject`, ...(subject.detail ? [`${uid}-subject-detail`] : [])] : [];
+    return [...ids, `${uid}-text`].join(' ');
+});
 const canConfirm = computed(() => {
     const field = request.value?.field;
     if (!field) return true;
@@ -107,7 +113,7 @@ onBeforeUnmount(() => {
             role="alertdialog"
             aria-modal="true"
             :aria-labelledby="`${uid}-title`"
-            :aria-describedby="`${uid}-text`"
+            :aria-describedby="describedBy"
         >
             <h2
                 :id="`${uid}-title`"
@@ -115,6 +121,20 @@ onBeforeUnmount(() => {
             >
                 {{ request.title }}
             </h2>
+            <p
+                v-if="request.subject"
+                class="cps-confirm__subject"
+            >
+                <span
+                    :id="`${uid}-subject`"
+                    class="cps-confirm__subject-name"
+                >{{ request.subject.name }}</span>
+                <span
+                    v-if="request.subject.detail"
+                    :id="`${uid}-subject-detail`"
+                    class="cps-confirm__subject-detail"
+                >{{ request.subject.detail }}</span>
+            </p>
             <p
                 :id="`${uid}-text`"
                 class="cps-confirm__text"
@@ -195,6 +215,20 @@ onBeforeUnmount(() => {
 .cps-confirm__title {
     margin: 0;
     font-size: 1.125rem;
+}
+.cps-confirm__subject {
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+}
+.cps-confirm__subject-name {
+    font-weight: var(--cps-weight-strong);
+    overflow-wrap: anywhere;
+}
+.cps-confirm__subject-detail {
+    font-size: var(--cps-size-sm);
+    font-style: italic;
+    color: var(--cps-text-meta);
 }
 .cps-confirm__text {
     margin: 0;

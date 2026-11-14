@@ -68,3 +68,34 @@ describe('parsePersonId (the /manage/:personId parameter)', () => {
         },
     );
 });
+
+describe('searchUsers by ChurchTools id', () => {
+    const many: PersonOption[] = [
+        { id: 12, name: 'Anna Admin' },
+        { id: 123, name: 'Jürgen Müller' },
+        { id: 1234, name: 'Bernd Mulde' },
+        { id: 7, name: 'Mia 12er' },
+    ];
+
+    it('a number finds the id exactly or as a prefix', () => {
+        expect(searchUsers(many, '1234').map((p) => p.id)).toEqual([1234]);
+        expect(searchUsers(many, '123').map((p) => p.id).sort()).toEqual([123, 1234]);
+        expect(searchUsers(many, '7').map((p) => p.id)).toEqual([7]);
+        expect(searchUsers(many, '23')).toEqual([]);
+    });
+
+    it('a number also still matches a name part (names are unchanged)', () => {
+        expect(searchUsers(many, '12').map((p) => p.id).sort((a, b) => a - b)).toEqual([7, 12, 123, 1234]);
+    });
+
+    it('mixed queries: every word must match, a name part or (for digits) the id', () => {
+        expect(searchUsers(many, 'jürgen 12').map((p) => p.id)).toEqual([123]);
+        expect(searchUsers(many, 'jürgen 7')).toEqual([]);
+        expect(searchUsers(many, 'anna 12').map((p) => p.id)).toEqual([12]);
+    });
+
+    it('only plain digits count as an id', () => {
+        expect(searchUsers(many, '#12')).toEqual([]);
+        expect(searchUsers(many, '-12')).toEqual([]);
+    });
+});

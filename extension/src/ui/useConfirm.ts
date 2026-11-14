@@ -7,6 +7,11 @@ export interface ConfirmOptions {
     cancelLabel: string;
     /** A destructive step: the confirm button is red and the focus starts on cancel. */
     danger?: boolean;
+    /**
+     * The person (or thing) the question is about, shown above the text: the name, and below it a small, muted detail
+     * (e.g. an ID). Plain text.
+     */
+    subject?: { name: string; detail?: string };
     /** An input in the dialog (the admin's password, a name to type). `mustEqual`: confirm waits for exactly this text. */
     field?: { label: string; type: 'password' | 'text'; mustEqual?: string };
 }

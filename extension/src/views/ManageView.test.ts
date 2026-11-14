@@ -14,7 +14,7 @@ import { SESSION_KEY, createSession } from '../app/useSession';
 import type { BackendApi } from '../backend/api';
 import { Auth, CALLBACK_WINDOW_KEY, TOKEN_KEY, type AuthEnv, type CallbackWindow } from '../backend/auth';
 import { backendBase } from '../backend/http';
-import { BackendUnreachable } from '../backend/problems';
+import { BackendProblem, BackendUnreachable } from '../backend/problems';
 import type { CtApi } from '../ct/api';
 import type { Permissions } from '../ct/types';
 import { createFakeBackend } from '../dev/fake-backend';
@@ -35,6 +35,9 @@ const MUELLER = 2;
 const MULDE = 3;
 const ODD = 4;
 const OUTSIDER = 5;
+/** Two members with the same name. */
+const TWIN_A = 6;
+const TWIN_B = 7;
 const USERS_GROUP = 40;
 const ADMINS_GROUP = 41;
 const SETTINGS_ID = 11;
@@ -67,6 +70,7 @@ const TEXT = {
     personNotFound: 'Diese Person gibt es in ChurchTools nicht mehr.',
     primaryWrong: 'Das ChurchTools-Passwort stimmt nicht.',
     noHits: 'Niemand in der Nutzergruppe passt zu dieser Suche.',
+    pick: 'Such eine Person, um ihr Passwort festzulegen oder zu löschen.',
 };
 
 class MemoryStorage {
@@ -96,6 +100,8 @@ interface Options {
     meInUsers?: boolean;
     path?: string;
     tokenLeftMs?: number;
+    /** Two „Anna Müller“ in the users group as well. */
+    twins?: boolean;
     /** What `access` holds; `null`: nothing stored. */
     access?: unknown;
     perms?: Partial<Permissions>;
@@ -157,9 +163,11 @@ function fakes(o: Options) {
             { id: MULDE, firstName: 'Bernd', lastName: 'Mulde' },
             { id: ODD, firstName: 'Eva', lastName: ODD_NAME },
             { id: OUTSIDER, firstName: 'Otto', lastName: 'Außen' },
+            { id: TWIN_A, firstName: 'Anna', lastName: 'Müller' },
+            { id: TWIN_B, firstName: 'Anna', lastName: 'Müller' },
         ],
         groups: [
-            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: o.meInUsers === false ? [MUELLER, MULDE, ODD] : [ME, MUELLER, MULDE, ODD] },
+            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: [...(o.meInUsers === false ? [] : [ME]), MUELLER, MULDE, ODD, ...(o.twins ? [TWIN_A, TWIN_B] : [])] },
             { id: ADMINS_GROUP, name: 'CtPassStore Admins', memberIds: [ME] },
             { id: 50, name: 'Other', memberIds: [OUTSIDER] },
         ],
@@ -189,7 +197,7 @@ function fakes(o: Options) {
     const fakeBackend = createFakeBackend({
         personId: ME,
         admin: o.admin ?? true,
-        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER],
+        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER, TWIN_A, TWIN_B],
         ctOrigin: ORIGIN,
         primaryPassword: CT_PASSWORD,
         requirePasswordForPasswordChange: settings.requirePasswordForPasswordChange,
@@ -200,6 +208,8 @@ function fakes(o: Options) {
     });
     /** `hold`: status reads wait for it; `fail`: status reads fail (unreachable). */
     const gets: { hold: Promise<void> | null; fail: boolean } = { hold: null, fail: false };
+    /** `hold`: deletes wait for it. */
+    const dels: { hold: Promise<void> | null } = { hold: null };
     const calls = { get: [] as number[], put: [] as { id: number; body: Record<string, unknown> }[], del: [] as { id: number; primaryPwd?: string }[] };
     const counted: BackendApi = {
         ...fakeBackend,
@@ -210,9 +220,13 @@ function fakes(o: Options) {
             return fakeBackend.getEntry(id);
         },
         putEntry: (id, body) => (calls.put.push({ id, body: { ...body } }), fakeBackend.putEntry(id, body)),
-        deleteEntry: (id, primaryPwd) => (calls.del.push(primaryPwd === undefined ? { id } : { id, primaryPwd }), fakeBackend.deleteEntry(id, primaryPwd)),
+        deleteEntry: async (id, primaryPwd) => {
+            calls.del.push(primaryPwd === undefined ? { id } : { id, primaryPwd });
+            if (dels.hold) await dels.hold;
+            return fakeBackend.deleteEntry(id, primaryPwd);
+        },
     };
-    return { ct, fakeCt, fakeBackend, counted, calls, counts, settings, gets };
+    return { ct, fakeCt, fakeBackend, counted, calls, counts, settings, gets, dels };
 }
 
 function browser(o: Options) {
@@ -313,6 +327,13 @@ async function typeInDialog(value: string) {
     await settle();
 }
 const card = (w: VueWrapper) => w.find('.cps-manage__person');
+/** A promise and its resolver, for a renewal (or request) that takes its time. */
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve = (): void => undefined;
+    const promise = new Promise<void>((r) => (resolve = r));
+    return { promise, resolve };
+}
+const SESSION_BANNER = 'Deine Sitzung ist abgelaufen.';
 const pill = (w: VueWrapper) => card(w).find('.cps-pill');
 
 describe('page head and search (spec 4.3)', () => {
@@ -320,6 +341,7 @@ describe('page head and search (spec 4.3)', () => {
         const { wrapper } = await start();
         expect(wrapper.find('h1').text()).toBe(TEXT.title);
         expect(wrapper.text()).toContain(TEXT.intro);
+        expect(wrapper.find('main .cps-status--empty').text()).toBe(TEXT.pick);
         expect(wrapper.find('input[role="combobox"]').exists()).toBe(true);
     });
 
@@ -384,6 +406,43 @@ describe('page head and search (spec 4.3)', () => {
         const { wrapper } = await start({ path: `/manage/${MUELLER}` });
         expect(card(wrapper).find('.cps-manage__avatar').text()).toBe('JM');
         expect(card(wrapper).find('.cps-manage__avatar').attributes('aria-hidden')).toBe('true');
+    });
+
+    it('clearing the search drops the selection: back to /manage and the empty state', async () => {
+        const { wrapper, router } = await start({ path: `/manage/${MUELLER}` });
+        await wrapper.find('input[role="combobox"]').setValue('');
+        await settle();
+        expect(router.currentRoute.value.path).toBe('/manage');
+        expect(card(wrapper).exists()).toBe(false);
+        expect(wrapper.find('main .cps-status--empty').text()).toBe(TEXT.pick);
+    });
+
+    it('selecting replaces the address instead of adding a history entry', async () => {
+        const { wrapper, router } = await start();
+        const push = vi.spyOn(router, 'push');
+        const replace = vi.spyOn(router, 'replace');
+        await pick(wrapper, 'mül', 'Jürgen Müller');
+        expect(replace).toHaveBeenCalledWith(`/manage/${MUELLER}`);
+        expect(push).not.toHaveBeenCalled();
+    });
+
+    it('the picker is hidden while the flow is open', async () => {
+        const { wrapper } = await start({ path: `/manage/${MUELLER}` });
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-flow').exists()).toBe(true);
+        expect(wrapper.find('input[role="combobox"]').exists()).toBe(false);
+        await click(wrapper, TEXT.cancel);
+        expect(wrapper.find('input[role="combobox"]').exists()).toBe(true);
+    });
+
+    it('a failed status read can be retried', async () => {
+        const { wrapper, gets } = await start({ path: '/manage' });
+        gets.fail = true;
+        await pick(wrapper, 'bernd', 'Bernd Mulde');
+        expect(card(wrapper).find('[role="alert"]').exists()).toBe(true);
+        gets.fail = false;
+        await click(wrapper, 'Erneut versuchen');
+        expect(pill(wrapper).text()).toBe(TEXT.none);
     });
 });
 
@@ -464,6 +523,15 @@ describe('rights', () => {
         expect(counts.members).toBe(0);
         expect(calls.get).toEqual([]);
     });
+
+    it('logged out of ChurchTools while loading the members: its own text, not „antwortet nicht“', async () => {
+        const s = await start({ path: '/about' });
+        s.fakeCt.failNext(401);
+        await s.router.push('/manage');
+        await settle();
+        expect(s.wrapper.text()).toContain('Du bist in ChurchTools nicht mehr angemeldet. Lade die Seite neu.');
+        expect(s.wrapper.text()).not.toContain('ChurchTools antwortet gerade nicht');
+    });
 });
 
 describe('the page checks its own right, on top of the frame', () => {
@@ -506,7 +574,7 @@ describe('the page checks its own right, on top of the frame', () => {
         expect(calls.get).toEqual([]);
     });
 
-    it('M1: a delete confirmed after the page unmounted sends nothing, even with the address unchanged', async () => {
+    it('a delete confirmed after the page unmounted sends nothing, even with the address unchanged', async () => {
         const { wrapper, calls, fakeBackend } = await mountAlone('admin', { entries: { [MUELLER]: VALID } });
         clickNow(wrapper as unknown as VueWrapper, TEXT.delete);
         await settle();
@@ -526,6 +594,28 @@ describe('the page checks its own right, on top of the frame', () => {
         expect(counts.members).toBe(1);
         expect(calls.get).toEqual([MUELLER]);
         expect(card(wrapper).text()).toContain('Jürgen Müller');
+    });
+
+    it('loads the members once per visit, also when the state goes away and comes back', async () => {
+        const { stateRef, counts } = await mountAlone('admin');
+        expect(counts.members).toBe(1);
+        stateRef.value = 'loading';
+        await settle();
+        stateRef.value = 'admin';
+        await settle();
+        expect(counts.members).toBe(1);
+    });
+
+    it('the entry stays gated on the admin state after the first load', async () => {
+        const { wrapper, stateRef, calls } = await mountAlone('admin');
+        expect(calls.get).toEqual([MUELLER]);
+        stateRef.value = 'user';
+        await settle();
+        expect(wrapper.find('.cps-banner--warning').text()).toBe('Diese Seite ist nur für Admins.');
+        const router = wrapper.vm.$router;
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        expect(calls.get).toEqual([MUELLER]);
     });
 });
 
@@ -667,6 +757,119 @@ describe('„Neues Passwort“ for another person', () => {
         expect(card(s.wrapper).text()).not.toContain(TEXT.none);
         expect(button(s.wrapper, TEXT.newPassword)).toBeUndefined();
     });
+
+    it.each(['pending', 'failing'])('after a failed attempt, with the status read %s, a resubmit still asks first', async (mode) => {
+        const { wrapper, calls, fakeBackend, gets } = await start({ path: `/manage/${MULDE}` });
+        expect(pill(wrapper).text()).toBe(TEXT.none);
+        await click(wrapper, TEXT.newPassword);
+        if (mode === 'pending') gets.hold = new Promise<void>(() => undefined);
+        else gets.fail = true;
+        // A lost answer: the password may have been stored, the status is read again.
+        fakeBackend.breakNext('unreachable', { afterWrite: true });
+        await click(wrapper, TEXT.generate);
+        expect(calls.put).toHaveLength(1);
+        expect(dialog()).toBeNull();
+        await click(wrapper, TEXT.generate);
+        expect(dialogText()).toBe(TEXT.replaceText('Bernd Mulde'));
+        expect(calls.put).toHaveLength(1);
+        await answer(TEXT.cancel);
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('a person known to have no entry is not asked about', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MULDE}` });
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.generate);
+        expect(dialog()).toBeNull();
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('a double click (direct path) opens one dialog and sends once', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, allowCustom: false, requirePrimary: false });
+        clickNow(wrapper, TEXT.newPassword);
+        clickNow(wrapper, TEXT.newPassword);
+        await settle();
+        await answer(TEXT.proceed);
+        expect(dialog()).toBeNull();
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('a blocked renewal popup: no flow, nothing sent, the frame’s „Sitzung erneuern“, no error', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, tokenLeftMs: 60_000 });
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-flow').exists()).toBe(false);
+        expect(dialog()).toBeNull();
+        expect(calls.put).toEqual([]);
+        expect(wrapper.text()).toContain(SESSION_BANNER);
+        expect(button(wrapper, 'Sitzung erneuern')).toBeDefined();
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(false);
+    });
+
+    it('a renewal that fails otherwise shows its error above the buttons', async () => {
+        const { wrapper, session } = await start({ path: `/manage/${MUELLER}` });
+        vi.spyOn(session, 'ensureFresh').mockRejectedValueOnce(new BackendUnreachable());
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-flow').exists()).toBe(false);
+        expect(wrapper.find('.cps-manage__error').text()).toContain('Der Dienst ist gerade nicht erreichbar.');
+    });
+
+    it('a token problem during renewal while „Sitzung erneuern“ is up shows no extra error', async () => {
+        const { wrapper, session } = await start({ path: `/manage/${MUELLER}` });
+        session.needsRenewal.value = true;
+        vi.spyOn(session, 'ensureFresh').mockRejectedValueOnce(new BackendProblem('invalid-token', 401));
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(false);
+        session.needsRenewal.value = false;
+        vi.spyOn(session, 'ensureFresh').mockRejectedValueOnce(new BackendProblem('invalid-token', 401));
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(true);
+    });
+
+    it('a slow renewal that succeeds opens the flow afterwards', async () => {
+        const { wrapper, session } = await start({ path: `/manage/${MUELLER}` });
+        const slow = deferred();
+        vi.spyOn(session, 'ensureFresh').mockReturnValueOnce(slow.promise);
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-flow').exists()).toBe(false);
+        slow.resolve();
+        await settle();
+        expect(wrapper.find('.cps-flow-for').text()).toBe(TEXT.forName('Jürgen Müller'));
+    });
+
+    it('another person chosen during a slow renewal: nothing opens', async () => {
+        const { wrapper, session, router } = await start({ path: `/manage/${MUELLER}` });
+        const slow = deferred();
+        vi.spyOn(session, 'ensureFresh').mockReturnValueOnce(slow.promise);
+        await click(wrapper, TEXT.newPassword);
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        slow.resolve();
+        await settle();
+        expect(wrapper.find('.cps-flow').exists()).toBe(false);
+        expect(card(wrapper).text()).toContain('Bernd Mulde');
+    });
+
+    it('no „✓ Gespeichert“ line after „Fertig“ on a generated password, nor after „Abbrechen“', async () => {
+        const { wrapper } = await start({ path: `/manage/${MULDE}` });
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.generate);
+        await click(wrapper, TEXT.done);
+        expect(wrapper.find('.cps-manage__saved').exists()).toBe(false);
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.cancel);
+        expect(wrapper.find('.cps-manage__saved').exists()).toBe(false);
+    });
+
+    it('leaving the flow reads the status again', async () => {
+        const { wrapper, gets, fakeBackend } = await start({ path: `/manage/${MULDE}` });
+        await click(wrapper, TEXT.newPassword);
+        gets.fail = true;
+        fakeBackend.breakNext('unreachable', { afterWrite: true });
+        await click(wrapper, TEXT.generate);
+        gets.fail = false;
+        await click(wrapper, TEXT.cancel);
+        expect(pill(wrapper).text()).toBe(TEXT.isSet);
+    });
 });
 
 describe('selecting oneself', () => {
@@ -679,6 +882,19 @@ describe('selecting oneself', () => {
         await click(wrapper, TEXT.generate);
         expect(dialog()).toBeNull();
         expect(calls.put).toHaveLength(1);
+    });
+
+    it('with an entry: the 4.2 label and the hint', async () => {
+        const { wrapper } = await start({ path: `/manage/${ME}`, entries: { [ME]: VALID } });
+        expect(button(wrapper, 'Neues Passwort festlegen')).toBeDefined();
+        expect(button(wrapper, TEXT.newPassword)).toBeUndefined();
+        expect(wrapper.text()).toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
+    });
+
+    it('without an entry: „Passwort festlegen“, no hint', async () => {
+        const { wrapper } = await start({ path: `/manage/${ME}` });
+        expect(button(wrapper, 'Passwort festlegen')).toBeDefined();
+        expect(wrapper.text()).not.toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
     });
 });
 
@@ -769,6 +985,110 @@ describe('„Löschen“', () => {
         expect(open).toHaveBeenCalledTimes(1);
         await settle();
     });
+
+    it('a delete confirmed after the page was left sends nothing', async () => {
+        const { wrapper, router, calls, fakeBackend } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        await click(wrapper, TEXT.delete);
+        await router.push('/about');
+        await settle();
+        await answer(TEXT.delete);
+        expect(calls.del).toEqual([]);
+        expect(fakeBackend.entries.get(MUELLER)).toBe(VALID);
+    });
+
+    it('a delete confirmed after another person was selected sends nothing', async () => {
+        const { wrapper, router, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        await click(wrapper, TEXT.delete);
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        await answer(TEXT.delete);
+        expect(calls.del).toEqual([]);
+    });
+
+    it('a double click opens one dialog and deletes once', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        clickNow(wrapper, TEXT.delete);
+        clickNow(wrapper, TEXT.delete);
+        await settle();
+        await answer(TEXT.delete);
+        expect(dialog()).toBeNull();
+        expect(calls.del).toHaveLength(1);
+    });
+
+    it('a blocked renewal popup: no dialog, nothing deleted, the frame’s „Sitzung erneuern“, no error', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, tokenLeftMs: 60_000 });
+        await click(wrapper, TEXT.delete);
+        expect(dialog()).toBeNull();
+        expect(calls.del).toEqual([]);
+        expect(wrapper.text()).toContain(SESSION_BANNER);
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(false);
+    });
+
+    it('a renewal that fails otherwise: no dialog, its error', async () => {
+        const { wrapper, session, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        vi.spyOn(session, 'ensureFresh').mockRejectedValueOnce(new BackendUnreachable());
+        await click(wrapper, TEXT.delete);
+        expect(dialog()).toBeNull();
+        expect(calls.del).toEqual([]);
+        expect(wrapper.find('.cps-manage__error').text()).toContain('Der Dienst ist gerade nicht erreichbar.');
+    });
+
+    it('a slow renewal that succeeds opens the dialog afterwards', async () => {
+        const { wrapper, session } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        const slow = deferred();
+        vi.spyOn(session, 'ensureFresh').mockReturnValueOnce(slow.promise);
+        await click(wrapper, TEXT.delete);
+        expect(dialog()).toBeNull();
+        slow.resolve();
+        await settle();
+        expect(dialogText()).toBe(TEXT.deleteText('Jürgen Müller'));
+    });
+
+    it('while the delete runs, both buttons are disabled', async () => {
+        const { wrapper, dels } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        const slow = deferred();
+        dels.hold = slow.promise;
+        await click(wrapper, TEXT.delete);
+        await answer(TEXT.delete);
+        expect(button(wrapper, TEXT.newPassword)!.element.disabled).toBe(true);
+        expect(button(wrapper, TEXT.delete)!.element.disabled).toBe(true);
+        slow.resolve();
+        await settle();
+        expect(button(wrapper, TEXT.newPassword)!.element.disabled).toBe(false);
+    });
+
+    it('an error is cleared when another person is chosen', async () => {
+        const { wrapper, fakeBackend, router } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        fakeBackend.failNext('internal-error', 500);
+        await click(wrapper, TEXT.delete);
+        await answer(TEXT.delete);
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(true);
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        expect(wrapper.find('.cps-manage__error').exists()).toBe(false);
+    });
+
+    it('with the password required, an empty field can’t confirm', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, requirePrimary: true });
+        await click(wrapper, TEXT.delete);
+        const confirmButton = dialog()!.querySelector<HTMLButtonElement>('[data-confirm]')!;
+        expect(confirmButton.disabled).toBe(true);
+        dialog()!.querySelector('form')!.dispatchEvent(new Event('submit'));
+        await settle();
+        expect(dialog()).not.toBeNull();
+        expect(calls.del).toEqual([]);
+    });
+
+    it('person-not-found: its text, above the buttons', async () => {
+        const { wrapper, fakeBackend } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        fakeBackend.failNext('person-not-found', 404);
+        await click(wrapper, TEXT.delete);
+        await answer(TEXT.delete);
+        const error = wrapper.find('.cps-manage__error');
+        expect(error.text()).toContain(TEXT.personNotFound);
+        const actions = card(wrapper).find('.cps-form-actions').element;
+        expect(error.element.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
 });
 
 describe('ChurchTools names are plain text', () => {
@@ -788,98 +1108,50 @@ describe('ChurchTools names are plain text', () => {
         expect(dialogText()).toBe(TEXT.replaceText(name));
         expect(dialog()!.querySelector('b')).toBeNull();
     });
+
+
+    it('the ChurchTools ID is shown under every name: list, card and both dialogs', async () => {
+        const { wrapper } = await start({ twins: true, entries: { [TWIN_B]: VALID } });
+        await search(wrapper, 'anna mü');
+        const options = wrapper.findAll('[role="option"]');
+        expect(options.map((o) => o.find('.cps-picker__detail').text())).toEqual([`ID ${TWIN_A}`, `ID ${TWIN_B}`]);
+        await options[1]!.trigger('click');
+        await settle();
+        expect(card(wrapper).find('.cps-manage__name').text()).toBe('Anna Müller');
+        const id = card(wrapper).find('.cps-manage__id');
+        expect(id.text()).toBe(`ID ${TWIN_B}`);
+        // Read as „Anna Müller, ID 7“.
+        expect(card(wrapper).find('.cps-manage__ident').element.textContent).toBe(`Anna Müller, ID ${TWIN_B}`);
+
+        await click(wrapper, TEXT.delete);
+        expect(dialog()!.querySelector('.cps-confirm__subject-name')!.textContent).toBe('Anna Müller');
+        expect(dialog()!.querySelector('.cps-confirm__subject-detail')!.textContent).toBe(`ID ${TWIN_B}`);
+        expect(dialogText()).toBe(TEXT.deleteText('Anna Müller'));
+        await answer(TEXT.cancel);
+
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.generate);
+        expect(dialog()!.querySelector('.cps-confirm__subject-name')!.textContent).toBe('Anna Müller');
+        expect(dialog()!.querySelector('.cps-confirm__subject-detail')!.textContent).toBe(`ID ${TWIN_B}`);
+        expect(dialogText()).toBe(TEXT.replaceText('Anna Müller'));
+    });
+
+    it('the ID is shown for oneself and for a unique name too', async () => {
+        const { wrapper } = await start({ path: `/manage/${ME}` });
+        expect(card(wrapper).find('.cps-manage__id').text()).toBe(`ID ${ME}`);
+    });
+
+    it('finds a person by ChurchTools ID, exactly or as a prefix', async () => {
+        const { wrapper } = await start({ twins: true });
+        await search(wrapper, String(TWIN_B));
+        expect(options(wrapper)).toEqual(['Anna Müller']);
+        expect(wrapper.find('[role="option"] .cps-picker__detail').text()).toBe(`ID ${TWIN_B}`);
+        await search(wrapper, `anna ${TWIN_A}`);
+        expect(wrapper.findAll('[role="option"] .cps-picker__detail').map((d) => d.text())).toEqual([`ID ${TWIN_A}`]);
+    });
 });
 
 /** Every value and text on the page, to make sure a password is gone. */
 function everything(w: VueWrapper): string {
     return document.body.innerHTML + w.findAll('input').map((i) => (i.element as HTMLInputElement).value).join('|');
 }
-
-describe('review fixes', () => {
-    it.each(['pending', 'failing'])('I1: after a failed attempt, with the status read %s, a resubmit still asks first', async (mode) => {
-        const { wrapper, calls, fakeBackend, gets } = await start({ path: `/manage/${MULDE}` });
-        expect(pill(wrapper).text()).toBe(TEXT.none);
-        await click(wrapper, TEXT.newPassword);
-        if (mode === 'pending') gets.hold = new Promise<void>(() => undefined);
-        else gets.fail = true;
-        // A lost answer: the password may have been stored, the status is read again.
-        fakeBackend.breakNext('unreachable', { afterWrite: true });
-        await click(wrapper, TEXT.generate);
-        expect(calls.put).toHaveLength(1);
-        expect(dialog()).toBeNull();
-        await click(wrapper, TEXT.generate);
-        expect(dialogText()).toBe(TEXT.replaceText('Bernd Mulde'));
-        expect(calls.put).toHaveLength(1);
-        await answer(TEXT.cancel);
-        expect(calls.put).toHaveLength(1);
-    });
-
-    it('I1: a person known to have no entry is not asked about', async () => {
-        const { wrapper, calls } = await start({ path: `/manage/${MULDE}` });
-        await click(wrapper, TEXT.newPassword);
-        await click(wrapper, TEXT.generate);
-        expect(dialog()).toBeNull();
-        expect(calls.put).toHaveLength(1);
-    });
-
-    it('M1: a delete confirmed after the page was left sends nothing', async () => {
-        const { wrapper, router, calls, fakeBackend } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
-        await click(wrapper, TEXT.delete);
-        await router.push('/about');
-        await settle();
-        await answer(TEXT.delete);
-        expect(calls.del).toEqual([]);
-        expect(fakeBackend.entries.get(MUELLER)).toBe(VALID);
-    });
-
-    it('M1: a delete confirmed after another person was selected sends nothing', async () => {
-        const { wrapper, router, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
-        await click(wrapper, TEXT.delete);
-        await router.push(`/manage/${MULDE}`);
-        await settle();
-        await answer(TEXT.delete);
-        expect(calls.del).toEqual([]);
-    });
-
-    it('M2: a double click on „Löschen“ opens one dialog and deletes once', async () => {
-        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
-        clickNow(wrapper, TEXT.delete);
-        clickNow(wrapper, TEXT.delete);
-        await settle();
-        await answer(TEXT.delete);
-        expect(dialog()).toBeNull();
-        expect(calls.del).toHaveLength(1);
-    });
-
-    it('M2: a double click on „Neues Passwort“ (direct path) opens one dialog and sends once', async () => {
-        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, allowCustom: false, requirePrimary: false });
-        clickNow(wrapper, TEXT.newPassword);
-        clickNow(wrapper, TEXT.newPassword);
-        await settle();
-        await answer(TEXT.proceed);
-        expect(dialog()).toBeNull();
-        expect(calls.put).toHaveLength(1);
-    });
-
-    it('M4: oneself with an entry: the 4.2 label and the hint', async () => {
-        const { wrapper } = await start({ path: `/manage/${ME}`, entries: { [ME]: VALID } });
-        expect(button(wrapper, 'Neues Passwort festlegen')).toBeDefined();
-        expect(button(wrapper, TEXT.newPassword)).toBeUndefined();
-        expect(wrapper.text()).toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
-    });
-
-    it('M4: oneself without an entry: „Passwort festlegen“, no hint', async () => {
-        const { wrapper } = await start({ path: `/manage/${ME}` });
-        expect(button(wrapper, 'Passwort festlegen')).toBeDefined();
-        expect(wrapper.text()).not.toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
-    });
-
-    it('M6: logged out of ChurchTools while loading the members: its own text, not „antwortet nicht“', async () => {
-        const s = await start({ path: '/about' });
-        s.fakeCt.failNext(401);
-        await s.router.push('/manage');
-        await settle();
-        expect(s.wrapper.text()).toContain('Du bist in ChurchTools nicht mehr angemeldet. Lade die Seite neu.');
-        expect(s.wrapper.text()).not.toContain('ChurchTools antwortet gerade nicht');
-    });
-});

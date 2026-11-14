@@ -17,8 +17,10 @@ function parts(name: string): string[] {
 }
 
 /**
- * The members whose name has, for every word of the query, a part that starts with it (case and accents don't
- * matter), sorted by name. An empty query finds nobody. Query characters are compared literally.
+ * The members for whom every word of the query matches, sorted by name: a word matches a name part that starts with
+ * it (case and accents don't matter), and a word of plain digits also matches the ChurchTools id exactly or as a
+ * prefix. So „Anna 12“ finds an Anna whose id starts with 12. An empty query finds nobody. Query characters are
+ * compared literally.
  */
 export function searchUsers(members: readonly PersonOption[], query: string): PersonOption[] {
     const words = fold(query)
@@ -28,7 +30,8 @@ export function searchUsers(members: readonly PersonOption[], query: string): Pe
     return members
         .filter((m) => {
             const own = parts(m.name);
-            return words.every((w) => own.some((p) => p.startsWith(w)));
+            const id = String(m.id);
+            return words.every((w) => own.some((p) => p.startsWith(w)) || (/^[0-9]+$/.test(w) && id.startsWith(w)));
         })
         .sort((a, b) => a.name.localeCompare(b.name, 'de'));
 }
@@ -42,3 +45,4 @@ export function parsePersonId(raw: unknown): number | null {
     const id = Number(raw);
     return Number.isSafeInteger(id) ? id : null;
 }
+

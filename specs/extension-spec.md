@@ -180,6 +180,10 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
   found here; the cleanup and the rights check deal with that case.
 - The selected person shows avatar, name and status pill (as in 4.2) and the buttons „Neues Passwort“ and „Löschen“.
   The avatar shows initials only, no ChurchTools image, to avoid extra requests.
+  Under every name (search list, card, both dialogs) the ChurchTools person ID is shown small, italic and muted
+  („ID 123“), so two people with the same name can be told apart. The search also finds a person by ID: each word of
+  the query must match, a word of digits matches the ID exactly or as a prefix, otherwise a name part; so „Anna 12“
+  finds an Anna whose ID starts with 12.
 - „Neues Passwort“ runs the flow of 4.2 (states 2 and 3, or the direct path) for that person, with two differences:
   - A **warning banner** above the flow: „Du legst gerade das Passwort für **{Name}** fest.“
   - A **confirm dialog** before sending, if the person has a password: „Das bisherige Passwort von {Name} funktioniert

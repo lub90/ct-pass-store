@@ -46,6 +46,25 @@ describe('ConfirmDialog', () => {
         expect(document.getElementById(d.getAttribute('aria-describedby')!)?.textContent).toContain('Gone forever');
     });
 
+    it('names a person with a detail line below the name, as plain text, and describes the dialog with both', async () => {
+        await open({ ...base, subject: { name: '<b>Anna</b> {x}', detail: 'ID 12' } }).shown;
+        const d = document.body.querySelector('[role="alertdialog"]')!;
+        const subject = d.querySelector('.cps-confirm__subject')!;
+        expect(subject.querySelector('.cps-confirm__subject-name')!.textContent).toBe('<b>Anna</b> {x}');
+        expect(subject.querySelector('b')).toBeNull();
+        const detail = subject.querySelector('.cps-confirm__subject-detail')!;
+        expect(detail.textContent).toBe('ID 12');
+        // Name first, then the detail, then the sentence: a screen reader reads „<name> ID 12 <text>“.
+        const described = d.getAttribute('aria-describedby')!.split(' ').map((id) => document.getElementById(id)?.textContent?.trim());
+        expect(described).toEqual(['<b>Anna</b> {x}', 'ID 12', 'Gone forever']);
+    });
+
+    it('has no subject block without a subject', async () => {
+        await open().shown;
+        expect(document.body.querySelector('.cps-confirm__subject')).toBeNull();
+        expect(document.body.querySelector('[role="alertdialog"]')!.getAttribute('aria-describedby')!.split(' ')).toHaveLength(1);
+    });
+
     it('focuses confirm normally and cancel for danger', async () => {
         await open().shown;
         expect(document.activeElement).toBe(btn('Delete'));

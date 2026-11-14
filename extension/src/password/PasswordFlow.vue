@@ -203,6 +203,7 @@ async function confirmed(): Promise<boolean> {
     const answer = await confirm({
         title: t('manage.replaceTitle'),
         text: t('manage.replaceText', { name: props.forName }),
+        subject: { name: props.forName, detail: t('manage.personId', { id: String(props.personId) }) },
         confirmLabel: t('manage.replaceConfirm'),
         cancelLabel: t('common.cancel'),
     });

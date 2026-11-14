@@ -156,6 +156,11 @@ onBeforeUnmount(() => clearTimeout(timer));
                 @click="choose(person)"
             >
                 <span class="cps-picker__name">{{ person.name }}</span>
+                <!-- Read as „name, detail“; drawn as two lines. -->
+                <span
+                    v-if="person.detail"
+                    class="cps-picker__sep"
+                >, </span>
                 <span
                     v-if="person.detail"
                     class="cps-picker__detail"
@@ -231,8 +236,17 @@ onBeforeUnmount(() => clearTimeout(timer));
 .cps-picker__option--active {
     background: var(--cps-accent-pale);
 }
+.cps-picker__sep {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
 .cps-picker__detail {
     font-size: var(--cps-size-sm);
-    color: var(--cps-text-muted);
+    font-style: italic;
+    color: var(--cps-text-meta);
 }
 </style>

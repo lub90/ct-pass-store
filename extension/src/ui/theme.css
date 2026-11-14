@@ -18,6 +18,11 @@
     --cps-font: var(--font-sans, 'Lato', ui-sans-serif, system-ui, sans-serif);
     --cps-text: var(--color-basic-primary, oklch(20.8% 0.042 265.755));
     --cps-text-muted: var(--color-basic-secondary, oklch(44.6% 0.043 257.281));
+    /*
+     * Secondary facts next to a name (a ChurchTools ID): small and italic, in the muted text colour — a step lighter
+     * than the name, still ~7.6:1 on surface (light); dark follows the host's secondary text colour like text-muted.
+     */
+    --cps-text-meta: var(--cps-text-muted);
     --cps-surface: var(--color-basic-inverted, #fff);
     --cps-panel: var(--color-basic-b-pale, oklch(98.4% 0.003 247.858));
     --cps-divider: var(--color-basic-divider, oklch(92.9% 0.013 255.508));

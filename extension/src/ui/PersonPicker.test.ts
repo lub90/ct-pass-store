@@ -49,6 +49,14 @@ describe('PersonPicker', () => {
         expect(options[0]!.text()).toContain('anna@example.org');
     });
 
+    it('an option reads „name, detail“: the detail below the name, a hidden comma between them', async () => {
+        const w = mount(PersonPicker, { props: { ...props, search: vi.fn().mockResolvedValue(people) } });
+        await type(w, 'a');
+        const option = w.findAll('[role="option"]')[0]!;
+        expect(option.find('.cps-picker__detail').text()).toBe('anna@example.org');
+        expect(option.element.textContent).toBe('Anna Beck, anna@example.org');
+    });
+
     it('Down/Up move aria-activedescendant, Enter selects', async () => {
         const w = mount(PersonPicker, { props: { ...props, search: vi.fn().mockResolvedValue(people) } });
         await type(w, 'An');

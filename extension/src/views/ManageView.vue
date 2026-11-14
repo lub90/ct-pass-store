@@ -71,7 +71,8 @@ async function loadMembers(): Promise<void> {
         }
         reading = 'group';
         const list = await services.ct.groupMembers(access.value.groups.users.groupId);
-        if (mine === loadRun) members.value = { state: 'ok', list };
+        // Every person shows their ChurchTools ID under the name (in the list as the option's detail).
+        if (mine === loadRun) members.value = { state: 'ok', list: list.map((m) => ({ ...m, detail: personIdText(m.id) })) };
     } catch (error) {
         if (mine === loadRun) members.value = { state: 'error', error, reading };
     }
@@ -118,6 +119,8 @@ const selected = computed<PersonOption | null>(() => {
     return id === null ? null : (list.value.find((m) => m.id === id) ?? null);
 });
 const notInGroup = computed(() => members.value.state === 'ok' && hasParam.value && selected.value === null);
+/** „ID 123“: shown small and italic under every name (spec 4.3). */
+const personIdText = (id: number): string => t('manage.personId', { id: String(id) });
 const isSelf = computed(() => selected.value !== null && selected.value.id === app.personId.value);
 
 const picked = computed<PersonOption | null>({
@@ -181,7 +184,7 @@ function showError(error: unknown): void {
 
 async function openFlow(): Promise<void> {
     const person = selected.value;
-    if (!person || pending.value) return;
+    if (!person || pending.value || busy.value) return;
     pending.value = true;
     done.value = null;
     actionError.value = null;
@@ -229,6 +232,7 @@ async function removeFor(person: PersonOption, requirePrimary: boolean): Promise
     const question: ConfirmOptions = {
         title: t('manage.deleteTitle'),
         text: t('manage.deleteText', { name: person.name }),
+        subject: { name: person.name, detail: personIdText(person.id) },
         confirmLabel: t('manage.delete'),
         cancelLabel: t('common.cancel'),
         danger: true,
@@ -238,9 +242,12 @@ async function removeFor(person: PersonOption, requirePrimary: boolean): Promise
     const answer = await confirm(question);
     // Left the page or chose someone else meanwhile (the dialog outlives the page): nothing is sent.
     if (!answer.confirmed || !alive || selected.value?.id !== person.id) return;
+    // The dialog can't confirm with the field empty; never send an empty password anyway.
+    const primaryPwd = requirePrimary ? answer.value : undefined;
+    if (requirePrimary && !primaryPwd) return;
     busy.value = true;
     try {
-        await entry.remove(requirePrimary ? (answer.value ?? '') : undefined);
+        await entry.remove(primaryPwd);
         done.value = 'deleted';
     } catch (error) {
         showError(error);
@@ -331,7 +338,12 @@ function initials(name: string): string {
                         class="cps-manage__avatar"
                         aria-hidden="true"
                     >{{ initials(selected.name) }}</span>
-                    <span class="cps-manage__name">{{ selected.name }}</span>
+                    <span class="cps-manage__ident">
+                        <span class="cps-manage__name">{{ selected.name }}</span>
+                        <!-- Read as „name, ID 123“; drawn as a small second line. -->
+                        <span class="cps-manage__sep">{{ ', ' }}</span>
+                        <span class="cps-manage__id">{{ personIdText(selected.id) }}</span>
+                    </span>
                     <Pill
                         v-if="entry.status.value === 'set' || entry.status.value === 'none'"
                         :kind="entry.status.value === 'set' ? 'ok' : 'neutral'"
@@ -457,6 +469,24 @@ function initials(name: string): string {
     background: var(--cps-accent-pale);
     color: var(--cps-text);
     font-weight: var(--cps-weight-strong);
+}
+.cps-manage__ident {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+.cps-manage__id {
+    font-size: var(--cps-size-sm);
+    font-style: italic;
+    color: var(--cps-text-meta);
+}
+.cps-manage__sep {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 .cps-manage__name {
     font-weight: var(--cps-weight-strong);
