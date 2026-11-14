@@ -69,7 +69,8 @@ describe('the fake backend', () => {
     it('answers every shared case with the same violations (one source)', async () => {
         const { createFakeBackend } = await import('@/dev/fake-backend');
         for (const c of cases as Case[]) {
-            if (c.minLength < 12 || c.minLength > 64) continue;
+            expect(c.minLength, `${c.name}: minLength must be a valid passwordLength`).toBeGreaterThanOrEqual(12);
+            expect(c.minLength, `${c.name}: minLength must be a valid passwordLength`).toBeLessThanOrEqual(64);
             const fake = createFakeBackend({ passwordLength: c.minLength, requirePasswordForPasswordChange: false });
             const result = fake.putEntry(1, { secondaryPwd: c.password });
             if (c.violations.length === 0) {
