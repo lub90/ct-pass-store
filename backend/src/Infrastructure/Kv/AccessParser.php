@@ -25,12 +25,25 @@ final class AccessParser
         'no-keys' => 'publicKeys must be a non-empty list',
         'invalid-key' => 'publicKeys contains a value that isn\'t a base64-encoded Ed25519 public key',
         'invalid-permissions' => 'permissions must be a list',
+        'shared-key' => 'it shares a public key with another client; give every client its own key pair',
     ];
 
     /**
-     * @param array<string, mixed>|null $raw null if the category or its value is missing
+     * Parses the JSON text of the `access` value. Objects and lists stay apart (`{"0": …}` is not a list), so what
+     * the backend enables is what the extension's reader accepts.
      */
-    public static function parse(?array $raw): ParsedAccess
+    public static function parseJson(?string $json): ParsedAccess
+    {
+        $decoded = $json === null ? null : json_decode($json, false);
+
+        return self::parse($decoded instanceof \stdClass ? $decoded : null);
+    }
+
+    /**
+     * @param \stdClass|array<string, mixed>|null $raw null if the category or its value is missing. A \stdClass is a JSON
+     *     object and an array is a list; a non-empty array with string keys is accepted as an object (tests).
+     */
+    public static function parse(\stdClass|array|null $raw): ParsedAccess
     {
         if ($raw === null) {
             return new ParsedAccess(null, [], ['The KV category access has no value; nobody is an admin and no machine client is enabled. Run the extension setup.']);
@@ -38,20 +51,20 @@ final class AccessParser
 
         $findings = [];
         $groupId = self::adminGroupId($raw, $findings);
-        [$clients, $problems] = self::machineClients($raw[KvSchema::ACCESS_MACHINE_CLIENTS] ?? []);
+        [$clients, $problems, $entryReasons] = self::machineClients(self::field($raw, KvSchema::ACCESS_MACHINE_CLIENTS) ?? []);
 
-        return new ParsedAccess($groupId, $clients, [...$findings, ...$problems]);
+        return new ParsedAccess($groupId, $clients, [...$findings, ...$problems], $entryReasons);
     }
 
     /**
-     * @param array<string, mixed> $raw
+     * @param \stdClass|array<string, mixed> $raw
      * @param list<string> $findings
      */
-    private static function adminGroupId(array $raw, array &$findings): ?int
+    private static function adminGroupId(\stdClass|array $raw, array &$findings): ?int
     {
-        $groups = $raw[KvSchema::ACCESS_GROUPS] ?? null;
-        $admins = is_array($groups) ? ($groups[KvSchema::GROUP_ADMINS] ?? null) : null;
-        $id = is_array($admins) ? ($admins[KvSchema::GROUP_ID] ?? null) : null;
+        $groups = self::field($raw, KvSchema::ACCESS_GROUPS);
+        $admins = self::isObject($groups) ? self::field($groups, KvSchema::GROUP_ADMINS) : null;
+        $id = self::isObject($admins) ? self::field($admins, KvSchema::GROUP_ID) : null;
         if (is_int($id) && $id > 0) {
             return $id;
         }
@@ -64,26 +77,30 @@ final class AccessParser
      * The valid machine clients, and a description of every problem (spec 3.2). An invalid entry disables only that
      * client; a broken list disables all of them. Users are never affected, and nothing invalid ever grants access.
      *
-     * @return array{array<string, MachineClient>, list<string>}
+     * @return array{array<string, MachineClient>, list<string>, list<list<string>>} the clients, the findings and the
+     *     reason codes of every entry (see reasons())
      */
     private static function machineClients(mixed $value): array
     {
         if (!is_array($value) || !array_is_list($value)) {
-            return [[], ['The machineClients in access isn\'t a list; all machine clients are disabled.']];
+            return [[], ['The machineClients in access isn\'t a list; all machine clients are disabled.'], []];
         }
 
         $clients = [];
         $problems = [];
         $seen = [];
+        $entryReasons = [];
+        $enabledAt = [];
         foreach ($value as $index => $entry) {
-            $id = is_array($entry) ? ($entry['id'] ?? null) : null;
+            $id = self::isObject($entry) ? self::field($entry, 'id') : null;
             $label = is_string($id) && preg_match(MachineClient::ID_PATTERN, $id) === 1 ? $id : "#$index";
-            $problem = self::machineClientProblem($entry, $seen);
+            $reasons = self::reasons($entry, $seen);
+            $entryReasons[$index] = $reasons;
             if (is_string($id)) {
                 $seen[$id] = true;
             }
-            if ($problem !== null) {
-                $problems[] = "Machine client $label is disabled: $problem.";
+            if ($reasons !== []) {
+                $problems[] = "Machine client $label is disabled: " . self::reasonTexts($reasons) . '.';
                 // A duplicate disables the earlier entry as well: which of the two is meant can't be decided.
                 if (isset($clients[$label])) {
                     unset($clients[$label]);
@@ -92,24 +109,37 @@ final class AccessParser
 
                 continue;
             }
-            /** @var array{id: string, name: string, publicKeys: list<string>, permissions?: mixed} $entry */
+            /** @var \stdClass|array<string, mixed> $entry */
             $permissions = [];
-            foreach (is_array($entry['permissions'] ?? null) ? $entry['permissions'] : [] as $permission) {
+            $given = self::field($entry, 'permissions');
+            foreach (is_array($given) ? $given : [] as $permission) {
                 if ($permission === MachineClient::PERMISSION_READ_ENTRIES) {
                     $permissions[] = $permission;
                 } else {
                     $problems[] = sprintf('Machine client %s: the permission %s is unknown and grants nothing.', $label, is_string($permission) && preg_match('/^[a-z:*_-]{1,40}\z/', $permission) === 1 ? $permission : '(invalid)');
                 }
             }
-            $clients[$entry['id']] = new MachineClient(
-                $entry['id'],
-                trim($entry['name']),
-                array_map(self::ed25519Key(...), $entry['publicKeys']),
+            /** @var string $clientId */
+            $clientId = self::field($entry, 'id');
+            /** @var string $name */
+            $name = self::field($entry, 'name');
+            /** @var list<string> $keys */
+            $keys = self::field($entry, 'publicKeys');
+            $clients[$clientId] = new MachineClient(
+                $clientId,
+                trim($name),
+                array_map(self::ed25519Key(...), $keys),
                 array_values(array_unique($permissions)),
             );
+            $enabledAt[$clientId] = $index;
         }
 
-        return self::withoutSharedKeys($clients, $problems);
+        [$clients, $problems, $shared] = self::withoutSharedKeys($clients, $problems);
+        foreach ($shared as $id) {
+            $entryReasons[$enabledAt[$id]][] = 'shared-key';
+        }
+
+        return [$clients, $problems, array_values($entryReasons)];
     }
 
     /**
@@ -118,7 +148,8 @@ final class AccessParser
      *
      * @param array<string, MachineClient> $clients
      * @param list<string> $problems
-     * @return array{array<string, MachineClient>, list<string>}
+     * @return array{array<string, MachineClient>, list<string>, list<string>} the clients left, the problems and the
+     *     IDs disabled for a shared key
      */
     private static function withoutSharedKeys(array $clients, array $problems): array
     {
@@ -128,6 +159,7 @@ final class AccessParser
                 $owners[$key][] = $client->id;
             }
         }
+        $shared = [];
         foreach ($owners as $ids) {
             if (count($ids) < 2) {
                 continue;
@@ -135,54 +167,51 @@ final class AccessParser
             foreach ($ids as $id) {
                 if (isset($clients[$id])) {
                     unset($clients[$id]);
+                    $shared[] = $id;
                     $problems[] = sprintf('Machine client %s is disabled: it shares a public key with %s. Give every client its own key pair.', $id, implode(', ', array_diff($ids, [$id])));
                 }
             }
         }
 
-        return [$clients, $problems];
+        return [$clients, $problems, $shared];
     }
 
     /**
-     * @param array<string, true> $seen IDs of earlier entries
+     * @param list<string> $reasons
      */
-    private static function machineClientProblem(mixed $entry, array $seen): ?string
+    private static function reasonTexts(array $reasons): string
     {
-        $reasons = self::reasons($entry, $seen);
-        if ($reasons === []) {
-            return null;
-        }
-
         return implode('; ', array_map(static fn(string $reason): string => self::REASON_TEXTS[$reason], $reasons));
     }
 
     /**
-     * The reason codes why an entry is invalid (empty if it's valid). The codes are pinned by
-     * `shared/access-client-cases.json`, which the extension's reader tests as well.
+     * The reason codes why an entry is invalid (empty if it's valid), in this order. The codes are pinned by
+     * `shared/access-client-cases.json`, which the extension's reader tests as well. `shared-key` is added by
+     * parse() afterwards, because it depends on the other entries.
      *
      * @param array<string, true> $seen IDs of earlier entries
      * @return list<string>
      */
-    public static function reasons(mixed $entry, array $seen = []): array
+    private static function reasons(mixed $entry, array $seen): array
     {
-        if (!is_array($entry) || array_is_list($entry)) {
+        if (!self::isObject($entry)) {
             return ['not-an-object'];
         }
         $reasons = [];
-        $id = $entry['id'] ?? null;
+        $id = self::field($entry, 'id');
         if (!is_string($id) || preg_match(MachineClient::ID_PATTERN, $id) !== 1) {
             $reasons[] = 'invalid-id';
         } elseif (isset($seen[$id])) {
             $reasons[] = 'duplicate-id';
         }
-        $name = $entry['name'] ?? null;
+        $name = self::field($entry, 'name');
         if (!is_string($name) || trim($name) === '') {
             $reasons[] = 'missing-name';
         }
-        if (!self::isDate($entry['createdAt'] ?? null)) {
+        if (!self::isDate(self::field($entry, 'createdAt'))) {
             $reasons[] = 'invalid-created-at';
         }
-        $keys = $entry['publicKeys'] ?? null;
+        $keys = self::field($entry, 'publicKeys');
         if (!is_array($keys) || !array_is_list($keys) || $keys === []) {
             $reasons[] = 'no-keys';
         } else {
@@ -193,12 +222,30 @@ final class AccessParser
                 }
             }
         }
-        $permissions = $entry['permissions'] ?? [];
-        if (!is_array($permissions) || !array_is_list($permissions)) {
+        $permissions = self::field($entry, 'permissions');
+        if ($permissions !== null && (!is_array($permissions) || !array_is_list($permissions))) {
             $reasons[] = 'invalid-permissions';
         }
 
         return $reasons;
+    }
+
+    /**
+     * A JSON object: a \stdClass, or (only when built in PHP) a non-empty array with string keys.
+     */
+    private static function isObject(mixed $value): bool
+    {
+        return $value instanceof \stdClass || (is_array($value) && $value !== [] && !array_is_list($value));
+    }
+
+    /** @param \stdClass|array<string, mixed> $object */
+    private static function field(\stdClass|array $object, string $name): mixed
+    {
+        if ($object instanceof \stdClass) {
+            return property_exists($object, $name) ? $object->{$name} : null;
+        }
+
+        return $object[$name] ?? null;
     }
 
     private static function isDate(mixed $value): bool
@@ -214,12 +261,22 @@ final class AccessParser
     }
 
     /**
-     * The raw 32-byte key from base64 or base64url, or null.
+     * The raw 32-byte key, or null. Only canonical forms are accepted after trimming: standard base64 with padding
+     * (43 characters and "="), or base64url with or without padding (what Node.js exports as a JWK's `x`). Mixed
+     * alphabets, inner whitespace and non-zero trailing bits are rejected, so the extension's reader decodes exactly
+     * the same keys.
      */
-    private static function ed25519KeyOrNull(string $base64): ?string
+    private static function ed25519KeyOrNull(string $text): ?string
     {
-        $raw = base64_decode(strtr(trim($base64), '-_', '+/'), true);
+        $text = trim($text);
+        if (preg_match('/^[A-Za-z0-9+\/]{43}=\z/', $text) !== 1 && preg_match('/^[A-Za-z0-9_-]{43}=?\z/', $text) !== 1) {
+            return null;
+        }
+        $raw = base64_decode(strtr($text, '-_', '+/'), true);
+        if (!is_string($raw) || strlen($raw) !== SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES) {
+            return null;
+        }
 
-        return is_string($raw) && strlen($raw) === SODIUM_CRYPTO_SIGN_PUBLICKEYBYTES ? $raw : null;
+        return rtrim(strtr(base64_encode($raw), '+/', '-_'), '=') === rtrim(strtr($text, '+/', '-_'), '=') ? $raw : null;
     }
 }

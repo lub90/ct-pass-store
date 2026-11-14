@@ -422,6 +422,33 @@ final class KvSettingsRepositoryTest extends TestCase
 
     // ---------------------------------------------------------------- access (AG-04, AG-09)
 
+    /**
+     * AG-13: every case of the shared fixture through the real path: KV value, signed cache file and parser. The
+     * second repository reads the cache, which has to keep JSON objects and lists apart.
+     */
+    #[DataProvider('fixtureCases')]
+    public function testFixtureCaseThroughTheCache(\stdClass $case): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], AccessParserTest::accessJson($case));
+
+        $enabled = [
+            array_map(strval(...), array_keys($this->cachedRepository()->settings()->machineClients)),
+            array_map(strval(...), array_keys($this->cachedRepository()->settings()->machineClients)),
+        ];
+
+        $expected = property_exists($case, 'enabled') ? $case->enabled : ($case->valid ? [$case->client->id] : []);
+        self::assertSame([$expected, $expected], $enabled);
+    }
+
+    /**
+     * @return iterable<string, array{\stdClass}>
+     */
+    public static function fixtureCases(): iterable
+    {
+        return AccessParserTest::fixtureCases();
+    }
+
     public function testTheAdminGroupAndClientsComeFromAccess(): void
     {
         $settings = $this->settings(self::validSettings(), [
