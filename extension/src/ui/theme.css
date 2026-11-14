@@ -170,6 +170,15 @@
     .cps {
         --cps-control-h: 44px;
     }
+    /*
+     * A link that stands alone (a back link, „Über“) is a target of its own. Links in running text keep the line height
+     * (WCAG 2.5.8 inline exception); they don't get the class.
+     */
+    .cps :where(a.cps-link) {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+    }
 }
 /*
  * iOS zooms into a field whose text is smaller than 16px as soon as it is tapped, and does not zoom out again.

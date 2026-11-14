@@ -56,7 +56,10 @@ const invalidStored = computed(() => props.form.status.value === 'invalid' || pr
 
 <template>
     <p class="cps-settings-form__back">
-        <RouterLink to="/settings">
+        <RouterLink
+            to="/settings"
+            class="cps-link"
+        >
             {{ t('settings.back') }}
         </RouterLink>
     </p>

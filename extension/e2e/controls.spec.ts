@@ -21,14 +21,25 @@ test('Space and Enter flip the Toggle', async ({ page }) => {
     await expect(page.getByRole('button', { name: 'Speichern' })).toBeEnabled();
 });
 
-test('a click on the Toggle text flips it once and puts the focus on the switch', async ({ page }) => {
+test('a click on the Toggle text flips it once', async ({ page }) => {
     await openDemo(page, 'admin', 'settings/rules');
     const toggle = page.getByRole('switch', { name: LABEL });
     await page.getByText(LABEL, { exact: true }).click();
     await expect(toggle).toHaveAttribute('aria-checked', 'false');
-    await expect(toggle).toBeFocused();
     await page.getByText('Sonst werden Passwörter nur zufällig erzeugt.').click();
     await expect(toggle).toHaveAttribute('aria-checked', 'true');
+});
+
+test('a click on the Toggle text puts the focus on the switch', async ({ page, browserName }) => {
+    test.fixme(
+        browserName === 'webkit',
+        'Safari does not focus buttons on a click; whether WebKit under Playwright does is unknown (never run here). If not, decide whether the Toggle should focus itself.',
+    );
+    await openDemo(page, 'admin', 'settings/rules');
+    const toggle = page.getByRole('switch', { name: LABEL });
+    await page.getByText(LABEL, { exact: true }).click();
+    await expect(toggle).toBeFocused();
+    await page.getByText('Sonst werden Passwörter nur zufällig erzeugt.').click();
     await expect(toggle).toBeFocused();
 });
 

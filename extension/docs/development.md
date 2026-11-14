@@ -193,26 +193,37 @@ on (Playwright turns it off by default), so a popup outside a click is blocked a
 | --- | --- |
 | `password.spec.ts` | Generate, copy (clipboard read back in Chromium; in WebKit the „Kopiert“ feedback), „Fertig“ drops the plaintext; a chosen password; arrow keys in the ChoiceCard group; the custom form's `autocomplete` attributes and no username-like field |
 | `admin.spec.ts` | An admin sets someone else's password: banner, confirm dialog naming the person with the „ID n“ line; focus trap, Escape, focus back on the opener; the dialog above a stand-in top bar (z-index 1040); one `main` landmark |
-| `controls.spec.ts` | Toggle: Space and Enter, a click on its text flips it once and focuses the switch, a tap |
-| `layout.spec.ts` | Every route of spec 4.1 and the main form states: no horizontal scrolling, every button and input at least 44 px high with touch (Toggle and ChoiceCard through their label), 16 px input text and full-width form buttons at 375 px |
-| `renewal.spec.ts` | The session renewal popup (spec 7.2) from a click, and from the confirm dialog's click when the request after it answers `token-expired`; a control shows the same renewal without a click is blocked. Also, in the demo app, a token one minute before its end: the submit click renews first and keeps everything typed |
-| `docs-screenshots.spec.ts` | The user-guide pictures in `docs/images/` (Chromium only, `*-desktop.png` and `*-phone.png`) |
+| `controls.spec.ts` | Toggle: Space and Enter, a click on its text flips it once and focuses the switch (fixme in WebKit, see item 6 below), a tap |
+| `layout.spec.ts` | Every route of spec 4.1 and the main form states: no horizontal scrolling, every button, input and standalone link at least 44 px high with touch (Toggle and ChoiceCard through their label), 16 px input text and full-width form buttons at 375 px |
+| `renewal.spec.ts` | The session renewal popup (spec 7.2) from a click, and from the confirm dialog's click when the request after it answers `token-expired`; a control shows the same renewal without a click is blocked. The popup tests are fixme in WebKit until a first run. Also, in the demo app, a token one minute before its end: the submit click renews first and keeps everything typed |
+| `docs-screenshots.spec.ts` | The user-guide pictures in `docs/images/` (Chromium only, `*-desktop.png` and `*-phone.png`); only with `npm run docs:screenshots`, skipped otherwise |
 
 **Not part of `npm run check`.** The browser tests need the Playwright browsers (and WebKit its system libraries),
 start a dev server and take about a minute; `check` stays fast and runs anywhere. Run them by hand before a release
 and after UI changes (spec 13.1). `e2e/` is type-checked and linted by `check`, and it never reaches the build (Vite
 builds from `index.html` only; `check-dist` would fail on demo code).
 
-**Screenshots** are deterministic: a fixed scenario per picture, a fresh demo state, the demo switch hidden, no
+**Touch targets of links.** A link that stands alone (alone in its paragraph, list item or footer: the back link
+„‹ Einstellungen“, „Über“, the links on „Über“) is a target of its own and gets the class `cps-link`, which makes it
+44 px high on a coarse pointer (`theme.css`). A link inside running text (the block around it has text of its own,
+e.g. „In ChurchTools öffnen ↗“ after the members hint, or a link at the end of a banner sentence) keeps the line
+height: WCAG 2.5.8 exempts inline targets. `layout.spec.ts` applies the same rule when it measures.
+
+**Screenshots** are made only on request: `npm run docs:screenshots` (it sets `CPS_SCREENSHOTS=1`); a normal
+`npm run test:browser` skips them and never rewrites `docs/images/`. They aim to be deterministic: a fixed scenario per picture, a fresh demo state, the demo switch hidden, no
 caret or focus ring, and a fixed example (`Beispiel-Pw-42!x`) in place of the random password. Fonts come from the
 machine (Lato only on the instance), so pictures made on another machine can differ in the font; commit them from one
-machine.
+machine. Small sub-pixel differences between two runs on the same machine (anti-aliasing) are expected; commit new
+pictures only when the page itself changed.
 
 **Session renewal in the demo:** the demo has no OAuth, so its popup is always reported as blocked. The renewal tests
 therefore build a real `Auth` and `Session` from the app's modules on the demo page (Vite serves them under
 `/ccm/ctpassstore/src/`), answer `/oauth/authorize` with a redirect to the callback route, and let the real callback
-page post the code back to its opener. `page.evaluate` counts as a user activation in Chromium; these tests wait
-longer than its 5 s lifetime before the click that matters, which makes them about 10 s each.
+page post the code back to its opener. Playwright marks its own injected calls (`page.evaluate`, the checks around a
+click) as user gestures, so the tests can't separate the click's activation from Playwright's: they show that the
+renewal runs within the click's activation window, not that the click alone provides it. The control test starts the
+same renewal from a timer after more than Chromium's 5 s activation lifetime, with no Playwright call meanwhile, and
+it is blocked.
 
 ### Manual checks on the test instance
 
@@ -240,9 +251,12 @@ ask the maintainer first) and a test account; never a production instance.
    `t = JSON.parse(sessionStorage['cps-token']); t.expiresAt = Date.now() + 90000; sessionStorage['cps-token'] = JSON.stringify(t); location.reload()`.
    Within the remaining minute, click „Neues Passwort festlegen“. Expected: a ChurchTools login popup opens (and closes
    by itself while ChurchTools still has a session), the form opens, and no „Sitzung erneuern“ banner appears. Repeat
-   in Safari. The other path, a `token-expired` answer after the confirm dialog's click, can't be provoked by hand
+   in Firefox and Safari. The other path, a `token-expired` answer after the confirm dialog's click, can't be provoked by hand
    reliably; `renewal.spec.ts` covers it (Chromium; WebKit where its libraries are installed).
 6. **WebKit run and Safari details** (if WebKit couldn't run locally): `npm run test:browser` on a machine with the
    WebKit libraries, or the checks by hand in Safari on macOS/iOS: the Toggle's text click (Safari does not focus
-   buttons on a click, so `controls.spec.ts` may report the focus line there), the copy feedback, and 16 px fields
-   without zoom on an iPhone.
+   buttons on a click; the focus test is fixme there until decided), the copy feedback, and 16 px fields without zoom
+   on an iPhone. Safari's activation after a click is short: in the path where the request after the confirm dialog
+   answers `token-expired`, Safari may block the renewal popup. The expected fallback is the „Sitzung erneuern“
+   banner, with everything typed kept; a click on its button opens the popup. The renewal popup tests are fixme in
+   WebKit until a first WebKit run shows its popup-blocker default.

@@ -40,7 +40,10 @@ const message = computed(() => (app.failure.value ? failureMessage(app.failure.v
             v-if="editor && app.failure.value?.kind === 'login'"
             class="cps-state__link"
         >
-            <RouterLink to="/settings/backend">
+            <RouterLink
+                to="/settings/backend"
+                class="cps-link"
+            >
                 {{ t('state.toBackend') }}
             </RouterLink>
         </p>

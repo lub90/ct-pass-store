@@ -238,7 +238,10 @@ async function remove(row: Row): Promise<void> {
 
 <template>
     <p class="cps-access__back">
-        <RouterLink to="/settings">
+        <RouterLink
+            to="/settings"
+            class="cps-link"
+        >
             {{ t('settings.back') }}
         </RouterLink>
     </p>

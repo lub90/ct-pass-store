@@ -22,6 +22,11 @@ async function expectNoHorizontalScroll(page: Page, where: string): Promise<void
 /**
  * Heights of every visible control of the app (not the demo switch). A switch and a radio or checkbox are hit through
  * the label around them (Toggle, ChoiceCard), so the label counts for them.
+ *
+ * Links count too, except links in running text (the inline exception of WCAG 2.5.8): a link is inline when the block
+ * around it has text of its own outside any link, e.g. „Mitglieder verwaltest du in ChurchTools. In ChurchTools öffnen
+ * ↗“ or a link at the end of a banner sentence. A link alone in its paragraph, list item or footer (back links, „Über“,
+ * the links on „Über“) is a standalone target and needs 44 px.
  */
 function targetHeights(page: Page): Promise<Target[]> {
     return page.evaluate(() => {
@@ -38,9 +43,19 @@ function targetHeights(page: Page): Promise<Target[]> {
             const style = getComputedStyle(el);
             return r.width > 0 && r.height > 0 && style.visibility !== 'hidden';
         };
+        /** The link's block has text of its own besides links: the link sits in a sentence. */
+        const inRunningText = (a: Element) => {
+            const block = a.parentElement;
+            if (!block) return false;
+            const own = [...block.childNodes]
+                .filter((n) => !(n instanceof Element && (n.tagName === 'A' || n.querySelector('a'))))
+                .map((n) => n.textContent ?? '')
+                .join('');
+            return own.trim() !== '';
+        };
         const controls = [
-            ...document.querySelectorAll('.cps button, .cps input:not([type=hidden]), .cps select, .cps textarea'),
-        ].filter((el) => !el.closest('aside[aria-label="Demo-Modus"]'));
+            ...document.querySelectorAll('.cps button, .cps input:not([type=hidden]), .cps select, .cps textarea, .cps a[href]'),
+        ].filter((el) => !el.closest('aside[aria-label="Demo-Modus"]') && !(el.tagName === 'A' && inRunningText(el)));
         return controls
             .map((el) => {
                 const viaLabel = el.getAttribute('role') === 'switch' || ['radio', 'checkbox'].includes(el.getAttribute('type') ?? '');

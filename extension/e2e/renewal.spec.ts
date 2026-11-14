@@ -8,14 +8,20 @@
  * backend login. `/oauth/authorize` is answered by the test with a redirect to the app's callback route, so the popup
  * runs the real callback page, which posts the code back to its opener. Nothing leaves the machine.
  *
- * Timing: `page.evaluate` counts as a user activation in Chromium, so every test waits longer than its activation
- * lifetime (5 s in Chromium) before the click that matters; the control test shows that a renewal after the same wait
- * but without a click is blocked (Chromium's popup blocker is on in `playwright.config.ts`).
+ * What this shows and what it doesn't: Playwright marks its own injected calls (`page.evaluate`, the checks around a
+ * `click`) as user gestures, so a test can't tell the click's activation apart from Playwright's. The positive tests
+ * therefore show that the renewal runs within the activation window of the click (inside its handler, or after the
+ * confirm click and a request), not that the click alone provides it. The control test shows the other side: the
+ * same renewal started from a timer, after any earlier activation has run out and with no Playwright call meanwhile,
+ * is blocked (Chromium's popup blocker is on in `playwright.config.ts`).
+ *
+ * WebKit: whether its popup blocker is on under Playwright and how long its activation lasts is not known yet (no
+ * WebKit run so far); the popup tests are marked fixme there until a first run decides.
  */
 import { expect, test, type Page } from '@playwright/test';
 import { openDemo } from './demo';
 
-/** Longer than Chromium's transient activation (5 s): whatever activation came before has expired. */
+/** Longer than Chromium's transient activation (5 s): for the control test, whatever activation came before is gone. */
 const ACTIVATION_EXPIRED_MS = 5500;
 const PERSON = 4711;
 
@@ -24,11 +30,8 @@ interface Harness {
     logins: number;
     expiresInMs(): number;
 }
-declare global {
-    interface Window {
-        e2e: Harness & Record<string, unknown>;
-    }
-}
+/** The page's window with the harness; a local type, so nothing leaks into the app's `Window`. */
+type E2eWindow = Window & { e2e: Harness & Record<string, unknown> };
 
 /** Answers the popup's `/oauth/authorize` like ChurchTools would after a login: back to the callback with a code. */
 async function fakeAuthorize(page: Page): Promise<void> {
@@ -67,7 +70,7 @@ async function installHarness(page: Page, expiresInMs: number): Promise<void> {
                     person,
                 }),
             );
-            const harness = { results: [] as string[], logins: 0 } as Window['e2e'];
+            const harness = { results: [] as string[], logins: 0 } as E2eWindow['e2e'];
             const auth = new Auth(
                 () => ({
                     login: async (code: string) => {
@@ -82,7 +85,7 @@ async function installHarness(page: Page, expiresInMs: number): Promise<void> {
             auth.bindPerson(person);
             harness.expiresInMs = () => auth.expiresInMs();
             harness.session = createSession(auth, () => '/');
-            window.e2e = harness;
+            (window as unknown as E2eWindow).e2e = harness;
         },
         { expiresInMs, person: PERSON },
     );
@@ -92,15 +95,15 @@ async function installHarness(page: Page, expiresInMs: number): Promise<void> {
 async function addButton(page: Page, id: string, action: string): Promise<void> {
     await page.evaluate(
         ({ id, action }) => {
-            const run = new Function('e2e', `return (async () => { ${action} })();`) as (h: Window['e2e']) => Promise<string>;
+            const run = new Function('e2e', `return (async () => { ${action} })();`) as (h: E2eWindow['e2e']) => Promise<string>;
             const button = document.createElement('button');
             button.id = id;
             button.textContent = id;
             Object.assign(button.style, { position: 'fixed', top: '0', left: '0', zIndex: '3000', minHeight: '44px' });
             button.addEventListener('click', () => {
-                run(window.e2e).then(
-                    (r) => window.e2e.results.push(r),
-                    (e: Error) => window.e2e.results.push(e.name),
+                run((window as unknown as E2eWindow).e2e).then(
+                    (r) => (window as unknown as E2eWindow).e2e.results.push(r),
+                    (e: Error) => (window as unknown as E2eWindow).e2e.results.push(e.name),
                 );
             });
             document.body.append(button);
@@ -109,10 +112,14 @@ async function addButton(page: Page, id: string, action: string): Promise<void> 
     );
 }
 
-const results = (page: Page) => page.evaluate(() => window.e2e.results);
+const results = (page: Page) => page.evaluate(() => (window as unknown as E2eWindow).e2e.results);
 
 test.describe('renewal popup', () => {
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page, browserName }) => {
+        test.fixme(
+            browserName === 'webkit',
+            "WebKit's popup blocker default under Playwright and its activation lifetime are unknown (never run here); a first WebKit run decides",
+        );
         await openDemo(page, 'user');
         await fakeAuthorize(page);
     });
@@ -121,14 +128,13 @@ test.describe('renewal popup', () => {
         // 60 s left: ensureFresh() renews (spec 7.2: fewer than 2 minutes).
         await installHarness(page, 60_000);
         await addButton(page, 'e2e-fresh', "await e2e.session.ensureFresh(); return 'fresh';");
-        await page.waitForTimeout(ACTIVATION_EXPIRED_MS);
 
         const popup = page.waitForEvent('popup');
         await page.locator('#e2e-fresh').click();
         await popup;
         await expect.poll(() => results(page)).toEqual(['fresh']);
-        expect(await page.evaluate(() => window.e2e.logins)).toBe(1);
-        expect(await page.evaluate(() => window.e2e.expiresInMs())).toBeGreaterThan(50 * 60_000);
+        expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.logins)).toBe(1);
+        expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.expiresInMs())).toBeGreaterThan(50 * 60_000);
     });
 
     test('the click on the confirm dialog carries the popup of a renewal after token-expired', async ({ page }) => {
@@ -139,7 +145,7 @@ test.describe('renewal popup', () => {
             const src = '/ccm/ctpassstore/src/';
             const { useConfirm } = await import(/* @vite-ignore */ `${src}ui/useConfirm.ts`);
             const { BackendProblem } = await import(/* @vite-ignore */ `${src}backend/problems.ts`);
-            const e2e = window.e2e;
+            const e2e = (window as unknown as E2eWindow).e2e;
             let sends = 0;
             // As in PasswordFlow / ManageView: confirm, then the request; it answers token-expired once.
             void useConfirm()({ title: 'E2E-Frage', text: 'Weiter?', confirmLabel: 'Fortfahren', cancelLabel: 'Abbrechen' })
@@ -160,13 +166,12 @@ test.describe('renewal popup', () => {
         });
         const dialog = page.getByRole('alertdialog', { name: 'E2E-Frage' });
         await expect(dialog).toBeVisible();
-        await page.waitForTimeout(ACTIVATION_EXPIRED_MS);
 
         const popup = page.waitForEvent('popup');
         await dialog.getByRole('button', { name: 'Fortfahren' }).click();
         await popup;
         await expect.poll(() => results(page)).toEqual(['sent 2']);
-        expect(await page.evaluate(() => window.e2e.logins)).toBe(1);
+        expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.logins)).toBe(1);
     });
 
     test('control: the same renewal without a click is blocked', async ({ page, browserName }) => {
@@ -177,9 +182,9 @@ test.describe('renewal popup', () => {
         // Started from a timer after the evaluate's activation has run out: no user activation.
         await page.evaluate((ms) => {
             setTimeout(() => {
-                void (window.e2e.session as { ensureFresh(): Promise<void> }).ensureFresh().then(
-                    () => window.e2e.results.push('fresh'),
-                    (e: Error) => window.e2e.results.push(e.name),
+                void ((window as unknown as E2eWindow).e2e.session as { ensureFresh(): Promise<void> }).ensureFresh().then(
+                    () => (window as unknown as E2eWindow).e2e.results.push('fresh'),
+                    (e: Error) => (window as unknown as E2eWindow).e2e.results.push(e.name),
                 );
             }, ms);
         }, ACTIVATION_EXPIRED_MS);
@@ -187,7 +192,7 @@ test.describe('renewal popup', () => {
         await page.waitForTimeout(ACTIVATION_EXPIRED_MS + 1500);
         expect(await results(page)).toEqual(['PopupBlocked']);
         expect(popups).toBe(0);
-        expect(await page.evaluate(() => (window.e2e.session as { needsRenewal: { value: boolean } }).needsRenewal.value)).toBe(true);
+        expect(await page.evaluate(() => ((window as unknown as E2eWindow).e2e.session as { needsRenewal: { value: boolean } }).needsRenewal.value)).toBe(true);
     });
 });
 

@@ -23,12 +23,14 @@ function track(event: FocusEvent) {
 
 /**
  * The element to return to. Usually the focused one; but a page often disables its button while the action the dialog
- * belongs to runs, and the browser then moves the focus to body, so the last focused element counts.
+ * belongs to runs, and the browser then moves the focus to body: so the last focused element counts if it is disabled
+ * now. An enabled one lost the focus for another reason (the person clicked elsewhere); the focus then stays on body
+ * instead of jumping back to it.
  */
 function findOpener(): HTMLElement | null {
     const active = document.activeElement;
     if (active instanceof HTMLElement && active !== document.body) return active;
-    return lastFocused?.isConnected ? lastFocused : null;
+    return lastFocused?.isConnected && (lastFocused as HTMLButtonElement).disabled ? lastFocused : null;
 }
 
 const focusIsLost = () => document.activeElement === null || document.activeElement === document.body;

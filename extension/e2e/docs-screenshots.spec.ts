@@ -3,6 +3,9 @@
  * fixed scenario per picture, no time stamps or versions in the picture, and a fixed example in place of the randomly
  * generated password. Desktop pictures from `chromium-desktop`, phone pictures from `chromium-phone`; the other
  * projects skip this file.
+ *
+ * Opt-in: only with `CPS_SCREENSHOTS=1` (`npm run docs:screenshots`), so a normal browser test run never rewrites
+ * `docs/images/`.
  */
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +19,7 @@ const EXAMPLE_PASSWORD = 'Beispiel-Pw-42!x';
 const kind = () => (test.info().project.name === 'chromium-phone' ? 'phone' : 'desktop');
 
 test.beforeEach(() => {
+    test.skip(process.env.CPS_SCREENSHOTS !== '1', 'screenshots only with CPS_SCREENSHOTS=1 (npm run docs:screenshots)');
     const project = test.info().project.name;
     test.skip(project !== 'chromium-desktop' && project !== 'chromium-phone', 'screenshots come from Chromium only');
 });

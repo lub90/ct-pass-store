@@ -170,6 +170,23 @@ describe('ConfirmDialog', () => {
             await flush();
             expect(document.activeElement).toBe(inDialog);
         });
+
+        // Focus on body for another reason (the person clicked on empty space): the last focused element didn't open
+        // the dialog, so the focus doesn't jump to it afterwards; it stays where the person left it.
+        it('does not return to a stale, enabled element the person had left', async () => {
+            const field = document.createElement('input');
+            document.body.append(field);
+            field.focus();
+            field.blur();
+            expect(document.activeElement).toBe(document.body);
+            const { result: p, shown } = open();
+            await shown;
+            key('Escape');
+            await p;
+            await flush();
+            expect(document.activeElement).toBe(document.body);
+            field.remove();
+        });
     });
 
     it('confirm resolves confirmed; a click on the backdrop cancels', async () => {

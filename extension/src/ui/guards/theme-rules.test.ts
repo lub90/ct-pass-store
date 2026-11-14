@@ -24,3 +24,15 @@ describe('theme.css form action rows', () => {
         expect(rule).toMatch(/flex-wrap:\s*wrap/);
     });
 });
+
+describe('theme.css standalone links', () => {
+    // Spec 1.3: 44 px touch targets also for links that stand alone (back links, „Über“); links in running text are
+    // exempt (WCAG 2.5.8 inline exception). `e2e/layout.spec.ts` measures them; the browser tests found 16 px ones.
+    it('a .cps-link is at least 44 px high on a coarse pointer', () => {
+        const coarse = [...css.matchAll(/@media \(pointer: coarse\) {([\s\S]*?)\n}/g)].map((m) => m[1]).join('\n');
+        const rule = /\.cps :where\(a\.cps-link\)\s*{([^}]*)}/.exec(coarse)?.[1] ?? '';
+        expect(rule).toMatch(/min-height:\s*44px/);
+        expect(rule).toMatch(/display:\s*inline-flex/);
+        expect(rule).toMatch(/align-items:\s*center/);
+    });
+});

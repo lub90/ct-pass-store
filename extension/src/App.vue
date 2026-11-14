@@ -94,7 +94,10 @@ function navigate(to: string): void {
                 <p>{{ t(route.meta.requires === 'admin' ? 'state.needsAdmin' : 'state.needsEditor') }}</p>
             </Banner>
             <p class="cps-app__back">
-                <RouterLink to="/">
+                <RouterLink
+                    to="/"
+                    class="cps-link"
+                >
                     {{ t('notFound.back') }}
                 </RouterLink>
             </p>
@@ -108,7 +111,10 @@ function navigate(to: string): void {
             v-if="footerLink"
             class="cps-app__footer"
         >
-            <RouterLink :to="footerLink.to">
+            <RouterLink
+                :to="footerLink.to"
+                class="cps-link"
+            >
                 {{ footerLink.label }}
             </RouterLink>
         </footer>

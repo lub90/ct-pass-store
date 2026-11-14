@@ -36,6 +36,7 @@ const THIRD_PARTY = `${BASE_PATH}THIRD-PARTY-LICENSES.txt`;
         <ul class="cps-about__links">
             <li>
                 <a
+                    class="cps-link"
                     :href="guideUrl(version)"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -43,6 +44,7 @@ const THIRD_PARTY = `${BASE_PATH}THIRD-PARTY-LICENSES.txt`;
             </li>
             <li>
                 <a
+                    class="cps-link"
                     :href="releaseUrl(version)"
                     target="_blank"
                     rel="noopener noreferrer"
@@ -51,12 +53,14 @@ const THIRD_PARTY = `${BASE_PATH}THIRD-PARTY-LICENSES.txt`;
         </ul>
         <p class="cps-about__legal">
             <a
+                class="cps-link"
                 :href="licenseUrl(version)"
                 target="_blank"
                 rel="noopener noreferrer"
             >{{ t('about.copyright') }}</a>
             <br>
             <a
+                class="cps-link"
                 :href="THIRD_PARTY"
                 target="_blank"
                 rel="noopener noreferrer"

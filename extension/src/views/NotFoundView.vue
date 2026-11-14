@@ -8,7 +8,10 @@ const { t } = useI18n();
 <template>
     <h1>{{ t('notFound.title') }}</h1>
     <p>
-        <RouterLink to="/">
+        <RouterLink
+            to="/"
+            class="cps-link"
+        >
             {{ t('notFound.back') }}
         </RouterLink>
     </p>
