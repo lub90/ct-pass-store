@@ -94,6 +94,26 @@ final class LoggerTest extends TestCase
         self::assertStringContainsString('bytes\x0Aforged', $content);
     }
 
+    /**
+     * One stray byte makes a string invalid UTF-8, which switches the Unicode match off; the byte sequences of C1
+     * controls, the line and paragraph separators and the bidi controls are then escaped byte-wise.
+     */
+    public function testInvalidUtf8StillHasItsUnicodeControlsEscaped(): void
+    {
+        $logger = Kernel::logger($this->file, 'debug', '0.1.0');
+
+        $logger->warning("stray \xFF https://evil.example/\u{202E}gro\u{2028}[2026] forged\u{2029}\u{0085}\u{2066}x\u{2069}\u{202A}", [
+            'url' => "\xFF\u{202E}y",
+        ]);
+
+        $content = $this->content();
+        self::assertCount(1, explode("\n", rtrim($content, "\n")));
+        foreach (["\u{202E}", "\u{2028}", "\u{2029}", "\u{0085}", "\u{2066}", "\u{2069}", "\u{202A}"] as $control) {
+            self::assertStringNotContainsString($control, $content, bin2hex($control));
+        }
+        self::assertStringContainsString('evil.example/\xE2\x80\xAEgro\xE2\x80\xA8[2026] forged\xE2\x80\xA9\xC2\x85\xE2\x81\xA6x\xE2\x81\xA9\xE2\x80\xAA', $content);
+    }
+
     /** LG-04 */
     public function testTheLevelIsRespected(): void
     {

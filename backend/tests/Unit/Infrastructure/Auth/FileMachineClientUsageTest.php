@@ -218,6 +218,67 @@ final class FileMachineClientUsageTest extends TestCase
         self::assertSame('Machine client ct-radius is in use; first request in the last 14 days.', $this->summaries()[array_key_last($this->summaries())]['message']);
     }
 
+    /** The last hour of a client isn't lost when its entry expires: its pending summary is logged first. */
+    public function testAnExpiringEntryLogsItsPendingSummary(): void
+    {
+        $this->use('ct-radius', '203.0.113.7');
+        $this->use('ct-radius', '198.51.100.2');
+        $this->clock->advance(FileMachineClientUsage::RETENTION_SECONDS);
+        $this->log->clear();
+
+        $this->use('backup-reader', '192.0.2.1');
+
+        self::assertSame([
+            'Machine client ct-radius is in use; 2 requests from 2 addresses since the last summary at 2026-11-01T12:00:00+00:00.',
+            'Machine client backup-reader is in use; first request in the last 14 days.',
+        ], array_column($this->summaries(), 'message'));
+        self::assertSame(['addresses' => ['203.0.113.7', '198.51.100.2']], $this->summaries()[0]['context']);
+    }
+
+    public function testPruneLogsThePendingSummaryOfTheEntriesItDrops(): void
+    {
+        $this->use('ct-radius', '203.0.113.7');
+        $this->use('old-reader', '198.51.100.2');
+        $this->use('old-reader', '198.51.100.2');
+        $this->log->clear();
+
+        $this->usage()->prune(['ct-radius']);
+
+        self::assertSame(['Machine client old-reader is in use; 2 requests from 1 address since the last summary at 2026-11-01T12:00:00+00:00.'], array_column($this->summaries(), 'message'));
+    }
+
+    /** A pending summary isn't logged when the write that drops it fails (the entry is still there). */
+    public function testAFailedPruneLogsNoPendingSummary(): void
+    {
+        $this->use('old-reader', '198.51.100.2');
+        $this->log->clear();
+        chmod($this->dir, 0o500);
+
+        $this->usage()->prune([]);
+
+        self::assertSame([], $this->summaries());
+        self::assertSame(["The usage of machine clients can't be cleaned up, because the cache folder can't be used."], array_column($this->warnings(), 'message'));
+    }
+
+    /** A validly signed record with entries of another shape: those entries are dropped, the rest counts on. */
+    public function testEntriesOfAnotherShapeAreDropped(): void
+    {
+        $this->use('ct-radius', '203.0.113.7');
+        $logger = new Logger('test', [$this->log]);
+        (new SignedFileStore($this->dir, self::SECRET, $logger))->update(FileMachineClientUsage::RECORD, static fn(array $all): array => $all + [
+            'c:bad-count' => ['since' => 1, 'count' => 'x', 'addresses' => []],
+            'c:bad-entry' => 'text',
+            'no-prefix' => ['since' => 1, 'count' => 1, 'addresses' => []],
+        ]);
+        $this->log->clear();
+
+        $this->use('ct-radius', '203.0.113.7');
+
+        self::assertSame(['c:ct-radius'], array_keys($this->stored()));
+        self::assertSame(2, $this->stored()['c:ct-radius']['count']);
+        self::assertSame([], $this->summaries());
+    }
+
     /** M-2: clients no longer configured lose their entry when the access value is loaded. */
     public function testPruneKeepsOnlyTheConfiguredClients(): void
     {
@@ -268,7 +329,7 @@ final class FileMachineClientUsageTest extends TestCase
         $this->use('ct-radius', '203.0.113.7');
 
         self::assertSame([], $this->summaries());
-        self::assertCount(1, $this->warnings());
+        self::assertSame(["The usage of machine client ct-radius can't be counted, because the cache folder can't be used."], array_column($this->warnings(), 'message'));
     }
 
     public function testATamperedRecordIsAWarningNotARefusal(): void

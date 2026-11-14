@@ -32,6 +32,7 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
   `404 entry-not-found`.
 - `GET /v1/test` is for admins only and reports the version; `?write=1` also tests writing to `passwordStore`.
 - `credentials.php` needs `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET`; `LOG_LEVEL` is new.
+- PHP needs the extensions `mbstring` and `sodium`; `composer.json` requires them.
 - The ChurchTools client is an own small implementation instead of `churchtools/php-client`.
 
 ### Added

@@ -66,6 +66,9 @@ Users log in through ChurchTools' OAuth server. Each ChurchTools instance needs:
 
 You need PHP 8.3 or newer and [Composer](https://getcomposer.org/) on your machine, not on the webserver.
 
+The webserver needs PHP 8.3 or newer with the extensions `mbstring` and `sodium` (both are part of most hosting
+PHPs; `composer.json` requires them, so `composer install` refuses a PHP without them).
+
 ```bash
 git clone https://github.com/lub90/ct-pass-store
 cd ct-pass-store/backend
@@ -282,8 +285,10 @@ What to look for when you review the log (the default `LOG_LEVEL` `info` shows a
 The "last seen" values for these comparisons and the usage counts are kept in `cache/` (signed records). Emptying
 `cache/` or changing `JWT_SECRET` makes the next load log the current values as "first seen" again. The usage counts
 keep no address longer than the log (14 days), and the entry of a machine client is dropped once it is no longer
-configured. If one of these records fails its integrity check, the backend logs a `warning` on each settings load and
-goes on answering requests: check the server for unauthorized access, then empty `cache/`. Unicode control and
+configured. The pending count of a dropped entry is logged first. If one of these records fails its integrity check,
+the backend keeps answering requests but logs an `error` plus a `warning` until you empty `cache/`: for the "last
+seen" record on every settings load from ChurchTools (about every 5 minutes), for the usage record on every
+machine-client request. Check the server for unauthorized access, then empty `cache/`. Unicode control and
 format characters (such as bidi overrides) in logged values appear escaped as `\u{XXXX}`.
 
 ## Rotating secrets

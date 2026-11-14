@@ -282,7 +282,7 @@ final class SettingsChangeLogTest extends TestCase
         $this->observe(self::settings([]));
 
         self::assertSame([], $this->notices());
-        self::assertCount(1, $this->warnings());
+        self::assertSame(['Changes of the machine clients, the admin group and the backend address can\'t be checked, because the cache folder can\'t be used.'], $this->warnings());
     }
 
     /** M-2: the access load also drops the usage of clients that are no longer configured. */
