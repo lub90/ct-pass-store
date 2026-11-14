@@ -282,3 +282,55 @@ foreach (['012', '12 ', ' 12', '1e1', '+12', '-12', '0', '', null, 12.0, true, [
   in extension plan Task 1; until then this check fails, which is correct: no backend release before the extension.)
 - [ ] **Step 4: Run** `composer check` → PASS.
 - [ ] **Step 5: Commit:** `"Backend: release tags backend-v*, shared MAJOR.MINOR with the extension (AG-12)"`.
+
+---
+
+## Tasks from review point B (2026-11-14)
+
+Added after the end-of-branch reviews (project `.claude/CLAUDE.md`, review point B, round 1). Findings are quoted in
+`.superpowers/sdd/backend-admin-group-plan/progress.md`.
+
+### Task 8: Whoever controls the admin group's membership is admin [security-critical]
+
+Security review finding 1 (IMPORTANT) and minors 3 and 5.
+
+**Files:**
+- Modify: `specs/extension-spec.md` 16.4 (new rule at the end), 16.1, 4.7; `specs/backend-spec.md` D9 (consequence) and
+  4.4 (log line); `backend/docs/setup.md` (admin group section)
+- Modify: `backend/src/Application/Login.php`, `backend/tests/Api/LoggingApiTest.php` (or `LoginApiTest.php`)
+- Modify: `backend/tests/Contract/AdminGroupContractTest.php` (~line 76)
+
+- [ ] **Step 1: Spec and docs.** Extension spec 16.4 gets rule 6 "Who controls the admin group's membership": warn
+  about (a) group roles of the admin group whose rights let them edit memberships of that group, (b) open, sign-up or
+  auto-accepting groups, dynamic or automatically filled groups, (c) persons, statuses and group roles holding
+  membership-editing rights for that group or its group type (`edit group memberships`, `edit group memberships of
+  group`/`of grouptype`, `administer groups`, `administer persons`), read from `getMasterData`; if any of this can't be
+  determined, the check says so instead of reporting ok. 16.1 and 4.7 state: controlling the admin group's membership
+  equals the admin role. Backend D9 states the same consequence. `backend/docs/setup.md` tells the admin to use a group
+  whose membership only the intended people can change (closed, no sign-up, no leader rights to edit members).
+- [ ] **Step 2: Failing test** in the API/logging tests: a successful login logs at `info` "user N logged in as admin."
+  for an admin and "user N logged in." for a user; no token or username in the line.
+- [ ] **Step 3: Run** → FAIL. **Step 4: Implement** the log line in `Login::execute`.
+- [ ] **Step 5:** `AdminGroupContractTest.php` ~76: the assertion message must never contain `clientSecret`; remove it
+  from the body before building the message (unit-check the redaction helper if it's a function).
+- [ ] **Step 6: Run** `composer check` → PASS. **Commit:** `"Spec, backend: membership control of the admin group is the admin role; log the role at login"`.
+
+### Task 9: Tests that pin the active-only rule and the shared MAJOR.MINOR [security-critical]
+
+Test review findings 1 and 2 (IMPORTANT) and minors 3–5.
+
+**Files:**
+- Modify: `backend/tests/Unit/Infrastructure/ChurchTools/GuzzleChurchToolsClientTest.php`,
+  `backend/tests/Unit/Deploy/ReleaseCheckTest.php`, `backend/tests/Api/LoginApiTest.php`,
+  `backend/tests/Unit/Application/Auth/UserTokensTest.php`
+- Modify production code only if a new test exposes a bug.
+
+- [ ] **Step 1:** `GuzzleChurchToolsClientTest`: memberships of the admin group with statuses `'inactive'`, `'Active'`,
+  `'ACTIVE'`, `''`, `' active'` are left out of `activeGroupIds`. `malformedGroupAnswers` gains `lastPage` `0`, `-1`,
+  `101`; a case where the admin group appears only on page 2 is returned.
+- [ ] **Step 2:** `ReleaseCheckTest`: backend 0.1.0 fails against extension `1.1.0`, `0.10.0`, `0.11.0` and `10.1.0`.
+- [ ] **Step 3:** `LoginApiTest`: a malformed groups answer (`InvalidResponseException`) gives `502 upstream-invalid` and
+  no token.
+- [ ] **Step 4:** `UserTokensTest` ~227: split into "missing admin claim is rejected" and "admin true and false round-trip".
+- [ ] **Step 5: Run** the new tests; if one fails, fix the production code (TDD) and say so. `composer check` → PASS.
+  **Commit:** `"Tests: unknown membership statuses, MAJOR.MINOR mutants, malformed groups answer"`.
