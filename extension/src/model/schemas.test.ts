@@ -4,7 +4,7 @@ import type { PageTextsInput } from '@/i18n/custom-texts';
 import { AccessSchema, MachineClientSchema, SettingsSchema, type SettingsTexts } from './schemas';
 
 const key32 = btoa('a'.repeat(32));
-const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key32], permissions: ['entries:read'], createdAt: '2026-01-01T00:00:00Z' };
+const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key32], permissions: ['entries:read'], createdAt: '2026-01-01' };
 
 describe('schemas', () => {
     it('SettingsTexts is assignable to PageTextsInput', () => {

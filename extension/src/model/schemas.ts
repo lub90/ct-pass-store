@@ -1,28 +1,8 @@
 import * as v from 'valibot';
+import { CLIENT_ID_PATTERN, decodeKey, isCalendarDate, phpTrim } from './machine-clients';
 
 /** Layout version of the data this code reads and writes. */
 export const SCHEMA_VERSION = 2;
-
-function decodesTo32Bytes(s: string): boolean {
-    if (!/^[A-Za-z0-9+/_-]+={0,2}$/.test(s)) return false;
-    const std = s.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-    if (std.length % 4 === 1) return false;
-    try {
-        return atob(std.padEnd(Math.ceil(std.length / 4) * 4, '=')).length === 32;
-    } catch {
-        return false;
-    }
-}
-
-/** The bytes of a key given as base64 or base64url (so both spellings of one key compare equal). */
-export function keyBytes(s: string): string | null {
-    try {
-        const std = s.replace(/-/g, '+').replace(/_/g, '/').replace(/=+$/, '');
-        return atob(std.padEnd(Math.ceil(std.length / 4) * 4, '='));
-    } catch {
-        return null; // malformed: the per-key check reports it
-    }
-}
 
 /** `https://`, no credentials, no query, no fragment (mirrors backend spec 3.2). */
 function isPlainHttpsUrl(s: string): boolean {
@@ -63,12 +43,13 @@ export const SettingsSchema = v.looseObject({
 });
 export type SettingsV2 = v.InferOutput<typeof SettingsSchema>;
 
+/** Strict (write) shape of a machine client; the rules are the backend's (see `machine-clients.ts`). */
 export const MachineClientSchema = v.looseObject({
-    id: v.pipe(v.string(), v.regex(/^[a-z0-9-]{3,40}$/)),
-    name: v.string(),
-    publicKeys: v.pipe(v.array(v.pipe(v.string(), v.check(decodesTo32Bytes, 'must decode to 32 bytes'))), v.minLength(1)),
+    id: v.pipe(v.string(), v.regex(CLIENT_ID_PATTERN)),
+    name: v.pipe(v.string(), v.check((n) => phpTrim(n) !== '', 'name must not be empty')),
+    publicKeys: v.pipe(v.array(v.pipe(v.string(), v.check((k) => phpTrim(k) === k && decodeKey(k) !== null, 'must be a canonical base64 or base64url Ed25519 key without surrounding whitespace'))), v.minLength(1)),
     permissions: v.array(v.picklist(['entries:read'])),
-    createdAt: v.string(),
+    createdAt: v.pipe(v.string(), v.check((d: string) => isCalendarDate(d), 'must be a date like 2026-11-01')),
 });
 export type MachineClient = v.InferOutput<typeof MachineClientSchema>;
 
@@ -87,7 +68,7 @@ export function conflictingClients(clients: readonly MachineClient[]): Set<numbe
     const keys = new Map<string, number[]>();
     clients.forEach((c, i) => {
         ids.set(c.id, [...(ids.get(c.id) ?? []), i]);
-        for (const k of new Set(c.publicKeys.map(keyBytes))) if (k !== null) keys.set(k, [...(keys.get(k) ?? []), i]);
+        for (const k of new Set(c.publicKeys.map(decodeKey))) if (k !== null) keys.set(k, [...(keys.get(k) ?? []), i]);
     });
     for (const group of [...ids.values(), ...keys.values()]) if (group.length > 1) group.forEach((i) => result.add(i));
     return result;

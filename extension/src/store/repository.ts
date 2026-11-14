@@ -1,6 +1,7 @@
 import * as v from 'valibot';
+import { decodeKey, readMachineClients, type UnusableClient } from '@/model/machine-clients';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, MachineClientSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, conflictingClients, keyBytes, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { KvBackend } from './kv';
 
 export const VALUE_LIMIT = 10_000;
@@ -12,10 +13,11 @@ export type Read<T> =
     | { state: 'newer'; schema: number }
     /**
      * `issues`: parts of the stored value were left out or dropped (settings: invalid `texts`, so the defaults apply;
-     * access: invalid machine clients and unknown permissions). The value never carries them. A save removes dropped
-     * texts and permissions; left-out machine clients are kept unchanged.
+     * access: unusable machine clients and unknown permissions). The value never carries them. A save removes dropped
+     * texts and permissions; `unusable` (access only: stored entries the backend disables, with their reasons) are
+     * kept unchanged unless `saveAccess` is told to drop them.
      */
-    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[] };
+    | { state: 'ok'; value: T; valueId: number; duplicates: number; issues?: string[]; unusable?: UnusableClient[] };
 
 type Schema = typeof SettingsSchema | typeof AccessSchema;
 
@@ -41,58 +43,19 @@ function collision(clients: readonly MachineClient[], preserved: readonly unknow
         if (typeof entry.id === 'string') ids.add(entry.id);
         if (Array.isArray(entry.publicKeys)) {
             for (const key of entry.publicKeys) {
-                const bytes = typeof key === 'string' ? keyBytes(key) : null;
+                const bytes = typeof key === 'string' ? decodeKey(key) : null;
                 if (bytes !== null) keys.add(bytes);
             }
         }
     }
     for (const c of clients) {
         if (ids.has(c.id)) return clip(`machineClients: id "${c.id}" collides with a stored client that couldn't be read; fix or remove that one first`);
-        if (c.publicKeys.some((k) => keys.has(keyBytes(k) ?? ''))) return clip(`machineClients: a public key of "${c.id}" is already used by a stored client that couldn't be read`);
+        if (c.publicKeys.some((k) => keys.has(decodeKey(k) ?? ''))) return clip(`machineClients: a public key of "${c.id}" is already used by a stored client that couldn't be read`);
     }
     return undefined;
 }
 
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
-
-/**
- * Reads the machine clients one by one, like the backend: an invalid client (or one with a duplicate id or a shared
- * key) is left out and reported; an unknown permission is dropped from the client and reported. `rejected` holds the
- * stored entries that were left out, unchanged, so a save can keep them.
- */
-function parseClients(list: unknown[]): { clients: MachineClient[]; rejected: unknown[]; issues: string[] } {
-    const issues: string[] = [];
-    const parsed: { index: number; client: MachineClient }[] = [];
-    const rejectedIndices = new Set<number>();
-    list.forEach((entry, index) => {
-        let candidate = entry;
-        if (isObject(entry) && Array.isArray(entry.permissions)) {
-            const known = entry.permissions.filter((p) => p === 'entries:read');
-            if (known.length !== entry.permissions.length) {
-                issues.push(`machineClients.${index}.permissions: unknown permission dropped`);
-                candidate = { ...entry, permissions: known };
-            }
-        }
-        const result = v.safeParse(MachineClientSchema, candidate);
-        if (result.success) parsed.push({ index, client: result.output });
-        else {
-            rejectedIndices.add(index);
-            issues.push(...issuesOf(result.issues).map((i) => clip(`machineClients.${index}.${i}`)));
-        }
-    });
-    const conflicts = conflictingClients(parsed.map((p) => p.client));
-    parsed.forEach((p, n) => {
-        if (conflicts.has(n)) {
-            rejectedIndices.add(p.index);
-            issues.push(`machineClients.${p.index}: duplicate id or shared public key, left out`);
-        }
-    });
-    return {
-        clients: parsed.filter((_, n) => !conflicts.has(n)).map((p) => p.client),
-        rejected: list.filter((_, index) => rejectedIndices.has(index)),
-        issues,
-    };
-}
 
 /** The one-value categories `settings` and `access`: tolerant reads, strict conflict-checked writes (spec 6.2). */
 export class ExtensionStore {
@@ -115,8 +78,12 @@ export class ExtensionStore {
         return this.save('settings', SettingsSchema, next, expectedRevision);
     }
 
-    saveAccess(next: AccessV2, expectedRevision: number): Promise<void> {
-        return this.save('access', AccessSchema, next, expectedRevision);
+    /**
+     * `dropUnusable`: indices (`Read.unusable[].index` of the read this save is based on) of stored entries the
+     * backend can't use that are to be removed. All other unusable entries are kept unchanged.
+     */
+    saveAccess(next: AccessV2, expectedRevision: number, dropUnusable: readonly number[] = []): Promise<void> {
+        return this.save('access', AccessSchema, next, expectedRevision, dropUnusable);
     }
 
     /** Highest value ID first. */
@@ -137,6 +104,7 @@ export class ExtensionStore {
         const version = (raw as { schema?: unknown } | null)?.schema;
         if (typeof version === 'number' && version > SCHEMA_VERSION) return { state: 'newer', schema: version };
         const issues: string[] = [];
+        let unusable: UnusableClient[] | undefined;
         if (isObject(raw)) {
             const rest = { ...raw };
             for (const key of RETIRED_KEYS[category]) delete rest[key];
@@ -148,11 +116,12 @@ export class ExtensionStore {
                 }
             }
             if (schema === AccessSchema) {
-                if (rest.machineClients === undefined) rest.machineClients = [];
-                else if (Array.isArray(rest.machineClients)) {
-                    const parsed = parseClients(rest.machineClients);
+                const parsed = readMachineClients(rest.machineClients);
+                if (!parsed.notAList) {
                     rest.machineClients = parsed.clients;
-                    issues.push(...parsed.issues);
+                    unusable = parsed.unusable;
+                    issues.push(...parsed.dropped);
+                    issues.push(...parsed.unusable.map((u) => `machineClients.${u.index}: ${u.reasons.join(', ')}`));
                 }
             }
             raw = rest;
@@ -163,10 +132,11 @@ export class ExtensionStore {
             return revision === undefined ? { state: 'invalid', issues: issuesOf(result.issues) } : { state: 'invalid', issues: issuesOf(result.issues), revision };
         }
         const ok = { state: 'ok' as const, value: result.output as v.InferOutput<S>, valueId: newest.id, duplicates: duplicates.length };
-        return issues.length > 0 ? { ...ok, issues } : ok;
+        const withUnusable = unusable && unusable.length > 0 ? { ...ok, unusable } : ok;
+        return issues.length > 0 ? { ...withUnusable, issues } : withUnusable;
     }
 
-    private async save<S extends Schema>(category: 'settings' | 'access', schema: S, next: v.InferOutput<S>, expectedRevision: number): Promise<void> {
+    private async save<S extends Schema>(category: 'settings' | 'access', schema: S, next: v.InferOutput<S>, expectedRevision: number, dropUnusable: readonly number[] = []): Promise<void> {
         // Strict: validate what the caller hands in, before touching the store.
         const checked = v.safeParse(schema, normalize(next));
         if (!checked.success) throw new InvalidValueError(issuesOf(checked.issues));
@@ -201,7 +171,9 @@ export class ExtensionStore {
         const merged: Record<string, unknown> = { ...unknown, ...checked.output, revision: expectedRevision + 1 };
         for (const key of retired) delete merged[key];
         if (schema === AccessSchema && Array.isArray(stored.machineClients) && Array.isArray(merged.machineClients)) {
-            const rejected = parseClients(stored.machineClients).rejected;
+            const rejected = readMachineClients(stored.machineClients)
+                .unusable.filter((u) => !dropUnusable.includes(u.index))
+                .map((u) => (stored.machineClients as unknown[])[u.index]);
             const clash = collision(merged.machineClients as MachineClient[], rejected);
             if (clash) throw new InvalidValueError([clash]);
             merged.machineClients = [...merged.machineClients, ...rejected];

@@ -83,7 +83,7 @@ describe('ExtensionStore writes', () => {
             name: 'n'.repeat(20),
             publicKeys: [btoa(String(i).padStart(32, '0'))],
             permissions: ['entries:read' as const],
-            createdAt: '2026-01-01T00:00:00Z',
+            createdAt: '2026-01-01',
         }));
         await expect(store.saveAccess({ ...access, machineClients: many }, 1)).rejects.toBeInstanceOf(ValueTooLargeError);
         expect(kv.writes).toEqual([]);
@@ -158,7 +158,7 @@ describe('ExtensionStore fixes', () => {
 describe('ExtensionStore malformed keys', () => {
     it('leaves a client with malformed public keys out with an issue, not throwing', async () => {
         for (const bad of ['!!!', 'AAAAA']) {
-            const stored = { ...access, machineClients: [{ id: 'abc', name: 'n', publicKeys: [bad], permissions: ['entries:read'], createdAt: 'x' }] };
+            const stored = { ...access, machineClients: [{ id: 'abc', name: 'n', publicKeys: [bad], permissions: ['entries:read'], createdAt: '2026-01-01' }] };
             const r = await new ExtensionStore(new MemoryKv({ access: [JSON.stringify(stored)] })).readAccess();
             expect(r).toMatchObject({ state: 'ok', value: { machineClients: [] } });
             expect(r.state === 'ok' && r.issues?.length).toBeGreaterThan(0);
@@ -314,8 +314,8 @@ describe('retired v1 fields (R3)', () => {
 });
 
 describe('access: tolerant per machine client (R2)', () => {
-    const good = { id: 'good', name: 'Good', publicKeys: [btoa('g'.repeat(32))], permissions: ['entries:read'], createdAt: 'x' };
-    const bad = { id: 'BAD', name: 'Bad', publicKeys: ['!!!'], permissions: ['entries:read'], createdAt: 'x' };
+    const good = { id: 'good', name: 'Good', publicKeys: [btoa('g'.repeat(32))], permissions: ['entries:read'], createdAt: '2026-01-01' };
+    const bad = { id: 'BAD', name: 'Bad', publicKeys: ['!!!'], permissions: ['entries:read'], createdAt: '2026-01-01' };
     const run = (clients: unknown) => {
         const stored = { ...access, machineClients: clients, future: 1 };
         const kv = new MemoryKv({ access: [JSON.stringify(stored)] });
@@ -355,8 +355,9 @@ describe('access: tolerant per machine client (R2)', () => {
         expect((await run('x').store.readAccess()).state).toBe('invalid');
     });
     it('still rejects a strictly invalid client on save', async () => {
-        const { store } = run([good]);
+        const { kv, store } = run([good]);
         await expect(store.saveAccess({ ...access, machineClients: [bad as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
     });
 });
 function g0() {
@@ -366,12 +367,12 @@ function g0() {
 describe('preserved machine clients vs new ones', () => {
     const k = (c: string) => btoa(c.repeat(32));
     const url = (b64: string) => b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-    const mk = (id: string, key: string) => ({ id, name: id, publicKeys: [key], permissions: ['entries:read'] as 'entries:read'[], createdAt: 'x' });
+    const mk = (id: string, key: string) => ({ id, name: id, publicKeys: [key], permissions: ['entries:read'] as 'entries:read'[], createdAt: '2026-01-01' });
     const run = (clients: unknown[]) => {
         const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: clients })] });
         return { kv, store: new ExtensionStore(kv) };
     };
-    const badId = { id: 'abc', name: 'bad', publicKeys: ['!!!'], permissions: ['entries:read'], createdAt: 'x' };
+    const badId = { id: 'abc', name: 'bad', publicKeys: ['!!!'], permissions: ['entries:read'], createdAt: '2026-01-01' };
 
     it('rejects a new client whose id equals a preserved entry, with no write', async () => {
         const { kv, store } = run([badId]);
@@ -380,7 +381,7 @@ describe('preserved machine clients vs new ones', () => {
     });
     it('rejects a new client sharing a decodable key with a preserved entry (base64 vs base64url)', async () => {
         const key = btoa(String.fromCharCode(...new Uint8Array(32).fill(251)));
-        const { kv, store } = run([{ id: 'BAD-ID', name: 'x', publicKeys: [key], permissions: ['entries:read'], createdAt: 'x' }]);
+        const { kv, store } = run([{ id: 'BAD-ID', name: 'x', publicKeys: [key], permissions: ['entries:read'], createdAt: '2026-01-01' }]);
         await expect(store.saveAccess({ ...access, machineClients: [mk('fresh', url(key))] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
         expect(kv.writes).toEqual([]);
     });
@@ -410,5 +411,78 @@ describe('invalid reads carry their revision', () => {
             const r = await setup([content]).store.readSettings();
             expect(r.state === 'invalid' && r.revision).toBeUndefined();
         }
+    });
+});
+
+describe('unusable machine clients are listed and removable', () => {
+    const key = (c: string) => btoa(c.repeat(32));
+    const ok = (id: string, c: string) => ({ id, name: id, publicKeys: [key(c)], permissions: ['entries:read'], createdAt: '2026-01-01' });
+    const noName = { id: 'noname', publicKeys: [key('n')], permissions: ['entries:read'], createdAt: '2026-01-01' };
+    const run = (clients: unknown[]) => {
+        const kv = new MemoryKv({ access: [JSON.stringify({ ...access, machineClients: clients })] });
+        return { kv, store: new ExtensionStore(kv) };
+    };
+    const written = (kv: MemoryKv) => (JSON.parse(kv.writes[0]?.value ?? '{}') as { machineClients: unknown[] }).machineClients;
+
+    it('lists index, raw id and reason codes of each entry the backend disables', async () => {
+        const r = await run([ok('good', 'g'), noName, 'text', null, ok('dup', 'd'), ok('dup', 'e')]).store.readAccess();
+        expect(r.state === 'ok' && r.value.machineClients.map((c) => c.id)).toEqual(['good']);
+        expect(r.state === 'ok' && r.unusable).toEqual([
+            { index: 1, id: 'noname', reasons: ['missing-name'] },
+            { index: 2, reasons: ['not-an-object'] },
+            { index: 3, reasons: ['not-an-object'] },
+            { index: 4, id: 'dup', reasons: ['duplicate-id'] },
+            { index: 5, id: 'dup', reasons: ['duplicate-id'] },
+        ]);
+    });
+
+    it('has no unusable list when everything is fine', async () => {
+        const r = await run([ok('good', 'g')]).store.readAccess();
+        expect(r.state === 'ok' && r.unusable).toBeUndefined();
+    });
+
+    it('drops the listed entries on save and keeps all other unusable ones unchanged (also non-objects)', async () => {
+        const { kv, store } = run([ok('good', 'g'), noName, 'text', null]);
+        const r = await store.readAccess();
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveAccess(r.value, 1, [1, 3]);
+        expect(written(kv)).toEqual([ok('good', 'g'), 'text']);
+    });
+
+    it('makes every stored client removable, including the earlier one of a duplicate pair', async () => {
+        const { kv, store } = run([ok('dup', 'd'), ok('dup', 'e'), noName]);
+        const r = await store.readAccess();
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveAccess(r.value, 1, r.unusable?.map((u) => u.index));
+        expect(written(kv)).toEqual([]);
+    });
+
+    it('keeps a non-object entry that is preserved on a plain save', async () => {
+        const { kv, store } = run(['text']);
+        await store.saveAccess({ ...access, machineClients: [] }, 1);
+        expect(written(kv)).toEqual(['text']);
+    });
+
+    it('still finds a collision after a non-object preserved entry', async () => {
+        const { kv, store } = run([null, 'text', { ...noName, id: 'clash' }]);
+        await expect(store.saveAccess({ ...access, machineClients: [ok('clash', 'c') as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('does not let a dropped entry collide any more', async () => {
+        const { kv, store } = run([{ ...noName, id: 'clash' }]);
+        await store.saveAccess({ ...access, machineClients: [ok('clash', 'c') as never] }, 1, [0]);
+        expect(written(kv)).toEqual([ok('clash', 'c')]);
+    });
+
+    it('does not write an unknown permission back, and refuses to write one', async () => {
+        const { kv, store } = run([{ ...ok('perm', 'p'), permissions: ['entries:read', '*'] }]);
+        const r = await store.readAccess();
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveAccess(r.value, 1);
+        expect(written(kv)).toEqual([ok('perm', 'p')]);
+        const kv2 = run([]);
+        await expect(kv2.store.saveAccess({ ...access, machineClients: [{ ...ok('perm', 'p'), permissions: ['*'] } as never] }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv2.kv.writes).toEqual([]);
     });
 });

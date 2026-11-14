@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { AccessSchema, MachineClientSchema, SettingsSchema } from './schemas';
 
 const key = (n: number, fill = 97) => btoa(String.fromCharCode(...new Uint8Array(n).fill(fill)));
-const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key(32)], permissions: ['entries:read'], createdAt: '2026-01-01T00:00:00Z' };
+const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key(32)], permissions: ['entries:read'], createdAt: '2026-01-01' };
 const settings = { schema: 2, revision: 1, requirePasswordForPasswordChange: false, allowCustomPassword: true, passwordLength: 16, backendUrl: 'https://b.example' };
 const g = { groupId: 1, createdBySetup: false };
 const access = { schema: 2, revision: 1, groups: { users: g, admins: g, service: g }, machineClients: [client] };
@@ -22,9 +22,10 @@ describe('public keys', () => {
         ['0 bytes', '', false],
         ['newline inside', `${key(32).slice(0, 10)}\n${key(32).slice(10)}`, false],
         ['space inside', `${key(32).slice(0, 10)} ${key(32).slice(10)}`, false],
-        ['trailing newline', `${key(32)}\n`, false],
+        ['surrounding whitespace is rejected on write (the reader trims it)', `${key(32)}\n`, false],
         ['too much padding', `${key(32)}==`, false],
-        ['unpadded base64', key(32).replace(/=+$/, ''), true],
+        ['unpadded standard base64 with + or / (not canonical)', key(32, 251).replace(/=+$/, ''), false],
+        ['base64url without padding', key(32, 251).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''), true],
     ])('%s', (_n, k, accepted) => expect(ok(k)).toBe(accepted));
     it('rejects an empty key list and a non-string key', () => {
         expect(v.safeParse(MachineClientSchema, { ...client, publicKeys: [] }).success).toBe(false);
@@ -44,6 +45,9 @@ describe('client id and fields', () => {
         ['non-string id rejected', { id: 123 }, false],
         ['non-string name rejected', { name: 5 }, false],
         ['non-string createdAt rejected', { createdAt: 5 }, false],
+        ['createdAt not a date', { createdAt: '2026-02-30' }, false],
+        ['createdAt with time', { createdAt: '2026-01-01T00:00:00Z' }, false],
+        ['whitespace-only name', { name: ' \t' }, false],
         ['unknown permission rejected here', { permissions: ['*'] }, false],
     ]);
 });
