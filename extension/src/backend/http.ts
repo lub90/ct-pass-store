@@ -66,7 +66,8 @@ export function createHttp(base: string, token: () => string | null) {
             return { status, body: parseJson(text, status) };
         }
 
-        if (mediaType(response) !== 'application/problem+json') throw new UnexpectedResponse(status);
+        // Redirects are refused by fetch; any other 1xx/3xx is not a problem answer either.
+        if (status < 400 || mediaType(response) !== 'application/problem+json') throw new UnexpectedResponse(status);
         const problem = problemFromBody(status, parseJson(text, status));
         if (!problem) throw new UnexpectedResponse(status);
         if (isProgrammingError(problem)) console.error(`Backend rejected a request: ${problem.slug} (HTTP ${status})`);

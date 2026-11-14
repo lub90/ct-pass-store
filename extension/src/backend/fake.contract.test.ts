@@ -4,6 +4,7 @@ import { defineBackendContract, type BackendContractSubject } from './contract-c
 import { BackendProblem } from './problems';
 
 const PRIMARY = 'ct-Secret-1';
+const REDIRECT = 'https://ct.example/ccm/ctpassstore/auth/callback';
 
 const subject = (over: FakeBackendOptions = {}): BackendContractSubject => {
     const fake = createFakeBackend({ personId: 1, existingPersonIds: [1, 2, 3], primaryPassword: PRIMARY, ...over });
@@ -15,13 +16,22 @@ const subject = (over: FakeBackendOptions = {}): BackendContractSubject => {
         primaryPwd: (over.requirePasswordForPasswordChange ?? true) ? PRIMARY : null,
         allowCustomPassword: over.allowCustomPassword ?? true,
         passwordLength: over.passwordLength ?? 12,
-        loginArguments: async () => ['valid-code', 'verifier', 'https://ct.example/ccm/ctpassstore/auth/callback'],
+        gonePersonId: 99,
+        loginArguments: async () => ['valid-code', 'verifier', REDIRECT],
         withoutToken: () => createFakeBackend({ personId: 1, loggedIn: false }),
+        expiredToken: () => {
+            const expired = createFakeBackend({ personId: 1 });
+            expired.expireToken();
+            return expired;
+        },
+        getEntryRaw: (id) => fake.getEntryRaw(id),
     };
 };
 
 defineBackendContract('fake, user', async () => subject());
 defineBackendContract('fake, admin', async () => subject({ admin: true }));
+defineBackendContract('fake, user, custom passwords, length 20', async () => subject({ passwordLength: 20 }));
+defineBackendContract('fake, admin, length 64', async () => subject({ admin: true, passwordLength: 64 }));
 defineBackendContract('fake, no primary password, no custom passwords, length 20', async () =>
     subject({ requirePasswordForPasswordChange: false, allowCustomPassword: false, passwordLength: 20 }),
 );
@@ -33,19 +43,41 @@ describe('fake backend rules', () => {
 
     it('login: version and admin come from the options, a code is used once', async () => {
         const fake = make({ admin: true, version: '2.3.4', loggedIn: false });
-        const args: [string, string, string] = ['valid-code', 'v', 'https://ct.example/cb'];
+        const args: [string, string, string] = ['valid-code', 'v', REDIRECT];
         await expect(fake.getEntry(1)).rejects.toMatchObject({ slug: 'missing-token', status: 401 });
         expect(await fake.login(...args)).toEqual({ accessToken: expect.any(String), expiresIn: 900, admin: true, version: '2.3.4' });
         expect(await fake.getEntry(1)).toBe('none');
         expect(await problem(fake.login(...args))).toMatchObject({ slug: 'oauth-code-invalid', status: 400 });
-        for (const bad of [['', 'v', 'r'], ['c', '', 'r'], ['c', 'v', '']] as [string, string, string][]) {
+        for (const bad of [['', 'v', REDIRECT], ['c', '', REDIRECT], ['c', 'v', '']] as [string, string, string][]) {
             expect(await problem(fake.login(...bad))).toMatchObject({ slug: 'invalid-body', status: 400 });
         }
     });
 
+    it('login: redirectUri must be https on the ChurchTools host and port; fields at most 2,048 characters', async () => {
+        const bad = [
+            'http://ct.example/cb',
+            'https://ct.example.evil.com/cb',
+            'https://ct.example@evil.com/cb',
+            'https://evil.com/cb',
+            'https://ct.example:8443/cb',
+            'not a url',
+            `${REDIRECT}?${'a'.repeat(2048)}`,
+        ];
+        for (const redirectUri of bad) {
+            const fake = make({ loggedIn: false });
+            expect(await problem(fake.login('valid-code', 'v', redirectUri)), redirectUri).toMatchObject({ slug: 'invalid-body', status: 400 });
+            // the code is not used up by a rejected request
+            expect(await fake.login('valid-code', 'v', REDIRECT)).toMatchObject({ expiresIn: 900 });
+        }
+        const fake = make({ loggedIn: false, validCodes: ['c'.repeat(2048)] });
+        expect(await problem(fake.login('c'.repeat(2049), 'v', REDIRECT))).toMatchObject({ slug: 'invalid-body' });
+        expect(await problem(fake.login('c', 'v'.repeat(2049), REDIRECT))).toMatchObject({ slug: 'invalid-body' });
+        expect(await fake.login('c'.repeat(2048), 'v'.repeat(2048), REDIRECT)).toMatchObject({ expiresIn: 900 });
+    });
+
     it('login: a person without the extension right gets no-service-access', async () => {
         const fake = make({ loggedIn: false, noServiceAccess: true });
-        expect(await problem(fake.login('valid-code', 'v', 'r'))).toMatchObject({ slug: 'no-service-access', status: 403 });
+        expect(await problem(fake.login('valid-code', 'v', REDIRECT))).toMatchObject({ slug: 'no-service-access', status: 403 });
     });
 
     it('order of checks: token, id, authorization, existence, primary password, custom allowed, policy', async () => {
@@ -61,6 +93,15 @@ describe('fake backend rules', () => {
         expect((await problem(allowed.putEntry(1, { primaryPwd: PRIMARY, secondaryPwd: '' }))).violations).toContain('too-short');
         // the ID check is before authorization
         expect(await problem(fake.getEntry(0))).toMatchObject({ slug: 'invalid-id', status: 400 });
+    });
+
+    it('invalid-id comes before forbidden; ids are strict decimal', async () => {
+        const fake = make();
+        for (const id of ['0', '01', '-1', '1.5', '1e3', 'abc', '+1', ' 1', '9223372036854775808']) {
+            expect(await problem(fake.getEntryRaw(id)), id).toMatchObject({ slug: 'invalid-id', status: 400 });
+        }
+        expect(await fake.getEntryRaw('1')).toBe('none');
+        expect((await problem(fake.getEntryRaw('2'))).slug).toBe('forbidden');
     });
 
     it('an admin gets person-not-found for a gone person on GET and PUT, but may DELETE', async () => {
@@ -104,6 +145,11 @@ describe('fake backend rules', () => {
         expect(a).not.toBe(b);
     });
 
+    it('too-long counts bytes: 127 ASCII characters plus "ä" are 129 bytes', async () => {
+        const fake = make({ requirePasswordForPasswordChange: false });
+        expect((await problem(fake.putEntry(1, { secondaryPwd: `a1!${'x'.repeat(124)}ä` }))).violations).toEqual(['too-long']);
+    });
+
     it('policy boundaries: length exactly passwordLength passes, one less fails; 128 passes, 129 is too-long', async () => {
         const fake = make({ requirePasswordForPasswordChange: false, passwordLength: 12 });
         await expect(fake.putEntry(1, { secondaryPwd: 'abcdefghij1!' })).resolves.toEqual({});
@@ -121,7 +167,7 @@ describe('fake backend rules', () => {
         const fake = make();
         fake.expireToken();
         expect(await problem(fake.getEntry(1))).toMatchObject({ slug: 'token-expired', status: 401 });
-        await fake.login('valid-code', 'v', 'r');
+        await fake.login('valid-code', 'v', REDIRECT);
         expect(await fake.getEntry(1)).toBe('none');
     });
 

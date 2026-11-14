@@ -106,6 +106,9 @@ Open issues and planned improvements, roughly ordered by severity.
   Stored passwords can't be re-encrypted under a new key, because nobody holds the plaintext. Rotating the key (or recovering from a leaked private key) means every user has to reset their password.
   - Document the procedure and support it in the UI (e.g. a "key rotated, please reset your password" state).
 
+- [ ] **Mail all admins when the backend address (`backendUrl`) changes**
+  A changed address redirects users' passwords to another server, so every admin should notice at once.
+
 ## Data Management
 
 - [x] **Clean up entries of deleted users**

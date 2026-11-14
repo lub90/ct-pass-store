@@ -25,6 +25,8 @@ export interface FakeBackendOptions {
     loggedIn?: boolean;
     /** Login answers `no-service-access`. */
     noServiceAccess?: boolean;
+    /** The ChurchTools origin `login` expects in `redirectUri`. Default `https://ct.example`. */
+    ctOrigin?: string;
     /** Codes `login` accepts, each once. Default `['valid-code']`. */
     validCodes?: string[];
 }
@@ -41,6 +43,8 @@ export interface FakeBackendControls {
     /** The token has expired: calls give `token-expired` until the next `login`. */
     expireToken(): void;
     setSettings(settings: FakeBackendSettings): void;
+    /** `GET /v1/entries/{id}` with the id as written in the path: strict decimal, else `invalid-id`. */
+    getEntryRaw(id: string): Promise<'set' | 'none'>;
     /** The stored passwords by person id (plaintext, for assertions). */
     readonly entries: ReadonlyMap<number, string>;
 }
@@ -63,6 +67,19 @@ function violations(pwd: string, minLength: number): string[] {
     if (!has(SYMBOLS)) found.push('missing-symbol');
     if ([...pwd].some((c) => !ALLOWED.includes(c))) found.push('invalid-character');
     return found;
+}
+
+const MAX_FIELD = 2048;
+
+/** Backend spec 4.4 step 1: parsed, `https`, and the ChurchTools host and port. */
+function redirectAllowed(redirectUri: string, ctOrigin: string): boolean {
+    try {
+        const url = new URL(redirectUri);
+        const ct = new URL(ctOrigin);
+        return url.protocol === 'https:' && url.username === '' && url.password === '' && url.host === ct.host;
+    } catch {
+        return false;
+    }
 }
 
 function randomInt(max: number): number {
@@ -154,7 +171,10 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
 
         async login(code, codeVerifier, redirectUri): Promise<LoginResult> {
             step();
-            if (code === '' || codeVerifier === '' || redirectUri === '') throw problem('invalid-body', 400);
+            for (const field of [code, codeVerifier, redirectUri]) {
+                if (field === '' || field.length > MAX_FIELD) throw problem('invalid-body', 400);
+            }
+            if (!redirectAllowed(redirectUri, options.ctOrigin ?? 'https://ct.example')) throw problem('invalid-body', 400);
             if (!codes.delete(code)) throw problem('oauth-code-invalid', 400);
             if (options.noServiceAccess) throw problem('no-service-access', 403);
             loggedIn = true;
@@ -164,6 +184,16 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
 
         async getEntry(personId) {
             authorize(personId);
+            requireExisting(personId);
+            return store.has(personId) ? 'set' : 'none';
+        },
+
+        async getEntryRaw(id) {
+            authenticate();
+            // Strict decimal: no sign, no leading zero, no whitespace, a safe integer.
+            if (!/^[1-9][0-9]*$/.test(id) || !Number.isSafeInteger(Number(id))) throw problem('invalid-id', 400);
+            const personId = Number(id);
+            if (personId !== me && !admin) throw problem('forbidden', 403);
             requireExisting(personId);
             return store.has(personId) ? 'set' : 'none';
         },

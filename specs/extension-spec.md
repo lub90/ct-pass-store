@@ -55,6 +55,7 @@
 | E12 | **No Pinia.** Local `ref`s and a few composables. | The app is small. |
 | E13 | **Versioning:** backend and extension share `MAJOR.MINOR` ([`versioning.md`](versioning.md)). | Compatibility is visible in the version number and checked at release and at runtime. |
 | E14 | **Rights model as one table** (section 16): each role maps to a ChurchTools group; the setup creates new groups or uses existing ones; the mapping can be changed later; a check compares the real rights with the table. | Least privilege that's verified, not just described; churches can reuse groups they already have. |
+| E15 | **The admin group is trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. The admin group, and everyone who controls its membership, must therefore be as trustworthy as ChurchTools administrators. |
 
 ## 3. Roles and app states
 
@@ -245,6 +246,10 @@ sentences, at most 300 characters). An empty field means the default text, shown
 
 - Field „Backend-Adresse“ (`backendUrl`): `https://`, no query, fragment or credentials; a trailing slash is removed.
   Changing it shows a warning that machine clients sign tokens for this address (backend spec 4.4a).
+  Whoever can change this address (the admin group and everyone who controls its membership) can make users' browsers
+  send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another
+  server; the admin group must therefore be as trustworthy as ChurchTools administrators (E15). The page warns about this
+  when the address is changed (built in Task 16).
 - „Selbsttest“: the checks of `GET /v1/test` as a list with colored dots and messages; a button runs it again. The
   write test (`?write=1`) is a separate button with a short explanation.
 - Shows the backend version.

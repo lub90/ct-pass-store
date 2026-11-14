@@ -22,6 +22,14 @@ export class BackendProblem extends Error {
     }
 }
 
+/** The configured backend address is unusable (not https, has credentials, not a URL). Says nothing about the URL. */
+export class BackendConfigError extends Error {
+    constructor() {
+        super('The backend address must be an https:// URL without credentials');
+        this.name = 'BackendConfigError';
+    }
+}
+
 /** Network failure, CORS failure, timeout or a body that broke off. */
 export class BackendUnreachable extends Error {
     constructor() {
@@ -40,8 +48,11 @@ export class UnexpectedResponse extends Error {
     }
 }
 
+/** The rule codes of backend spec 5.1; anything else in `violations` is dropped. */
+const VIOLATION_CODES = new Set(['too-short', 'too-long', 'missing-letter', 'missing-digit', 'missing-symbol', 'invalid-character']);
+
 /**
- * A problem body as an error, or `null` when it isn't one (no string `type` with a non-empty `#slug`). The HTTP
+ * A problem body as an error, or `null` when it isn't one (no string `type` with a `#slug` of 1 to 64 characters from a-z, 0-9, `-`). The HTTP
  * status is the transport's, not the body's. Odd extension members are dropped rather than trusted.
  */
 export function problemFromBody(status: number, body: unknown): BackendProblem | null {
@@ -51,12 +62,14 @@ export function problemFromBody(status: number, body: unknown): BackendProblem |
     const hash = record.type.lastIndexOf('#');
     if (hash < 0) return null;
     const slug = record.type.slice(hash + 1);
-    if (slug === '') return null;
+    if (!/^[a-z0-9-]{1,64}$/.test(slug)) return null;
 
     const problem = new BackendProblem(slug, status);
     if (typeof record.detail === 'string') problem.detail = record.detail;
-    if (Array.isArray(record.violations)) problem.violations = record.violations.filter((v): v is string => typeof v === 'string');
-    if (typeof record.retryAfter === 'number' && Number.isFinite(record.retryAfter) && record.retryAfter >= 0) {
+    if (Array.isArray(record.violations)) {
+        problem.violations = [...new Set(record.violations.filter((v): v is string => typeof v === 'string' && VIOLATION_CODES.has(v)))];
+    }
+    if (typeof record.retryAfter === 'number' && Number.isInteger(record.retryAfter) && record.retryAfter >= 0) {
         problem.retryAfter = record.retryAfter;
     }
     return problem;

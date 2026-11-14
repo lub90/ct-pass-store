@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import de from '@/i18n/de';
 import en from '@/i18n/en';
-import { BackendProblem, BackendUnreachable, UnexpectedResponse, isProgrammingError, problemFromBody, problemMessageKey } from './problems';
+import { BackendConfigError, BackendProblem, BackendUnreachable, UnexpectedResponse, isProgrammingError, problemFromBody, problemMessageKey } from './problems';
 
 const TYPE = 'https://github.com/lub90/ct-pass-store/blob/main/backend/docs/problems.md';
 
@@ -30,6 +30,21 @@ describe('problemFromBody', () => {
         expect(problemFromBody(400, body)).toBeNull();
     });
 
+    it.each([
+        ['upper case', '#Forbidden'],
+        ['a space', '#a b'],
+        ['markup', '#<script>'],
+        ['a slash', '#a/b'],
+        ['65 characters', `#${'a'.repeat(65)}`],
+    ])('a slug with %s is not a problem', (_n, suffix) => {
+        expect(problemFromBody(400, { type: `${TYPE}${suffix}` })).toBeNull();
+    });
+
+    it('accepts slugs of 1 and 64 characters', () => {
+        expect(problemFromBody(400, { type: '#a' })?.slug).toBe('a');
+        expect(problemFromBody(400, { type: `#${'a1-'.repeat(21)}a` })?.slug).toHaveLength(64);
+    });
+
     it('ignores a detail that is not a string', () => {
         expect(problemFromBody(400, { type: '#invalid-id', detail: { a: 1 } })?.detail).toBeUndefined();
     });
@@ -38,6 +53,14 @@ describe('problemFromBody', () => {
         const type = `${TYPE}#password-invalid`;
         expect(problemFromBody(400, { type, violations: ['too-short', 'missing-digit'] })?.violations).toEqual(['too-short', 'missing-digit']);
         expect(problemFromBody(400, { type, violations: ['too-short', 3, null] })?.violations).toEqual(['too-short']);
+        // Only the six documented codes survive, each once, in the order sent.
+        expect(problemFromBody(400, { type, violations: ['too-short', 'made-up', 'too-short', '<b>x</b>', 'too-long'] })?.violations).toEqual([
+            'too-short',
+            'too-long',
+        ]);
+        for (const code of ['too-short', 'too-long', 'missing-letter', 'missing-digit', 'missing-symbol', 'invalid-character']) {
+            expect(problemFromBody(400, { type, violations: [code] })?.violations, code).toEqual([code]);
+        }
         expect(problemFromBody(400, { type, violations: [] })?.violations).toEqual([]);
         expect(problemFromBody(400, { type, violations: 'too-short' })?.violations).toBeUndefined();
         expect(problemFromBody(400, { type, violations: { 0: 'too-short' } })?.violations).toBeUndefined();
@@ -47,7 +70,7 @@ describe('problemFromBody', () => {
         const type = `${TYPE}#too-many-attempts`;
         expect(problemFromBody(429, { type, retryAfter: 120 })?.retryAfter).toBe(120);
         expect(problemFromBody(429, { type, retryAfter: 0 })?.retryAfter).toBe(0);
-        for (const bad of ['120', -1, Number.NaN, Number.POSITIVE_INFINITY, null, [120], {}]) {
+        for (const bad of ['120', 1.5, 0.1, -1, Number.NaN, Number.POSITIVE_INFINITY, null, [120], {}]) {
             expect(problemFromBody(429, { type, retryAfter: bad })?.retryAfter, String(bad)).toBeUndefined();
         }
         expect(problemFromBody(429, { type })?.retryAfter).toBeUndefined();
@@ -65,11 +88,12 @@ describe('error classes', () => {
     it('have names and are Errors', () => {
         expect(new BackendProblem('x', 400).name).toBe('BackendProblem');
         expect(new BackendUnreachable().name).toBe('BackendUnreachable');
+        expect(new BackendConfigError().name).toBe('BackendConfigError');
         const u = new UnexpectedResponse(502);
         expect(u.name).toBe('UnexpectedResponse');
         expect(u.status).toBe(502);
         expect(u.message).toContain('502');
-        for (const e of [new BackendProblem('x', 400), new BackendUnreachable(), u]) expect(e).toBeInstanceOf(Error);
+        for (const e of [new BackendProblem('x', 400), new BackendUnreachable(), new BackendConfigError(), u]) expect(e).toBeInstanceOf(Error);
     });
 });
 

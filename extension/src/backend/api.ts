@@ -1,5 +1,5 @@
 import { createHttp, backendBase, TIMEOUT_MS } from './http';
-import { BackendProblem, UnexpectedResponse } from './problems';
+import { BackendConfigError, BackendProblem, UnexpectedResponse } from './problems';
 
 export { backendBase, TIMEOUT_MS };
 
@@ -45,7 +45,27 @@ function personPath(personId: number): string {
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
-export function createBackendApi(baseUrl: string, token: () => string | null): BackendApi {
+export interface BackendApiOptions {
+    /** Development only: also allow `http://localhost` and `http://127.0.0.1`. */
+    allowLocalHttp?: boolean;
+}
+
+/** Throws `BackendConfigError` unless the address is `https:` without credentials (or local http, if allowed). */
+function checkBaseUrl(baseUrl: string, allowLocalHttp: boolean): void {
+    let url: URL;
+    try {
+        url = new URL(baseUrl.trim());
+    } catch {
+        throw new BackendConfigError();
+    }
+    if (url.username !== '' || url.password !== '') throw new BackendConfigError();
+    if (url.protocol === 'https:') return;
+    if (allowLocalHttp && url.protocol === 'http:' && (url.hostname === 'localhost' || url.hostname === '127.0.0.1')) return;
+    throw new BackendConfigError();
+}
+
+export function createBackendApi(baseUrl: string, token: () => string | null, options: BackendApiOptions = {}): BackendApi {
+    checkBaseUrl(baseUrl, options.allowLocalHttp === true);
     const request = createHttp(backendBase(baseUrl), token);
 
     return {
@@ -58,7 +78,9 @@ export function createBackendApi(baseUrl: string, token: () => string | null): B
                 body.accessToken === '' ||
                 body.tokenType !== 'Bearer' ||
                 typeof body.expiresIn !== 'number' ||
-                !(body.expiresIn > 0) ||
+                !Number.isInteger(body.expiresIn) ||
+                body.expiresIn < 1 ||
+                body.expiresIn > 86_400 ||
                 typeof body.admin !== 'boolean' ||
                 typeof body.version !== 'string' ||
                 body.version === ''
@@ -76,7 +98,7 @@ export function createBackendApi(baseUrl: string, token: () => string | null): B
                 if (status !== 200 || !isObject(body) || typeof body.secondaryPwd !== 'string') throw new UnexpectedResponse(status);
                 return 'set';
             } catch (error) {
-                if (error instanceof BackendProblem && error.slug === 'entry-not-found') return 'none';
+                if (error instanceof BackendProblem && error.slug === 'entry-not-found' && error.status === 404) return 'none';
                 throw error;
             }
         },
@@ -87,8 +109,10 @@ export function createBackendApi(baseUrl: string, token: () => string | null): B
             if (fields.primaryPwd !== undefined) payload.primaryPwd = fields.primaryPwd;
             if (fields.secondaryPwd !== undefined) payload.secondaryPwd = fields.secondaryPwd;
             const { status, body } = await request('PUT', path, { body: payload });
-            if (status === 204) return {};
-            if (status === 200 && isObject(body) && typeof body.secondaryPwd === 'string' && body.secondaryPwd !== '') {
+            // A custom password is acknowledged with 204 only; a generated one comes back with 200 only.
+            if (fields.secondaryPwd !== undefined) {
+                if (status === 204) return {};
+            } else if (status === 200 && isObject(body) && typeof body.secondaryPwd === 'string' && body.secondaryPwd !== '') {
                 return { generated: body.secondaryPwd };
             }
             throw new UnexpectedResponse(status);
@@ -106,6 +130,7 @@ export function createBackendApi(baseUrl: string, token: () => string | null): B
                 (status !== 200 && status !== 207) ||
                 !isObject(body) ||
                 typeof body.version !== 'string' ||
+                body.version === '' ||
                 typeof body.summary !== 'string' ||
                 !Array.isArray(body.tests) ||
                 !body.tests.every(

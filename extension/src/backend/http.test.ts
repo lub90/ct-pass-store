@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { backendBase, createBackendApi, TIMEOUT_MS } from './api';
-import { BackendProblem, BackendUnreachable, UnexpectedResponse } from './problems';
+import { BackendConfigError, BackendProblem, BackendUnreachable, UnexpectedResponse } from './problems';
 
 const TYPE = 'https://github.com/lub90/ct-pass-store/blob/main/backend/docs/problems.md';
 const PROBLEM = 'application/problem+json';
@@ -87,20 +87,21 @@ describe('request building', () => {
     });
 
     it('PUT sends only the given fields, an empty custom password included', async () => {
-        fetchMock.mockResolvedValue(respond(204, null));
+        fetchMock.mockImplementation(async () => respond(204, null));
         await api().putEntry(7, { secondaryPwd: '' });
         expect(JSON.parse(lastCall().init.body as string)).toEqual({ secondaryPwd: '' });
         await api().putEntry(7, { primaryPwd: 'p', secondaryPwd: 's' });
         expect(lastCall().init.method).toBe('PUT');
         expect(lastCall().url).toBe('https://x.example/pw/v1/entries/7');
         expect(JSON.parse(lastCall().init.body as string)).toEqual({ primaryPwd: 'p', secondaryPwd: 's' });
+        fetchMock.mockImplementation(async () => json(200, { secondaryPwd: 'Gen3rated!pw' }));
         await api().putEntry(7, {});
         expect(lastCall().headers.get('Content-Type')).toBe('application/json');
         expect(JSON.parse(lastCall().init.body as string)).toEqual({});
     });
 
     it('PUT drops fields the backend does not know', async () => {
-        fetchMock.mockResolvedValue(respond(204, null));
+        fetchMock.mockImplementation(async () => respond(204, null));
         await api().putEntry(7, { secondaryPwd: 's', personId: 9 } as never);
         expect(JSON.parse(lastCall().init.body as string)).toEqual({ secondaryPwd: 's' });
     });
@@ -135,6 +136,48 @@ describe('request building', () => {
     );
 });
 
+describe('base URL', () => {
+    const make = (url: string, options?: { allowLocalHttp?: boolean }) => () => createBackendApi(url, () => null, options);
+
+    it.each([
+        ['plain http', 'http://x.example/pw'],
+        ['userinfo', 'https://user:pass@x.example/pw'],
+        ['a user name only', 'https://user@x.example'],
+        ['no URL at all', 'not a url'],
+        ['an empty string', ''],
+        ['another scheme', 'ftp://x.example'],
+        ['a javascript URL', 'javascript:alert(1)'],
+        ['http on a look-alike of localhost', 'http://localhost.evil.example'],
+        ['http on a remote host', 'http://x.example'],
+    ])('refuses %s before any request', async (_n, url) => {
+        expect(make(url)).toThrow(BackendConfigError);
+        expect(make(url, { allowLocalHttp: true })).toThrow(BackendConfigError);
+        expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('the config error does not echo the URL', () => {
+        try {
+            createBackendApi('https://user:topsecret@x.example', () => null);
+            expect.unreachable();
+        } catch (e) {
+            expect((e as Error).message).not.toContain('topsecret');
+        }
+    });
+
+    it('allows https, with a port and a path', () => {
+        expect(make('https://x.example:8443/a/b/')).not.toThrow();
+    });
+
+    it('allows http only for localhost and 127.0.0.1 and only with the explicit option', () => {
+        for (const url of ['http://localhost:8080', 'http://127.0.0.1/pw', 'http://localhost']) {
+            expect(make(url), url).toThrow(BackendConfigError);
+            expect(make(url, { allowLocalHttp: false }), url).toThrow(BackendConfigError);
+            expect(make(url, { allowLocalHttp: true }), url).not.toThrow();
+        }
+        expect(make('https://localhost', { allowLocalHttp: true })).not.toThrow();
+    });
+});
+
 describe('responses', () => {
     it('getEntry: 200 -> set, entry-not-found -> none; the ciphertext is not returned', async () => {
         fetchMock.mockResolvedValueOnce(json(200, { secondaryPwd: 'Y2lwaGVy' }));
@@ -152,9 +195,18 @@ describe('responses', () => {
         await expect(api().getEntry(1)).rejects.toBeInstanceOf(UnexpectedResponse);
     });
 
-    it('getEntry: entry-not-found with a status other than 404 still means none only for the slug', async () => {
+    it('getEntry: "none" needs the slug entry-not-found AND status 404', async () => {
+        fetchMock.mockResolvedValueOnce(problem(500, 'entry-not-found'));
+        await expect(api().getEntry(1)).rejects.toMatchObject({ slug: 'entry-not-found', status: 500 });
         fetchMock.mockResolvedValueOnce(problem(500, 'internal-error'));
         await expect(api().getEntry(1)).rejects.toMatchObject({ slug: 'internal-error' });
+        fetchMock.mockResolvedValueOnce(problem(404, 'entry-not-found'));
+        expect(await api().getEntry(1)).toBe('none');
+    });
+
+    it('getEntry: only 200 is success (201 with a valid body is not)', async () => {
+        fetchMock.mockResolvedValueOnce(json(201, { secondaryPwd: 'abc' }));
+        await expect(api().getEntry(1)).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 201 });
     });
 
     it.each([
@@ -168,11 +220,23 @@ describe('responses', () => {
         await expect(api().getEntry(1)).rejects.toBeInstanceOf(UnexpectedResponse);
     });
 
-    it('putEntry: 204 -> {}, 200 -> generated', async () => {
+    it('putEntry: a custom password is stored only with 204', async () => {
         fetchMock.mockResolvedValueOnce(respond(204, null));
         expect(await api().putEntry(1, { secondaryPwd: 'x' })).toEqual({});
+        // 200 with a valid body is the answer to "generate one", not to "store this one"
+        fetchMock.mockResolvedValueOnce(json(200, { secondaryPwd: 'Gen3rated!pw' }));
+        await expect(api().putEntry(1, { secondaryPwd: 'x' })).rejects.toBeInstanceOf(UnexpectedResponse);
+        fetchMock.mockResolvedValueOnce(json(200, {}));
+        await expect(api().putEntry(1, { secondaryPwd: '' })).rejects.toBeInstanceOf(UnexpectedResponse);
+    });
+
+    it('putEntry: with no custom password only a 200 with the generated one is success', async () => {
         fetchMock.mockResolvedValueOnce(json(200, { secondaryPwd: 'Gen3rated!pw' }));
         expect(await api().putEntry(1, {})).toEqual({ generated: 'Gen3rated!pw' });
+        fetchMock.mockResolvedValueOnce(json(200, { secondaryPwd: 'Gen3rated!pw' }));
+        expect(await api().putEntry(1, { primaryPwd: 'p' })).toEqual({ generated: 'Gen3rated!pw' });
+        fetchMock.mockResolvedValueOnce(respond(204, null));
+        await expect(api().putEntry(1, {})).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 204 });
     });
 
     it.each([
@@ -202,6 +266,10 @@ describe('responses', () => {
         ['empty accessToken', { accessToken: '', tokenType: 'Bearer', expiresIn: 900, admin: false, version: '1.0.0' }],
         ['wrong tokenType', { accessToken: 'a', tokenType: 'MAC', expiresIn: 900, admin: false, version: '1.0.0' }],
         ['expiresIn a string', { accessToken: 'a', tokenType: 'Bearer', expiresIn: '900', admin: false, version: '1.0.0' }],
+        ['expiresIn 1.5', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 1.5, admin: false, version: '1.0.0' }],
+        ['expiresIn negative', { accessToken: 'a', tokenType: 'Bearer', expiresIn: -900, admin: false, version: '1.0.0' }],
+        ['expiresIn over a day', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 86_401, admin: false, version: '1.0.0' }],
+        ['empty version', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 900, admin: false, version: '' }],
         ['expiresIn zero', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 0, admin: false, version: '1.0.0' }],
         ['admin not a boolean', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 900, admin: 'true', version: '1.0.0' }],
         ['admin missing', { accessToken: 'a', tokenType: 'Bearer', expiresIn: 900, version: '1.0.0' }],
@@ -211,12 +279,38 @@ describe('responses', () => {
         await expect(api().login('c', 'v', 'r')).rejects.toBeInstanceOf(UnexpectedResponse);
     });
 
+    it('login: 201 with a valid body is not success', async () => {
+        fetchMock.mockResolvedValueOnce(json(201, { accessToken: 'a', tokenType: 'Bearer', expiresIn: 900, admin: false, version: '1.0.0' }));
+        await expect(api().login('c', 'v', 'r')).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 201 });
+    });
+
+    it('login: expiresIn of 1 and of 86400 are accepted', async () => {
+        for (const expiresIn of [1, 86_400]) {
+            fetchMock.mockResolvedValueOnce(json(200, { accessToken: 'a', tokenType: 'Bearer', expiresIn, admin: false, version: '1.0.0' }));
+            expect((await api().login('c', 'v', 'r')).expiresIn).toBe(expiresIn);
+        }
+    });
+
     it('selfTest: 200 and 207 both give the result; bad shapes are unexpected', async () => {
         const body = { version: '1.0.0', summary: '1 of 2', tests: [{ name: 'a', status: 'ok', message: 'm' }, { name: 'b', status: 'fail', message: 'm2' }] };
-        fetchMock.mockResolvedValueOnce(json(200, body));
-        expect(await api().selfTest()).toEqual(body);
+        fetchMock.mockResolvedValueOnce(json(200, { ...body, extra: 1, tests: body.tests.map((t) => ({ ...t, secret: 'x' })) }));
+        const r = await api().selfTest();
+        expect(r).toEqual(body);
+        expect(Object.keys(r).sort()).toEqual(['summary', 'tests', 'version']);
+        expect(Object.keys(r.tests[0]!).sort()).toEqual(['message', 'name', 'status']);
         fetchMock.mockResolvedValueOnce(json(207, body));
         expect(await api().selfTest()).toEqual(body);
+        for (const status of [201, 206, 202]) {
+            fetchMock.mockResolvedValueOnce(json(status, body));
+            await expect(api().selfTest()).rejects.toMatchObject({ name: 'UnexpectedResponse', status });
+        }
+        // `undefined` is dropped by JSON.stringify: the member is missing
+        const noVersion = { ...body, version: undefined };
+        const noSummary = { ...body, summary: undefined };
+        for (const bad of [noVersion, { ...body, version: 3 }, { ...body, version: '' }, noSummary, { ...body, summary: 1 }, { ...body, tests: [{ name: 'a', status: 'ok' }] }]) {
+            fetchMock.mockResolvedValueOnce(json(200, bad));
+            await expect(api().selfTest()).rejects.toBeInstanceOf(UnexpectedResponse);
+        }
         fetchMock.mockResolvedValueOnce(json(200, { ...body, tests: 'x' }));
         await expect(api().selfTest()).rejects.toBeInstanceOf(UnexpectedResponse);
         fetchMock.mockResolvedValueOnce(json(200, { ...body, tests: [{ name: 'a', status: 'maybe', message: 'm' }] }));
@@ -253,6 +347,8 @@ describe('problems', () => {
         ['a problem body that is an array', () => json(400, [], PROBLEM)],
         ['a problem body without type', () => json(400, { title: 'x' }, PROBLEM)],
         ['a 3xx answer', () => respond(302, '', PROBLEM)],
+        ['a 3xx answer with a valid problem body', () => json(302, { type: `${TYPE}#forbidden` }, PROBLEM)],
+        ['a problem with a 1-character-too-long slug', () => json(400, { type: `#${'a'.repeat(65)}` }, PROBLEM)],
     ])('%s is UnexpectedResponse with the status', async (_n, make) => {
         const response = make();
         fetchMock.mockResolvedValue(response);
@@ -279,6 +375,11 @@ describe('problems', () => {
         fetchMock.mockResolvedValue(problem(403, 'forbidden'));
         await expect(api().getEntry(1)).rejects.toBeInstanceOf(BackendProblem);
         expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('a 2xx with application/json and a charset is parsed', async () => {
+        fetchMock.mockResolvedValue(json(200, { secondaryPwd: 'abc' }, 'application/json; charset=utf-8'));
+        expect(await api().getEntry(1)).toBe('set');
     });
 
     it('a 200 with a non-JSON body is unexpected', async () => {
