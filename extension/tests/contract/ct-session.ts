@@ -1,0 +1,141 @@
+import type { AxiosInstance } from 'axios';
+import { createCtApi, type CtApi } from '@/ct/api';
+import { createClient } from '@/ct/client';
+import { redactBody } from './redact';
+import type { ContractEnv, FixtureUser } from './setup';
+
+/** The cookies of one ChurchTools session (name → value), as a browser profile would hold them. */
+export class CookieJar {
+    private cookies = new Map<string, string>();
+
+    store(setCookie: readonly string[] | string | undefined): void {
+        for (const line of typeof setCookie === 'string' ? [setCookie] : (setCookie ?? [])) {
+            const pair = line.split(';', 1)[0]!;
+            const eq = pair.indexOf('=');
+            if (eq > 0) this.cookies.set(pair.slice(0, eq).trim(), pair.slice(eq + 1).trim());
+        }
+    }
+
+    header(): string | null {
+        return this.cookies.size === 0 ? null : [...this.cookies].map(([k, v]) => `${k}=${v}`).join('; ');
+    }
+}
+
+export interface Answer {
+    status: number;
+    headers: Headers;
+    text: string;
+    /** The parsed body, `undefined` when it isn't JSON. */
+    json: unknown;
+}
+
+/** `data` of a ChurchTools answer as a record (empty when it is something else). */
+export const dataOf = (a: Answer): Record<string, unknown> => {
+    const data = (a.json as { data?: unknown } | undefined)?.data;
+    return data && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+};
+export const listOf = (a: Answer): Record<string, unknown>[] => {
+    const data = (a.json as { data?: unknown } | undefined)?.data;
+    return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
+};
+
+/**
+ * A ChurchTools session for the contract layer's own calls (admin set-up, OAuth): a cookie jar of its own and, when
+ * given, a login token sent as `Authorization: Login`. Redirects are never followed. Error messages carry only the
+ * method, path, status and a redacted body.
+ */
+export class CtSession {
+    readonly jar = new CookieJar();
+    private csrf: string | null = null;
+
+    private readonly env: ContractEnv;
+    private readonly loginToken: string | null;
+
+    constructor(env: ContractEnv, loginToken: string | null = null) {
+        this.env = env;
+        this.loginToken = loginToken;
+    }
+
+    async request(method: string, pathOrUrl: string, options: { json?: unknown; form?: Record<string, string>; headers?: Record<string, string>; csrf?: boolean } = {}): Promise<Answer> {
+        const url = /^https:\/\//.test(pathOrUrl) ? pathOrUrl : `${this.env.apiUrl}${pathOrUrl}`;
+        if (new URL(url).origin !== this.env.root) throw new Error('CtSession only talks to the test instance');
+        const headers: Record<string, string> = { Accept: 'application/json', ...options.headers };
+        if (this.loginToken) headers.Authorization = `Login ${this.loginToken}`;
+        const cookie = this.jar.header();
+        if (cookie) headers.Cookie = cookie;
+        if (options.csrf) headers['CSRF-Token'] = await this.csrfToken();
+        let body: string | undefined;
+        if (options.json !== undefined) {
+            headers['Content-Type'] = 'application/json';
+            body = JSON.stringify(options.json);
+        } else if (options.form) {
+            headers['Content-Type'] = 'application/x-www-form-urlencoded';
+            body = new URLSearchParams(options.form).toString();
+        }
+        const response = await fetch(url, { method, headers, body, redirect: 'manual' });
+        this.jar.store(response.headers.getSetCookie());
+        const text = await response.text();
+        let json: unknown;
+        try {
+            json = JSON.parse(text);
+        } catch {
+            json = undefined;
+        }
+        return { status: response.status, headers: response.headers, text, json };
+    }
+
+    /** Like `request`, but throws unless the status is 2xx. */
+    async ok(method: string, path: string, options: Parameters<CtSession['request']>[2] = {}): Promise<Answer> {
+        const a = await this.request(method, path, options);
+        if (a.status < 200 || a.status >= 300) throw new Error(`${method} ${new URL(path, this.env.root).pathname} answered ${a.status}: ${redactBody(a.text)}`);
+        return a;
+    }
+
+    async login(user: FixtureUser): Promise<this> {
+        const a = await this.request('POST', '/login', { json: { username: user.username, password: user.pwd } });
+        if (a.status !== 200 || dataOf(a).status !== 'success') throw new Error(`Login of fixture person ${user.id} answered ${a.status}`);
+        this.csrf = null;
+        return this;
+    }
+
+    async csrfToken(): Promise<string> {
+        if (this.csrf === null) {
+            const a = await this.request('GET', '/csrftoken');
+            const data = (a.json as { data?: unknown } | undefined)?.data;
+            if (typeof data !== 'string') throw new Error(`GET /csrftoken answered ${a.status} without a token`);
+            this.csrf = data;
+        }
+        return this.csrf;
+    }
+}
+
+type Auth = { loginToken: string } | { jar: CookieJar } | null;
+
+/**
+ * The app's real `CtApi` (`createClient` + `createCtApi`) in Node. Inside ChurchTools the browser carries the session
+ * cookie; here a login token (`Authorization: Login`, no cookies at all — as the real-mode dev proxy sends it) or a
+ * session's cookie jar stands in for it. `null`: nobody is logged in.
+ */
+export function ctApiFor(env: ContractEnv, auth: Auth): CtApi {
+    const client = createClient(env.root);
+    // The client's axios instance is private; reaching into it is test-only, to attach the credentials of the run.
+    const ax = (client as unknown as { ax: AxiosInstance }).ax;
+    ax.interceptors.request.use((config) => {
+        if (auth && 'loginToken' in auth) config.headers.set('Authorization', `Login ${auth.loginToken}`);
+        if (auth && 'jar' in auth) {
+            const cookie = auth.jar.header();
+            if (cookie) config.headers.set('Cookie', cookie);
+        }
+        return config;
+    });
+    if (auth && 'jar' in auth) {
+        ax.interceptors.response.use(
+            (response) => (auth.jar.store(response.headers['set-cookie']), response),
+            (error: { response?: { headers?: Record<string, string[] | undefined> } }) => {
+                auth.jar.store(error.response?.headers?.['set-cookie']);
+                return Promise.reject(error);
+            },
+        );
+    }
+    return createCtApi(client, 'ctpassstore');
+}

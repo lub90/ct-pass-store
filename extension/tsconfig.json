@@ -20,5 +20,5 @@
         "noUncheckedSideEffectImports": true,
         "paths": { "@/*": ["./src/*"] }
     },
-    "include": ["src", "scripts/*.ts", "vite.config.ts", "vitest.config.ts", "vitest.contract.config.ts"]
+    "include": ["src", "scripts/*.ts", "tests", "vite.config.ts", "vitest.config.ts", "vitest.contract.config.ts"]
 }

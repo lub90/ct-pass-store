@@ -631,7 +631,8 @@ Neither the unit nor the app layer needs network access.
 - **The password rules** (`password/rules.ts`) run against a shared list of test passwords that the backend's
   `PasswordPolicy` tests also use (a JSON file in `specs/fixtures/` or similar, decided in the plan), so the mirror
   can't drift.
-- Without its configuration (`.env` with instance, test users, backend URL), the contract layer aborts with a message
+- Without its configuration (`CT_API_URL` and `CT_API_TOKEN` as in the backend's `phpunit.xml`, the backend's test-user
+  fixtures; the backend itself runs as a local sandbox, see `extension/docs/development.md`), the contract layer aborts with a message
   naming what's missing; it's never reported as passed. Recorded responses come only from the test instance, are
   stripped of personal data and tokens, and are gitignored; tests that need them are skipped visibly.
 

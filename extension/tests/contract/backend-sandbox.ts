@@ -1,0 +1,137 @@
+import { spawn, type ChildProcess } from 'node:child_process';
+import { createHmac, randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
+import path from 'node:path';
+import { BACKEND_DIR, type ContractEnv } from './setup';
+
+/**
+ * The address the extension's backend client is given. The client accepts `https://` only (no localhost escape hatch
+ * in `src/`), so the tests give it this https address and `sandboxFetch` maps it to the plain-HTTP sandbox. The
+ * `.invalid` domain can never resolve, so nothing can leak to a real host if the mapping is missing.
+ */
+export const SANDBOX_BASE = 'https://backend.contract.invalid';
+
+export interface SandboxOptions {
+    oauthClientId: string;
+    oauthClientSecret: string;
+}
+
+/** A request the extension sent to the sandbox, as seen on the wire (for the CORS checks). */
+export interface SeenRequest {
+    method: string;
+    headerNames: string[];
+}
+
+/**
+ * The real backend (this repository's `backend/`) on PHP's built-in server, like the backend's own
+ * `BackendSandboxManager`: 127.0.0.1, a free port, several workers, a fresh cache and log folder per run. Its
+ * configuration comes from the environment only (`sandbox/credentials.php` holds no values); the JWT secret is
+ * random per run and known to the test, so it can produce an expired token.
+ */
+export class BackendSandbox {
+    readonly jwtSecret = randomBytes(32).toString('hex');
+    readonly seen: SeenRequest[] = [];
+    private process: ChildProcess | null = null;
+    private dir: string | null = null;
+    private port = 0;
+
+    private readonly env: ContractEnv;
+    private readonly options: SandboxOptions;
+
+    constructor(env: ContractEnv, options: SandboxOptions) {
+        this.env = env;
+        this.options = options;
+    }
+
+    get httpBase(): string {
+        return `http://127.0.0.1:${this.port}`;
+    }
+
+    async start(): Promise<void> {
+        this.port = await freePort();
+        this.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-backend-sandbox-'));
+        fs.mkdirSync(path.join(this.dir, 'cache'), { mode: 0o700 });
+        fs.mkdirSync(path.join(this.dir, 'logs'), { mode: 0o700 });
+        const childEnv: NodeJS.ProcessEnv = {
+            PATH: process.env.PATH,
+            PHP_CLI_SERVER_WORKERS: '4',
+            CPS_SANDBOX_BACKEND_DIR: BACKEND_DIR,
+            CPS_SANDBOX_CACHE_DIR: path.join(this.dir, 'cache'),
+            CPS_SANDBOX_CT_API_URL: this.env.apiUrl,
+            CPS_SANDBOX_CT_API_TOKEN: this.env.apiToken,
+            CPS_SANDBOX_CORS_ORIGIN: this.env.root,
+            CPS_SANDBOX_OAUTH_CLIENT_ID: this.options.oauthClientId,
+            CPS_SANDBOX_OAUTH_CLIENT_SECRET: this.options.oauthClientSecret,
+            CPS_SANDBOX_JWT_SECRET: this.jwtSecret,
+        };
+        // Output is discarded: the built-in server logs request lines, which must not end up in the test output.
+        this.process = spawn('php', ['-S', `127.0.0.1:${this.port}`, path.join(import.meta.dirname, 'sandbox/router.php')], {
+            env: childEnv,
+            cwd: path.join(BACKEND_DIR, 'public'),
+            stdio: 'ignore',
+        });
+        // An unknown route answers 404 once the app is up; a misconfigured backend answers 500 to everything.
+        let last = 'no answer';
+        for (let i = 0; i < 50; i++) {
+            try {
+                const r = await fetch(`${this.httpBase}/v1/no-such-route`);
+                if (r.status === 404) return;
+                last = `HTTP ${r.status}`;
+            } catch {
+                // not up yet
+            }
+            await new Promise((r) => setTimeout(r, 100));
+        }
+        throw new Error(`The backend sandbox did not start within 5 s (${last}).`);
+    }
+
+    async stop(): Promise<void> {
+        const child = this.process;
+        this.process = null;
+        if (child && child.exitCode === null) {
+            const exited = new Promise((r) => child.once('exit', r));
+            child.kill('SIGTERM');
+            await Promise.race([exited, new Promise((r) => setTimeout(r, 3000))]);
+            if (child.exitCode === null) child.kill('SIGKILL');
+        }
+        // The cache and logs hold person ids and signed records of this run only.
+        if (this.dir) fs.rmSync(this.dir, { recursive: true, force: true });
+        this.dir = null;
+    }
+
+    /**
+     * A `fetch` for `vi.stubGlobal`: requests to `SANDBOX_BASE` go to the sandbox (recording method and header
+     * names), everything else to the real `fetch`.
+     */
+    fetchFor(realFetch: typeof fetch): typeof fetch {
+        return async (input, init) => {
+            const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+            if (!url.startsWith(`${SANDBOX_BASE}/`)) return realFetch(input, init);
+            const headers = new Headers(init?.headers);
+            this.seen.push({ method: init?.method ?? 'GET', headerNames: [...headers.keys()] });
+            return realFetch(`${this.httpBase}${url.slice(SANDBOX_BASE.length)}`, init);
+        };
+    }
+
+    /** A token as `POST /v1/auth/token` issues it (backend `UserTokens`), with the claims and lifetime given. */
+    mintToken(personId: number, username: string, admin: boolean, issuedSecondsAgo = 0, lifetime = 900): string {
+        const now = Math.floor(Date.now() / 1000) - issuedSecondsAgo;
+        const claims = { iss: 'ctpassstore-backend', aud: 'ctpassstore-api', sub: String(personId), username, admin, iat: now, nbf: now, exp: now + lifetime, jti: randomBytes(16).toString('hex') };
+        const part = (o: unknown) => Buffer.from(JSON.stringify(o)).toString('base64url');
+        const unsigned = `${part({ typ: 'JWT', alg: 'HS256' })}.${part(claims)}`;
+        return `${unsigned}.${createHmac('sha256', this.jwtSecret).update(unsigned).digest('base64url')}`;
+    }
+}
+
+function freePort(): Promise<number> {
+    return new Promise((resolve, reject) => {
+        const server = net.createServer();
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const { port } = server.address() as net.AddressInfo;
+            server.close(() => resolve(port));
+        });
+    });
+}

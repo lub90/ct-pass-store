@@ -111,6 +111,33 @@ export function defineCtContract(name: string, make: () => Promise<CtContractSub
             expect((await s.values(moduleId, categoryId)).some((v) => v.id === created.id)).toBe(false);
         });
 
+        it('a value may have 10,000 characters, counted as code points (multibyte too), not one more', async () => {
+            // Measured 2026-11-14: ChurchTools counts characters (code points), not bytes or UTF-16 units: 10,000 × "ä"
+            // (20,000 bytes) and 10,000 × "😀" (20,000 UTF-16 units) are stored and read back unchanged; 10,001
+            // characters give 400 validation.error. The repository's own limit counts UTF-16 units, so it stays below.
+            const s = await make();
+            const moduleId = (await s.moduleId(s.moduleKey)) as number;
+            const categoryId = (await s.categories(moduleId))[0]!.id;
+            // A write that wrongly succeeds is removed again before the assertion fails.
+            const refused = async (write: Promise<{ id: number }>, keep?: number) => {
+                const result = await write.catch((e: unknown) => e);
+                if (!(result instanceof Error) && (result as { id: number }).id !== keep) await s.deleteValue(moduleId, categoryId, (result as { id: number }).id);
+                return result;
+            };
+            for (const char of ['a', 'ä', '😀']) {
+                const value = char.repeat(10_000);
+                const created = await s.createValue(moduleId, categoryId, value);
+                try {
+                    expect((await s.values(moduleId, categoryId)).find((v) => v.id === created.id)?.value === value, char).toBe(true);
+                    expect(await refused(s.updateValue(moduleId, categoryId, created.id, char.repeat(10_001)), created.id), char).toMatchObject({ name: 'CtHttpError', status: 400 });
+                    expect((await s.values(moduleId, categoryId)).find((v) => v.id === created.id)?.value === value, char).toBe(true);
+                } finally {
+                    await s.deleteValue(moduleId, categoryId, created.id);
+                }
+                expect(await refused(s.createValue(moduleId, categoryId, char.repeat(10_001))), char).toMatchObject({ name: 'CtHttpError', status: 400 });
+            }
+        });
+
         it('a group the person is a member of is readable', async () => {
             const s = await make();
             const group = await s.group(s.knownGroupId);

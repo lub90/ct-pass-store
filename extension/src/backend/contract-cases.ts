@@ -193,8 +193,9 @@ export function defineBackendContract(name: string, make: () => Promise<BackendC
             const s = await make();
             if (s.admin) return ctx.skip();
             for (const id of [s.otherPersonId, ...(s.gonePersonId === undefined ? [] : [s.gonePersonId])]) {
-                for (const call of [s.getEntry(id), s.putEntry(id, primary(s)), s.deleteEntry(id, s.primaryPwd ?? undefined)]) {
-                    expect(await problemOf(call), String(id)).toMatchObject({ slug: 'forbidden', status: 403 });
+                // One call at a time: started together, a later rejection would go unhandled while the first is awaited.
+                for (const call of [() => s.getEntry(id), () => s.putEntry(id, primary(s)), () => s.deleteEntry(id, s.primaryPwd ?? undefined)]) {
+                    expect(await problemOf(call()), String(id)).toMatchObject({ slug: 'forbidden', status: 403 });
                 }
             }
         });

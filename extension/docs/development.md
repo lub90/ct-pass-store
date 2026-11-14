@@ -92,3 +92,64 @@ Notes:
 marker `__DEMO__` (every module under `src/dev/` puts it into its code) or any of the demo data strings
 (`DEMO_STRINGS` in `src/dev/demo-data.ts`). `scripts/build.test.ts` builds the app in production, development and real
 mode and checks that only the development build contains the demo.
+
+## Contract tests
+
+`npm run test:contract` runs the shared contract cases (`src/ct/contract-cases.ts`, `src/backend/contract-cases.ts`)
+against a real ChurchTools **test** instance and the real backend of this repository, so the fakes the unit and app
+tests use stay honest (spec 13.2). Run it by hand before a release, never against a production instance: it creates
+and deletes temporary objects there.
+
+### What it needs
+
+The same source as the backend's contract tests (`backend/docs/testing.md`); no password is ever an environment
+variable and no new credential file is created:
+
+| What | Where it comes from |
+| --- | --- |
+| `CT_API_URL` | `https://<instance>/api`, the value in the backend's local `phpunit.xml` |
+| `CT_API_TOKEN` | the login token of the service user, the value in the backend's local `phpunit.xml` |
+| `admin_users.json`, `normal_users.json`, `person_status.json` | the backend's gitignored fixtures in `backend/tests/Contract/fixtures/` (another folder with `CT_FIXTURES_DIR`) |
+| `backend/vendor` and the `php` command | `composer install` in `backend/`; PHP 8.3 CLI |
+
+Pass the two variables only into the test process, e.g. `CT_API_URL=… CT_API_TOKEN=… npm run test:contract` from a
+script that reads them from `phpunit.xml` without printing them; never put them into `.env`, a shell history or a
+file. Without any of the above, `tests/contract/setup.ts` aborts the run before the first test with a message naming
+**everything** that is missing; the suite is never reported as passed without them.
+
+### What it does on the test instance
+
+- **ChurchTools** (`tests/contract/ct.contract.test.ts`): the app's real `CtApi` as the service user
+  (`Authorization: Login`, no cookies, as the real-mode dev proxy sends it), the normal test user's session for the
+  "no category rights" cases, and an anonymous client. Two temporary groups named „ctpassstore extension contract
+  test“ (a team with the service user, the normal test user, a `waiting` member and an archived person; a
+  distribution list without the service user). Probe values in `passwordStore`, deleted right away.
+- **Backend** (`tests/contract/backend.contract.test.ts`): the backend runs locally on PHP's built-in server
+  (`tests/contract/backend-sandbox.ts`, 127.0.0.1, a free port, a fresh cache and log folder per run, deleted after).
+  Its configuration (`tests/contract/sandbox/credentials.php`) holds no values; everything comes from the PHP
+  process's environment, with a random `JWT_SECRET` per run. The deployed backend of the test instance is not used.
+  - A temporary confidential OAuth client with the redirect URI `https://<instance>/ccm/ctpassstore/auth/callback`;
+    its secret stays in memory. The normal test user gets „login to external system“ for this client only (`PUT`
+    adds it; `DELETE` with the same body removes exactly it; afterwards all of the user's own grants are compared
+    with the start).
+  - "user" logs in through the real OAuth flow and `POST /v1/auth/token`. "admin" uses a token signed with the
+    per-run secret exactly as the login issues it, because nobody is an admin on the test instance.
+  - Entries are written only for persons that have none; the run refuses to start otherwise.
+- **HTTPS:** the extension's backend client accepts `https://` only, and `src/` has no switch for plain HTTP. So the
+  tests give the client the address `https://backend.contract.invalid` and replace `fetch` (`vi.stubGlobal`, test
+  code only) with one that sends those requests to the sandbox. The sandbox's router sets `HTTPS=on`, as a TLS
+  terminator does in production, so the backend's own HTTPS check passes.
+- **Cleanup:** every temporary object is removed in `afterAll`, also after a failure; each step runs even if an earlier
+  one fails, and a failed step fails the run with „check the test instance by hand“. Objects left by a crashed run
+  are found by their name and removed at the next start.
+- **Skipped cases**, by design: the read-only-rights case (no test user may read without writing), the
+  primary-password cases while the instance doesn't require it, and the cases for the other value of
+  `allowCustomPassword`. Vitest lists them as skipped.
+
+### Recorded responses
+
+With `CT_CONTRACT_RECORD=1` a few raw answers are written to `tests/contract/fixtures/` (gitignored, mode `600`), only
+through `scripts/sanitize-fixture.js`: secrets under keys like `token`, `secret`, `pwd`, `code` are blanked; names,
+initials and contact data replaced; the instance host becomes `ct.example`; tokens, hashes and ciphertexts in any
+string become `<jwt>` / `<hash>`. To sanitize a file by hand: `CT_API_URL=… node scripts/sanitize-fixture.js in.json
+out.json`.

@@ -83,6 +83,10 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
     const requireRight = (right: keyof Permissions & `${string} custom data`, categoryId: number) => {
         if (!permissions[right].includes(categoryId)) throw new CtForbiddenError(`Missing right: ${right}`, right);
     };
+    // Measured: ChurchTools stores at most 10,000 characters (code points) per value; more is `400 validation.error`.
+    const requireSize = (value: string) => {
+        if ([...value].length > 10_000) throw new CtHttpError(400, 'validation.error');
+    };
     const requireCategory = (moduleId: number, categoryId: number) => {
         requireModule(moduleId);
         if (!seed.categories.some((c) => c.id === categoryId)) throw new CtHttpError(404, 'Category not found');
@@ -127,6 +131,7 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
             step();
             requireCategory(moduleId, categoryId);
             requireRight('create custom data', categoryId);
+            requireSize(value);
             const created = { id: nextValueId++, dataCategoryId: categoryId, value };
             values.push(created);
             return { ...created };
@@ -135,6 +140,7 @@ export function createFakeChurchTools(seed: FakeCtSeed): CtApi & FakeControls {
             step();
             requireCategory(moduleId, categoryId);
             requireRight('edit custom data', categoryId);
+            requireSize(value);
             const existing = values.find((v) => v.id === valueId && v.dataCategoryId === categoryId);
             if (!existing) throw new CtHttpError(404, 'Value not found');
             existing.value = value;
