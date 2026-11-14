@@ -310,7 +310,11 @@ refused at the field and by the store (stored texts with them are dropped on rea
   `parse_url` check): also no empty credentials (`https://:@host`), no missing host, no whitespace, control characters
   or backslashes. A new or changed address must not contain invisible format characters (`\p{Cf}`: zero-width spaces,
   soft hyphens, bidi controls); a stored one is still read and kept, as the backend reads it. A stored trailing slash
-  is no change. Addresses are shown isolated (`<bdi>`). A typed address is never contacted, not even without a token: there is no reachability check before
+  is no change. A new or changed address must also name the host as the browser connects to it: only ASCII, no `%` in
+  the host part, and the host as written equals `new URL(…).host` (case aside), so an IDN is entered in its `xn--` form
+  and `%2e` or numeric tricks are refused. A stored address whose host the browser rewrites is still read (the backend
+  keeps the written host); the page then shows the real host next to it (the tested line and the dialog's „Bisher“).
+  Addresses are shown isolated (`<bdi>`). A typed address is never contacted, not even without a token: there is no reachability check before
   saving; the self-test after the reload is that check.
 - „Selbsttest“ (admins only, as the backend requires; settings editors who aren't admins see a note): the checks of
   `GET /v1/test` as a list with colored dots and messages (plain text); it runs once when the page opens, and a button

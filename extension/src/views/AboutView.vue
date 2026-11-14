@@ -28,7 +28,10 @@ const THIRD_PARTY = `${BASE_PATH}THIRD-PARTY-LICENSES.txt`;
     <div class="cps-about">
         <ul class="cps-about__versions">
             <li>{{ t('about.extensionVersion', { version }) }}</li>
-            <li>{{ backendVersion ? t('about.backendVersion', { version: backendVersion }) : t('about.backendUnknown') }}</li>
+            <!-- The page shows only after a login (state user or admin), which brings the backend's version. -->
+            <li v-if="backendVersion">
+                {{ t('about.backendVersion', { version: backendVersion }) }}
+            </li>
         </ul>
         <ul class="cps-about__links">
             <li>

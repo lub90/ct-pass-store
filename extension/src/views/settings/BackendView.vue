@@ -25,7 +25,7 @@ import { useSession } from '../../app/useSession';
 import type { SelfTestResult } from '../../backend/api';
 import { PopupBlocked, PopupClosed } from '../../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams } from '../../backend/problems';
-import type { SettingsV2 } from '../../model/schemas';
+import { connectedHost, type SettingsV2 } from '../../model/schemas';
 import Banner from '../../ui/Banner.vue';
 import Field from '../../ui/Field.vue';
 import Pill from '../../ui/Pill.vue';
@@ -45,6 +45,16 @@ const admin = computed(() => app.state.value === 'admin');
 const runningUrl = computed(() => app.settings.value?.backendUrl ?? null);
 /** Addresses compare without trailing slashes, as the store and the backend normalize them. */
 const bare = (url: string | null | undefined): string | null => (url == null ? null : url.replace(/\/+$/, ''));
+/**
+ * A stored address may be written with a host the browser rewrites (`%2e`, an IDN look-alike): the backend keeps the
+ * text, the browser connects to `URL.host`. Then both are shown. A new address can't be like that (the field refuses it).
+ */
+const runningHost = computed(() => (runningUrl.value ? connectedHost(runningUrl.value) : null));
+function oldText(url: string | undefined): string {
+    if (url === undefined) return t('backend.confirmOld', { old: t('backend.noAddress') });
+    const host = connectedHost(url);
+    return host === null ? t('backend.confirmOld', { old: url }) : t('backend.confirmOldHost', { old: url, host });
+}
 
 // --- The address ---------------------------------------------------------------------------------------------------
 
@@ -59,7 +69,7 @@ const form = useSettingsForm<SettingsV2>(
             const answer = await confirm({
                 title: t('backend.confirmTitle'),
                 // Both addresses isolated in the dialog's subject (`<bdi>`).
-                subject: { name: next.backendUrl ?? t('backend.noAddress'), detail: t('backend.confirmOld', { old: previous?.backendUrl ?? t('backend.noAddress') }) },
+                subject: { name: next.backendUrl ?? t('backend.noAddress'), detail: oldText(previous?.backendUrl) },
                 text: t('backend.confirmText'),
                 confirmLabel: t('backend.confirm'),
                 cancelLabel: t('common.cancel'),
@@ -102,7 +112,7 @@ watch(
     { immediate: true },
 );
 
-const URL_ERRORS = { 'not-https': 'notHttps', credentials: 'credentials', query: 'query', fragment: 'fragment', invalid: 'invalid', invisible: 'invisible' } as const;
+const URL_ERRORS = { 'not-https': 'notHttps', credentials: 'credentials', query: 'query', fragment: 'fragment', invalid: 'invalid', invisible: 'invisible', 'host-encoding': 'hostEncoding' } as const;
 const urlError = computed(() => (checked.value.ok ? undefined : t(`backend.urlErrors.${URL_ERRORS[checked.value.reason]}`)));
 
 /** The read value's address, to warn as soon as the field differs from it. */
@@ -119,7 +129,8 @@ const changed = computed(() => form.value.value !== null && checked.value.ok && 
 const needsReload = computed(() => form.status.value === 'ready' && !form.dirty.value && storedUrl.value !== null && storedUrl.value !== bare(runningUrl.value));
 
 function reloadPage(): void {
-    window.location.reload();
+    if (services.reloadPage) services.reloadPage();
+    else window.location.reload();
 }
 
 // --- Self-test -------------------------------------------------------------------------------------------------------
@@ -266,7 +277,10 @@ watch(
                 v-if="runningUrl"
                 class="cps-backend__tested cps-backend__muted"
             >
-                {{ t('backend.tested') }} <bdi>{{ runningUrl }}</bdi>
+                {{ t('backend.tested') }} <bdi>{{ runningUrl }}</bdi><span
+                    v-if="runningHost"
+                    class="cps-backend__real-host"
+                >{{ ` ${t('backend.realHost')} ` }}<bdi>{{ runningHost }}</bdi></span>
             </p>
             <StatusLine
                 v-if="running"

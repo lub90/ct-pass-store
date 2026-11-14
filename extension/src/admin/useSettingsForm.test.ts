@@ -211,4 +211,33 @@ describe('useSettingsForm: beforeSave', () => {
         expect(saved).toEqual([]);
         wrapper.unmount();
     });
+
+    it('a question that fails writes nothing, and the next save asks again', async () => {
+        let form!: SettingsForm<V>;
+        const saved: V[] = [];
+        let asked = 0;
+        const Page = defineComponent({
+            setup() {
+                form = useSettingsForm<V>(
+                    () => Promise.resolve({ state: 'ok', value: { revision: 3, url: 'old' }, valueId: 1, duplicates: 0 }),
+                    (value) => (saved.push(value), Promise.resolve()),
+                    {
+                        beforeSave: () => (++asked === 1 ? Promise.reject(new Error('dialog gone')) : Promise.resolve(true)),
+                        confirm: () => Promise.resolve({ confirmed: true }),
+                        leaveQuestion: () => ({ title: 't', text: 't', confirmLabel: 'c', cancelLabel: 'x' }),
+                    },
+                );
+                return () => h('div');
+            },
+        });
+        const wrapper = mount(Page);
+        await form.load();
+        form.value.value!.url = 'new';
+        await form.save().catch(() => undefined);
+        expect(saved).toEqual([]);
+        await form.save();
+        expect(asked).toBe(2);
+        expect(saved).toEqual([{ revision: 3, url: 'new' }]);
+        wrapper.unmount();
+    });
 });

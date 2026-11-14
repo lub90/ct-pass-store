@@ -917,6 +917,31 @@ describe('reloadSettings (Task 12 point A)', () => {
         expect(app.settings.value).toMatchObject({ revision: 2, passwordLength: 20, backendUrl: BACKEND, oauthClientId: CLIENT });
     });
 
+    it('without settings at startup, a later read doesn’t bring in an address or OAuth client', async () => {
+        const stored = { value: JSON.stringify({ schema: 2, revision: 1, passwordLength: 'x' }) };
+        const built = await build({
+            ct: (ct) => ({
+                ...ct,
+                values: async (moduleId, categoryId) =>
+                    categoryId === SETTINGS_ID ? [{ id: 101, dataCategoryId: SETTINGS_ID, value: stored.value }] : ct.values(moduleId, categoryId),
+            }),
+        });
+        const app = createAppState({
+            services: built.services,
+            router: built.router,
+            session: createSession(built.auth, () => built.router.currentRoute.value.fullPath),
+            callbackWindow: built.win,
+            appVersion: '0.1.0',
+        });
+        await app.start();
+        expect(app.settings.value).toBeNull();
+        stored.value = JSON.stringify({ ...SETTINGS, revision: 2, passwordLength: 20, backendUrl: 'https://evil.example' });
+        await app.reloadSettings();
+        expect(app.settings.value).toMatchObject({ revision: 2, passwordLength: 20 });
+        expect(app.settings.value?.backendUrl).toBeUndefined();
+        expect(app.settings.value?.oauthClientId).toBeUndefined();
+    });
+
     it.each([
         ['invalid', { schema: 2, revision: 2, passwordLength: 'x' }],
         ['of a newer schema', { ...SETTINGS, schema: 99, revision: 2, passwordLength: 20 }],

@@ -25,6 +25,8 @@ export interface Services {
     session?: Session;
     /** The ChurchTools base URL for links into ChurchTools; `instanceBaseUrl()` when left out. */
     ctBaseUrl?: string;
+    /** Reloads the page; `location.reload()` when left out (tests pass their own). */
+    reloadPage?: () => void;
 }
 
 export const SERVICES_KEY: InjectionKey<Services> = Symbol('services');

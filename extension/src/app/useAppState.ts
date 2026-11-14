@@ -256,8 +256,14 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         try {
             const read = await store.readSettings();
             if (read.state !== 'ok') return;
-            const { backendUrl, oauthClientId } = settings.value ?? read.value;
-            settings.value = { ...read.value, backendUrl, oauthClientId };
+            // Never adopted from a later read: without settings at startup there is no configured backend.
+            const { backendUrl, oauthClientId } = settings.value ?? {};
+            const next: SettingsV2 = { ...read.value };
+            delete next.backendUrl;
+            delete next.oauthClientId;
+            if (backendUrl !== undefined) next.backendUrl = backendUrl;
+            if (oauthClientId !== undefined) next.oauthClientId = oauthClientId;
+            settings.value = next;
         } catch {
             // The settings of startup stay; the backend decides each request anyway.
         }

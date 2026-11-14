@@ -36,6 +36,36 @@ export function backendUrlProblem(s: string): BackendUrlProblem | null {
  */
 export const INVISIBLE = /\p{Cf}/u;
 
+/** The host part (`host[:port]`) as written, between `https://` and the first `/`, `?` or `#`. */
+const authorityOf = (s: string): string => s.slice('https://'.length).split(/[/?#]/, 1)[0]!;
+
+/**
+ * The host the browser connects to (`URL.host`, lower case, IDN as `xn--`, percent escapes decoded, numbers as an IPv4
+ * address), when it differs from the host as written; `null` when they agree (case aside) or the URL doesn't parse.
+ * The backend (`parse_url`) keeps the written host, so such an address shows one host and connects to another.
+ */
+export function connectedHost(s: string): string | null {
+    let u: URL;
+    try {
+        u = new URL(s);
+    } catch {
+        return null;
+    }
+    const written = authorityOf(s).toLowerCase();
+    return written === u.host || written === `${u.host}:443` ? null : u.host;
+}
+
+/**
+ * What a new or changed `backendUrl` must not have on top of `backendUrlProblem` (the field and the store's save; a
+ * stored one is still read, like the backend reads it): invisible characters, or a host other than the one the
+ * browser connects to (non-ASCII or `%` in the host part, or a host the URL parser rewrites).
+ */
+export function newBackendUrlProblem(s: string): 'invisible' | 'host-encoding' | null {
+    if (INVISIBLE.test(s)) return 'invisible';
+    if (!/^[\x21-\x7E]*$/.test(authorityOf(s)) || authorityOf(s).includes('%') || connectedHost(s) !== null) return 'host-encoding';
+    return null;
+}
+
 const isPlainHttpsUrl = (s: string): boolean => backendUrlProblem(s) === null;
 
 /** Bidi embedding/override (U+202A–U+202E) and isolate (U+2066–U+2069) controls: they can make a text read differently. */

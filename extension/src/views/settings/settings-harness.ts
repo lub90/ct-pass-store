@@ -75,6 +75,8 @@ export interface HarnessOptions {
     /** The extension's version (default 0.1.0) and the backend's from the login answer (default 0.1.0). */
     appVersion?: string;
     backendVersion?: string;
+    /** Stands in for `location.reload()`. */
+    reloadPage?: () => void;
 }
 
 const mounted: VueWrapper[] = [];
@@ -118,6 +120,10 @@ export function permissions(o: Pick<HarnessOptions, 'edit' | 'viewAccess' | 'set
         'delete custom data': edit,
     };
 }
+
+/** The token belongs to the backend of the stored settings (so an odd stored address still starts logged in). */
+const startupUrl = (settings: unknown): string =>
+    typeof settings === 'object' && settings !== null && typeof (settings as { backendUrl?: unknown }).backendUrl === 'string' ? (settings as { backendUrl: string }).backendUrl : BACKEND;
 
 const encode = (value: unknown): string => (typeof value === 'string' ? value : JSON.stringify(value));
 
@@ -175,7 +181,7 @@ export async function start(o: HarnessOptions) {
     };
     storage.setItem(
         TOKEN_KEY,
-        JSON.stringify({ accessToken: jwt(ME), expiresAt: NOW + 600_000, admin, version: o.backendVersion ?? '0.1.0', backend: backendBase(BACKEND), person: ME }),
+        JSON.stringify({ accessToken: jwt(ME), expiresAt: NOW + 600_000, admin, version: o.backendVersion ?? '0.1.0', backend: backendBase(startupUrl(settings)), person: ME }),
     );
     const router: Router = createAppRouter(createMemoryHistory());
     const auth = new Auth(() => backend, env);
@@ -198,6 +204,7 @@ export async function start(o: HarnessOptions) {
         language: 'de',
         appVersion: o.appVersion ?? '0.1.0',
         ctBaseUrl: ORIGIN,
+        ...(o.reloadPage ? { reloadPage: o.reloadPage } : {}),
     };
     const win: CallbackWindow = { opener: null, origin: ORIGIN, close: vi.fn() };
     await router.push(o.path);

@@ -95,6 +95,13 @@ describe('settings (mirror of backend 3.2)', () => {
         ['backslash', { backendUrl: 'https://b.example\\@evil.example' }, false],
         ['tab', { backendUrl: 'https://b.example\t' }, false],
         ['port', { backendUrl: 'https://b.example:8443/api' }, true],
+        ['NUL in the path', { backendUrl: 'https://b.example/\u0000' }, false],
+        ['SOH in the path', { backendUrl: 'https://b.example/\u0001' }, false],
+        ['ESC in the path', { backendUrl: 'https://b.example/\u001B' }, false],
+        ['ESC in the host', { backendUrl: 'https://b\u001B.example' }, false],
+        ['DEL in the path', { backendUrl: 'https://b.example/\u007F' }, false],
+        // Read like the backend reads it; only a new or changed one is refused (the store's save, the field).
+        ['percent-encoded host', { backendUrl: 'https://b.example%2eevil.com' }, true],
         ['wrong schema 1', { schema: 1 }, false],
         ['wrong schema "2"', { schema: '2' }, false],
     ]);

@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { decodeKey, phpTrim, readMachineClients, type ClientReason, type UnusableClient } from '@/model/machine-clients';
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, BIDI_CONTROLS, INVISIBLE, isUsableRevision, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, BIDI_CONTROLS, isUsableRevision, newBackendUrlProblem, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { CtValue } from '@/ct/types';
 import type { KvBackend } from './kv';
 
@@ -314,10 +314,12 @@ export class ExtensionStore {
             if (stale) throw new ConflictError(currentRevision);
         }
         if (schema === SettingsSchema) {
-            // A new or changed address must not carry invisible characters; a stored one is kept (the backend reads it).
+            // A new or changed address must not carry invisible characters nor a host other than the one the browser
+            // connects to; a stored one is kept (the backend reads it).
             const url = (checked.output as SettingsV2).backendUrl;
             const before = typeof stored.backendUrl === 'string' ? stored.backendUrl.replace(/\/+$/, '') : undefined;
-            if (url !== undefined && INVISIBLE.test(url) && url !== before) throw new InvalidValueError(['backendUrl: contains invisible characters']);
+            const problem = url === undefined || url === before ? null : newBackendUrlProblem(url);
+            if (problem) throw new InvalidValueError([`backendUrl: ${problem === 'invisible' ? 'contains invisible characters' : 'the host must be written as the browser uses it'}`]);
         }
         if (schema === AccessSchema) {
             // A new or changed name must not carry bidi controls; a stored one is kept as it is (the backend reads it).

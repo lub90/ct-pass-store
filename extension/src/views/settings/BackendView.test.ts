@@ -31,6 +31,7 @@ const TEXT = {
         fragment: 'Die Adresse darf kein „#“ enthalten.',
         invalid: 'Gib eine vollständige Adresse ein, z. B. https://passwort.example.org.',
         invisible: 'Die Adresse enthält unsichtbare Zeichen oder Steuerzeichen für die Schreibrichtung.',
+        'host-encoding': 'Gib den Host so ein, wie der Browser ihn verwendet: nur ASCII-Zeichen ohne „%“, Domains mit Umlauten in der xn--Form.',
     },
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
@@ -119,6 +120,8 @@ describe('Backend & Status: the address (spec 4.8, E15)', () => {
         ['', 'invalid'],
         ['https://neu\u200B.example', 'invisible'],
         ['https://neu.example/\u202Eabc', 'invisible'],
+        ['https://good.example%2eevil.com', 'host-encoding'],
+        ['https://g\u043E\u043Ed.example', 'host-encoding'],
     ] as const)('%j is refused at the field (%s) and can’t be saved', async (text, reason) => {
         const { wrapper, writes } = await start({ path: '/settings/backend' });
         await type(wrapper, text);
@@ -130,6 +133,8 @@ describe('Backend & Status: the address (spec 4.8, E15)', () => {
         await settle();
         expect(dialog()).toBeNull();
         expect(writes).toEqual([]);
+        // A refused address gets its field error, not the E15 warning (nothing could be saved).
+        expect(warning(wrapper).exists()).toBe(false);
     });
 
     it('warns before saving as soon as the address differs from the stored one', async () => {
@@ -356,5 +361,142 @@ describe('Backend & Status: self-test (spec 4.8)', () => {
         expect(selfTests).toEqual([false]);
         const card = wrapper.findAll('main .cps-linkcard').find((c) => c.find('.cps-linkcard__title').text() === TEXT.title)!;
         expect(card.find('.cps-pill').text()).toBe('⚠ 1 Problem');
+    });
+
+    it('a write run leaves the overview’s pill with the read-only result and asks nothing more', async () => {
+        const { wrapper, router, selfTests } = await start({
+            path: '/settings/backend',
+            selfTest: (write) => result(write ? [...TESTS.slice(0, 1), { name: 'write', status: 'fail', message: 'x' }, { name: 'w2', status: 'fail', message: 'y' }] : [TESTS[0]!])(),
+        });
+        await click(wrapper, TEXT.runWrite);
+        expect(selfTests).toEqual([false, true]);
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toEqual([false, true]);
+        const card = wrapper.findAll('main .cps-linkcard').find((c) => c.find('.cps-linkcard__title').text() === TEXT.title)!;
+        expect(card.find('.cps-pill').text()).toBe('✓');
+    });
+
+    it('token-expired on a click: renewed once and retried once, then the result shows', async () => {
+        let calls = 0;
+        const { wrapper, auth, selfTests } = await start({
+            path: '/settings/backend',
+            selfTest: () => (++calls === 2 ? Promise.reject(new BackendProblem('token-expired', 401)) : result(TESTS)()),
+        });
+        const renew = vi.spyOn(auth, 'loginInPopup').mockResolvedValue(undefined);
+        await click(wrapper, TEXT.runAgain);
+        expect(renew).toHaveBeenCalledTimes(1);
+        expect(selfTests).toEqual([false, false, false]);
+        expect(checks(wrapper)).toHaveLength(3);
+        expect(wrapper.find('.cps-backend__error').exists()).toBe(false);
+    });
+
+    it.each([
+        [true, false],
+        [false, true],
+    ])('a token problem on a click while renewal is needed (%s): error shown %s', async (needsRenewal, shown) => {
+        let calls = 0;
+        const { wrapper, session } = await start({
+            path: '/settings/backend',
+            selfTest: () => (++calls === 1 ? result(TESTS)() : Promise.reject(new BackendProblem('invalid-token', 401))),
+        });
+        // The session would otherwise answer invalid-token with a page login; here only the page's reaction counts.
+        vi.spyOn(session, 'call').mockImplementation((fn) => fn());
+        session.needsRenewal.value = needsRenewal;
+        await click(wrapper, TEXT.runAgain);
+        expect(wrapper.find('.cps-backend__error').exists()).toBe(shown);
+    });
+
+    it('runs on open only once, even when the role comes and goes again', async () => {
+        const { session, selfTests } = await start({ path: '/settings/backend' });
+        session.admin.value = false;
+        await settle();
+        session.admin.value = true;
+        await settle();
+        expect(selfTests).toEqual([false]);
+    });
+
+    it('a run still pending when the page is left writes nothing into the overview’s cache', async () => {
+        const slow = deferred<{ version: string; summary: string; tests: SelfTestTests }>();
+        let calls = 0;
+        const { router, selfTests } = await start({ path: '/settings/backend', selfTest: () => (calls++ === 0 ? slow.promise : result(TESTS)()) });
+        await router.push('/');
+        await settle();
+        slow.resolve({ version: '0.1.0', summary: '', tests: TESTS });
+        await settle();
+        await router.push('/settings');
+        await settle();
+        expect(selfTests).toEqual([false, false]);
+    });
+});
+
+describe('Backend & Status: point A', () => {
+    const ODD = 'https://pw.example%2eevil.com';
+
+    it('a stored address whose host the browser rewrites: the tested line names the real host', async () => {
+        const { wrapper } = await start({ path: '/settings/backend', settings: { ...SETTINGS, backendUrl: ODD } });
+        const line = wrapper.find('.cps-backend__tested');
+        expect(line.text()).toContain(ODD);
+        expect(line.find('.cps-backend__real-host bdi').text()).toBe('pw.example.evil.com');
+    });
+
+    it('no real-host note for an address the browser uses as written (case aside)', async () => {
+        const { wrapper } = await start({ path: '/settings/backend', settings: { ...SETTINGS, backendUrl: 'https://PW.example' } });
+        expect(wrapper.find('.cps-backend__real-host').exists()).toBe(false);
+    });
+
+    it('the dialog’s „Bisher“ names the real host of such a stored address', async () => {
+        const { wrapper, router, changeElsewhere } = await start({ path: '/settings' });
+        await changeElsewhere({ backendUrl: ODD });
+        await router.push('/settings/backend');
+        await settle();
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.save);
+        const detail = dialog()!.querySelector('.cps-confirm__subject-detail')!.textContent!;
+        expect(detail).toContain(ODD);
+        expect(detail).toContain('pw.example.evil.com');
+    });
+
+    it('a stored invisible address is shown with its field error; Save stays off and nothing is written', async () => {
+        const odd = 'https://pw\u200B.example';
+        const { wrapper, writes } = await start({ path: '/settings/backend', settings: { ...SETTINGS, backendUrl: odd } });
+        expect(input(wrapper).element.value).toBe(odd);
+        expect(fieldError(wrapper).text()).toBe(TEXT.errors.invisible);
+        expect(disabled(wrapper, TEXT.save)).toBe(true);
+        expect(writes).toEqual([]);
+    });
+
+    it('a successful save reloads the app’s settings', async () => {
+        const { wrapper, storeReads } = await start({ path: '/settings/backend' });
+        await type(wrapper, NEW);
+        const before = storeReads.settings;
+        await click(wrapper, TEXT.save);
+        await answer(TEXT.confirm);
+        expect(storeReads.settings).toBe(before + 1);
+    });
+
+    it('the reload note goes while the field is changed again, and its button reloads the page', async () => {
+        const reloadPage = vi.fn();
+        const { wrapper } = await start({ path: '/settings/backend', reloadPage });
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.save);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-backend__reload').exists()).toBe(true);
+        await type(wrapper, 'https://drei.example');
+        expect(wrapper.find('.cps-backend__reload').exists()).toBe(false);
+        await type(wrapper, NEW);
+        await wrapper.find('.cps-backend__reload button').trigger('click');
+        expect(reloadPage).toHaveBeenCalledTimes(1);
+    });
+
+    it('nothing on this page fetches anything itself: a typed or saved address is never contacted', async () => {
+        const fetch = vi.spyOn(globalThis, 'fetch');
+        const { wrapper } = await start({ path: '/settings/backend' });
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.runAgain);
+        await click(wrapper, TEXT.save);
+        await answer(TEXT.confirm);
+        await click(wrapper, TEXT.runWrite);
+        expect(fetch).not.toHaveBeenCalled();
     });
 });

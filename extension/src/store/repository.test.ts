@@ -881,4 +881,33 @@ describe('invisible characters in backendUrl', () => {
         await store.saveSettings({ ...r.value, passwordLength: 20 }, 1);
         expect((JSON.parse(kv.writes[0]!.value!) as SettingsV2).backendUrl).toBe('https://b​.example');
     });
+
+    it('a stored invisible address changed into another invisible one is refused', async () => {
+        const { kv, store } = setup([JSON.stringify({ ...settings, backendUrl: 'https://b\u200B.example' })]);
+        await expect(store.saveSettings({ ...settings, backendUrl: 'https://c\u200B.example' }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+});
+
+describe('the host of a new backendUrl (F1)', () => {
+    it.each(['https://good.example%2eevil.com', 'https://\uFF47ood.example', 'https://g\u043E\u043Ed.example'])('a new or changed %j is refused on save', async (url) => {
+        const { kv, store } = setup();
+        await expect(store.saveSettings({ ...settings, backendUrl: url }, 1)).rejects.toBeInstanceOf(InvalidValueError);
+        expect(kv.writes).toEqual([]);
+    });
+
+    it('an uppercase host is fine', async () => {
+        const { kv, store } = setup();
+        await store.saveSettings({ ...settings, backendUrl: 'https://B.Example' }, 1);
+        expect(kv.writes).toHaveLength(1);
+    });
+
+    it('a stored one is read and kept when other fields are saved', async () => {
+        const odd = 'https://b.example%2eevil.com';
+        const { kv, store } = setup([JSON.stringify({ ...settings, backendUrl: odd })]);
+        const r = await store.readSettings();
+        if (r.state !== 'ok') throw new Error('not ok');
+        await store.saveSettings({ ...r.value, passwordLength: 20 }, 1);
+        expect((JSON.parse(kv.writes[0]!.value!) as SettingsV2).backendUrl).toBe(odd);
+    });
 });
