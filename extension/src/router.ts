@@ -7,6 +7,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory
 import type { RouteRequirement } from './app/app-state';
 import { BASE_PATH, CALLBACK_PATH } from './config';
 import AuthCallbackView from './views/AuthCallbackView.vue';
+import ManageView from './views/ManageView.vue';
 import NotFoundView from './views/NotFoundView.vue';
 import PasswordView from './views/PasswordView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
@@ -28,8 +29,8 @@ const placeholder = (path: string, titleKey: string, requires?: RouteRequirement
 
 export const routes: RouteRecordRaw[] = [
     { path: '/', component: PasswordView },
-    placeholder('/manage', 'nav.manage', 'admin'),
-    placeholder('/manage/:personId', 'nav.manage', 'admin'),
+    // One record for both, so choosing another person keeps the page (and its loaded members).
+    { path: '/manage/:personId?', component: ManageView, meta: { requires: 'admin' } },
     placeholder('/settings', 'nav.settings', 'editor'),
     placeholder('/settings/rules', 'pages.rules', 'editor'),
     placeholder('/settings/texts', 'pages.texts', 'editor'),

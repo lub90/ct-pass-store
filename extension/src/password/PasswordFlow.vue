@@ -8,9 +8,13 @@
  * arrives after the unmount is not kept. While any is on screen the session counts it as unsaved input, so a token
  * problem asks for a renewal instead of reloading the page. The status of the entry is not this component's business:
  * every change is announced through `usePasswordEntry`, and the page reads the status again.
+ *
+ * For someone else (`forName`, spec 4.3) a warning banner names the person above the flow, and if they have a password
+ * a confirm dialog naming them comes before anything is sent. The name is plain text: a named parameter or `{{ }}`,
+ * never part of a message.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { useI18n } from 'vue-i18n';
+import { I18nT, useI18n } from 'vue-i18n';
 import { isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
@@ -21,13 +25,14 @@ import ChoiceCard from '../ui/ChoiceCard.vue';
 import Pill from '../ui/Pill.vue';
 import SecretField from '../ui/SecretField.vue';
 import StatusLine from '../ui/StatusLine.vue';
+import { useConfirm } from '../ui/useConfirm';
 import { canSubmit, nextAfterOverview, type FlowSettings, type FlowState } from './flow';
 import { MAX_LENGTH, SYMBOLS, checkPassword, type Rule } from './rules';
 import { usePasswordEntry } from './usePasswordEntry';
 
 const props = defineProps<{
     personId: number;
-    /** Set for an admin acting for someone else (Task 13: warning banner and confirm dialog). */
+    /** The person's name when an admin acts for someone else (spec 4.3): warning banner and confirm dialog. */
     forName?: string;
     settings: FlowSettings;
     hasEntry: boolean;
@@ -40,6 +45,7 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const session = useSession();
 const app = useAppState();
+const confirm = useConfirm();
 const entry = usePasswordEntry(() => props.personId, { load: false });
 
 type RuleKey = 'length' | 'letter' | 'digit' | 'symbol' | 'chars';
@@ -191,6 +197,18 @@ async function fail(e: unknown, sent: boolean): Promise<void> {
     }
 }
 
+/** Spec 4.3: replacing someone else's password needs a yes first. */
+async function confirmed(): Promise<boolean> {
+    if (props.forName === undefined || !props.hasEntry) return true;
+    const answer = await confirm({
+        title: t('manage.replaceTitle'),
+        text: t('manage.replaceText', { name: props.forName }),
+        confirmLabel: t('manage.replaceConfirm'),
+        cancelLabel: t('common.cancel'),
+    });
+    return answer.confirmed;
+}
+
 async function submit(): Promise<void> {
     if (busy.value || state.value.step !== 'choose' || !check.value.ok) return;
     busy.value = true;
@@ -206,6 +224,14 @@ async function submit(): Promise<void> {
         await fail(e, false);
         return;
     }
+    if (!(await confirmed())) {
+        busy.value = false;
+        // The direct path has no form to go back to.
+        if (alive && direct.value) emit('done', 'cancelled');
+        return;
+    }
+    // Left while the dialog was open: nothing is sent for a page nobody sees.
+    if (!alive) return;
     try {
         if (mode.value === 'generate') {
             const plaintext = await entry.generate(primaryPwd);
@@ -249,6 +275,20 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+    <Banner
+        v-if="forName !== undefined"
+        kind="warning"
+        class="cps-flow-for"
+    >
+        <I18nT
+            keypath="manage.forName"
+            tag="p"
+        >
+            <template #name>
+                <strong>{{ forName }}</strong>
+            </template>
+        </I18nT>
+    </Banner>
     <section
         v-if="state.step === 'result'"
         class="cps-flow cps-flow__result"
@@ -416,6 +456,12 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
+.cps-flow-for {
+    margin-bottom: var(--cps-space-4);
+}
+.cps-flow-for p {
+    margin: 0;
+}
 .cps-flow {
     display: flex;
     flex-direction: column;

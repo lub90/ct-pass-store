@@ -65,6 +65,30 @@ const de = {
         done: 'Fertig',
         generating: 'Passwort wird erzeugt …',
     },
+    // „Passwörter verwalten“ (spec 4.3). ChurchTools names and right names only ever come in as `{name}` / `{right}`.
+    manage: {
+        title: 'Passwörter verwalten',
+        intro: 'Setz oder lösch das Passwort einer anderen Person, z. B. wenn sie ihres vergessen hat.',
+        search: 'Person aus der Nutzergruppe suchen',
+        searchPlaceholder: 'Name',
+        noHits: 'Niemand in der Nutzergruppe passt zu dieser Suche.',
+        pick: 'Such eine Person, um ihr Passwort festzulegen oder zu löschen.',
+        notInGroup: 'Diese Person ist nicht in der Nutzergruppe. Such eine Person über das Suchfeld.',
+        missingGroupRight: 'Dir fehlt in ChurchTools das Recht „{right}“ auf die Nutzergruppe. Ohne dieses Recht kannst du hier niemanden suchen.',
+        missingAccessRight: 'Dir fehlt in ChurchTools das Recht „{right}“ auf die Kategorie „access“. Ohne dieses Recht ist die Nutzergruppe nicht bekannt.',
+        accessMissing:
+            'Die Nutzergruppe ist nicht bekannt: Die Erweiterung ist noch nicht fertig eingerichtet, oder dir fehlt in ChurchTools das Recht „view custom category“ auf die Kategorie „access“.',
+        accessInvalid: 'Die Zugriffseinstellungen sind nicht lesbar. Prüf sie unter „Zugriff“.',
+        newPassword: 'Neues Passwort',
+        delete: 'Löschen',
+        forName: 'Du legst gerade das Passwort für {name} fest.',
+        replaceTitle: 'Passwort ersetzen?',
+        replaceText: 'Das bisherige Passwort von {name} funktioniert danach nicht mehr. Fortfahren?',
+        replaceConfirm: 'Fortfahren',
+        deleteTitle: 'Passwort löschen?',
+        deleteText: 'Das Passwort von {name} wird gelöscht und funktioniert danach nicht mehr.',
+        deleted: '✓ Gelöscht',
+    },
     // Spec 7.2: the renewal popup was blocked or closed.
     session: {
         expired: 'Deine Sitzung ist abgelaufen.',
