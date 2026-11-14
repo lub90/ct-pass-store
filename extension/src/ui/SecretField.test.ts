@@ -90,4 +90,16 @@ describe('SecretField', () => {
         expect(w.attributes('style')).toContain('margin');
         expect(w.find('input').classes()).not.toContain('extra');
     });
+
+    it('starts revealed with `revealed` (a value shown once), and can still be hidden', async () => {
+        const w = mount(SecretField, { props: { ...props, revealed: true } });
+        expect(w.find('input').attributes('type')).toBe('text');
+        await w.find('button[aria-label="Hide"]').trigger('click');
+        expect(w.find('input').attributes('type')).toBe('password');
+    });
+
+    it('uses a monospace font only with `mono`', () => {
+        expect(mount(SecretField, { props }).find('input').classes()).not.toContain('cps-secret__input--mono');
+        expect(mount(SecretField, { props: { ...props, mono: true } }).find('input').classes()).toContain('cps-secret__input--mono');
+    });
 });

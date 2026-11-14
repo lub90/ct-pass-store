@@ -21,9 +21,11 @@ export function nextAfterOverview(settings: Pick<FlowSettings, 'allowCustomPassw
     return !settings.allowCustomPassword && !settings.requirePasswordForPasswordChange ? 'generate-now' : 'choose';
 }
 
-/** Whether the form may be sent; if not, `reason` is an i18n key. The backend decides again. */
-export function canSubmit(state: FlowState, input: FlowInput, settings: FlowSettings): { ok: boolean; reason?: string } {
-    if (state.step !== 'choose') return { ok: false, reason: 'password.notReady' };
+/**
+ * Whether the form of state 2 may be sent; if not, `reason` is an i18n key. Only state 2 has a submit button, so only
+ * it is accepted. The backend decides again.
+ */
+export function canSubmit(state: Extract<FlowState, { step: 'choose' }>, input: FlowInput, settings: FlowSettings): { ok: boolean; reason?: string } {
     if (settings.requirePasswordForPasswordChange && input.primaryPassword === '') {
         return { ok: false, reason: 'password.primaryRequired' };
     }

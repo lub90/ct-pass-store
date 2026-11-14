@@ -214,10 +214,14 @@ const TEXT = {
     page: 'Diese Seite folgt mit einem späteren Schritt.',
     needsAdmin: 'Diese Seite ist nur für Admins.',
     needsEditor: 'Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.',
+    /** „Mein Passwort“ shows the title of the settings texts (default of spec 4.6). */
+    passwordTitle: 'Mein Zweitpasswort',
 };
 
 const navLinks = (w: VueWrapper) => w.findAll('nav a').map((a) => [a.text(), a.attributes('href')]);
 const showsPage = (w: VueWrapper) => w.text().includes(TEXT.page);
+/** „Mein Passwort“ (Task 12) is a real page now, no placeholder. */
+const showsPasswordPage = (w: VueWrapper) => w.find('h1').exists() && w.find('h1').text() === TEXT.passwordTitle;
 
 describe('frame by role (E3)', () => {
     it('a normal user gets the card without navigation and a footer link to /about', async () => {
@@ -225,7 +229,7 @@ describe('frame by role (E3)', () => {
         expect(wrapper.find('.cps-frame--card').exists()).toBe(true);
         expect(wrapper.find('nav').exists()).toBe(false);
         expect(wrapper.find('select').exists()).toBe(false);
-        expect(wrapper.find('h1').text()).toBe('Mein Passwort');
+        expect(wrapper.find('h1').text()).toBe(TEXT.passwordTitle);
         const footer = wrapper.find('footer a');
         expect(footer.text()).toBe('Über');
         expect(footer.attributes('href')).toBe('/about');
@@ -283,7 +287,7 @@ describe('routes (spec 4.1)', () => {
     });
 
     it.each([
-        ['/', 'Mein Passwort'],
+        ['/', 'Mein Zweitpasswort'],
         ['/manage', 'Passwörter verwalten'],
         ['/manage/5', 'Passwörter verwalten'],
         ['/settings', 'Einstellungen'],
@@ -339,8 +343,13 @@ describe('routes (spec 4.1)', () => {
         expect(wrapper.find('main .cps-banner--warning').text()).toBe(TEXT.needsAdmin);
     });
 
-    it.each(['/', '/about'])('everyone with access gets %s', async (path) => {
-        const { wrapper } = await start({ token: { admin: false }, path });
+    it('everyone with access gets /', async () => {
+        const { wrapper } = await start({ token: { admin: false }, path: '/' });
+        expect(showsPasswordPage(wrapper)).toBe(true);
+    });
+
+    it('everyone with access gets /about', async () => {
+        const { wrapper } = await start({ token: { admin: false }, path: '/about' });
         expect(showsPage(wrapper)).toBe(true);
     });
 
@@ -349,7 +358,7 @@ describe('routes (spec 4.1)', () => {
         await router.push('/auth/callback');
         await settle();
         expect(router.currentRoute.value.path).toBe('/');
-        expect(wrapper.find('h1').text()).toBe('Mein Passwort');
+        expect(wrapper.find('h1').text()).toBe(TEXT.passwordTitle);
     });
 });
 
@@ -708,7 +717,7 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('main').text()).toBe(TEXT.loading);
         expect(wrapper.find('main [role="status"]').exists()).toBe(true);
         expect(wrapper.find('nav').exists()).toBe(false);
-        expect(showsPage(wrapper)).toBe(false);
+        expect(showsPasswordPage(wrapper)).toBe(false);
     });
 
     it('row 1: no page while the settings are being read', async () => {
@@ -831,7 +840,7 @@ describe('app states as shown (spec 3.2)', () => {
     it('row 8: version mismatch, users see the short notice and no page', async () => {
         const { wrapper } = await start({ token: { admin: false, version: '0.2.0' }, appVersion: '0.1.0' });
         expect(wrapper.find('main').text()).toBe(TEXT.updating);
-        expect(showsPage(wrapper)).toBe(false);
+        expect(showsPasswordPage(wrapper)).toBe(false);
         expect(wrapper.find('footer').exists()).toBe(false);
     });
 
@@ -843,16 +852,16 @@ describe('app states as shown (spec 3.2)', () => {
 
     it('row 8: build metadata is ignored', async () => {
         const { wrapper } = await start({ token: { admin: false, version: '0.1.0+abc-dirty' }, appVersion: '0.1.3' });
-        expect(wrapper.find('h1').text()).toBe('Mein Passwort');
+        expect(wrapper.find('h1').text()).toBe(TEXT.passwordTitle);
     });
 
     it('row 7 later: a login loop reported by the session turns the page into backend-error', async () => {
         const { wrapper, session } = await start({ token: { admin: true }, session: true });
-        expect(wrapper.find('h1').text()).toBe('Mein Passwort');
+        expect(wrapper.find('h1').text()).toBe(TEXT.passwordTitle);
         session!.loginLoop.value = true;
         await settle();
         expect(wrapper.text()).toContain(TEXT.loginFailed);
-        expect(showsPage(wrapper)).toBe(false);
+        expect(showsPasswordPage(wrapper)).toBe(false);
         expect(wrapper.find('nav').exists()).toBe(false);
     });
 

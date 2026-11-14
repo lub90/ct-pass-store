@@ -39,8 +39,12 @@ export interface AppStateHandle {
     failure: ComputedRef<Failure | null>;
     settingsEditor: Ref<SettingsEditor>;
     setupCapable: Ref<boolean>;
-    /** The settings read at startup (`ok` only), for the pages. */
+    /** The settings read at startup (`ok` only), for the pages; `reloadSettings()` refreshes them. */
     settings: Ref<SettingsV2 | null>;
+    /** The ChurchTools person logged in (whoami), once known. „Mein Passwort“ acts for this person only. */
+    personId: Ref<number | null>;
+    /** Reads `settings` again (e.g. after `custom-password-not-allowed`); keeps the old ones if the read fails. */
+    reloadSettings(): Promise<void>;
     /** `update-needed`: the stored `schema`. */
     storedSchema: Ref<number | null>;
     appVersion: string;
@@ -79,6 +83,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
     const settingsEditor = ref<SettingsEditor>({ settings: false, access: false });
     const setupCapable = ref(false);
     const settings = ref<SettingsV2 | null>(null);
+    const personId = ref<number | null>(null);
     const onCallback = ref(false);
 
     /** The session reports a login loop later on (a token problem right after a page login). */
@@ -132,9 +137,9 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
 
     /** Rows 2 to 5. Returns what the login needs when it may follow. */
     async function readChurchTools(): Promise<{ personId: number; backendUrl: string; clientId: string } | null> {
-        let personId: number;
+        let person: number;
         try {
-            personId = (await ct.whoami()).id;
+            person = (await ct.whoami()).id;
             const permissions = await ct.globalPermissions();
             view.value = permissions.view;
             if (!permissions.view) return null;
@@ -151,6 +156,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             if (newer) storedSchema.value = newer.schema;
             ready.value = settingsReady(read);
             if (read.state === 'ok') settings.value = read.value;
+            personId.value = person;
         } catch (error) {
             ctFailed(error);
             return null;
@@ -158,7 +164,7 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         if (oldLayout.value || storedSchema.value !== null || !ready.value) return null;
         const { backendUrl, oauthClientId } = settings.value ?? {};
         if (!backendUrl || !oauthClientId) return null;
-        return { personId, backendUrl, clientId: oauthClientId };
+        return { personId: person, backendUrl, clientId: oauthClientId };
     }
 
     /** Step 4. Resolves when the login is decided; stays pending while the page leaves for a page login. */
@@ -236,6 +242,15 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         loading.value = false;
     }
 
+    async function reloadSettings(): Promise<void> {
+        try {
+            const read = await store.readSettings();
+            if (read.state === 'ok') settings.value = read.value;
+        } catch {
+            // The settings of startup stay; the backend decides each request anyway.
+        }
+    }
+
     function loginAgain(): void {
         void auth.startPageLogin(router.currentRoute.value.fullPath).catch(() => undefined);
     }
@@ -246,6 +261,8 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         settingsEditor,
         setupCapable,
         settings,
+        personId,
+        reloadSettings,
         storedSchema,
         appVersion: deps.appVersion,
         backendVersion: session.backendVersion,

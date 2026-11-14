@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import de from '@/i18n/de';
 import en from '@/i18n/en';
-import { BackendConfigError, BackendProblem, BackendUnreachable, UnexpectedResponse, isProgrammingError, problemFromBody, problemMessageKey } from './problems';
+import { BackendConfigError, BackendProblem, BackendUnreachable, UnexpectedResponse, isProgrammingError, problemFromBody, problemMessageKey, problemParams, retryMinutes } from './problems';
 
 const TYPE = 'https://github.com/lub90/ct-pass-store/blob/main/backend/docs/problems.md';
 
@@ -180,5 +180,37 @@ describe('isProgrammingError', () => {
             expect(isProgrammingError(new BackendProblem(slug, 400)), slug).toBe(false);
         }
         expect(isProgrammingError(new Error('x'))).toBe(false);
+    });
+});
+
+describe('retryMinutes', () => {
+    it.each([
+        [undefined, 1],
+        [0, 1],
+        [1, 1],
+        [60, 1],
+        [61, 2],
+        [125, 3],
+        [3600, 60],
+        [3601, 60],
+        [Number.MAX_SAFE_INTEGER, 60],
+    ])('%s s → %s min (clamped to 1..60)', (seconds, minutes) => {
+        expect(retryMinutes(seconds)).toBe(minutes);
+    });
+});
+
+describe('problemParams', () => {
+    it('gives the HTTP status for {status} and the minutes for {n}', () => {
+        const limited = new BackendProblem('too-many-attempts', 429);
+        limited.retryAfter = 125;
+        expect(problemParams(limited)).toEqual({ status: 429, n: 3 });
+        expect(problemParams(new BackendProblem('upstream-rate-limited', 503))).toEqual({ status: 503, n: 1 });
+        expect(problemParams(new BackendProblem('internal-error', 500))).toEqual({ status: 500 });
+        expect(problemParams(new UnexpectedResponse(502))).toEqual({ status: 502 });
+    });
+
+    it('fills {status} with a dash when there is no HTTP status', () => {
+        expect(problemParams(new BackendUnreachable())).toEqual({ status: '–' });
+        expect(problemParams(new Error('x'))).toEqual({ status: '–' });
     });
 });

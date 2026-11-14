@@ -23,6 +23,10 @@ const props = defineProps<{
     autocomplete?: string;
     help?: string;
     error?: string;
+    /** Start with the value visible (a value shown once, such as a generated password). */
+    revealed?: boolean;
+    /** Monospace, so look-alike characters (l, 1, I, O, 0) can be told apart. */
+    mono?: boolean;
 }>();
 const model = defineModel<string>();
 const emit = defineEmits<{ 'copy-failed': [] }>();
@@ -41,7 +45,7 @@ const describedby = computed(() => {
     const ids = [props.help ? `${id}-help` : '', props.error ? `${id}-error` : '', attrs['aria-describedby'] as string | undefined].filter(Boolean);
     return ids.length ? ids.join(' ') : undefined;
 });
-const shown = ref(false);
+const shown = ref(props.revealed === true);
 const copied = ref(false);
 let timer: ReturnType<typeof setTimeout> | undefined;
 
@@ -81,6 +85,7 @@ onBeforeUnmount(() => clearTimeout(timer));
                 :aria-describedby="describedby"
                 :aria-invalid="error ? true : undefined"
                 class="cps-secret__input"
+                :class="{ 'cps-secret__input--mono': mono }"
                 :style="{ paddingRight: `calc(var(--cps-control-h) * ${buttons} + var(--cps-space-2))` }"
                 :type="shown ? 'text' : 'password'"
                 :value="current"
@@ -158,6 +163,9 @@ onBeforeUnmount(() => clearTimeout(timer));
     min-height: calc(var(--cps-control-h) - 2px);
     width: calc(var(--cps-control-h) - 2px);
     margin-right: 1px;
+}
+.cps-secret__input--mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
 .cps-secret__help,
 .cps-secret__error {

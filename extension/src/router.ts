@@ -8,6 +8,7 @@ import type { RouteRequirement } from './app/app-state';
 import { BASE_PATH, CALLBACK_PATH } from './config';
 import AuthCallbackView from './views/AuthCallbackView.vue';
 import NotFoundView from './views/NotFoundView.vue';
+import PasswordView from './views/PasswordView.vue';
 import PlaceholderView from './views/PlaceholderView.vue';
 
 declare module 'vue-router' {
@@ -26,7 +27,7 @@ const placeholder = (path: string, titleKey: string, requires?: RouteRequirement
 });
 
 export const routes: RouteRecordRaw[] = [
-    placeholder('/', 'nav.myPassword'),
+    { path: '/', component: PasswordView },
     placeholder('/manage', 'nav.manage', 'admin'),
     placeholder('/manage/:personId', 'nav.manage', 'admin'),
     placeholder('/settings', 'nav.settings', 'editor'),

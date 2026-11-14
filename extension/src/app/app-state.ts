@@ -5,7 +5,7 @@
  * from its rights. These values only choose what to draw.
  */
 import { LoginStateError, LoginUnavailable, PersonMismatch } from '../backend/auth';
-import { BackendProblem, UnexpectedResponse, problemMessageKey } from '../backend/problems';
+import { BackendProblem, UnexpectedResponse, problemMessageKey, retryMinutes } from '../backend/problems';
 import { CtRateLimitedError } from '../ct/errors';
 import type { CtCategory, Permissions } from '../ct/types';
 import type { SettingsV2 } from '../model/schemas';
@@ -158,7 +158,7 @@ export interface FailureMessage {
     detail?: string;
 }
 
-const minutes = (seconds: number): number => Math.min(60, Math.max(1, Math.ceil(seconds / 60)));
+const minutes = retryMinutes;
 
 /** The login itself broke (not the backend): spec 8.2 „Die Anmeldung hat nicht geklappt“, for everyone. */
 function isLoginFlowError(error: unknown): boolean {

@@ -1,0 +1,436 @@
+<script setup lang="ts">
+/**
+ * States 2 and 3 of „Mein Passwort“ (spec 4.2), also used by „Passwörter verwalten“ (4.3). Mounted when the person
+ * asks for a new password; without anything to choose or confirm it sends right away (the direct path).
+ *
+ * Plaintext (typed or generated) lives only in this component's refs: never in storage, the address or a log. It is
+ * dropped on „Fertig“, „Abbrechen“, after saving and when the component unmounts (leaving the page). While any is on
+ * screen the session counts it as unsaved input, so a token problem asks for a renewal instead of reloading the page.
+ */
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
+import { isSettingsEditor } from '../app/app-state';
+import { useAppState } from '../app/useAppState';
+import { useSession } from '../app/useSession';
+import { PopupBlocked, PopupClosed } from '../backend/auth';
+import { BackendProblem, BackendUnreachable, UnexpectedResponse, problemMessageKey, problemParams } from '../backend/problems';
+import Banner from '../ui/Banner.vue';
+import ChoiceCard from '../ui/ChoiceCard.vue';
+import Pill from '../ui/Pill.vue';
+import SecretField from '../ui/SecretField.vue';
+import { canSubmit, nextAfterOverview, type FlowSettings, type FlowState } from './flow';
+import { MAX_LENGTH, SYMBOLS, checkPassword, type Rule } from './rules';
+import { usePasswordEntry } from './usePasswordEntry';
+
+const props = defineProps<{
+    personId: number;
+    /** Set for an admin acting for someone else (Task 13: warning banner and confirm dialog). */
+    forName?: string;
+    settings: FlowSettings;
+    hasEntry: boolean;
+}>();
+const emit = defineEmits<{
+    /** Back to state 1: `saved` after a chosen password, `generated` after „Fertig“. */
+    done: [outcome: 'cancelled' | 'saved' | 'generated'];
+    /** The stored entry may have changed (saved, or the outcome is unknown): the status should be read again. */
+    changed: [];
+}>();
+
+const { t } = useI18n();
+const session = useSession();
+const app = useAppState();
+const entry = usePasswordEntry(() => props.personId, { load: false });
+
+type RuleKey = 'length' | 'letter' | 'digit' | 'symbol' | 'chars';
+const RULES: { key: RuleKey; codes: Rule[] }[] = [
+    { key: 'length', codes: ['too-short', 'too-long'] },
+    { key: 'letter', codes: ['missing-letter'] },
+    { key: 'digit', codes: ['missing-digit'] },
+    { key: 'symbol', codes: ['missing-symbol'] },
+    { key: 'chars', codes: ['invalid-character'] },
+];
+/** Not "not yet" but wrong: more typing can't fix these. */
+const WRONG: readonly Rule[] = ['too-long', 'invalid-character'];
+const SESSION_SLUGS = new Set(['token-expired', 'invalid-token', 'missing-token']);
+
+const state = ref<FlowState>({ step: 'choose', mode: 'generate' });
+const password = ref('');
+const primary = ref('');
+const busy = ref(false);
+/** Above the button. `detail`: plain text, admins and settings editors only. */
+const error = ref<{ text: string; detail?: string } | null>(null);
+const primaryError = ref('');
+/** Rules the backend reported (`password-invalid`) for the password as sent. */
+const serverViolations = ref<Rule[]>([]);
+const unknownOutcome = ref(false);
+const copyFailed = ref(false);
+
+const requirePrimary = computed(() => props.settings.requirePasswordForPasswordChange);
+const mode = computed(() => (state.value.step === 'choose' ? state.value.mode : 'generate'));
+const choice = computed({
+    get: () => mode.value,
+    set: (value: string) => {
+        state.value = { step: 'choose', mode: value === 'custom' ? 'custom' : 'generate' };
+    },
+});
+const generated = computed(() => (state.value.step === 'result' ? (state.value.generated ?? '') : ''));
+const detailed = computed(() => session.admin.value || isSettingsEditor(app.settingsEditor.value));
+
+const check = computed(() =>
+    state.value.step === 'choose' ? canSubmit(state.value, { password: password.value, primaryPassword: primary.value }, props.settings) : { ok: false },
+);
+
+const violations = computed(() => checkPassword(password.value, props.settings.passwordLength));
+const rules = computed(() =>
+    RULES.map(({ key, codes }) => {
+        const local = violations.value.filter((c) => codes.includes(c));
+        const failed = serverViolations.value.some((c) => codes.includes(c)) || local.some((c) => WRONG.includes(c));
+        return { key, state: failed ? 'failed' : local.length > 0 ? 'open' : 'ok' };
+    }),
+);
+const ruleText = (key: RuleKey): string =>
+    key === 'length'
+        ? t('password.rules.length', { n: props.settings.passwordLength, max: MAX_LENGTH })
+        : key === 'symbol'
+          ? t('password.rules.symbol', { symbols: SYMBOLS.split('').join(' ') })
+          : t(`password.rules.${key}`);
+
+/** The characters the rules don't allow, named so that a pasted space or line break is visible. */
+const notAllowed = computed(() => {
+    const allowed = /[A-Za-z0-9]/;
+    const seen = [...new Set(password.value.split(''))].filter((c) => !allowed.test(c) && !SYMBOLS.includes(c));
+    return seen.map((c) => (c === ' ' ? t('password.rules.space') : c === '\t' ? t('password.rules.tab') : c === '\n' || c === '\r' ? t('password.rules.newline') : `„${c}“`)).join(', ');
+});
+
+// A new input invalidates what the backend said about the old one.
+watch(password, () => (serverViolations.value = []));
+watch(primary, () => (primaryError.value = ''));
+// Custom passwords switched off (settings reloaded): back to generating, the typed one is dropped.
+watch(
+    () => props.settings.allowCustomPassword,
+    (allowed) => {
+        if (!allowed && mode.value === 'custom') {
+            password.value = '';
+            state.value = { step: 'choose', mode: 'generate' };
+        }
+    },
+);
+
+function clearInput(): void {
+    password.value = '';
+    primary.value = '';
+}
+
+function showProblem(e: unknown): void {
+    error.value = { text: t(problemMessageKey(e), problemParams(e)) };
+    if (detailed.value && e instanceof BackendProblem && e.detail) error.value.detail = e.detail;
+}
+
+/** `sent`: the request may have reached the backend, so a lost answer leaves the outcome open. */
+async function fail(e: unknown, sent: boolean): Promise<void> {
+    // The session shows „Sitzung erneuern“ or logs in again; what was typed stays.
+    if (e instanceof PopupBlocked || e instanceof PopupClosed) return;
+    if (e instanceof BackendProblem && SESSION_SLUGS.has(e.slug)) return;
+    if (sent && (e instanceof BackendUnreachable || e instanceof UnexpectedResponse)) {
+        unknownOutcome.value = true;
+        emit('changed');
+        return;
+    }
+    if (!(e instanceof BackendProblem)) return showProblem(e);
+    switch (e.slug) {
+        case 'primary-password-required':
+        case 'invalid-primary-password':
+            primaryError.value = t(problemMessageKey(e));
+            return;
+        case 'password-invalid':
+            serverViolations.value = (e.violations ?? []) as Rule[];
+            return showProblem(e);
+        case 'custom-password-not-allowed':
+            showProblem(e);
+            await app.reloadSettings();
+            return;
+        default:
+            return showProblem(e);
+    }
+}
+
+async function submit(): Promise<void> {
+    if (busy.value || state.value.step !== 'choose' || !check.value.ok) return;
+    busy.value = true;
+    error.value = null;
+    primaryError.value = '';
+    unknownOutcome.value = false;
+    const primaryPwd = requirePrimary.value ? primary.value : undefined;
+    try {
+        // Inside the click handler, before anything else is awaited: a popup needs the click (spec 7.2).
+        await session.ensureFresh();
+    } catch (e) {
+        busy.value = false;
+        await fail(e, false);
+        return;
+    }
+    try {
+        if (mode.value === 'generate') {
+            const plaintext = await entry.generate(primaryPwd);
+            clearInput();
+            state.value = { step: 'result', generated: plaintext };
+            emit('changed');
+        } else {
+            await entry.setCustom(password.value, primaryPwd);
+            clearInput();
+            emit('changed');
+            emit('done', 'saved');
+        }
+    } catch (e) {
+        await fail(e, true);
+    } finally {
+        busy.value = false;
+    }
+}
+
+function cancel(): void {
+    clearInput();
+    emit('done', 'cancelled');
+}
+
+function finish(): void {
+    state.value = { step: 'choose', mode: 'generate' };
+    emit('done', 'generated');
+}
+
+let untrack = (): void => undefined;
+onMounted(() => {
+    untrack = session.trackUnsaved(() => password.value !== '' || primary.value !== '' || state.value.step === 'result');
+    if (nextAfterOverview(props.settings) === 'generate-now') void submit();
+});
+onBeforeUnmount(() => {
+    untrack();
+    clearInput();
+    state.value = { step: 'choose', mode: 'generate' };
+});
+</script>
+
+<template>
+    <section
+        v-if="state.step === 'result'"
+        class="cps-flow cps-flow__result"
+    >
+        <p>
+            <Pill kind="ok">
+                {{ t('password.saved') }}
+            </Pill>
+        </p>
+        <SecretField
+            :label="t('password.resultLabel')"
+            :value="generated"
+            readonly
+            revealed
+            mono
+            :reveal-label="t('password.reveal')"
+            :hide-label="t('password.hide')"
+            :copy-label="t('password.copy')"
+            :copied-label="t('password.copied')"
+            :error="copyFailed ? t('password.copyFailed') : undefined"
+            @copy-failed="copyFailed = true"
+        />
+        <Banner kind="warning">
+            <p>{{ t('password.onlyNow') }}</p>
+        </Banner>
+        <div class="cps-form-actions">
+            <button
+                type="button"
+                class="cps-btn cps-btn--primary"
+                @click="finish"
+            >
+                {{ t('password.done') }}
+            </button>
+        </div>
+    </section>
+
+    <form
+        v-else
+        class="cps-flow"
+        novalidate
+        @submit.prevent="submit"
+    >
+        <fieldset
+            v-if="settings.allowCustomPassword"
+            class="cps-flow__choice"
+        >
+            <legend>{{ t('password.choiceLabel') }}</legend>
+            <ChoiceCard
+                v-model="choice"
+                name="cps-password-mode"
+                value="generate"
+                :label="t('password.generate')"
+                :help="t('password.generateHelp')"
+            />
+            <ChoiceCard
+                v-model="choice"
+                name="cps-password-mode"
+                value="custom"
+                :label="t('password.custom')"
+            />
+        </fieldset>
+
+        <template v-if="mode === 'custom'">
+            <SecretField
+                v-model="password"
+                :label="t('password.customLabel')"
+                autocomplete="new-password"
+                :reveal-label="t('password.reveal')"
+                :hide-label="t('password.hide')"
+                :aria-describedby="'cps-flow-rules'"
+            />
+            <ul
+                id="cps-flow-rules"
+                class="cps-rules"
+                :aria-label="t('password.rules.label')"
+                aria-live="polite"
+            >
+                <li
+                    v-for="rule in rules"
+                    :key="rule.key"
+                    :data-rule="rule.key"
+                    :data-state="rule.state"
+                    :class="`cps-rules__item--${rule.state}`"
+                >
+                    <span
+                        class="cps-rules__mark"
+                        aria-hidden="true"
+                    >{{ rule.state === 'ok' ? '✓' : rule.state === 'failed' ? '✗' : '○' }}</span>
+                    <span>{{ ruleText(rule.key) }}</span>
+                    <span class="cps-rules__state">{{ t(`password.rules.${rule.state}`) }}</span>
+                    <span
+                        v-if="rule.key === 'chars' && notAllowed"
+                        class="cps-rules__named"
+                    >{{ t('password.rules.notAllowed') }} {{ notAllowed }}</span>
+                </li>
+            </ul>
+        </template>
+
+        <SecretField
+            v-if="requirePrimary"
+            v-model="primary"
+            :label="t('password.primaryLabel')"
+            autocomplete="current-password"
+            :reveal-label="t('password.reveal')"
+            :hide-label="t('password.hide')"
+            :error="primaryError || undefined"
+        />
+
+        <Banner
+            v-if="unknownOutcome"
+            kind="warning"
+        >
+            <p>{{ t('password.unknownOutcome') }}</p>
+        </Banner>
+        <div
+            v-if="error"
+            class="cps-flow__error"
+            role="alert"
+        >
+            <p>{{ error.text }}</p>
+            <details v-if="error.detail">
+                <summary>{{ t('state.details') }}</summary>
+                <p>{{ error.detail }}</p>
+            </details>
+        </div>
+
+        <div class="cps-form-actions">
+            <button
+                type="submit"
+                class="cps-btn cps-btn--primary"
+                :disabled="!check.ok || busy"
+                :aria-describedby="check.reason ? 'cps-flow-hint' : undefined"
+            >
+                {{ mode === 'custom' ? t('password.submitCustom') : t('password.submitGenerate') }}
+            </button>
+            <button
+                type="button"
+                class="cps-btn cps-btn--ghost"
+                @click="cancel"
+            >
+                {{ t('common.cancel') }}
+            </button>
+        </div>
+        <p
+            v-if="check.reason"
+            id="cps-flow-hint"
+            class="cps-flow__hint"
+        >
+            {{ t(check.reason) }}
+        </p>
+    </form>
+</template>
+
+<style scoped>
+.cps-flow {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cps-space-4);
+}
+.cps-flow p {
+    margin: 0;
+}
+.cps-flow__choice {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cps-space-2);
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+.cps-flow__choice legend {
+    margin-bottom: var(--cps-space-2);
+    font-weight: var(--cps-weight-strong);
+}
+.cps-rules {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cps-space-1);
+    margin: calc(-1 * var(--cps-space-2)) 0 0;
+    padding: 0;
+    list-style: none;
+    font-size: var(--cps-size-sm);
+}
+.cps-rules li {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 var(--cps-space-2);
+    color: var(--cps-text-muted);
+}
+.cps-rules__item--ok {
+    color: var(--cps-text);
+}
+.cps-rules__item--failed {
+    color: var(--cps-text);
+}
+.cps-rules__item--ok .cps-rules__mark {
+    color: var(--cps-success);
+}
+.cps-rules__item--failed .cps-rules__mark {
+    color: var(--cps-danger);
+}
+.cps-rules__named {
+    flex-basis: 100%;
+    padding-left: var(--cps-space-4);
+}
+.cps-rules__state {
+    /* For screen readers: the mark is only drawn. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+.cps-flow__error {
+    padding-left: var(--cps-space-2);
+    border-left: 3px solid var(--cps-danger);
+}
+.cps-flow__hint {
+    color: var(--cps-text-muted);
+    font-size: var(--cps-size-sm);
+}
+</style>

@@ -1,5 +1,5 @@
 import type { BackendApi, LoginResult, SelfTestResult } from '@/backend/api';
-import { BackendProblem } from '@/backend/problems';
+import { BackendProblem, BackendUnreachable, UnexpectedResponse } from '@/backend/problems';
 import { checkPassword, DIGITS, LETTERS, SYMBOLS } from '@/password/rules';
 
 /**
@@ -41,6 +41,12 @@ export interface FakeBackendSettings {
 export interface FakeBackendControls {
     /** The next call fails with this problem (once). */
     failNext(slug: string, status: number, extra?: { retryAfter?: number; violations?: string[]; detail?: string }): void;
+    /**
+     * The next call fails like the transport would: `unreachable` (network, CORS, timeout) or `unexpected` (an answer
+     * off the contract, HTTP 502). `afterWrite`: the call still does its work first, like a timeout after the backend
+     * stored the password. Once.
+     */
+    breakNext(kind: 'unreachable' | 'unexpected', options?: { afterWrite?: boolean }): void;
     /** The token has expired: calls give `token-expired` until the next `login`. */
     expireToken(): void;
     setSettings(settings: FakeBackendSettings): void;
@@ -118,13 +124,29 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
     let loggedIn = options.loggedIn ?? true;
     let expired = false;
     let failure: BackendProblem | null = null;
+    let broken: { kind: 'unreachable' | 'unexpected'; afterWrite: boolean } | null = null;
 
+    const transportError = (kind: 'unreachable' | 'unexpected'): Error => (kind === 'unreachable' ? new BackendUnreachable() : new UnexpectedResponse(502));
     const step = () => {
+        if (broken && !broken.afterWrite) {
+            const { kind } = broken;
+            broken = null;
+            throw transportError(kind);
+        }
         if (failure) {
             const f = failure;
             failure = null;
             throw f;
         }
+    };
+    /** The end of a call: a break meant for after the work happens here. */
+    const finish = <T>(result: T): T => {
+        if (broken?.afterWrite) {
+            const { kind } = broken;
+            broken = null;
+            throw transportError(kind);
+        }
+        return result;
     };
     const authenticate = () => {
         step();
@@ -153,6 +175,9 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
         failNext(slug, status, extra) {
             failure = problem(slug, status, extra);
         },
+        breakNext(kind, opts) {
+            broken = { kind, afterWrite: opts?.afterWrite === true };
+        },
         expireToken() {
             expired = true;
         },
@@ -176,7 +201,7 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
         async getEntry(personId) {
             authorize(personId);
             requireExisting(personId);
-            return store.has(personId) ? 'set' : 'none';
+            return finish(store.has(personId) ? 'set' : 'none');
         },
 
         async getEntryRaw(id) {
@@ -204,13 +229,14 @@ export function createFakeBackend(options: FakeBackendOptions = {}): BackendApi 
                 password = generated = generate(settings.passwordLength);
             }
             store.set(personId, password);
-            return generated === undefined ? {} : { generated };
+            return finish(generated === undefined ? {} : { generated });
         },
 
         async deleteEntry(personId, primaryPwd) {
             authorize(personId);
             checkPrimary(primaryPwd);
             store.delete(personId);
+            finish(undefined);
         },
 
         async selfTest(write = false): Promise<SelfTestResult> {

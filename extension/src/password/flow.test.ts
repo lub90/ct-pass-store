@@ -69,12 +69,6 @@ describe('canSubmit', () => {
         expect(result).toEqual({ ok: false, reason: 'password.customNotAllowed' });
     });
 
-    it('is not ok in the overview and result steps', () => {
-        const notReady = { ok: false, reason: 'password.notReady' };
-        expect(canSubmit({ step: 'overview' }, { password: valid, primaryPassword: 'x' }, settings(true, true))).toEqual(notReady);
-        expect(canSubmit({ step: 'result' }, { password: valid, primaryPassword: 'x' }, settings(true, true))).toEqual(notReady);
-    });
-
     it('checks the primary password before the custom one', () => {
         const result = canSubmit({ step: 'choose', mode: 'custom' }, { password: 'bad', primaryPassword: '' }, settings(true, true));
         expect(result.reason).toBe('password.primaryRequired');
@@ -116,7 +110,7 @@ describe('canSubmit reasons', () => {
             { password: 'bad', primaryPassword: 'x' },
             { password: 'Abcdefgh12!?', primaryPassword: 'x' },
         ];
-        const states = [{ step: 'overview' }, { step: 'result' }, { step: 'choose', mode: 'generate' }, { step: 'choose', mode: 'custom' }] as const;
+        const states = [{ step: 'choose', mode: 'generate' }, { step: 'choose', mode: 'custom' }] as const;
         for (const custom of [true, false]) {
             for (const require of [true, false]) {
                 for (const st of states) {
@@ -127,7 +121,7 @@ describe('canSubmit reasons', () => {
                 }
             }
         }
-        expect([...reasons].sort()).toEqual(['password.customNotAllowed', 'password.invalidCustom', 'password.notReady', 'password.primaryRequired']);
+        expect([...reasons].sort()).toEqual(['password.customNotAllowed', 'password.invalidCustom', 'password.primaryRequired']);
         for (const messages of [de, en]) {
             for (const reason of reasons) {
                 const value = reason.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], messages);

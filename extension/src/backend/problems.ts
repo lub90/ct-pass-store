@@ -138,3 +138,19 @@ export function problemMessageKey(error: unknown): string {
     if (error instanceof UnexpectedResponse) return 'problems.unexpected';
     return GENERIC;
 }
+
+/** Minutes to show for a `retryAfter` in seconds: rounded up, at least 1 and at most 60 (a wild value stays readable). */
+export function retryMinutes(seconds: number | undefined): number {
+    return Math.min(60, Math.max(1, Math.ceil((seconds ?? 0) / 60)));
+}
+
+const RATE_LIMIT_SLUGS = new Set(['too-many-attempts', 'upstream-rate-limited']);
+
+/** The parameters of the text of `problemMessageKey(error)`: `{status}` (a dash without HTTP status) and `{n}` minutes. */
+export function problemParams(error: unknown): { status: number | string; n?: number } {
+    if (error instanceof BackendProblem) {
+        return RATE_LIMIT_SLUGS.has(error.slug) ? { status: error.status, n: retryMinutes(error.retryAfter) } : { status: error.status };
+    }
+    if (error instanceof UnexpectedResponse) return { status: error.status };
+    return { status: '–' };
+}
