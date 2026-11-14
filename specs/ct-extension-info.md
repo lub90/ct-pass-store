@@ -31,6 +31,12 @@ may change between versions, so verify anything critical against your own instan
 - Managing extensions requires the separate permission **"administer custom modules"**. "administer settings" or
   "administer persons" isn't enough (`POST /custommodules` then returns `401`).
 - **Update = Edit + upload the new ZIP to the existing module.** This keeps all data.
+  - Over the API (measured 2026-11-14; not in the OpenAPI document): the admin page does `PUT /api/custommodules/{id}`
+    with the module JSON (only needed when name, shorty etc. change), then `POST /api/files/custom_module/{id}` with the
+    ZIP as multipart field `files[]` (plus `CSRF-Token`). That answers `200` with the stored file; the module serves the
+    new build at once, with its data kept.
+  - Deep paths are served: after the upload, `/ccm/ctpassstore/`, `/ccm/ctpassstore/settings/rules` and
+    `/ccm/ctpassstore/auth/callback` all answered `200` with the extension's `index.html` (spec 14.2).
 - **Delete + reinstall is NOT an update.** Deleting an extension removes:
   - all its categories and data values
   - its permissions on every role, including permissions an admin assigned manually
@@ -178,6 +184,10 @@ seeing their password or login token. Observed behavior:
   (e.g. about 10 minutes for authorization codes) probably apply.
 - **Redirect into an extension:** the registered redirect URI can be the extension's page (`/ccm/<key>/`). ChurchTools
   serves the extension for any sub-path, and the query parameters (`code`, `state`) survive client-side routing.
+- **No Cross-Origin-Opener-Policy (measured 2026-11-14):** ChurchTools sends no COOP, COEP or CORP header on
+  `/oauth/authorize` (consent page logged in and anonymous) nor on `/ccm/<key>/…`. The CSP has `connect-src *` and
+  `frame-ancestors 'self'`, plus `X-Frame-Options: SAMEORIGIN`. So an OAuth popup keeps `window.opener` and can hand
+  the code back to the extension page; an iframe for silent renewal is not an option.
 - **Deep redirect URI and consent (measured 2026-11-13, contract test `AdminGroupContractTest`):**
   - `POST /api/oauthclients` accepts the `redirectUri` string `https://<instance>/ccm/ctpassstore/auth/callback` (`200`;
     the answer holds `data.identifier`, `data.clientSecret` and `redirectUri` as a list) and `DELETE
