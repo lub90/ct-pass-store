@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import de from '@/i18n/de';
+import en from '@/i18n/en';
 import { canSubmit, nextAfterOverview, type FlowSettings } from './flow';
 
 const settings = (allowCustomPassword: boolean, requirePasswordForPasswordChange: boolean, passwordLength = 12): FlowSettings => ({
@@ -68,12 +70,69 @@ describe('canSubmit', () => {
     });
 
     it('is not ok in the overview and result steps', () => {
-        expect(canSubmit({ step: 'overview' }, { password: valid, primaryPassword: 'x' }, settings(true, true)).ok).toBe(false);
-        expect(canSubmit({ step: 'result' }, { password: valid, primaryPassword: 'x' }, settings(true, true)).ok).toBe(false);
+        const notReady = { ok: false, reason: 'password.notReady' };
+        expect(canSubmit({ step: 'overview' }, { password: valid, primaryPassword: 'x' }, settings(true, true))).toEqual(notReady);
+        expect(canSubmit({ step: 'result' }, { password: valid, primaryPassword: 'x' }, settings(true, true))).toEqual(notReady);
     });
 
     it('checks the primary password before the custom one', () => {
         const result = canSubmit({ step: 'choose', mode: 'custom' }, { password: 'bad', primaryPassword: '' }, settings(true, true));
         expect(result.reason).toBe('password.primaryRequired');
+    });
+});
+
+describe('canSubmit in generate mode', () => {
+    const state = { step: 'choose', mode: 'generate' } as const;
+    it.each([
+        [true, true],
+        [true, false],
+        [false, true],
+        [false, false],
+    ])('allowCustom=%s, requirePrimary=%s', (custom, require) => {
+        const s = settings(custom, require);
+        if (require) {
+            expect(canSubmit(state, { password: '', primaryPassword: '' }, s)).toEqual({ ok: false, reason: 'password.primaryRequired' });
+        } else {
+            expect(canSubmit(state, { password: '', primaryPassword: '' }, s)).toEqual({ ok: true });
+        }
+        expect(canSubmit(state, { password: '', primaryPassword: 'x' }, s)).toEqual({ ok: true });
+    });
+});
+
+describe('canSubmit with passwordLength 64', () => {
+    const state = { step: 'choose', mode: 'custom' } as const;
+    const pw = (n: number) => `Aa1!${'x'.repeat(n - 4)}`;
+    it('refuses 63 characters and accepts 64', () => {
+        expect(canSubmit(state, { password: pw(63), primaryPassword: '' }, settings(true, false, 64))).toEqual({ ok: false, reason: 'password.invalidCustom' });
+        expect(canSubmit(state, { password: pw(64), primaryPassword: '' }, settings(true, false, 64))).toEqual({ ok: true });
+    });
+});
+
+describe('canSubmit reasons', () => {
+    it('exist in de and en', () => {
+        const reasons = new Set<string>();
+        const inputs = [
+            { password: '', primaryPassword: '' },
+            { password: 'bad', primaryPassword: 'x' },
+            { password: 'Abcdefgh12!?', primaryPassword: 'x' },
+        ];
+        const states = [{ step: 'overview' }, { step: 'result' }, { step: 'choose', mode: 'generate' }, { step: 'choose', mode: 'custom' }] as const;
+        for (const custom of [true, false]) {
+            for (const require of [true, false]) {
+                for (const st of states) {
+                    for (const input of inputs) {
+                        const r = canSubmit(st, input, settings(custom, require)).reason;
+                        if (r) reasons.add(r);
+                    }
+                }
+            }
+        }
+        expect([...reasons].sort()).toEqual(['password.customNotAllowed', 'password.invalidCustom', 'password.notReady', 'password.primaryRequired']);
+        for (const messages of [de, en]) {
+            for (const reason of reasons) {
+                const value = reason.split('.').reduce<unknown>((o, k) => (o as Record<string, unknown> | undefined)?.[k], messages);
+                expect(typeof value, reason).toBe('string');
+            }
+        }
     });
 });

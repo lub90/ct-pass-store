@@ -5,6 +5,8 @@
  */
 export type Rule = 'too-short' | 'too-long' | 'missing-letter' | 'missing-digit' | 'missing-symbol' | 'invalid-character';
 
+export const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+export const DIGITS = '0123456789';
 export const SYMBOLS = '!@$%&*-_+=?.';
 export const MAX_LENGTH = 128;
 

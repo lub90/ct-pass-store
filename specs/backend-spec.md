@@ -856,10 +856,11 @@ These sections describe behavior per unit. Each numbered rule should map to at l
    other character; changing it requires changing both (Q8).
 2. The password contains at least one letter, one digit and one symbol.
 3. Its length is at least `passwordLength`.
-4. Its length is at most **128** characters. RSA-4096 with OAEP/SHA-256 can encrypt at most 446 bytes, so a longer
+4. Its length is at most **128** bytes (UTF-8, like `strlen`). RSA-4096 with OAEP/SHA-256 can encrypt at most 446 bytes, so a longer
    password would make the encryption fail (Q8). The length is checked **first**, before any other rule runs, so huge
    inputs cost nothing.
-5. Validation works on bytes, and the allowed set is ASCII-only, so byte length equals character length.
+5. Validation works on bytes (`strlen`): the length rules count UTF-8 bytes, so `ä` counts 2, `€` 3 and an emoji 4 (and
+   is invalid anyway).
 6. Each violated rule is reported (`too-short`, `too-long`, `missing-letter`, `missing-digit`,
    `missing-symbol`, `invalid-character`) for the `violations` member.
 

@@ -1,6 +1,6 @@
 import type { BackendApi, LoginResult, SelfTestResult } from '@/backend/api';
 import { BackendProblem } from '@/backend/problems';
-import { checkPassword, SYMBOLS } from '@/password/rules';
+import { checkPassword, DIGITS, LETTERS, SYMBOLS } from '@/password/rules';
 
 /**
  * In-memory backend for tests and the demo. Applies the backend's rules (backend spec 4.1, 4.3 to 4.9, 5.1) in the
@@ -50,8 +50,6 @@ export interface FakeBackendControls {
     readonly entries: ReadonlyMap<number, string>;
 }
 
-const LETTERS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-const DIGITS = '0123456789';
 const ALLOWED = LETTERS + DIGITS + SYMBOLS;
 // The policy check itself is `checkPassword` (`password/rules.ts`), one source with the extension's own feedback.
 

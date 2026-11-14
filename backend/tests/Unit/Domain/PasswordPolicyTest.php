@@ -228,6 +228,19 @@ final class PasswordPolicyTest extends TestCase
         self::assertSame($expected, $this->policy->violations($password, $minLength));
     }
 
+    /**
+     * @return list<int> the ASCII code points that appear in no shared password
+     */
+    private function uncoveredAsciiCodes(): array
+    {
+        $seen = '';
+        foreach (self::sharedCases() as [$password]) {
+            $seen .= $password;
+        }
+
+        return array_values(array_filter(range(0, 127), static fn(int $code): bool => !str_contains($seen, chr($code))));
+    }
+
     public function testSharedCasesCoverTheBoundariesAndEveryCode(): void
     {
         $codes = [];
@@ -240,6 +253,7 @@ final class PasswordPolicyTest extends TestCase
         }
 
         self::assertGreaterThan(100, $count);
+        self::assertSame([], $this->uncoveredAsciiCodes(), 'The shared cases must pin the whole ASCII character contract.');
         self::assertEqualsCanonicalizing(['too-short', 'too-long', 'missing-letter', 'missing-digit', 'missing-symbol', 'invalid-character'], array_keys($codes));
     }
 

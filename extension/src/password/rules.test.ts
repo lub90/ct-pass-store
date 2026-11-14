@@ -38,12 +38,12 @@ describe('checkPassword', () => {
     });
 
     it('reports every allowed character as valid', () => {
-        const all = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' + SYMBOLS;
+        const all = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$%&*-_+=?.';
         for (const ch of all) expect(checkPassword(`Aa1!bbbbbbbb${ch}`, 12), ch).toEqual([]);
     });
 
     it('rejects every other ASCII code point', () => {
-        const allowed = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789' + SYMBOLS;
+        const allowed = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@$%&*-_+=?.';
         for (let code = 0; code < 128; code++) {
             const ch = String.fromCharCode(code);
             if (allowed.includes(ch)) continue;
@@ -56,17 +56,27 @@ describe('checkPassword', () => {
     });
 });
 
+describe('the shared cases', () => {
+    it('cover all 128 ASCII code points', () => {
+        const seen = new Set<number>();
+        for (const c of cases as Case[]) for (const ch of c.password) if (ch.codePointAt(0)! < 128) seen.add(ch.codePointAt(0)!);
+        const missing = Array.from({ length: 128 }, (_, i) => i).filter((i) => !seen.has(i));
+        expect(missing).toEqual([]);
+    });
+});
+
 describe('the fake backend', () => {
     it('answers every shared case with the same violations (one source)', async () => {
         const { createFakeBackend } = await import('@/dev/fake-backend');
         for (const c of cases as Case[]) {
             if (c.minLength < 12 || c.minLength > 64) continue;
             const fake = createFakeBackend({ passwordLength: c.minLength, requirePasswordForPasswordChange: false });
-            const problem = await fake.putEntry(1, { secondaryPwd: c.password }).then(
-                () => null,
-                (e: { violations?: string[] }) => e,
-            );
-            expect(problem?.violations ?? [], c.name).toEqual(c.violations);
+            const result = fake.putEntry(1, { secondaryPwd: c.password });
+            if (c.violations.length === 0) {
+                await expect(result, c.name).resolves.toEqual({});
+            } else {
+                await expect(result, c.name).rejects.toMatchObject({ slug: 'password-invalid', violations: c.violations });
+            }
         }
     });
 });
