@@ -14,6 +14,7 @@ import { SESSION_KEY, createSession } from '../app/useSession';
 import type { BackendApi } from '../backend/api';
 import { Auth, CALLBACK_WINDOW_KEY, TOKEN_KEY, type AuthEnv, type CallbackWindow } from '../backend/auth';
 import { backendBase } from '../backend/http';
+import { BackendUnreachable } from '../backend/problems';
 import type { CtApi } from '../ct/api';
 import type { Permissions } from '../ct/types';
 import { createFakeBackend } from '../dev/fake-backend';
@@ -23,7 +24,7 @@ import type { SettingsV2 } from '../model/schemas';
 import { createAppRouter } from '../router';
 import { ChurchToolsKv } from '../store/churchtools-kv';
 import { ExtensionStore } from '../store/repository';
-import { answerConfirm } from '../ui/useConfirm';
+import { answerConfirm, pendingConfirm } from '../ui/useConfirm';
 import ManageView from './ManageView.vue';
 
 const ORIGIN = 'https://ct.example';
@@ -197,14 +198,21 @@ function fakes(o: Options) {
         version: '0.1.0',
         entries: o.entries ?? {},
     });
+    /** `hold`: status reads wait for it; `fail`: status reads fail (unreachable). */
+    const gets: { hold: Promise<void> | null; fail: boolean } = { hold: null, fail: false };
     const calls = { get: [] as number[], put: [] as { id: number; body: Record<string, unknown> }[], del: [] as { id: number; primaryPwd?: string }[] };
     const counted: BackendApi = {
         ...fakeBackend,
-        getEntry: (id) => (calls.get.push(id), fakeBackend.getEntry(id)),
+        getEntry: async (id) => {
+            calls.get.push(id);
+            if (gets.hold) await gets.hold;
+            if (gets.fail) throw new BackendUnreachable();
+            return fakeBackend.getEntry(id);
+        },
         putEntry: (id, body) => (calls.put.push({ id, body: { ...body } }), fakeBackend.putEntry(id, body)),
         deleteEntry: (id, primaryPwd) => (calls.del.push(primaryPwd === undefined ? { id } : { id, primaryPwd }), fakeBackend.deleteEntry(id, primaryPwd)),
     };
-    return { ct, fakeCt, fakeBackend, counted, calls, counts, settings };
+    return { ct, fakeCt, fakeBackend, counted, calls, counts, settings, gets };
 }
 
 function browser(o: Options) {
@@ -459,13 +467,15 @@ describe('rights', () => {
 });
 
 describe('the page checks its own right, on top of the frame', () => {
-    async function mountAlone(state: AppState) {
-        const o: Options = {};
+    async function mountAlone(state: AppState, o: Options = {}) {
         const f = fakes(o);
         const b = browser(o);
         const router = createAppRouter(createMemoryHistory());
         await router.push(`/manage/${MUELLER}`);
         const auth = new Auth(() => f.counted, b.env);
+        // What startup does before any page shows (useAppState step 3).
+        auth.configure({ backendUrl: BACKEND, clientId: 'oauth-client-1' });
+        auth.bindPerson(ME);
         const session = createSession(auth, () => router.currentRoute.value.fullPath);
         const stateRef = ref<AppState>(state);
         const app = {
@@ -494,6 +504,19 @@ describe('the page checks its own right, on top of the frame', () => {
         expect(counts.members).toBe(0);
         expect(counts.accessReads).toBe(0);
         expect(calls.get).toEqual([]);
+    });
+
+    it('M1: a delete confirmed after the page unmounted sends nothing, even with the address unchanged', async () => {
+        const { wrapper, calls, fakeBackend } = await mountAlone('admin', { entries: { [MUELLER]: VALID } });
+        clickNow(wrapper as unknown as VueWrapper, TEXT.delete);
+        await settle();
+        expect(pendingConfirm.value?.text).toBe(TEXT.deleteText('Jürgen Müller'));
+        wrapper.unmount();
+        mounted.splice(mounted.indexOf(wrapper as unknown as VueWrapper), 1);
+        answerConfirm({ confirmed: true });
+        await settle();
+        expect(calls.del).toEqual([]);
+        expect(fakeBackend.entries.get(MUELLER)).toBe(VALID);
     });
 
     it('loads once the state becomes admin', async () => {
@@ -651,7 +674,7 @@ describe('selecting oneself', () => {
         const { wrapper, calls } = await start({ path: `/manage/${ME}`, entries: { [ME]: VALID } });
         expect(card(wrapper).text()).toContain('Anna Admin');
         expect(button(wrapper, TEXT.delete)).toBeUndefined();
-        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, 'Neues Passwort festlegen');
         expect(wrapper.find('.cps-flow-for').exists()).toBe(false);
         await click(wrapper, TEXT.generate);
         expect(dialog()).toBeNull();
@@ -771,3 +794,92 @@ describe('ChurchTools names are plain text', () => {
 function everything(w: VueWrapper): string {
     return document.body.innerHTML + w.findAll('input').map((i) => (i.element as HTMLInputElement).value).join('|');
 }
+
+describe('review fixes', () => {
+    it.each(['pending', 'failing'])('I1: after a failed attempt, with the status read %s, a resubmit still asks first', async (mode) => {
+        const { wrapper, calls, fakeBackend, gets } = await start({ path: `/manage/${MULDE}` });
+        expect(pill(wrapper).text()).toBe(TEXT.none);
+        await click(wrapper, TEXT.newPassword);
+        if (mode === 'pending') gets.hold = new Promise<void>(() => undefined);
+        else gets.fail = true;
+        // A lost answer: the password may have been stored, the status is read again.
+        fakeBackend.breakNext('unreachable', { afterWrite: true });
+        await click(wrapper, TEXT.generate);
+        expect(calls.put).toHaveLength(1);
+        expect(dialog()).toBeNull();
+        await click(wrapper, TEXT.generate);
+        expect(dialogText()).toBe(TEXT.replaceText('Bernd Mulde'));
+        expect(calls.put).toHaveLength(1);
+        await answer(TEXT.cancel);
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('I1: a person known to have no entry is not asked about', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MULDE}` });
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.generate);
+        expect(dialog()).toBeNull();
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('M1: a delete confirmed after the page was left sends nothing', async () => {
+        const { wrapper, router, calls, fakeBackend } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        await click(wrapper, TEXT.delete);
+        await router.push('/about');
+        await settle();
+        await answer(TEXT.delete);
+        expect(calls.del).toEqual([]);
+        expect(fakeBackend.entries.get(MUELLER)).toBe(VALID);
+    });
+
+    it('M1: a delete confirmed after another person was selected sends nothing', async () => {
+        const { wrapper, router, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        await click(wrapper, TEXT.delete);
+        await router.push(`/manage/${MULDE}`);
+        await settle();
+        await answer(TEXT.delete);
+        expect(calls.del).toEqual([]);
+    });
+
+    it('M2: a double click on „Löschen“ opens one dialog and deletes once', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID } });
+        clickNow(wrapper, TEXT.delete);
+        clickNow(wrapper, TEXT.delete);
+        await settle();
+        await answer(TEXT.delete);
+        expect(dialog()).toBeNull();
+        expect(calls.del).toHaveLength(1);
+    });
+
+    it('M2: a double click on „Neues Passwort“ (direct path) opens one dialog and sends once', async () => {
+        const { wrapper, calls } = await start({ path: `/manage/${MUELLER}`, entries: { [MUELLER]: VALID }, allowCustom: false, requirePrimary: false });
+        clickNow(wrapper, TEXT.newPassword);
+        clickNow(wrapper, TEXT.newPassword);
+        await settle();
+        await answer(TEXT.proceed);
+        expect(dialog()).toBeNull();
+        expect(calls.put).toHaveLength(1);
+    });
+
+    it('M4: oneself with an entry: the 4.2 label and the hint', async () => {
+        const { wrapper } = await start({ path: `/manage/${ME}`, entries: { [ME]: VALID } });
+        expect(button(wrapper, 'Neues Passwort festlegen')).toBeDefined();
+        expect(button(wrapper, TEXT.newPassword)).toBeUndefined();
+        expect(wrapper.text()).toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
+    });
+
+    it('M4: oneself without an entry: „Passwort festlegen“, no hint', async () => {
+        const { wrapper } = await start({ path: `/manage/${ME}` });
+        expect(button(wrapper, 'Passwort festlegen')).toBeDefined();
+        expect(wrapper.text()).not.toContain('Dein bisheriges Passwort funktioniert danach nicht mehr.');
+    });
+
+    it('M6: logged out of ChurchTools while loading the members: its own text, not „antwortet nicht“', async () => {
+        const s = await start({ path: '/about' });
+        s.fakeCt.failNext(401);
+        await s.router.push('/manage');
+        await settle();
+        expect(s.wrapper.text()).toContain('Du bist in ChurchTools nicht mehr angemeldet. Lade die Seite neu.');
+        expect(s.wrapper.text()).not.toContain('ChurchTools antwortet gerade nicht');
+    });
+});

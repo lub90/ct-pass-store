@@ -75,6 +75,7 @@ const en: Messages = {
         accessMissing:
             'The users group is unknown: the extension is not fully set up yet, or you are missing the ChurchTools right “view custom category” on the category “access”.',
         accessInvalid: 'The access settings can’t be read. Check them under “Access”.',
+        ctLoggedOut: 'You are no longer logged in to ChurchTools. Reload the page.',
         newPassword: 'New password',
         delete: 'Delete',
         forName: 'You are setting the password for {name}.',

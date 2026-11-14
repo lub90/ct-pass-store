@@ -9,7 +9,7 @@
  * the users group, 16.2 A5). A person comes only from that list: an id in the address that isn't a member (or isn't
  * an id) shows a notice and is never asked about. Names from ChurchTools are plain text everywhere.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { parsePersonId, searchUsers } from '../admin/manage';
@@ -19,7 +19,7 @@ import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
 import { PopupBlocked, PopupClosed } from '../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams, retryMinutes } from '../backend/problems';
-import { CtForbiddenError, CtRateLimitedError } from '../ct/errors';
+import { CtForbiddenError, CtRateLimitedError, NotAuthenticatedError } from '../ct/errors';
 import PasswordFlow from '../password/PasswordFlow.vue';
 import { usePasswordEntry } from '../password/usePasswordEntry';
 import Banner from '../ui/Banner.vue';
@@ -101,6 +101,7 @@ const missingRight = computed(() => {
 const loadError = computed(() => {
     const m = members.value;
     if (m.state !== 'error') return null;
+    if (m.error instanceof NotAuthenticatedError) return t('manage.ctLoggedOut');
     if (m.error instanceof CtRateLimitedError) return t('state.ctRateLimited', { n: retryMinutes(m.error.retryAfterMs / 1000) });
     return t('state.ctUnavailable');
 });
@@ -130,7 +131,25 @@ const picked = computed<PersonOption | null>({
 const entry = usePasswordEntry(() => (allowed.value && selected.value ? selected.value.id : null));
 
 const flowOpen = ref(false);
+/**
+ * Whether the flow must ask before replacing (spec 4.3). Fails closed: true unless the status was known to be „none“
+ * when the flow opened, and once true it stays true while the flow is open — a status being read again (`loading`) or
+ * failing (`error`) after an attempt never lets a resubmit skip the dialog.
+ */
+const flowHasEntry = ref(true);
+watch(
+    () => entry.status.value,
+    (status) => {
+        if (flowOpen.value && status !== 'none') flowHasEntry.value = true;
+    },
+);
 const busy = ref(false);
+/** A click is being handled (renewal, dialog): a second click does nothing. */
+const pending = ref(false);
+let alive = true;
+onBeforeUnmount(() => {
+    alive = false;
+});
 const done = ref<'saved' | 'deleted' | null>(null);
 const actionError = ref<unknown>(null);
 
@@ -162,7 +181,8 @@ function showError(error: unknown): void {
 
 async function openFlow(): Promise<void> {
     const person = selected.value;
-    if (!person) return;
+    if (!person || pending.value) return;
+    pending.value = true;
     done.value = null;
     actionError.value = null;
     try {
@@ -171,8 +191,12 @@ async function openFlow(): Promise<void> {
     } catch (error) {
         showError(error);
         return;
+    } finally {
+        pending.value = false;
     }
-    if (selected.value?.id === person.id) flowOpen.value = true;
+    if (!alive || selected.value?.id !== person.id) return;
+    flowHasEntry.value = entry.status.value !== 'none';
+    flowOpen.value = true;
 }
 
 function flowDone(outcome: 'cancelled' | 'saved' | 'generated'): void {
@@ -183,7 +207,16 @@ function flowDone(outcome: 'cancelled' | 'saved' | 'generated'): void {
 
 async function remove(): Promise<void> {
     const person = selected.value;
-    if (!person || busy.value || !settings.value) return;
+    if (!person || busy.value || pending.value || !settings.value) return;
+    pending.value = true;
+    try {
+        await removeFor(person, settings.value.requirePasswordForPasswordChange);
+    } finally {
+        pending.value = false;
+    }
+}
+
+async function removeFor(person: PersonOption, requirePrimary: boolean): Promise<void> {
     done.value = null;
     actionError.value = null;
     try {
@@ -193,7 +226,6 @@ async function remove(): Promise<void> {
         showError(error);
         return;
     }
-    const requirePrimary = settings.value.requirePasswordForPasswordChange;
     const question: ConfirmOptions = {
         title: t('manage.deleteTitle'),
         text: t('manage.deleteText', { name: person.name }),
@@ -204,7 +236,8 @@ async function remove(): Promise<void> {
     // The admin's own ChurchTools password (backend spec 4.6), typed inside the dialog; the dialog clears it.
     if (requirePrimary) question.field = { label: t('password.primaryLabel'), type: 'password' };
     const answer = await confirm(question);
-    if (!answer.confirmed || selected.value?.id !== person.id) return;
+    // Left the page or chose someone else meanwhile (the dialog outlives the page): nothing is sent.
+    if (!answer.confirmed || !alive || selected.value?.id !== person.id) return;
     busy.value = true;
     try {
         await entry.remove(requirePrimary ? (answer.value ?? '') : undefined);
@@ -215,6 +248,12 @@ async function remove(): Promise<void> {
         busy.value = false;
     }
 }
+
+/** Oneself gets the labels of 4.2; someone else „Neues Passwort“. */
+const newLabel = computed(() => {
+    if (!isSelf.value) return t('manage.newPassword');
+    return entry.status.value === 'set' ? t('password.setNew') : t('password.setFirst');
+});
 
 /** Up to two letters for the avatar: the first of the first and of the last name part. */
 function initials(name: string): string {
@@ -307,7 +346,7 @@ function initials(name: string): string {
                     :person-id="selected.id"
                     :for-name="isSelf ? undefined : selected.name"
                     :settings="settings"
-                    :has-entry="entry.status.value === 'set'"
+                    :has-entry="flowHasEntry"
                     @done="flowDone"
                 />
                 <StatusLine
@@ -357,22 +396,28 @@ function initials(name: string): string {
                         <button
                             type="button"
                             class="cps-btn cps-btn--primary"
-                            :disabled="busy"
+                            :disabled="busy || pending"
                             @click="openFlow"
                         >
-                            {{ t('manage.newPassword') }}
+                            {{ newLabel }}
                         </button>
                         <!-- Not for oneself: an admin on their own entry gets the flow of 4.2, which has no delete (E9). -->
                         <button
                             v-if="!isSelf && entry.status.value === 'set'"
                             type="button"
                             class="cps-btn cps-btn--danger"
-                            :disabled="busy"
+                            :disabled="busy || pending"
                             @click="remove"
                         >
                             {{ t('manage.delete') }}
                         </button>
                     </div>
+                    <p
+                        v-if="isSelf && entry.status.value === 'set'"
+                        class="cps-manage__hint"
+                    >
+                        {{ t('password.replaceHint') }}
+                    </p>
                 </template>
             </section>
         </template>
@@ -416,6 +461,10 @@ function initials(name: string): string {
 .cps-manage__name {
     font-weight: var(--cps-weight-strong);
     overflow-wrap: anywhere;
+}
+.cps-manage__hint {
+    color: var(--cps-text-muted);
+    font-size: var(--cps-size-sm);
 }
 .cps-manage__error {
     padding-left: var(--cps-space-2);

@@ -179,13 +179,15 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
   other person. Without the right, a banner names it. A person outside the users group who still has an entry isn't
   found here; the cleanup and the rights check deal with that case.
 - The selected person shows avatar, name and status pill (as in 4.2) and the buttons „Neues Passwort“ and „Löschen“.
+  The avatar shows initials only, no ChurchTools image, to avoid extra requests.
 - „Neues Passwort“ runs the flow of 4.2 (states 2 and 3, or the direct path) for that person, with two differences:
   - A **warning banner** above the flow: „Du legst gerade das Passwort für **{Name}** fest.“
   - A **confirm dialog** before sending, if the person has a password: „Das bisherige Passwort von {Name} funktioniert
     danach nicht mehr. Fortfahren?“
   - The ChurchTools password asked for is the **admin's own** (backend spec 4.6).
 - „Löschen“: confirm dialog (danger variant, focus on „Abbrechen“) naming the person, then `DELETE /v1/entries/{id}`
-  with the admin's ChurchTools password if required. The password field is part of the dialog in that case.
+  with the admin's ChurchTools password if required. The password field is part of the dialog in that case. A missing
+  or wrong ChurchTools password is shown above the buttons, since the dialog with the field has closed by then.
 - An admin selecting themselves gets the normal flow of 4.2.
 
 ### 4.4 Settings overview

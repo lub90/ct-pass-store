@@ -79,6 +79,7 @@ const de = {
         accessMissing:
             'Die Nutzergruppe ist nicht bekannt: Die Erweiterung ist noch nicht fertig eingerichtet, oder dir fehlt in ChurchTools das Recht „view custom category“ auf die Kategorie „access“.',
         accessInvalid: 'Die Zugriffseinstellungen sind nicht lesbar. Prüf sie unter „Zugriff“.',
+        ctLoggedOut: 'Du bist in ChurchTools nicht mehr angemeldet. Lade die Seite neu.',
         newPassword: 'Neues Passwort',
         delete: 'Löschen',
         forName: 'Du legst gerade das Passwort für {name} fest.',
