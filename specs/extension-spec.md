@@ -648,11 +648,11 @@ Each role is a ChurchTools group, stored in `access.groups` (6.1):
    counts.
 2. The person running the setup isn't a role. Their rights (setup-capable, 3.1) are listed in the wizard spec and are
    never granted by the extension.
-3. **Controlling the membership of the admin group equals the admin role.** The backend reads the role from the
+3. Instead of a group, a church might want to grant the user rights by person status (e.g. all members). That's out of
+   scope; the user group can contain whoever the church wants.
+4. **Controlling the membership of the admin group equals the admin role.** The backend reads the role from the
    membership at login (backend spec 4.4, D9). Anyone who can add themselves or others to that group is admin at the
    next login. Rule 6 of 16.4 checks who can.
-4. Instead of a group, a church might want to grant the user rights by person status (e.g. all members). That's out of
-   scope; the user group can contain whoever the church wants.
 
 ### 16.2 The rights table
 

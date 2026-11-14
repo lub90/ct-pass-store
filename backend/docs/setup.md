@@ -149,8 +149,10 @@ become admin at their next login. Use a group whose membership only the intended
 - Few people hold the ChurchTools rights `edit group memberships`, `edit group memberships of group` or `of grouptype`,
   `administer groups` and `administer persons`; each of them can make themselves admin.
 
-The extension's rights check warns about these cases (extension spec 16.4, rule 6). The backend logs
-`User <id> logged in as admin.` at every admin login.
+Once the setup assistant exists, the extension's rights check will warn about these cases (extension spec 16.4,
+rule 6). Until then, check them yourself in ChurchTools, in the group's settings: the membership and sign-up settings
+and the group roles (leader roles with rights to edit members). The backend logs `User <id> logged in as admin.` at
+every admin login.
 
 ## 6. Test the backend
 
