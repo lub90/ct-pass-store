@@ -453,6 +453,29 @@ final class LoginApiTest extends ApiTestCase
         self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
     }
 
+    public function testTheLoginLogLineNamesTheAdminRoleWithoutSecrets(): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in as admin.'));
+        foreach ($this->log->getRecords() as $record) {
+            self::assertStringNotContainsString(self::CODE, (string) $record['message']);
+        }
+    }
+
+    public function testTheLoginLogLineOfAPlainUserHasNoRole(): void
+    {
+        $this->grant();
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
+        self::assertFalse($this->log->hasInfoThatContains('as admin'));
+    }
+
     // ---------------------------------------------------------------- AG-02, AG-03
 
     /**

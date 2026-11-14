@@ -139,6 +139,19 @@ files in `cache/`.
 
 Save the URL of the backend: you need it in the settings of the CtPassStore extension.
 
+## Choose the admin group
+
+Whoever controls the membership of the admin group **is an admin**: they can read, set and delete every entry. They
+become admin at their next login. Use a group whose membership only the intended people can change:
+
+- The group is closed: no sign-up, no requests, and not dynamic or filled automatically.
+- No group role of the group may edit its members (no leader rights to add or remove people).
+- Few people hold the ChurchTools rights `edit group memberships`, `edit group memberships of group` or `of grouptype`,
+  `administer groups` and `administer persons`; each of them can make themselves admin.
+
+The extension's rights check warns about these cases (extension spec 16.4, rule 6). The backend logs
+`User <id> logged in as admin.` at every admin login.
+
 ## 6. Test the backend
 
 Log in to the extension as a member of the admin group (admins are the active members of the group named in the

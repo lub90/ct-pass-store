@@ -73,7 +73,7 @@ final class AdminGroupContractTest extends TestCase
             self::$clientId = (string) ($client['identifier'] ?? '');
             self::$clientSecret = (string) ($client['clientSecret'] ?? '');
             self::$clientNumericId = (int) ($client['id'] ?? 0);
-            self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . substr((string) $create->getBody(), 0, 300));
+            self::assertContains($create->getStatusCode(), [200, 201], 'Creating the OAuth client: ' . self::redacted((string) $create->getBody()));
             self::assertNotSame('', self::$clientId);
             self::grantLogin();
         } catch (\Throwable $e) {
@@ -265,6 +265,12 @@ final class AdminGroupContractTest extends TestCase
         self::assertSame($expectedInts, $viaClient, 'activeGroupIds() with the OAuth token.');
     }
 
+    /** A response body for an assertion message, with every token and secret value removed and cut short. */
+    private static function redacted(string $body): string
+    {
+        return substr(preg_replace('/"[A-Za-z_]*(token|secret)"\s*:\s*"[^"]*"/i', '"…":"…"', $body) ?? '', 0, 300);
+    }
+
     private function exchange(): string
     {
         self::assertNotNull(self::$authorization);
@@ -279,7 +285,7 @@ final class AdminGroupContractTest extends TestCase
                 'code_verifier' => self::$verifier,
             ],
         ]);
-        self::assertSame(200, $response->getStatusCode(), 'Token exchange: ' . substr(preg_replace('/"[A-Za-z_]*token"\s*:\s*"[^"]*"/', '"…":"…"', (string) $response->getBody()) ?? '', 0, 300));
+        self::assertSame(200, $response->getStatusCode(), 'Token exchange: ' . self::redacted((string) $response->getBody()));
 
         return (string) (self::json($response)['access_token'] ?? '');
     }

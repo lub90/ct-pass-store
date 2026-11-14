@@ -331,7 +331,9 @@ All three fields are required, non-empty strings of at most 2,048 characters.
      `admin` is `false`. `404` or `403` from ChurchTools means `admin: false` and a `warning` in the log; `5xx` or a
      timeout → `502 upstream-unavailable`, so no token is issued with a guessed role.
 5. **The ChurchTools access and refresh tokens are discarded.** They're never stored or logged.
-6. It issues its own access token.
+6. It issues its own access token and logs at `info`: `User <id> logged in as admin.` for an admin, `User <id> logged in.`
+   otherwise. No token, code or username is in the line. The admin role comes from a group membership that others may
+   control (D9), so the log shows when it was used.
 
 **Response `200`:**
 
@@ -1503,6 +1505,12 @@ group `access.groups.admins.groupId`. At login the backend asks ChurchTools with
   their token expires (15 minutes), like revoking `view`.
 - Gone admins can't be reported or cleaned any more, and needn't be: membership lives in ChurchTools, and a deleted or
   archived person can't log in.
+
+**Consequence:** whoever controls the membership of the admin group in ChurchTools holds the admin role. That includes
+leaders whose group role may edit members, holders of `edit group memberships` (also `of group` or `of grouptype`),
+`administer groups` or `administer persons`, and anyone who can join an open, auto-accepting or dynamic group. They
+become admin at their next login. The backend can't check this; the extension's rights check does (extension spec 16.4,
+rule 6) and `backend/docs/setup.md` tells the admin how to choose the group.
 
 **Fail closed:** a missing or invalid group ID means no admins; `404` or `403` for the groups means `admin: false`; a
 `5xx` or timeout refuses the login (`502`) rather than issue a token with a guessed role.
