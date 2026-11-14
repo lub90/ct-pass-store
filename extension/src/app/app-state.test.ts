@@ -13,7 +13,7 @@ import {
     settingsEditorFrom,
     settingsReady,
     setupCapableFrom,
-    showsRoute,
+    routeView,
     type AppState,
     type AppStateInputs,
 } from './app-state';
@@ -243,22 +243,37 @@ describe('frameFor (E3, spec 3.1)', () => {
     );
 });
 
-describe('showsRoute: no page content before the state allows it', () => {
-    it('user and admin see every route (each view checks its rights)', () => {
+describe('routeView: no page content before the state and the role allow it', () => {
+    it('user and admin see routes without a requirement (each view checks its rights)', () => {
         for (const state of ['user', 'admin'] as const) {
-            for (const path of ['/', '/manage', '/settings/rules', '/about', '/nope']) expect(showsRoute(state, none, path)).toBe(true);
+            for (const path of ['/', '/about', '/nope']) expect(routeView(state, none, path)).toBe('page');
         }
+    });
+    it('`admin` routes are pages only in the admin state; settings editors are no admins', () => {
+        expect(routeView('admin', none, '/manage', 'admin')).toBe('page');
+        for (const e of [none, editor, accessEditor]) {
+            expect(routeView('user', e, '/manage', 'admin')).toBe('missing-rights');
+            expect(routeView('backend-error', e, '/settings/backup', 'admin')).toBe(e === none ? 'state' : 'missing-rights');
+        }
+    });
+    it('`editor` routes are pages for admins and settings editors of either category', () => {
+        expect(routeView('admin', none, '/settings/rules', 'editor')).toBe('page');
+        expect(routeView('user', editor, '/settings/rules', 'editor')).toBe('page');
+        expect(routeView('user', accessEditor, '/settings/rules', 'editor')).toBe('page');
+        expect(routeView('user', none, '/settings/rules', 'editor')).toBe('missing-rights');
     });
     it('in backend-error only settings editors see the settings routes', () => {
         for (const path of ['/settings', '/settings/backend', '/settings/access/clients/new']) {
-            expect(showsRoute('backend-error', editor, path)).toBe(true);
-            expect(showsRoute('backend-error', accessEditor, path)).toBe(true);
-            expect(showsRoute('backend-error', none, path)).toBe(false);
+            expect(routeView('backend-error', editor, path, 'editor')).toBe('page');
+            expect(routeView('backend-error', accessEditor, path, 'editor')).toBe('page');
+            expect(routeView('backend-error', none, path, 'editor')).toBe('state');
         }
-        for (const path of ['/', '/manage', '/about', '/settingsx', '/x/settings']) expect(showsRoute('backend-error', editor, path)).toBe(false);
+        for (const path of ['/', '/manage', '/about', '/settingsx', '/x/settings']) expect(routeView('backend-error', editor, path)).toBe('state');
     });
     it.each(['loading', 'no-access', 'migration-needed', 'update-needed', 'setup-needed', 'version-mismatch'] as const)('%s shows no route', (state) => {
-        for (const path of ['/', '/settings', '/settings/backend', '/about']) expect(showsRoute(state, { settings: true, access: true }, path)).toBe(false);
+        for (const path of ['/', '/settings', '/settings/backend', '/about']) {
+            for (const requires of [undefined, 'admin', 'editor'] as const) expect(routeView(state, { settings: true, access: true }, path, requires)).toBe('state');
+        }
     });
 });
 

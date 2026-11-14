@@ -312,6 +312,8 @@ export class Auth {
         const state = single(query.state);
         const code = query.code;
         if (!login || state === null || state !== login.state || !usableCode(code)) throw new LoginStateError();
+        // The code goes only to the backend the settings name now, not to one remembered from an older login.
+        if (this.config && backendBase(login.backendUrl) !== backendBase(this.config.backendUrl)) throw new LoginStateError();
         const result = await this.backend(login.backendUrl).login(code, login.verifier, this.redirectUri());
         this.storeToken(result, login.backendUrl);
         this.write(LAST_LOGIN_KEY, String(this.env.now()));

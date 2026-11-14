@@ -2,7 +2,9 @@
  * Startup (spec 3.2, 7.1): reads ChurchTools and the settings, binds the login to them and computes the app state.
  *
  * Order, each step only after the previous one allows it:
- * 1. On `/auth/callback` in a login popup: hand the code to the opener and stop (nothing else is read).
+ * 1. On `/auth/callback`: keep the query in memory and replace the address with the bare callback path, so code and
+ *    state are neither in the address bar, the history nor a `Referer` while ChurchTools is read. In a login popup:
+ *    hand the code to the opener and stop (nothing else is read).
  * 2. `whoami` and the extension's rights (row 2), the layout and the settings (rows 3 to 5).
  * 3. `auth.configure()` with the settings and `auth.bindPerson()` with whoami's id, before any login decision.
  * 4. On `/auth/callback` as a page: complete the login (a token of another person is refused); `oauth-code-invalid`
@@ -137,9 +139,8 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
             view.value = permissions.view;
             if (!permissions.view) return null;
             setupCapable.value = setupCapableFrom(permissions);
-            const [old, read, access, editor] = await Promise.all([
-                store.oldLayout(),
-                store.readSettings(),
+            const [{ oldLayout: old, settings: read }, access, editor] = await Promise.all([
+                store.readStartup(),
                 // `access` matters here only for a newer schema; people who can't read it are not affected by it.
                 store.readAccess().catch(() => null),
                 readEditor(permissions),
@@ -213,6 +214,8 @@ export function createAppState(deps: AppStateDeps): AppStateHandle {
         if (isCallbackPath(route.path)) {
             onCallback.value = true;
             const query = { ...route.query };
+            // Still the callback route (the loading line says the login is finishing), only without the query.
+            await router.replace(`/${CALLBACK_PATH}`);
             const handled = forwardPopupCallback(query, deps.callbackWindow);
             // A login popup: the opener exchanges the code; this window closes and shows nothing else.
             if (handled === 'forwarded' || handled === 'closed') return;

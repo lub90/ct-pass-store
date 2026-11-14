@@ -50,6 +50,36 @@ describe('ExtensionStore.oldLayout (spec 6.3)', () => {
     });
 });
 
+describe('ExtensionStore.readStartup (layout and settings in one read)', () => {
+    const old = JSON.stringify({ adminUsers: [1], readAccessUsers: [2] });
+    const counted = (kv: MemoryKv) => {
+        const listed: string[] = [];
+        const values = kv.values.bind(kv);
+        kv.values = (category: string) => (listed.push(category), values(category));
+        return listed;
+    };
+
+    it('lists the settings values once and gives the same answers as oldLayout and readSettings', async () => {
+        const seeds: Record<string, string[]>[] = [{ settings: [JSON.stringify(settings)] }, { settings: [old] }, { settings: [JSON.stringify(settings)], setupCompleted: [] }, {}, { settings: ['{nope'] }];
+        for (const seed of seeds) {
+            const kv = new MemoryKv(seed);
+            const listed = counted(kv);
+            const store = new ExtensionStore(kv);
+            const startup = await store.readStartup();
+            expect(listed).toEqual(['settings']);
+            expect(startup).toEqual({ oldLayout: await store.oldLayout(), settings: await store.readSettings() });
+        }
+    });
+
+    it('passes KV errors on', async () => {
+        const kv = new MemoryKv({ settings: [old] });
+        kv.categoryNames = async () => {
+            throw new CtForbiddenError();
+        };
+        await expect(new ExtensionStore(kv).readStartup()).rejects.toBeInstanceOf(CtForbiddenError);
+    });
+});
+
 describe('ExtensionStore reads', () => {
     it('reports a missing value', async () => {
         expect(await setup([]).store.readSettings()).toEqual({ state: 'missing' });

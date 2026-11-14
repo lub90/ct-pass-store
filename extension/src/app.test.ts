@@ -8,7 +8,8 @@ import { nextTick } from 'vue';
 import { createMemoryHistory, type Router } from 'vue-router';
 import App from './App.vue';
 import { SERVICES_KEY, type Services } from './app/services';
-import { SESSION_KEY, type Session } from './app/useSession';
+import { createAppState } from './app/useAppState';
+import { SESSION_KEY, createSession } from './app/useSession';
 import type { BackendApi } from './backend/api';
 import { Auth, CALLBACK_WINDOW_KEY, LAST_LOGIN_KEY, LOGIN_KEY, LOGIN_RETRY_KEY, POPUP_MESSAGE, TOKEN_KEY, type AuthEnv, type CallbackWindow } from './backend/auth';
 import { backendBase } from './backend/http';
@@ -67,9 +68,16 @@ interface Options {
     /** Replaces the backend's login (e.g. unreachable). */
     login?: BackendApi['login'];
     opener?: CallbackWindow['opener'];
-    ct?: (ct: CtApi) => CtApi;
+    /** Replaces ChurchTools for the app and the store; `router` is the app's router. */
+    ct?: (ct: CtApi, router: Router) => CtApi;
+    /** Replaces ChurchTools only where the app asks it directly (whoami, rights, module, categories), not in the store. */
+    appCt?: (ct: CtApi) => CtApi;
     /** Extra sessionStorage entries before startup. */
     storage?: Record<string, string>;
+    /** sessionStorage can't be used (private mode, blocked). */
+    noStorage?: boolean;
+    /** Provide the session from outside (`SESSION_KEY`), so the test can drive it. */
+    session?: boolean;
 }
 
 const mounted: VueWrapper[] = [];
@@ -93,7 +101,8 @@ const userPerms = (p: Partial<Permissions> = {}): Permissions => ({
 });
 const EDITOR: Partial<Permissions> = { 'view custom data': [SETTINGS_ID, ACCESS_ID], 'edit custom data': [SETTINGS_ID, ACCESS_ID] };
 
-async function start(o: Options = {}) {
+/** Everything the app gets from outside; `start` mounts it. */
+async function build(o: Options = {}) {
     const raw = (v: unknown) => (typeof v === 'string' ? v : JSON.stringify(v));
     const values = [];
     const settings = o.settings === undefined ? SETTINGS : o.settings;
@@ -117,7 +126,8 @@ async function start(o: Options = {}) {
         values,
         permissions: perms,
     });
-    const ct = o.ct ? o.ct(fakeCt) : fakeCt;
+    const router: Router = createAppRouter(createMemoryHistory());
+    const ct = o.ct ? o.ct(fakeCt, router) : fakeCt;
 
     const storage = new MemoryStorage();
     for (const [key, value] of Object.entries(o.storage ?? {})) storage.setItem(key, value);
@@ -126,7 +136,7 @@ async function start(o: Options = {}) {
         origin: ORIGIN,
         instanceBaseUrl: ORIGIN,
         redirectPath: '/ccm/ctpassstore/auth/callback',
-        storage: () => storage,
+        storage: () => (o.noStorage ? null : storage),
         assign: (url) => void assigned.push(url),
         open: () => null,
         listen: () => () => undefined,
@@ -153,7 +163,7 @@ async function start(o: Options = {}) {
         }) as never);
     }
     const services: Services = {
-        ct,
+        ct: o.appCt ? o.appCt(ct) : ct,
         store: new ExtensionStore(new ChurchToolsKv(ct, 'ctpassstore')),
         auth,
         backend: () => backendApi,
@@ -161,16 +171,27 @@ async function start(o: Options = {}) {
         appVersion: o.appVersion ?? '0.1.0',
     };
     const win: CallbackWindow = { opener: o.opener ?? null, origin: ORIGIN, close: vi.fn() };
-    const router: Router = createAppRouter(createMemoryHistory());
     await router.push(o.path ?? '/');
-    const wrapper = mount(App, {
-        attachTo: document.body,
-        global: { plugins: [router, createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: services, [CALLBACK_WINDOW_KEY as symbol]: win } },
-    });
+    return { router, auth, storage, assigned, calls, win, fakeCt, fakeBackend, services };
+}
+
+async function start(o: Options = {}) {
+    const built = await build(o);
+    const { router, auth, services, win } = built;
+    const session = o.session ? createSession(auth, () => router.currentRoute.value.fullPath) : null;
+    const provide: Record<symbol, unknown> = { [SERVICES_KEY as symbol]: services, [CALLBACK_WINDOW_KEY as symbol]: win };
+    if (session) provide[SESSION_KEY as symbol] = session;
+    const wrapper = mount(App, { attachTo: document.body, global: { plugins: [router, createAppI18n('de')], provide } });
     mounted.push(wrapper);
     await settle();
-    return { wrapper, router, auth, storage, assigned, calls, win, fakeCt, fakeBackend };
+    return { ...built, wrapper, session };
 }
+
+/** The login data a page login leaves in sessionStorage before ChurchTools sends the person back. */
+const seedLogin = (returnPath = '/about', extra: Record<string, string> = {}) => ({
+    [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath, backendUrl: BACKEND }),
+    ...extra,
+});
 
 /** Startup awaits real Web Crypto (PKCE) as well as promises, so a few macrotasks are needed. */
 async function settle() {
@@ -191,6 +212,8 @@ const TEXT = {
     loginFailed: 'Die Anmeldung hat nicht geklappt. Lade die Seite neu.',
     updating: 'Der Dienst wird gerade aktualisiert. Versuch es später noch einmal.',
     page: 'Diese Seite folgt mit einem späteren Schritt.',
+    needsAdmin: 'Diese Seite ist nur für Admins.',
+    needsEditor: 'Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.',
 };
 
 const navLinks = (w: VueWrapper) => w.findAll('nav a').map((a) => [a.text(), a.attributes('href')]);
@@ -278,6 +301,47 @@ describe('routes (spec 4.1)', () => {
         expect(wrapper.find('h1').text()).toBe(title);
     });
 
+    it.each(['/manage', '/manage/5', '/settings', '/settings/rules', '/settings/access/clients/new', '/settings/backend', '/settings/backup', '/settings/setup'])(
+        'a plain user on %s gets the missing-rights banner, not the page',
+        async (path) => {
+            const { wrapper } = await start({ token: { admin: false }, path });
+            expect(showsPage(wrapper)).toBe(false);
+            const banner = wrapper.find('main .cps-banner--warning');
+            expect(banner.exists()).toBe(true);
+            expect(banner.text()).toMatch(/^Diese Seite ist nur für Admins/);
+            expect(wrapper.find('main a[href="/"]').exists()).toBe(true);
+        },
+    );
+
+    it.each([
+        ['/manage', TEXT.needsAdmin],
+        ['/settings/backup', TEXT.needsAdmin],
+        ['/settings/setup', TEXT.needsAdmin],
+        ['/settings', TEXT.needsEditor],
+    ])('the banner on %s names the missing right', async (path, text) => {
+        const { wrapper } = await start({ token: { admin: false }, path });
+        expect(wrapper.find('main .cps-banner--warning').text()).toBe(text);
+    });
+
+    it.each(['/settings', '/settings/rules', '/settings/texts', '/settings/access', '/settings/access/clients/x', '/settings/backend'])(
+        'a settings editor who is no admin gets the page %s',
+        async (path) => {
+            const { wrapper } = await start({ token: { admin: false }, perms: EDITOR, path });
+            expect(showsPage(wrapper)).toBe(true);
+        },
+    );
+
+    it.each(['/manage', '/manage/5', '/settings/backup', '/settings/setup'])('a settings editor who is no admin does not get %s', async (path) => {
+        const { wrapper } = await start({ token: { admin: false }, perms: EDITOR, path });
+        expect(showsPage(wrapper)).toBe(false);
+        expect(wrapper.find('main .cps-banner--warning').text()).toBe(TEXT.needsAdmin);
+    });
+
+    it.each(['/', '/about'])('everyone with access gets %s', async (path) => {
+        const { wrapper } = await start({ token: { admin: false }, path });
+        expect(showsPage(wrapper)).toBe(true);
+    });
+
     it('the callback route reached inside the running app goes to /', async () => {
         const { router, wrapper } = await start({ token: { admin: true } });
         await router.push('/auth/callback');
@@ -335,6 +399,50 @@ describe('startup order (spec 7.1, carries of Task 9)', () => {
         const { calls } = await start({ token: null, settings: null });
         expect(calls).toEqual([]);
     });
+
+    it('a page login that cannot start (no sessionStorage) is backend-error with the login text, no redirect', async () => {
+        const { wrapper, assigned, calls } = await start({ token: null, noStorage: true });
+        expect(calls).toContain('startPageLogin');
+        expect(assigned).toEqual([]);
+        expect(wrapper.text()).toContain(TEXT.loginFailed);
+        expect(wrapper.text()).not.toContain(TEXT.updating);
+        expect(wrapper.find('nav').exists()).toBe(false);
+    });
+
+    it('„Erneut anmelden“ comes back to the full path the person was on', async () => {
+        const { wrapper, assigned, storage } = await startWithStorage({ [LAST_LOGIN_KEY]: String(NOW - 1000) }, { path: '/about?tab=x#top' });
+        expect(assigned).toEqual([]);
+        await wrapper.find('button').trigger('click');
+        await settle();
+        expect(assigned).toHaveLength(1);
+        expect(JSON.parse(storage.getItem(LOGIN_KEY)!)).toMatchObject({ returnPath: '/about?tab=x#top' });
+    });
+
+    it('start() runs once however often it is called', async () => {
+        const whoami = vi.fn();
+        const built = await build({ ct: (ct) => ({ ...ct, whoami: (...a) => (whoami(), ct.whoami(...a)) }) });
+        const app = createAppState({
+            services: built.services,
+            router: built.router,
+            session: createSession(built.auth, () => built.router.currentRoute.value.fullPath),
+            callbackWindow: built.win,
+            appVersion: '0.1.0',
+        });
+        const first = app.start();
+        expect(app.start()).toBe(first);
+        await first;
+        await app.start();
+        await settle();
+        expect(whoami).toHaveBeenCalledOnce();
+        expect(built.calls.filter((c) => c === 'configure')).toHaveLength(1);
+        expect(app.state.value).toBe('user');
+    });
+
+    it('lists the settings values once at startup', async () => {
+        const listed: number[] = [];
+        await start({ ct: (ct) => ({ ...ct, values: (m, c) => (listed.push(c), ct.values(m, c)) }) });
+        expect(listed.filter((c) => c === SETTINGS_ID)).toHaveLength(1);
+    });
 });
 
 /** `start` without a token but with extra sessionStorage entries. */
@@ -344,7 +452,7 @@ function startWithStorage(entries: Record<string, string>, o: Options = {}) {
 
 describe('/auth/callback (spec 7.1, 8.2)', () => {
     it('as a page: binds the person before completing, ends on the remembered path as user', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/about', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin();
         const { wrapper, router, calls, assigned } = await startWithStorage(seededLogin, { path: '/auth/callback?code=good-code&state=state-1' });
         expect(calls.indexOf('bindPerson')).toBeLessThan(calls.indexOf('completePageLogin'));
         expect(calls.indexOf('configure')).toBeLessThan(calls.indexOf('completePageLogin'));
@@ -354,7 +462,7 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('a login answer for another person is refused: backend-error, the code leaves the address', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/about', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin();
         const { wrapper, router, storage } = await startWithStorage(seededLogin, { path: '/auth/callback?code=good-code&state=state-1', backend: { personId: 2 } });
         expect(wrapper.text()).toContain(TEXT.loginFailed);
         expect(router.currentRoute.value.fullPath).toBe('/');
@@ -363,7 +471,7 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('a wrong state is backend-error with the login text, and the code leaves the address', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/about', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin();
         const { wrapper, router } = await startWithStorage(seededLogin, { path: '/auth/callback?code=secret-code&state=other' });
         expect(wrapper.text()).toContain(TEXT.loginFailed);
         expect(router.currentRoute.value.fullPath).toBe('/');
@@ -371,7 +479,7 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('oauth-code-invalid retries the login once', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/about', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin();
         const { wrapper, assigned, storage, router } = await startWithStorage(seededLogin, { path: '/auth/callback?code=used-code&state=state-1' });
         expect(assigned).toHaveLength(1);
         expect(storage.getItem(LOGIN_RETRY_KEY)).toBe(String(NOW));
@@ -380,10 +488,7 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('a second oauth-code-invalid within 60 s shows the login text instead of looping', async () => {
-        const seeded = {
-            [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/about', backendUrl: BACKEND }),
-            [LOGIN_RETRY_KEY]: String(NOW - 5000),
-        };
+        const seeded = seedLogin('/about', { [LOGIN_RETRY_KEY]: String(NOW - 5000) });
         const { wrapper, assigned, router } = await startWithStorage(seeded, { path: '/auth/callback?code=used-code&state=state-1' });
         expect(assigned).toEqual([]);
         expect(wrapper.text()).toContain(TEXT.loginFailed);
@@ -391,13 +496,13 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('no-service-access at the login is no-access (row 6)', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin('/');
         const { wrapper } = await startWithStorage(seededLogin, { path: '/auth/callback?code=good-code&state=state-1', backend: { noServiceAccess: true } });
         expect(wrapper.find('main').text()).toBe(TEXT.noAccess);
     });
 
     it('an unreachable backend at the login: users see the short text (row 7)', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin('/');
         const { wrapper } = await startWithStorage(seededLogin, {
             path: '/auth/callback?code=good-code&state=state-1',
             login: async () => {
@@ -410,7 +515,7 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     });
 
     it('settings editors see the problem, its detail as plain text and a link to „Backend & Status“ (row 7, 3.1.2)', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin('/');
         const problem = new BackendProblem('misconfigured', 500);
         problem.detail = '<b>BACKEND_KEY</b> missing';
         const { wrapper, router } = await startWithStorage(seededLogin, {
@@ -436,8 +541,49 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
         expect(wrapper.find('h1').text()).toBe('Backend & Status');
     });
 
+    const unreachable = async () => {
+        throw new BackendUnreachable();
+    };
+    const rejectCategories = (ct: CtApi): CtApi => ({ ...ct, categories: () => Promise.reject(new Error('network')) });
+
+    it.each([
+        ['the module is not found', (ct: CtApi): CtApi => ({ ...ct, moduleId: async () => null })],
+        ['the categories cannot be read', rejectCategories],
+    ])('when %s, nobody counts as settings editor: card, no link, no settings page in backend-error', async (_name, appCt) => {
+        const { wrapper, router } = await startWithStorage(seedLogin('/settings/backend'), { path: '/auth/callback?code=good-code&state=state-1', login: unreachable, appCt });
+        expect(wrapper.text()).toContain(TEXT.unavailable);
+        expect(wrapper.find('.cps-frame--card').exists()).toBe(true);
+        expect(wrapper.find('a[href="/settings/backend"]').exists()).toBe(false);
+        await router.push('/settings/backend');
+        await settle();
+        expect(showsPage(wrapper)).toBe(false);
+    });
+
+    it('a settings editor whose categories cannot be read is not recognised as one', async () => {
+        const { wrapper } = await startWithStorage(seedLogin('/'), { path: '/auth/callback?code=good-code&state=state-1', login: unreachable, perms: EDITOR, appCt: rejectCategories });
+        expect(wrapper.text()).toContain(TEXT.unavailable);
+        expect(wrapper.find('nav').exists()).toBe(false);
+        expect(wrapper.find('a[href="/settings/backend"]').exists()).toBe(false);
+    });
+
+    it('in backend-error, settings editors still do not get the admin-only settings pages', async () => {
+        const { wrapper, router } = await startWithStorage(seedLogin('/'), {
+            path: '/auth/callback?code=good-code&state=state-1',
+            perms: EDITOR,
+            login: unreachable,
+        });
+        await router.push('/settings/backend');
+        await settle();
+        expect(wrapper.find('h1').text()).toBe('Backend & Status');
+        await router.push('/settings/backup');
+        await settle();
+        expect(wrapper.find('h1').exists()).toBe(false);
+        expect(showsPage(wrapper)).toBe(false);
+        expect(wrapper.find('main .cps-banner--warning').text()).toBe(TEXT.needsAdmin);
+    });
+
     it('in backend-error, users do not get the settings pages', async () => {
-        const seededLogin = { [LOGIN_KEY]: JSON.stringify({ state: 'state-1', verifier: 'v'.repeat(43), returnPath: '/settings/backend', backendUrl: BACKEND }) };
+        const seededLogin = seedLogin('/settings/backend');
         const { wrapper } = await startWithStorage(seededLogin, {
             path: '/auth/callback?code=good-code&state=state-1',
             login: async () => {
@@ -478,6 +624,75 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
         expect(wrapper.text()).toContain(TEXT.loginFailed);
     });
 
+    it.each(['/Auth/Callback', '/AUTH/CALLBACK/', '/auth/callback/'])('%s is the callback too (case, trailing slash)', async (path) => {
+        const { router, wrapper, assigned } = await startWithStorage(seedLogin(), { path: `${path}?code=good-code&state=state-1` });
+        expect(router.currentRoute.value.fullPath).toBe('/about');
+        expect(wrapper.find('h1').text()).toBe('Über');
+        expect(assigned).toEqual([]);
+    });
+
+    it('a popup on /auth/callback/ (trailing slash) is forwarded and closed, reading nothing', async () => {
+        const opener = { postMessage: vi.fn() };
+        const state = `p.${'x'.repeat(43)}`;
+        const whoami = vi.fn();
+        const { win, calls } = await start({
+            path: `/auth/callback/?code=c2&state=${state}`,
+            opener,
+            ct: (ct) => ({ ...ct, whoami: (...a) => (whoami(), ct.whoami(...a)) }),
+        });
+        expect(opener.postMessage).toHaveBeenCalledExactlyOnceWith({ type: POPUP_MESSAGE, code: 'c2', state }, ORIGIN);
+        expect(win.close).toHaveBeenCalledOnce();
+        expect(whoami).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+    });
+
+    it('a declined popup login closes quietly: no message, no alert, nothing read, no page login', async () => {
+        const opener = { postMessage: vi.fn() };
+        const whoami = vi.fn();
+        const { win, calls, wrapper, assigned } = await start({
+            path: `/auth/callback?error=access_denied&state=p.${'x'.repeat(43)}`,
+            opener,
+            ct: (ct) => ({ ...ct, whoami: (...a) => (whoami(), ct.whoami(...a)) }),
+        });
+        expect(win.close).toHaveBeenCalledOnce();
+        expect(opener.postMessage).not.toHaveBeenCalled();
+        expect(whoami).not.toHaveBeenCalled();
+        expect(calls).toEqual([]);
+        expect(assigned).toEqual([]);
+        expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+    });
+
+    it('a page-login state with an opener present completes as a page login (no message, no close)', async () => {
+        const opener = { postMessage: vi.fn() };
+        const { win, calls, router } = await startWithStorage(seedLogin(), { path: '/auth/callback?code=good-code&state=state-1', opener });
+        expect(calls).toContain('completePageLogin');
+        expect(opener.postMessage).not.toHaveBeenCalled();
+        expect(win.close).not.toHaveBeenCalled();
+        expect(router.currentRoute.value.fullPath).toBe('/about');
+    });
+
+    it('code and state leave the address before ChurchTools is read, and the login still completes', async () => {
+        let answer!: () => void;
+        const asked = vi.fn();
+        const { router, wrapper } = await startWithStorage(seedLogin(), {
+            path: '/auth/callback?code=good-code&state=state-1',
+            ct: (ct, router) => ({
+                ...ct,
+                whoami: (...a) => {
+                    asked(router.currentRoute.value.fullPath);
+                    return new Promise((resolve) => (answer = () => resolve(ct.whoami(...a))));
+                },
+            }),
+        });
+        expect(asked).toHaveBeenCalledExactlyOnceWith('/auth/callback');
+        expect(router.currentRoute.value.fullPath).toBe('/auth/callback');
+        expect(wrapper.find('main').text()).toBe('Anmeldung wird abgeschlossen …');
+        answer();
+        await settle();
+        expect(router.currentRoute.value.fullPath).toBe('/about');
+        expect(wrapper.find('h1').text()).toBe('Über');
+    });
+
     it('leaves the callback address also when setup is needed', async () => {
         const { router, wrapper } = await start({ path: '/auth/callback?code=c9&state=s9', settings: null });
         expect(router.currentRoute.value.fullPath).toBe('/');
@@ -511,6 +726,20 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('nav').exists()).toBe(false);
     });
 
+    it('row 2: without the view right and without a token → no-access, no login and nothing asked of Auth', async () => {
+        const { wrapper, assigned, calls } = await start({ perms: { view: false }, token: null });
+        expect(wrapper.find('main').text()).toBe(TEXT.noAccess);
+        expect(assigned).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
+    it('a ChurchTools failure shows settings editors no link to „Backend & Status“ and no sidebar', async () => {
+        const { wrapper } = await start({ perms: EDITOR, ct: (ct) => ({ ...ct, values: () => Promise.reject(new Error('network')) }) });
+        expect(wrapper.text()).toContain('ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.');
+        expect(wrapper.find('a[href="/settings/backend"]').exists()).toBe(false);
+        expect(wrapper.find('.cps-frame--card').exists()).toBe(true);
+    });
+
     it('a ChurchTools failure is backend-error naming ChurchTools, not „not set up“', async () => {
         const { wrapper } = await start({ ct: (ct) => ({ ...ct, globalPermissions: () => Promise.reject(new Error('network')) }) });
         expect(wrapper.text()).toContain('ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.');
@@ -536,6 +765,13 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('main').text()).toBe(TEXT.waiting);
     });
 
+    it('row 3 alone stops the login: setupCompleted next to valid settings with backendUrl, no token', async () => {
+        const { wrapper, assigned, calls } = await start({ setupCompletedCategory: true, token: null });
+        expect(wrapper.find('main').text()).toBe(TEXT.waiting);
+        expect(assigned).toEqual([]);
+        expect(calls).toEqual([]);
+    });
+
     it('row 3 beats row 5: old layout without backendUrl is migration (waiting), setup-capable get the note', async () => {
         const { wrapper } = await start({ settings: { adminUsers: [1] }, perms: { 'create custom category': true } });
         expect(wrapper.text()).toContain(TEXT.waiting);
@@ -551,7 +787,7 @@ describe('app states as shown (spec 3.2)', () => {
     it('row 4: newer access schema → update-needed; settings editors see the versions', async () => {
         const { wrapper } = await start({ access: { ...ACCESS, schema: 5 }, perms: EDITOR, appVersion: '0.1.0' });
         expect(wrapper.text()).toContain(TEXT.update);
-        expect(wrapper.text()).toContain('Gespeicherte Daten: Version 5. Diese Erweiterung (0.1.0) kennt Version 2.');
+        expect(wrapper.text()).toContain('Gespeicherte Daten: Version 5. Diese Erweiterung (0.1.0) unterstützt Daten bis Version 2.');
     });
 
     it('row 4: a newer access schema also stops the login', async () => {
@@ -559,6 +795,12 @@ describe('app states as shown (spec 3.2)', () => {
         expect(wrapper.find('main').text()).toContain(TEXT.update);
         expect(assigned).toEqual([]);
         expect(calls).toEqual([]);
+    });
+
+    it('row 4: setup-capable people who are no settings editors see the versions too (no login, so no admin claim)', async () => {
+        const { wrapper } = await start({ settings: { ...SETTINGS, schema: 3 }, perms: { 'create custom category': true }, appVersion: '0.1.0' });
+        expect(wrapper.text()).toContain(TEXT.update);
+        expect(wrapper.text()).toContain('Gespeicherte Daten: Version 3. Diese Erweiterung (0.1.0) unterstützt Daten bis Version 2.');
     });
 
     it('row 4: users see no versions', async () => {
@@ -593,7 +835,7 @@ describe('app states as shown (spec 3.2)', () => {
 
     it('row 8: admins see both versions', async () => {
         const { wrapper } = await start({ token: { admin: true, version: '0.2.0+abc' }, appVersion: '0.1.5' });
-        expect(wrapper.text()).toContain('Erweiterung (Version 0.1.5) und Backend (Version 0.2.0+abc) passen nicht zusammen.');
+        expect(wrapper.text()).toContain('Erweiterung (Version 0.1.5) und Backend (Version 0.2.0+abc) passen nicht zusammen. Aktualisiere beide, sodass die ersten zwei Stellen der Versionsnummer übereinstimmen.');
         expect(wrapper.find('nav').exists()).toBe(false);
     });
 
@@ -603,10 +845,9 @@ describe('app states as shown (spec 3.2)', () => {
     });
 
     it('row 7 later: a login loop reported by the session turns the page into backend-error', async () => {
-        const { wrapper } = await start({ token: { admin: true } });
+        const { wrapper, session } = await start({ token: { admin: true }, session: true });
         expect(wrapper.find('h1').text()).toBe('Mein Passwort');
-        const session = (wrapper.vm.$ as unknown as { provides: Record<symbol, Session> }).provides[SESSION_KEY as symbol]!;
-        session.loginLoop.value = true;
+        session!.loginLoop.value = true;
         await settle();
         expect(wrapper.text()).toContain(TEXT.loginFailed);
         expect(showsPage(wrapper)).toBe(false);

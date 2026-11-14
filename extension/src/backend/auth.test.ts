@@ -327,6 +327,23 @@ describe('Auth.completePageLogin', () => {
         expect(backend.login).toHaveBeenCalledOnce();
     });
 
+    it('refuses a login started for another backend than the configured one, without exchanging the code', async () => {
+        const { h, auth, backend } = setup();
+        const { stored } = await startLogin(auth, h);
+        ready(auth, 'https://other.example.org');
+        await expect(auth.completePageLogin({ code: 'c', state: stored.state })).rejects.toBeInstanceOf(LoginStateError);
+        expect(backend.login).not.toHaveBeenCalled();
+        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
+    });
+
+    it('accepts the configured backend written differently (trailing slash)', async () => {
+        const { h, auth, backend } = setup();
+        const { stored } = await startLogin(auth, h);
+        ready(auth, `${BACKEND}/`);
+        await auth.completePageLogin({ code: 'c', state: stored.state });
+        expect(backend.login).toHaveBeenCalledOnce();
+    });
+
     it.each([
         ['a different state', (s: string) => s.slice(0, -1) + (s.endsWith('A') ? 'B' : 'A')],
         ['the state in other case', (s: string) => (s.toUpperCase() === s ? s.toLowerCase() : s.toUpperCase())],
@@ -343,17 +360,6 @@ describe('Auth.completePageLogin', () => {
         expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
         expect(auth.token()).toBeNull();
         expect(h.storage.getItem(LOGIN_KEY)).toBeNull();
-    });
-
-    it('uses the backend the login was started for, even when the setting changed meanwhile (token then unusable)', async () => {
-        const { h, auth, backend } = setup();
-        const { stored } = await startLogin(auth, h);
-        auth.configure({ backendUrl: 'https://other.example.org', clientId: CLIENT });
-        await auth.completePageLogin({ code: 'c', state: stored.state });
-        expect(backend.factory).toHaveBeenCalledExactlyOnceWith(BACKEND);
-        expect(auth.token()).toBeNull();
-        expect(auth.info()).toBeNull();
-        expect(h.storage.getItem(TOKEN_KEY)).toBeNull();
     });
 
     it('does not accept the callback when the login data cannot be removed (fails closed)', async () => {

@@ -93,6 +93,9 @@ The app computes one state at startup (`src/app/`), in this order. The first mat
 | 9 | Login answer `admin: false` | `user` | The password card |
 | 10 | Login answer `admin: true` | `admin` | The admin frame |
 
+In row 4 („admins: with the versions“) the versions go to settings editors and setup-capable people: the app doesn't
+log in to the backend in that state, so there is no `admin` answer to go by.
+
 ### 3.3 Waiting text
 
 Shown to people who aren't setup-capable while setup or migration is needed: „Die Erweiterung wird gerade
@@ -103,7 +106,9 @@ eingerichtet. Wende dich bei Fragen an die Verantwortlichen in deiner Gemeinde.�
 ### 4.1 Routes
 
 All routes live under `/ccm/ctpassstore/` (Vite `base` and `createWebHistory(import.meta.env.BASE_URL)`). There are
-no route guards; each view checks the app state and the rights it needs.
+no route guards; each view checks the app state and the rights it needs. In addition, each route names the role in
+the „Who“ column (`meta.requires`: admins, or admins and settings editors), and the app draws the missing-rights banner
+instead of the page for anyone else (display only, like everything role-derived).
 
 | Path | Page | Who |
 | --- | --- | --- |

@@ -3,6 +3,7 @@ import { decodeKey, readMachineClients, type UnusableClient } from '@/model/mach
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
 import { AccessSchema, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import type { CtValue } from '@/ct/types';
 import type { KvBackend } from './kv';
 
 export const VALUE_LIMIT = 10_000;
@@ -56,6 +57,21 @@ function collision(clients: readonly MachineClient[], preserved: readonly unknow
     return undefined;
 }
 
+type Loaded = { newest: CtValue | undefined; duplicates: CtValue[] };
+
+/** Spec 6.3 on the newest raw `settings` value (broken JSON is no old layout) and the category names. */
+function layoutOf(newest: CtValue | undefined, names: string[]): boolean {
+    let raw: unknown = null;
+    if (newest) {
+        try {
+            raw = JSON.parse(newest.value);
+        } catch {
+            raw = null;
+        }
+    }
+    return isOldLayout(raw, names);
+}
+
 const isObject = (x: unknown): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x);
 
 /** The one-value categories `settings` and `access`: tolerant reads, strict conflict-checked writes (spec 6.2). */
@@ -89,26 +105,27 @@ export class ExtensionStore {
 
     /** Spec 6.3 on the newest `settings` value and the category names. KV errors propagate. */
     async oldLayout(): Promise<boolean> {
-        const [names, { newest }] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
-        let raw: unknown = null;
-        if (newest) {
-            try {
-                raw = JSON.parse(newest.value);
-            } catch {
-                raw = null;
-            }
-        }
-        return isOldLayout(raw, names);
+        const [names, loaded] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
+        return layoutOf(loaded.newest, names);
+    }
+
+    /** Startup: `oldLayout()` and `readSettings()` from one listing of `settings`. KV errors propagate. */
+    async readStartup(): Promise<{ oldLayout: boolean; settings: Read<SettingsV2> }> {
+        const [names, loaded] = await Promise.all([this.kv.categoryNames(), this.load('settings')]);
+        return { oldLayout: layoutOf(loaded.newest, names), settings: this.parse('settings', SettingsSchema, loaded) };
     }
 
     /** Highest value ID first. */
-    private async load(category: string) {
+    private async load(category: string): Promise<Loaded> {
         const values = (await this.kv.values(category)).sort((a, b) => b.id - a.id);
         return { newest: values[0], duplicates: values.slice(1) };
     }
 
     private async read<S extends Schema>(category: 'settings' | 'access', schema: S): Promise<Read<v.InferOutput<S>>> {
-        const { newest, duplicates } = await this.load(category);
+        return this.parse(category, schema, await this.load(category));
+    }
+
+    private parse<S extends Schema>(category: 'settings' | 'access', schema: S, { newest, duplicates }: Loaded): Read<v.InferOutput<S>> {
         if (!newest) return { state: 'missing' };
         let raw: unknown;
         try {

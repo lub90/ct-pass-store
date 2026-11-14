@@ -1,17 +1,19 @@
 <script setup lang="ts">
 /**
  * The frame chosen by role (E3) and the one global `ConfirmDialog` (spec 5.1). Pages are drawn only when the app
- * state allows it (`showsRoute`); before that only the state's own text is, so no page content shows early.
+ * state and the route's `requires` allow it (`routeView`); before that only the state's own text is, so no page
+ * content shows early, and a page meant for another role shows the missing-rights banner (spec 4.1, 8.1).
  */
 import { computed, inject, provide } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { currentNav, frameFor, showsRoute, type NavPath } from './app/app-state';
+import { currentNav, frameFor, routeView, type NavPath } from './app/app-state';
 import { useServices } from './app/services';
 import { APP_STATE_KEY, createAppState } from './app/useAppState';
 import { SESSION_KEY, createSession } from './app/useSession';
 import { AUTH_KEY, CALLBACK_WINDOW_KEY, callbackWindow } from './backend/auth';
 import { APP_VERSION } from './config';
+import Banner from './ui/Banner.vue';
 import ConfirmDialog from './ui/ConfirmDialog.vue';
 import type { IconName } from './ui/Icon.vue';
 import PageFrame from './ui/PageFrame.vue';
@@ -24,7 +26,8 @@ const router = useRouter();
 const route = useRoute();
 const services = useServices();
 
-const session = createSession(services.auth, () => router.currentRoute.value.fullPath);
+// A session provided from outside (tests) is used as is; otherwise the app makes its own.
+const session = inject(SESSION_KEY, null) ?? createSession(services.auth, () => router.currentRoute.value.fullPath);
 provide(SESSION_KEY, session);
 provide(AUTH_KEY, services.auth);
 
@@ -49,11 +52,11 @@ const state = computed(() => app.state.value);
 const frame = computed(() => frameFor(state.value, app.settingsEditor.value));
 const nav = computed(() => frame.value.nav.map((to) => ({ to, label: t(NAV[to].label), icon: NAV[to].icon, bottom: to === '/about' })));
 const current = computed(() => currentNav(route.path, frame.value.nav));
-const showRoute = computed(() => showsRoute(state.value, app.settingsEditor.value, route.path));
+const view = computed(() => routeView(state.value, app.settingsEditor.value, route.path, route.meta.requires));
 const waiting = computed(() => state.value === 'setup-needed' || state.value === 'migration-needed');
 /** Normal users reach „Über“ through a small link in the card's footer (spec 4.1). */
 const footerLink = computed(() =>
-    frame.value.mode === 'card' && showRoute.value ? (route.path === '/about' ? { to: '/', label: t('nav.myPassword') } : { to: '/about', label: t('nav.about') }) : null,
+    frame.value.mode === 'card' && view.value !== 'state' ? (route.path === '/about' ? { to: '/', label: t('nav.myPassword') } : { to: '/about', label: t('nav.about') }) : null,
 );
 
 function navigate(to: string): void {
@@ -74,7 +77,17 @@ function navigate(to: string): void {
             kind="loading"
             :text="app.onCallback.value ? t('auth.finishing') : t('state.loading')"
         />
-        <RouterView v-else-if="showRoute" />
+        <RouterView v-else-if="view === 'page'" />
+        <template v-else-if="view === 'missing-rights'">
+            <Banner kind="warning">
+                <p>{{ t(route.meta.requires === 'admin' ? 'state.needsAdmin' : 'state.needsEditor') }}</p>
+            </Banner>
+            <p class="cps-app__back">
+                <RouterLink to="/">
+                    {{ t('notFound.back') }}
+                </RouterLink>
+            </p>
+        </template>
         <WaitingView
             v-else-if="waiting"
             :setup-capable="app.setupCapable.value"
@@ -98,6 +111,10 @@ function navigate(to: string): void {
 </template>
 
 <style scoped>
+.cps-app__back {
+    margin-top: var(--cps-space-3);
+}
+
 .cps-app__footer {
     margin-top: var(--cps-space-5);
     padding-top: var(--cps-space-3);

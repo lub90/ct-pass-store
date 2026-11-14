@@ -119,10 +119,20 @@ export function frameFor(state: AppState, editor: SettingsEditor): { mode: 'card
 
 const isSettingsPath = (path: string): boolean => path === '/settings' || path.startsWith('/settings/');
 
-/** Whether the route's page is drawn; otherwise the state's own view is. No page renders before the state allows it. */
-export function showsRoute(state: AppState, editor: SettingsEditor, path: string): boolean {
-    if (state === 'user' || state === 'admin') return true;
-    return state === 'backend-error' && isSettingsEditor(editor) && isSettingsPath(path);
+/** Who a route is for (spec 3.1, 4.1): `admin` only admins, `editor` admins and settings editors. */
+export type RouteRequirement = 'admin' | 'editor';
+
+/**
+ * What is drawn for a route: its page, the missing-rights banner, or the state's own view. No page renders before
+ * the state allows it, and none for a role it isn't meant for. Display only: each page checks its rights again, and
+ * the backend and ChurchTools decide every request.
+ */
+export function routeView(state: AppState, editor: SettingsEditor, path: string, requires?: RouteRequirement): 'page' | 'missing-rights' | 'state' {
+    const shown = state === 'user' || state === 'admin' || (state === 'backend-error' && isSettingsEditor(editor) && isSettingsPath(path));
+    if (!shown) return 'state';
+    if (requires === 'admin' && state !== 'admin') return 'missing-rights';
+    if (requires === 'editor' && state !== 'admin' && !isSettingsEditor(editor)) return 'missing-rights';
+    return 'page';
 }
 
 /** The nav entry of a path (`/manage/5` → `/manage`), whole segments only; the path itself when none matches. */
