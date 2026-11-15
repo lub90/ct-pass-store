@@ -121,14 +121,17 @@ CPS_LOAD_TEST=1 composer test:load
 
 The environment variable `CPS_LOAD_TEST=1` is the explicit opt-in. Without it (or with any other value) the load test
 is skipped with a message, before it checks its prerequisites, reads `config/credentials.php` or sends any request, so
-it never runs by accident, e.g. with `vendor/bin/phpunit -c phpunit.xml tests/` or an IDE "run all".
+it never runs by accident, e.g. with `vendor/bin/phpunit -c phpunit.xml tests/` or an IDE "run all". Set it on the
+command line for each run, never in the `<env>` block of your local `phpunit.xml`: there it would make the opt-in
+permanent.
 
 A full run takes about 15 minutes; `composer test:load` turns off Composer's 300-second process timeout for it.
 
 It measures the backend under realistic data sizes and writes the results to STDERR and to a new JSON file with mode
 `600`, whose path it prints at the start (`[Load] Results file: …`). By default the file gets a random name in the temp
 folder (`ctps-load-results-<random>.json`); `LOAD_RESULTS_FILE` chooses the path instead, which **must not exist yet**:
-the run refuses an existing file or a symlink rather than overwrite or follow it. The results name person IDs only. The
+the run refuses an existing file or a symlink rather than overwrite or follow it. Point it into a folder only you can
+write to (not a shared one such as `/tmp` itself). The results name person IDs only. The
 report of a run is in `specs/backend-load-test-*.md`.
 
 It needs everything the contract tests need, and:
