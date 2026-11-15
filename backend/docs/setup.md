@@ -78,6 +78,9 @@ Users log in through ChurchTools' OAuth server. Each ChurchTools instance needs:
 
 You need PHP 8.3 or newer and [Composer](https://getcomposer.org/) on your machine, not on the webserver.
 
+The webserver needs PHP 8.3 or newer with the extensions `mbstring` and `sodium` (both are part of most hosting
+PHPs; `composer.json` requires them, so `composer install` refuses a PHP without them).
+
 ```bash
 git clone https://github.com/lub90/ct-pass-store
 cd ct-pass-store/backend
@@ -118,7 +121,7 @@ return [
 | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | From the OAuth application (step 2). |
 | `JWT_SECRET` | Signs the backend's own access tokens. Generate it, at least 32 bytes: `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'` |
 | `CLEANUP_TOKEN` | Optional. Turns on the web-cron endpoint `POST /v1/cleanup` (step 7). At least 43 characters; generate it, do not choose it. |
-| `LOG_LEVEL` | Optional. `debug`, `info` (default), `notice`, `warning` or `error`. Anything else makes the backend answer `500 misconfigured`. |
+| `LOG_LEVEL` | Optional. `debug`, `info` (default), `notice`, `warning` or `error`. Anything else makes the backend answer `500 misconfigured`. Keep `info`: `notice` or higher hides the `info` audit lines (who set or deleted whose password, machine-client usage summaries; see [Logs and personal data](#logs-and-personal-data)). |
 
 A missing or invalid key never fails silently: every request answers `500 misconfigured` and names the key (never its
 value).
@@ -280,6 +283,26 @@ The backend writes `logs/app.log`, rotated daily (`app-YYYY-MM-DD.log`); the **l
 ones are deleted. The log contains IP addresses and ChurchTools person IDs (denied access, logins, password changes
 and deletions). These are **personal data**: the backend logs them only to detect abuse. Tell your users, and do not
 copy the logs elsewhere for longer than 14 days. Passwords, tokens, codes and ciphertexts are never logged.
+
+What to look for when you review the log. The default `LOG_LEVEL` `info` shows all of it; with `notice` or higher
+the `info` lines below (password changes and deletions, usage summaries) are not written, so keep `info`:
+
+| Level | Line | Meaning |
+| --- | --- | --- |
+| `info` | `User 100 set the password of person 10.` / `User 100 deleted the password of person 10.` | Who changed or deleted whose password (person IDs). A different first number means an admin changed someone else's password. A delete is logged as the request it was, also when the person had no password; the `Deleted password entry …` lines show which entries were removed. |
+| `notice` | `Enabled machine clients, first seen: …` / `The enabled machine clients changed. Added: … Removed: … Now enabled: …` | The machine clients that may read passwords, each with its ID, permissions and key fingerprints (the same 16 characters the extension shows under „Zugriff“; never the key). Logged when the backend next loads `access` from ChurchTools (the settings cache lasts 5 minutes; the next machine-client request, login or password change after that loads it). An entry you did not make means someone with edit rights on `access` added a reader: remove it and check who has those rights. |
+| `notice` | `Admin group, first seen: …` / `The admin group changed from 12 to 99.` | The ChurchTools group whose active members are admins changed (`none`: nobody is admin). |
+| `notice` | `Backend address, first seen: …` / `The backend address changed from … to ….` | The `backendUrl` setting changed (old and new value). The extension sends logins to this address. |
+| `info` | `Machine client ct-radius is in use; 523 requests from 1 address since the last summary at ….` | A usage summary, at most once per hour and client, with the address of the current request and the addresses (up to 10) since the last summary. An unknown address can mean a leaked client key. `first request in the last 14 days` starts the count anew. |
+
+The "last seen" values for these comparisons and the usage counts are kept in `cache/` (signed records). Emptying
+`cache/` or changing `JWT_SECRET` makes the next load log the current values as "first seen" again. The usage counts
+keep no address longer than the log (14 days), and the entry of a machine client is dropped once it is no longer
+configured. The pending count of a dropped entry is logged first. If one of these records fails its integrity check,
+the backend keeps answering requests but logs an `error` plus a `warning` until you empty `cache/`: for the "last
+seen" record on every settings load from ChurchTools (about every 5 minutes), for the usage record on every
+machine-client request. Check the server for unauthorized access, then empty `cache/`. Unicode control and
+format characters (such as bidi overrides) in logged values appear escaped as `\u{XXXX}`.
 
 ## Rotating secrets
 

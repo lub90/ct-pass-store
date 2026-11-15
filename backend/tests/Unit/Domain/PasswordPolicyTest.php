@@ -202,6 +202,61 @@ final class PasswordPolicyTest extends TestCase
         self::assertSame([PasswordPolicy::INVALID_CHARACTER], $this->policy->violations('Abcdefgh12!ä', 12));
     }
 
+    // ---------------------------------------------------------------- shared cases (parity with the extension)
+
+    /**
+     * The cases in shared/password-policy-cases.json, which the extension's tests iterate too (spec 5.1).
+     *
+     * @return iterable<string, array{string, int, list<string>}>
+     */
+    public static function sharedCases(): iterable
+    {
+        $cases = json_decode((string) file_get_contents(__DIR__ . '/../../../../shared/password-policy-cases.json'), true, 512, JSON_THROW_ON_ERROR);
+        self::assertIsArray($cases);
+        foreach ($cases as $case) {
+            self::assertIsArray($case);
+            yield (string) $case['name'] => [(string) $case['password'], (int) $case['minLength'], $case['violations']];
+        }
+    }
+
+    /**
+     * @param list<string> $expected
+     */
+    #[DataProvider('sharedCases')]
+    public function testSharedCases(string $password, int $minLength, array $expected): void
+    {
+        self::assertSame($expected, $this->policy->violations($password, $minLength));
+    }
+
+    /**
+     * @return list<int> the ASCII code points that appear in no shared password
+     */
+    private function uncoveredAsciiCodes(): array
+    {
+        $seen = '';
+        foreach (self::sharedCases() as [$password]) {
+            $seen .= $password;
+        }
+
+        return array_values(array_filter(range(0, 127), static fn(int $code): bool => !str_contains($seen, chr($code))));
+    }
+
+    public function testSharedCasesCoverTheBoundariesAndEveryCode(): void
+    {
+        $codes = [];
+        $count = 0;
+        foreach (self::sharedCases() as [, , $violations]) {
+            $count++;
+            foreach ($violations as $code) {
+                $codes[$code] = true;
+            }
+        }
+
+        self::assertGreaterThan(100, $count);
+        self::assertSame([], $this->uncoveredAsciiCodes(), 'The shared cases must pin the whole ASCII character contract.');
+        self::assertEqualsCanonicalizing(['too-short', 'too-long', 'missing-letter', 'missing-digit', 'missing-symbol', 'invalid-character'], array_keys($codes));
+    }
+
     // ---------------------------------------------------------------- encryption fits (PV-10)
 
     public function testMaximumLengthStillFitsRsaOaep(): void

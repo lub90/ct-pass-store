@@ -15,6 +15,18 @@ final class MachineClient
     /** The only permission known today. Others grant nothing. */
     public const PERMISSION_READ_ENTRIES = 'entries:read';
 
+    /** Length of a key fingerprint: 16 base64url characters, 96 bits (extension spec 4.7). */
+    public const FINGERPRINT_LENGTH = 16;
+
+    /**
+     * A short fingerprint of a raw public key, the same the extension shows: the first 16 characters of
+     * base64url(SHA-256(the 32 key bytes)). Safe for the log; the key itself never is logged.
+     */
+    public static function keyFingerprint(string $key): string
+    {
+        return substr(rtrim(strtr(base64_encode(hash('sha256', $key, true)), '+/', '-_'), '='), 0, self::FINGERPRINT_LENGTH);
+    }
+
     /**
      * @param non-empty-list<string> $publicKeys raw Ed25519 public keys (32 bytes each)
      * @param list<string> $permissions only known permissions

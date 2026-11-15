@@ -10,13 +10,13 @@ Open issues and planned improvements, roughly ordered by severity.
   - Unify the ID comparison: `getPwd()` uses `==`, while `putPwd()`/`deletePwd()` use `===`. An entry stored with a string `personId` is found by one and missed by the other.
   - Add a test for this scenario.
 
-- [ ] **Missing error middleware**
+- [x] **Missing error middleware** (done: [`ErrorMiddleware.php`](backend/src/Http/Middleware/ErrorMiddleware.php) answers every error as RFC 9457 problem details, see `backend/docs/problems.md`)
   When ChurchTools is unreachable or the settings are malformed, callers get Slim's default HTML 500 page instead of a JSON error response.
 
-- [ ] **Extension & backend: be ready for required CSRF tokens**
-  ChurchTools currently accepts REST write requests without a CSRF token, but the JS client gained opt-in support for them (`setLoadCSRFForAPI()`, client 1.7.1) and the instance configuration has a `csrf_enabled` flag. If ChurchTools starts requiring them, our KV writes would fail.
-  - Extension: check the installed `@churchtools/churchtools-client` version and test writes with `setLoadCSRFForAPI()` enabled.
-  - Backend: decide whether our own ChurchTools client (D1 in [`specs/backend-spec.md`](specs/backend-spec.md)) needs to fetch `GET /api/csrftoken` for writes.
+- [ ] **Backend: be ready for required CSRF tokens**
+  ChurchTools currently accepts REST write requests without a CSRF token, but the instance configuration has a `csrf_enabled` flag. If ChurchTools starts requiring them, our KV writes could fail.
+  - Done in the extension: client `1.7.3` with `setLoadCSRFForAPI()` on, so every REST write sends a `CSRF-Token` (`extension/src/ct/client.ts`, tested).
+  - Open, backend: decide whether our own ChurchTools client (D1 in [`specs/backend-spec.md`](specs/backend-spec.md)) needs to fetch `GET /api/csrftoken` for writes made with the service user's login token.
 
 ## Performance
 
@@ -55,7 +55,7 @@ Open issues and planned improvements, roughly ordered by severity.
   - The backend has no rate limiting, so it can be used to guess primary passwords. It's unverified whether ChurchTools' own login lockout would then block the backend's IP for all users.
   - The behaviour for users with 2FA enabled is untested.
 
-- [ ] **Switch backend authentication from login tokens to JWTs**
+- [x] **Switch backend authentication from login tokens to JWTs** (done in backend and extension, machine clients sign Ed25519 JWTs; only the setup-wizard step below is open and comes with the setup assistant)
   Right now clients send their ChurchTools login token (`Authorization: Login <token>`) to the backend, which uses it to call ChurchTools. So the backend sees long-lived credentials with full access to the user's ChurchTools account. If the backend is compromised, those tokens are exposed too.
   - **Decided (D4 in [`specs/backend-spec.md`](specs/backend-spec.md)):** users log in via ChurchTools OAuth (authorization code with PKCE, `scope=api`). The backend exchanges the code, checks identity and the `view` permission once, and issues its own short-lived JWT. Verified on the test instance on 2026-11-01.
   - Backend: implement `POST /auth/token` and bearer-token validation (spec 4.3, 4.4); add `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET` to `credentials.php`.
@@ -74,14 +74,14 @@ Open issues and planned improvements, roughly ordered by severity.
   - Add a permission self-check to the setup wizard and/or the `/test` endpoint.
   - Better: assign the permissions ourselves. ChurchTools now lets us create groups and set role permissions through the API, so the setup wizard can provision the groups and rights automatically instead of relying on the admin to do it by hand. It should then re-check them and warn if a group has more rights than intended.
 
-- [ ] **Extension: keep the test instance URL out of the release build**
+- [x] **Extension: keep the test instance URL out of the release build**
   [`extension/src/main.ts`](extension/src/main.ts) uses `window.settings?.base_url ?? import.meta.env.VITE_BASE_URL` (a pattern taken from the boilerplate). Vite inlines the `VITE_` value, so the URL of the development instance ends up in `dist/` and in the release ZIP. The dev password isn't in the bundle, but only because the code that reads it is removed as dead code.
   - Use the fallback only in development (`import.meta.env.DEV`), or replace it with a dev proxy that holds URL and credentials in non-`VITE_` variables.
   - Add a post-build check (like `check-dist.js` in the infoscreen project) that fails when `*.church.tools` or the dev username appears in `dist/`.
-  - Rebuild the existing release ZIP, and replace it wherever it was published.
+  - Still open: rebuild the old release ZIP (it holds the test instance URL), and replace it wherever it was published.
 
-- [ ] **Keep local credential files private**
-  The ignored files with credentials are readable by other users on the development machine (mode `664`):
+- [x] **Keep local credential files private** (all at mode `600`; `backend/docs/testing.md` and `extension/docs/development.md` say so, and the extension's contract recordings are written with `600`)
+  The ignored files with credentials were readable by other users on the development machine (mode `664`):
   - `backend/config/credentials.php`
   - `backend/phpunit.xml`
   - `extension/.env`
@@ -107,27 +107,38 @@ Open issues and planned improvements, roughly ordered by severity.
   Stored passwords can't be re-encrypted under a new key, because nobody holds the plaintext. Rotating the key (or recovering from a leaked private key) means every user has to reset their password.
   - Document the procedure and support it in the UI (e.g. a "key rotated, please reset your password" state).
 
+- [ ] **Mail all admins when the backend address (`backendUrl`) changes**
+  A changed address redirects users' passwords to another server, so every admin should notice at once.
+
 ## Data Management
 
 - [x] **Clean up entries of deleted users**
   Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). `adminUsers` is only reported, never changed.
 
 - [ ] **Backup & restore of the extension data**
-  Updating the extension in ChurchTools deletes all of its data: settings, encryption settings and every stored password.
+  Updating the extension (a new ZIP uploaded to the existing module) keeps its data (measured 2026-11-14, [`specs/ct-extension-info.md`](specs/ct-extension-info.md) section 2). Deleting and reinstalling it removes all of it: settings, encryption settings and every stored password. A backup also protects against mistakes and lost values.
   - Add a feature to export the whole extension data (all categories and their entries) to a backup file.
-  - Add a matching import so the data can be restored after an update.
+  - Add a matching import so the data can be restored. Planned as „Sicherung“ with the setup assistant (extension spec 12).
 
 ## Testing & Tooling
 
-- [ ] **Add unit tests**
-  Right now there are only end-to-end tests, and they need a live ChurchTools instance.
+- [x] **Add unit tests** (done: PHPUnit unit and API layers in `backend/tests/`, Vitest in `extension/`, both in CI)
+  Back then there were only end-to-end tests, and they need a live ChurchTools instance.
   - Add PHPUnit unit tests for `PasswordValidator`, `EncryptionService` (encrypt/decrypt round trip with the test keys) and the store logic against a mocked client.
   - Add frontend tests.
 
-- [ ] **Set up CI and static analysis**
-  - Add a GitHub Actions workflow that runs the unit tests, PHPStan and `vue-tsc`.
-  - Add linting (e.g. ESLint).
-  - Start tagging releases.
+- [x] **Set up CI and static analysis**
+  - Done: `.github/workflows/backend.yml` (PHPUnit, PHPStan, PHP-CS-Fixer, `composer audit`) and
+    `.github/workflows/extension.yml` (ESLint, `vue-tsc`, Vitest, build check, `npm audit`, gitleaks); release
+    workflows on the tags `backend-v*` and `extension-v*`.
+  - Open: the first tagged releases (they wait for the setup and migration assistant).
+
+- [ ] **Make the extension tests less tied to markup and wording (later refactor)**
+  The tests pin behaviour well, but many find elements by styling class (373 uses of 103 `.cps-…` classes) and 91
+  expectations repeat German sentences verbatim. Moving pages around or renaming classes then means many test edits.
+  - Find elements by role, label or a dedicated `data-test` attribute instead of styling classes.
+  - Compare texts through their translation keys, except where the spec fixes the exact wording.
+  - Not urgent; do it before a larger UI restructuring.
 
 ## Dependencies & Shared Code
 
@@ -144,7 +155,7 @@ Open issues and planned improvements, roughly ordered by severity.
 - [ ] **Consider publishing the shared libraries as packages**
   Subtrees work for a single developer. If other extensions will reuse `ct-utils` and `ct-extension-utils`, publish them as versioned npm packages (private or GitHub-hosted is fine) instead of copying them in.
 
-- [ ] **Replace `churchtools/php-client` with our own thin ChurchTools client**
+- [x] **Replace `churchtools/php-client` with our own thin ChurchTools client** (done: [`GuzzleChurchToolsClient.php`](backend/src/Infrastructure/ChurchTools/GuzzleChurchToolsClient.php); the library and the fork are gone from `composer.json`)
   [`backend/composer.json`](backend/composer.json) requires `churchtools/php-client` from the fork `lub90/ct-php-client` as `dev-version/3.126.2`, which is a branch. The library is 59 MB and about 3,800 files, but the backend uses only `SimpleClient`, `GeneralApi::getWhoami()`, `Configuration`, `ApiException` and one model.
   - Decided in [`specs/backend-spec.md`](specs/backend-spec.md) (D1); the client's behavior is specified in section 5.6.
   - Write a small client on top of Guzzle behind an interface: `whoami`, global permissions, login check and the KV store calls. It gets central timeouts, `429` handling and one exception type per error case.
@@ -157,8 +168,8 @@ Open issues and planned improvements, roughly ordered by severity.
 - [x] `PasswordValidator::generateRandom()` shuffles with `str_shuffle`, which isn't cryptographically secure. The characters themselves come from `random_int`, so this is minor, but a CSPRNG-based shuffle would be better. (Plan 2.4: `Random\Randomizer` with the secure engine, now in `PasswordPolicy`.)
 - [x] The class name is spelled two ways: `ChurchtoolsAuthVerifier` and `ChurchToolsAuthVerifier`. (Now `ChurchToolsPasswordVerifier`.)
 - [ ] Translate the remaining German code comments to English.
-- [ ] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
-- [ ] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).
+- [x] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
+- [x] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).
 
 ## Documentation
 

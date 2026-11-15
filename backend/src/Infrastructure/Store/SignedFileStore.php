@@ -85,6 +85,15 @@ final class SignedFileStore
     }
 
     /**
+     * Whether the record has a data file. A hint only, read without the lock: for callers that would otherwise create
+     * a record just to find it empty.
+     */
+    public function exists(string $name): bool
+    {
+        return is_file($this->directory . '/sec-' . hash('sha256', $name) . '.json');
+    }
+
+    /**
      * Checks that `flock` really excludes a second handle on this file system (spec 6.1, "Locking"): takes an
      * exclusive lock on `probe.lock`, then lets a second handle ask for the same lock without waiting.
      * `true` only if the second attempt is refused. Never throws; a folder that can't be used gives `false`.
@@ -165,7 +174,7 @@ final class SignedFileStore
 
     private function tampered(string $name): ConfigurationException
     {
-        $this->logger->error("Security store record $name failed its integrity check; requests that need it are refused.");
+        $this->logger->error("Security store record $name failed its integrity check.");
 
         return new ConfigurationException('A security record in the backend\'s cache folder failed its integrity check. Check the server for unauthorized access, then empty the folder cache/.', Reason::StoreTampered);
     }

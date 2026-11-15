@@ -892,6 +892,30 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertSame(2, $this->settingsReads());
     }
 
+    /**
+     * The change log compares only when settings or access came from ChurchTools: a public key loaded from ChurchTools
+     * before the cached settings doesn't count (spec 6.4).
+     */
+    public function testAPublicKeyLoadedBeforeTheCachedSettingsComparesNothing(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::ENCRYPTION_CATEGORY], json_encode([KvSchema::PUBLIC_KEY => (string) file_get_contents(self::KEYS . 'publicKey1.pem')], JSON_THROW_ON_ERROR));
+        $this->settings(self::validSettings());
+        $logger = new \Monolog\Logger('test', [$this->log]);
+        $repository = fn(): KvSettingsRepository => new KvSettingsRepository(new ExtensionData($this->fake), $logger, $this->cache(), $this->clock, new \CtPassStore\Infrastructure\Kv\SettingsChangeLog(new \CtPassStore\Infrastructure\Store\SignedFileStore($this->cacheDir, self::CACHE_SECRET, $logger), $logger));
+        $repository()->settings();
+        $record = $this->cacheDir . '/sec-' . hash('sha256', 'audit:settings') . '.json';
+        clearstatcache();
+        $written = fileinode($record);
+
+        $next = $repository();
+        $next->publicKey();
+        $next->settings();
+
+        clearstatcache();
+        self::assertSame($written, fileinode($record));
+        self::assertSame(1, count(array_filter($this->fake->calls(), fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categories[KvSchema::ENCRYPTION_CATEGORY])), 'The key came from ChurchTools.');
+    }
+
     private function accessReads(): int
     {
         return count(array_filter(

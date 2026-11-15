@@ -8,6 +8,7 @@ pnpm-debug.log*
 lerna-debug.log*
 
 .env
+.env.*
 node_modules
 dist
 dist-ssr
@@ -24,3 +25,7 @@ dist-ssr
 *.sln
 *.sw?
 releases
+coverage/
+test-results/
+playwright-report/
+tests/contract/fixtures/

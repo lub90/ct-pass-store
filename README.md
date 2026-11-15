@@ -34,8 +34,16 @@ CtPassStore consists of:
 - A **PHP backend** that handles encryption, integration, and access management with external IT systems, because this is not possible with a ChurchTools extension. The PHP backend can be hosted on any "usual" webhosting platform. As such, no separate server capacity, infrastructure or complicated setup is required.
 
 ### Setup Procedure
-Begin by following the installation guide for the **CtPassStore ChurchTools Extension** provided [here](./extension/docs/setup.md).  
-The extension’s setup process will also walk you through configuring the accompanying PHP backend, ensuring both components are properly connected and ready to use.
+> **Version 0.1.0 is not released yet.** Its setup and migration assistant isn't built yet, so a new installation can't be set up and an existing one can't be migrated. The release waits for it; keep running your current version until then.
+
+- **Extension:** get the release ZIP (or build it yourself) and upload it to ChurchTools under the key `ctpassstore`, as described in the [extension setup guide](./extension/docs/setup.md).
+- **PHP backend:** install it by hand as described in the [backend setup guide](./backend/docs/setup.md).
+- **Connecting both:** writing the extension's settings (backend address, OAuth client, role groups and their rights) is the job of the coming setup assistant.
+
+Install backend and extension with the same first two version numbers (e.g. backend `0.1.x` with extension `0.1.x`; see [specs/versioning.md](./specs/versioning.md)). Releases are tagged `extension-vX.Y.Z` and `backend-vX.Y.Z`.
+
+### Using CtPassStore
+The [user guide](./extension/docs/user-guide.md) shows the extension's pages for users and admins, on a computer and on a phone, and explains why everyone who can change the backend address (normally the admin group) must be as trustworthy as your ChurchTools administrators. What changed in each version is in the CHANGELOGs of the [extension](./extension/CHANGELOG.md) and the [backend](./backend/CHANGELOG.md).
 
 
 ## 🧩 CtPassStore Architecture

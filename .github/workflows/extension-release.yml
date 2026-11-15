@@ -1,0 +1,134 @@
+# Builds the extension release (spec 13.7, versioning.md): verifies tag, package.json, package-lock.json, the dated
+# CHANGELOG section and MAJOR.MINOR with the backend, runs the checks, builds the upload ZIP with its SHA-256, attests
+# its build provenance and publishes both files as a GitHub release with the CHANGELOG section as notes.
+#
+# Every action is pinned by its full commit SHA (the tag in the comment); how to update one: extension/docs/development.md
+# („CI and releases“).
+name: Extension release
+
+on:
+  push:
+    tags:
+      - 'extension-v*.*.*'
+
+# Nothing by default; each job names what it needs.
+permissions: {}
+
+concurrency:
+  group: extension-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Installs and runs third-party code (npm packages), so it gets read access only; the ZIP and its checksum leave it
+  # as an artifact.
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: extension
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Node 24 LTS, as in extension.yml.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          # No cache on a release, also not the automatic one a future packageManager field in package.json would turn on.
+          package-manager-cache: false
+
+      - name: Release check (tag, package.json, package-lock.json, CHANGELOG, MAJOR.MINOR with the backend)
+        run: |
+          mkdir -p "$RUNNER_TEMP/release"
+          node scripts/release-check.js "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release/notes.md"
+
+      # No dependency cache on a release: a fresh install from package-lock.json.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Security audit
+        run: npm audit --audit-level=high
+
+      # lint, typecheck, unit and app tests, `npm run build` with its build check. vite.config.ts refuses any build
+      # that isn't mode production with NODE_ENV production.
+      - name: Checks and production build
+        run: npm run check
+
+      - name: Zip it
+        run: |
+          VERSION="${GITHUB_REF_NAME#extension-v}"
+          # dist/version.txt is the app version the bundle carries (__APP_VERSION__, vite.config.ts). It is x.y.z only
+          # on a clean checkout of the tag (scripts/app-version.ts); a release never ships x.y.z+sha.
+          BUILT="$(cat dist/version.txt 2>/dev/null || true)"
+          if [ "$BUILT" != "$VERSION" ]; then
+            echo "The build carries the app version '$BUILT', the tag needs '$VERSION'." >&2
+            exit 1
+          fi
+          if grep -rqF -- "${VERSION}+" dist/assets; then
+            echo "The bundle carries a ${VERSION}+<sha> version; a release must be built from the clean tag." >&2
+            exit 1
+          fi
+          zip -r -q "$RUNNER_TEMP/release/ctpassstore-extension-${VERSION}.zip" dist/ -x '*.map' '*.DS_Store'
+
+      # The checksum file names the ZIP without a path, so `sha256sum --check` works next to the downloaded ZIP.
+      - name: SHA-256 of the ZIP
+        working-directory: ${{ runner.temp }}/release
+        run: |
+          ZIP="ctpassstore-extension-${GITHUB_REF_NAME#extension-v}.zip"
+          sha256sum "$ZIP" > "$ZIP.sha256"
+          cat "$ZIP.sha256"
+
+      # upload-artifact v7 and download-artifact v8 are the current majors of the pair (there is no upload-artifact
+      # v8); both talk to the same artifact service (backend v2, since v4 of both), and download-artifact v8 fails on a
+      # digest mismatch by default.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release
+          path: ${{ runner.temp }}/release/
+          if-no-files-found: error
+          retention-days: 7
+
+  # Signs a SLSA build provenance attestation for the ZIP (checked with `gh attestation verify`). Its own job, so the
+  # OIDC token permission never reaches the job that runs npm packages; it runs no project code.
+  attest:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-path: release/*.zip
+
+  # Only this job can write (create the release); it runs no project code.
+  release:
+    needs: [build, attest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release
+          path: release
+
+      - name: Check the ZIP against its checksum
+        working-directory: release
+        run: sha256sum --check --strict -- *.zip.sha256
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/*.zip release/*.zip.sha256 \
+            --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "$GITHUB_REF_NAME" --notes-file release/notes.md

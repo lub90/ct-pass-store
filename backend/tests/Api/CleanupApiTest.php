@@ -312,9 +312,10 @@ final class CleanupApiTest extends ApiTestCase
     public function testCooldownStoreFailsClosed(): void
     {
         self::assertSame(200, $this->cleanup()->getStatusCode());
-        $records = glob($this->cacheDir . '/sec-*.json') ?: [];
-        self::assertCount(1, $records, 'Only the cooldown record is written.');
-        file_put_contents($records[0], '{"broken": true}');
+        // The cooldown record; the settings change log (spec 6.4) has a record of its own.
+        $record = $this->cacheDir . '/sec-' . hash('sha256', 'cooldown:cleanup:web-cron') . '.json';
+        self::assertFileExists($record);
+        file_put_contents($record, '{"broken": true}');
         $this->clock->advance(600);
         $calls = $this->callCount();
 

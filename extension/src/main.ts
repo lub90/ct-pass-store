@@ -1,60 +1,18 @@
-import { churchtoolsClient } from '@churchtools/churchtools-client';
-
-
-// only import reset.css in development mode to keep the production bundle small and to simulate CT environment
-if (import.meta.env.MODE === 'development') {
-    import('./utils/reset.css');
-}
-
-declare const window: Window &
-    typeof globalThis & {
-        settings: {
-            base_url?: string;
-        };
-    };
-
-const baseUrl = window.settings?.base_url ?? import.meta.env.VITE_BASE_URL;
-churchtoolsClient.setBaseUrl(baseUrl);
-
-const username = import.meta.env.VITE_USERNAME;
-const password = import.meta.env.VITE_PASSWORD;
-if (import.meta.env.MODE === 'development' && username && password) {
-    await churchtoolsClient.post('/login', { username, password });
-}
-
-const KEY = import.meta.env.VITE_KEY;
-export { KEY };
-
-// Setup vue
+import './ui/theme.css';
 import { createApp } from 'vue';
 import App from './App.vue';
-import router from './router';
+import { createServices, provideServices } from './app/services';
+import { startDemo } from './dev/services';
+import { createAppI18n, pickLanguage } from './i18n';
+import { createAppRouter } from './router';
 
-// Setup vuetify
-import 'vuetify/dist/vuetify.min.css'
-import '@mdi/font/css/materialdesignicons.css' 
-import vuetify from './ct-extension-utils/styles/vuetify'
-
-// Import own css stylesheet
-import './ct-extension-utils/styles/churchToolsTheme.css'
-
-// Import vuetify fonts
-import '@fontsource/roboto/100.css'
-import '@fontsource/roboto/300.css'
-import '@fontsource/roboto/400.css'
-import '@fontsource/roboto/500.css'
-import '@fontsource/roboto/700.css'
-import '@fontsource/roboto/900.css'
-import '@fontsource/roboto/100-italic.css'
-import '@fontsource/roboto/300-italic.css'
-import '@fontsource/roboto/400-italic.css'
-import '@fontsource/roboto/500-italic.css'
-import '@fontsource/roboto/700-italic.css'
-import '@fontsource/roboto/900-italic.css'
-
-
-const app = createApp(App);
-app.provide('churchtoolsClient', churchtoolsClient);    // Provide churchtools client globally
-app.use(router).use(vuetify).mount('#app');
-
-
+// No async bootstrap (spec 5.1): the app state loads inside the frame.
+const language = pickLanguage(navigator.languages);
+// Demo mode is the default of `npm run dev` (spec 13.6); `--mode real` and every production build use the real systems.
+// The condition must stay literal here: Vite replaces it with `false` in a build, which drops `dev/` from the bundle.
+// On the dev server (real mode) there is no backend login: it covers the ChurchTools side only.
+const services =
+    import.meta.env.DEV && import.meta.env.MODE !== 'real' ? startDemo(language) : createServices(language, { backendLogin: !import.meta.env.DEV });
+const app = createApp(App).use(createAppI18n(services.language)).use(createAppRouter());
+provideServices(services, app);
+app.mount('#app');

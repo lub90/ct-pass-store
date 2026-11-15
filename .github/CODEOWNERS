@@ -1,0 +1,7 @@
+# Changes to the CI, release and secret-scan configuration need the maintainer's review
+# (extension/docs/development.md, „CI and releases“). Effective only with branch protection that requires code owner
+# reviews, which the maintainer sets on GitHub.
+/.github/workflows/ @lub90
+/.github/CODEOWNERS @lub90
+/.gitleaks.toml @lub90
+/.gitleaksignore @lub90

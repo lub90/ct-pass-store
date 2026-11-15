@@ -1,0 +1,36 @@
+# gitleaks configuration for the CI secret scan (.github/workflows/extension.yml).
+# All default rules stay on; no rule is disabled. The only exceptions are committed TEST values, each with its reason:
+# - the two PEM test keys by their exact path (a PEM block spans many lines, so a value pattern doesn't fit);
+# - in three source files, only the one invented value each (condition AND: the exact path AND the exact value), so
+#   any other secret-looking value added to those files is still reported.
+# A new exception needs a review that the value is a test value; prefer a fingerprint in .gitleaksignore for a single
+# finding (extension/docs/development.md, „Secret scan“).
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Test RSA private key of the backend's crypto tests (unencrypted); never used outside tests"
+paths = ['''^backend/tests/keys/privateKey1\.pem$''']
+
+[[allowlists]]
+description = "The same test key, passphrase-encrypted, for the backend's encrypted-key tests"
+paths = ['''^backend/tests/keys/privateKey1Encrypted\.pem$''']
+
+[[allowlists]]
+description = "Invented JWT-shaped string (payload sub 947, signature 'signature-of-the-token') for the fixture sanitizer tests"
+condition = "AND"
+paths = ['''^extension/scripts/sanitize-fixture\.test\.js$''']
+regexes = ['''^eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiI5NDcifQ\.c2lnbmF0dXJlLW9mLXRoZS10b2tlbg$''']
+
+[[allowlists]]
+description = "Invented 64-hex cleanup token ('b4d1c0ffee' + counting hex digits) of the backend's cleanup API tests"
+condition = "AND"
+paths = ['''^backend/tests/Api/CleanupApiTest\.php$''']
+regexes = ['''^b4d1c0ffee0123456789abcdef0123456789abcdef0123456789abcdef012345$''']
+
+[[allowlists]]
+description = "Invented dummy login token (redaction tests of the contract helpers)"
+condition = "AND"
+paths = ['''^extension/tests/contract/helpers\.unit\.test\.ts$''']
+regexes = ['''^dummy-login-token-QUJDREVGR0hJSktMTU5PUFFSU1RVVld$''']

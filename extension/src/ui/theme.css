@@ -1,0 +1,213 @@
+/*
+ * Design tokens of the extension. They are borrowed from the ChurchTools host page: its semantic Tailwind v4 variables
+ * (`--color-basic-*`, `--color-accent-*` ...) switch with ChurchTools' dark mode (`.dark` on an ancestor) by
+ * themselves, so the extension looks native and follows dark mode without a rule of its own. Every token has a
+ * fallback with the light value, so it also looks right outside ChurchTools (dev server, tests). An update of the host
+ * page may change a colour, never break the extension.
+ *
+ * Contrast (WCAG AA: 4.5:1 for text, 3:1 for large text and UI edges), light values:
+ *   text on surface            ~16:1    text-muted on surface   ~7.6:1
+ *   accent-text on accent      ~5.4:1   danger on danger-pale   ~4.6:1 (text uses --cps-text on the pale fills)
+ *   create-text on create      white on the darkened green: 5.06:1 (light fallback, computed: oklch(72.3% 0.219 149.6)
+ *                              mixed 72% with black in oklab = about rgb(0, 128, 49)).
+ *                              The host's own green with white text would be only ~2.3:1.
+ * The dark values come from the host and are checked there; text always sits on `surface`, `panel` or a pale fill
+ * together with `--cps-text`, never accent-coloured on a pale fill below 4.5:1.
+ */
+.cps {
+    --cps-font: var(--font-sans, 'Lato', ui-sans-serif, system-ui, sans-serif);
+    --cps-text: var(--color-basic-primary, oklch(20.8% 0.042 265.755));
+    --cps-text-muted: var(--color-basic-secondary, oklch(44.6% 0.043 257.281));
+    /*
+     * Secondary facts next to a name (a ChurchTools ID). Same colour as --cps-text-muted (~7.6:1 on surface, light;
+     * dark follows the host's secondary text colour); it sets the ID apart from the name together with the smaller
+     * size and italics the component gives it. Its own name so the meta colour can change without touching text-muted.
+     */
+    --cps-text-meta: var(--cps-text-muted);
+    --cps-surface: var(--color-basic-inverted, #fff);
+    --cps-panel: var(--color-basic-b-pale, oklch(98.4% 0.003 247.858));
+    --cps-divider: var(--color-basic-divider, oklch(92.9% 0.013 255.508));
+    --cps-accent: var(--color-accent-bright, oklch(54.6% 0.245 262.881));
+    --cps-accent-text: var(--color-accent-inverted, #fff);
+    --cps-accent-pale: var(--color-accent-b-pale, oklch(93.2% 0.032 255.585));
+    --cps-danger: var(--color-destructive-bright, oklch(57.7% 0.245 27.325));
+    --cps-danger-pale: var(--color-destructive-b-pale, oklch(93.6% 0.032 17.717));
+    --cps-warning: var(--color-warning-bright, oklch(76.9% 0.188 70.08));
+    --cps-warning-pale: var(--color-warning-b-pale, oklch(97.3% 0.071 103.193));
+    --cps-success: var(--color-success-bright, oklch(62.7% 0.194 149.214));
+    /* Green of "create something new", darkened so that white text reaches AA (5.06:1 on the light fallback). */
+    --cps-create: color-mix(in oklab, var(--color-constructive-b-bright, oklch(72.3% 0.219 149.579)) 72%, black);
+    --cps-create-text: var(--color-constructive-inverted, #fff);
+    --cps-radius: var(--radius-md, 0.375rem);
+    --cps-radius-lg: var(--radius-lg, 0.5rem);
+    --cps-size: var(--text-base, 0.875rem);
+    --cps-size-sm: var(--text-sm, 0.8125rem);
+    /* Spacing scale: 4, 8, 12, 16, 24, 32 px. */
+    --cps-space-1: 4px;
+    --cps-space-2: 8px;
+    --cps-space-3: 12px;
+    --cps-space-4: 16px;
+    --cps-space-5: 24px;
+    --cps-space-6: 32px;
+    /* One height for buttons and fields; a finger gets 44 px (below). */
+    --cps-control-h: 40px;
+    --cps-shadow-card: 0 1px 3px #0f172a14, 0 6px 16px #0f172a0d;
+    /* Duration and easing for every transition. Components never write raw durations; reduced motion sets it to 0s. */
+    --cps-transition: 150ms ease;
+    /* Lato of ChurchTools has 300, 400 and 700: text is regular, buttons and headings bold. No 500 or 600. */
+    --cps-weight-normal: 400;
+    --cps-weight-strong: 700;
+
+    font-family: var(--cps-font);
+    font-size: var(--cps-size);
+    font-weight: var(--cps-weight-normal);
+    line-height: 1.45;
+    color: var(--cps-text);
+}
+/* Headings and `strong` are bold, whether the host resets them (Tailwind) or not. */
+.cps :where(h1, h2, h3, h4, strong, b) {
+    font-weight: var(--cps-weight-strong);
+}
+
+/* Buttons are classes: `cps-btn` plus a variant. Icon buttons need an aria-label. */
+.cps :where(button.cps-btn, a.cps-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--cps-space-2);
+    box-sizing: border-box;
+    min-height: var(--cps-control-h);
+    padding: 0 var(--cps-space-4);
+    border: 1px solid var(--cps-divider);
+    border-radius: var(--cps-radius-lg);
+    background: var(--cps-surface);
+    color: var(--cps-text);
+    font: inherit;
+    font-weight: var(--cps-weight-strong);
+    cursor: pointer;
+    transition:
+        background-color var(--cps-transition),
+        border-color var(--cps-transition);
+}
+.cps :where(a.cps-btn) {
+    text-decoration: none;
+}
+.cps :where(button.cps-btn:hover:not(:disabled), a.cps-btn:hover) {
+    background: var(--cps-panel);
+    border-color: color-mix(in oklab, var(--cps-divider) 70%, var(--cps-text));
+}
+.cps :where(button.cps-btn:disabled) {
+    opacity: 0.5;
+    cursor: default;
+}
+.cps :where(button.cps-btn--primary) {
+    border-color: var(--cps-accent);
+    background: var(--cps-accent);
+    color: var(--cps-accent-text);
+}
+.cps :where(button.cps-btn--primary:hover:not(:disabled)) {
+    border-color: color-mix(in oklab, var(--cps-accent) 80%, black);
+    background: color-mix(in oklab, var(--cps-accent) 80%, black);
+}
+.cps :where(button.cps-btn--create) {
+    border-color: var(--cps-create);
+    background: var(--cps-create);
+    color: var(--cps-create-text);
+}
+.cps :where(button.cps-btn--create:hover:not(:disabled)) {
+    border-color: color-mix(in oklab, var(--cps-create) 85%, black);
+    background: color-mix(in oklab, var(--cps-create) 85%, black);
+}
+.cps :where(button.cps-btn--danger) {
+    border-color: var(--cps-danger);
+    color: var(--cps-danger);
+}
+.cps :where(button.cps-btn--danger:hover:not(:disabled)) {
+    background: var(--cps-danger-pale);
+}
+.cps :where(button.cps-btn--ghost) {
+    border-color: transparent;
+    background: transparent;
+}
+/* Same specificity as the base hover and later in the file, so it must restate the hover itself. */
+.cps :where(button.cps-btn--ghost:hover:not(:disabled)) {
+    border-color: transparent;
+    background: var(--cps-panel);
+}
+/* A symbol only: a square the height of a control. */
+.cps :where(button.cps-btn--icon) {
+    width: var(--cps-control-h);
+    padding: 0;
+}
+
+.cps :where(input, select, textarea) {
+    box-sizing: border-box;
+    width: 100%;
+    padding: var(--cps-space-2) var(--cps-space-3);
+    border: 1px solid var(--cps-divider);
+    border-radius: var(--cps-radius-lg);
+    background: var(--cps-surface);
+    color: var(--cps-text);
+    font: inherit;
+    transition: border-color var(--cps-transition);
+}
+.cps :where(input:not([type='checkbox'], [type='radio']), select) {
+    min-height: var(--cps-control-h);
+    padding-block: 0;
+}
+.cps :where(input[type='checkbox'], input[type='radio']) {
+    width: auto;
+}
+
+/* A visible frame wherever the keyboard stands. */
+.cps :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--cps-accent);
+    outline-offset: 2px;
+}
+
+/* Fingers need bigger targets than a mouse pointer. */
+@media (pointer: coarse) {
+    .cps {
+        --cps-control-h: 44px;
+    }
+    /*
+     * A link that stands alone (a back link, „Über“) is a target of its own. Links in running text keep the line height
+     * (WCAG 2.5.8 inline exception); they don't get the class.
+     */
+    .cps :where(a.cps-link) {
+        display: inline-flex;
+        align-items: center;
+        min-height: 44px;
+    }
+}
+/*
+ * iOS zooms into a field whose text is smaller than 16px as soon as it is tapped, and does not zoom out again.
+ * Below 48rem (phone) and on touch the fields use 16px. Not `:where`: no field of a component may take it below.
+ */
+@media (pointer: coarse), (max-width: 48rem) {
+    .cps input:not([type='checkbox'], [type='radio']),
+    .cps select,
+    .cps textarea {
+        font-size: 16px;
+    }
+}
+/* A form's buttons in one row, wrapping when narrow. */
+.cps :where(.cps-form-actions) {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--cps-space-2);
+}
+/* Phone: form buttons stretch to the full width. */
+@media (max-width: 48rem) {
+    .cps :where(.cps-form-actions > button.cps-btn) {
+        flex: 1 1 100%;
+    }
+}
+
+/* Less motion on request (no !important): every transition reads the token, which becomes 0s here. */
+@media (prefers-reduced-motion: reduce) {
+    .cps {
+        --cps-transition: 0s;
+    }
+}

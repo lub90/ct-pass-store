@@ -1,8 +1,15 @@
 # CtPassStore Extension – Specification
 
-> **Status: DRAFT, agreed in brainstorming on 2026-11-12.** This document describes the ChurchTools extension
-> (`extension/`) after its rework: new backend API, new design, new architecture and a new rights model. It is the
-> reference for the implementation plan and the extension's tests.
+> **Status: describes version 0.1.0 as built (2026-11-15).** Agreed in brainstorming on 2026-11-12 and kept in line
+> with the code during the implementation. This document describes the ChurchTools extension (`extension/`) after its
+> rework: new backend API, new design, new architecture and a new rights model. It is the reference for the extension's
+> tests.
+>
+> **Deferred to the setup and migration assistant** (its own spec, section 12), marked „*Deferred*“ where they occur:
+> the setup and migration wizards and `src/setup/`, `src/migration/` (5.1, 12.3), the rights table in code with its
+> guide test, the rights check and the group change (13.4.6, 16.3, 16.4, 16.5), and the „Sicherung“ and „Einrichtung“
+> pages (3.1.3, 4.4). Until then the release of 0.1.0 waits: without the assistant a new installation can't be set up
+> and an old one can't be migrated. Also pending: a first run of the browser tests in WebKit (13.1).
 >
 > **Related documents:**
 > - [`backend-spec.md`](backend-spec.md): the backend's API. Section 11 of this spec lists the backend changes this
@@ -55,6 +62,7 @@
 | E12 | **No Pinia.** Local `ref`s and a few composables. | The app is small. |
 | E13 | **Versioning:** backend and extension share `MAJOR.MINOR` ([`versioning.md`](versioning.md)). | Compatibility is visible in the version number and checked at release and at runtime. |
 | E14 | **Rights model as one table** (section 16): each role maps to a ChurchTools group; the setup creates new groups or uses existing ones; the mapping can be changed later; a check compares the real rights with the table. | Least privilege that's verified, not just described; churches can reuse groups they already have. |
+| E15 | **The settings editors (normally the admin group) are trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. Everyone with `edit custom data` on `settings` (normally the admin group), everyone who can grant that right, and everyone who controls the membership of a group holding it must therefore be as trustworthy as ChurchTools administrators. |
 
 ## 3. Roles and app states
 
@@ -73,7 +81,10 @@ Which ChurchTools rights each role's group gets, and why, is section 16.
    checked separately: one by the backend, one by ChurchTools.
 2. „Einstellungen“ is shown to admins **and** to settings editors, even when the backend login fails. So a broken
    `backendUrl` can always be fixed by someone with the right.
-3. „Sicherung“ (backup) and „Einrichtung“ (setup) are shown only to admins who are also setup-capable.
+3. „Sicherung“ (backup) and „Einrichtung“ (setup) are shown only to admins who are also setup-capable. *Deferred:*
+   until the setup assistant exists, the overview shows no card for them (for anyone); their reserved routes (12.4)
+   show the page title and „Diese Seite kommt mit dem Einrichtungsassistenten.“ Hints that would point there say
+   instead that the setup assistant can repair it once it is available (no version is promised).
 
 ### 3.2 App states
 
@@ -83,14 +94,18 @@ The app computes one state at startup (`src/app/`), in this order. The first mat
 | --- | --- | --- | --- |
 | 1 | Still loading | `loading` | Frame with a muted „Lade …“ line |
 | 2 | `whoami` is anonymous, or the extension's `view` permission is missing | `no-access` | „Du hast keinen Zugriff auf diese Erweiterung. Wende dich an die Verantwortlichen in deiner Gemeinde.“ |
-| 3 | Old data layout (6.3) | `migration-needed` | Setup-capable: the migration wizard. Others: the waiting text (3.3). |
-| 4 | Stored data has a newer `schema` than the code | `update-needed` | „Bitte aktualisiere die Erweiterung.“ (admins: with the versions) |
-| 5 | `settings` missing, invalid, or without `backendUrl` or `oauthClientId` | `setup-needed` | Setup-capable: the setup wizard. Others: the waiting text. |
+| 3 | Old data layout (6.3) | `migration-needed` | Setup-capable: the migration wizard (*deferred*: until it exists, the waiting text plus a note that the setup assistant isn't available yet, 5.2). Others: the waiting text (3.3). |
+| 4 | Stored data has a newer `schema` than the code (a single value; a newer value among several is row 4a) | `update-needed` | „Bitte aktualisiere die Erweiterung.“ (admins: with the versions) |
+| 4a | `settings`, or `access` if the person can read it, holds more than one value (6.2), also when one of them has a newer `schema` (it can't be kept) | `backend-error` | Users: as row 7. Settings editors: „In ChurchTools sind mehrere Werte für „{Kategorien}“ gespeichert. Die Erweiterung verwendet keinen davon, bis unter „Einstellungen“ ausgewählt ist, welcher bleibt.“ with a link to „Einstellungen“. No login, nothing is sent to any backend address. |
+| 5 | `settings` missing, invalid, or without `backendUrl` or `oauthClientId` | `setup-needed` | Setup-capable: the setup wizard (*deferred*: until it exists, the waiting text plus a note that the setup assistant isn't available yet, 5.2). Others: the waiting text. |
 | 6 | Backend login fails with `no-service-access` | `no-access` | As in row 2 |
 | 7 | Backend unreachable, or login fails otherwise | `backend-error` | Users: „Der Dienst ist gerade nicht erreichbar. Versuch es später noch einmal.“ Settings editors (3.1): the problem text plus a link to „Backend & Status“. |
 | 8 | Backend `MAJOR.MINOR` differs from the extension's | `version-mismatch` | As in `versioning.md` section 3 |
 | 9 | Login answer `admin: false` | `user` | The password card |
 | 10 | Login answer `admin: true` | `admin` | The admin frame |
+
+In row 4 („admins: with the versions“) the versions go to settings editors and setup-capable people: the app doesn't
+log in to the backend in that state, so there is no `admin` answer to go by.
 
 ### 3.3 Waiting text
 
@@ -102,7 +117,9 @@ eingerichtet. Wende dich bei Fragen an die Verantwortlichen in deiner Gemeinde.�
 ### 4.1 Routes
 
 All routes live under `/ccm/ctpassstore/` (Vite `base` and `createWebHistory(import.meta.env.BASE_URL)`). There are
-no route guards; each view checks the app state and the rights it needs.
+no route guards; each view checks the app state and the rights it needs. In addition, each route names the role in
+the „Who“ column (`meta.requires`: admins, or admins and settings editors), and the app draws the missing-rights banner
+instead of the page for anyone else (display only, like everything role-derived).
 
 | Path | Page | Who |
 | --- | --- | --- |
@@ -173,13 +190,19 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
   other person. Without the right, a banner names it. A person outside the users group who still has an entry isn't
   found here; the cleanup and the rights check deal with that case.
 - The selected person shows avatar, name and status pill (as in 4.2) and the buttons „Neues Passwort“ and „Löschen“.
+  The avatar shows initials only, no ChurchTools image, to avoid extra requests.
+  Under every name (search list, card, both dialogs) the ChurchTools person ID is shown small, italic and muted
+  („ID 123“), so two people with the same name can be told apart. The search also finds a person by ID: each word of
+  the query must match: a word matches a name part it starts, and a word of digits also matches the ID exactly or as
+  a prefix; so „Anna 12“ finds an Anna whose ID starts with 12.
 - „Neues Passwort“ runs the flow of 4.2 (states 2 and 3, or the direct path) for that person, with two differences:
   - A **warning banner** above the flow: „Du legst gerade das Passwort für **{Name}** fest.“
   - A **confirm dialog** before sending, if the person has a password: „Das bisherige Passwort von {Name} funktioniert
     danach nicht mehr. Fortfahren?“
   - The ChurchTools password asked for is the **admin's own** (backend spec 4.6).
 - „Löschen“: confirm dialog (danger variant, focus on „Abbrechen“) naming the person, then `DELETE /v1/entries/{id}`
-  with the admin's ChurchTools password if required. The password field is part of the dialog in that case.
+  with the admin's ChurchTools password if required. The password field is part of the dialog in that case. A missing
+  or wrong ChurchTools password is shown above the buttons, since the dialog with the field has closed by then.
 - An admin selecting themselves gets the normal flow of 4.2.
 
 ### 4.4 Settings overview
@@ -196,12 +219,20 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
 | Einrichtung | Rechte und Gruppen prüfen oder reparieren | wizard spec |
 
 Cards the person can't use are shown disabled with the missing right, not hidden, except Sicherung and Einrichtung
-(3.1.3). Sub-pages have a „‹ Einstellungen“ back link.
+(3.1.3; *deferred:* not shown until the setup assistant exists). Sub-pages have a „‹ Einstellungen“ back link.
 
 **Saving on every settings page:** Save and Discard are disabled until something changes; success shows as inline
 „Gespeichert“ (`role="status"`). A save compares `revision` (6.1) and reports a conflict instead of overwriting:
 „{Name} hat die Einstellungen inzwischen geändert. Lade neu, um die Änderungen zu sehen.“ (or without a name if
 unknown). Leaving a page with unsaved changes asks first.
+
+**Stored problems:** parts a read dropped (e.g. invalid `texts`, dropped as a whole) are listed before any save, since a
+save removes them. `settings` that are invalid at startup are `setup-needed` (3.2) and no settings page shows; the
+repair below covers a value that became invalid during a visit. It's explicit, on „Passwortregeln“: valid fields are
+kept, broken rules get a safe value (confirmation on, custom passwords off, length 16, or 64 for a stored length above
+64), and the save uses the stored `revision`. No repair is offered there if `backendUrl` or `oauthClientId` is invalid
+(the rules and texts pages never write these two fields, E15) or if the value has no `schema` 2 with a usable
+`revision` (a safe integer from 0 to 2⁵³ − 2; a stored revision outside that range refuses every save).
 
 ### 4.5 Passwortregeln
 
@@ -214,29 +245,66 @@ unknown). Leaving a page with unsaved changes asks first.
 ### 4.6 Texte
 
 One block per supported language (`de`, `en`), each with „Titel“ (at most 60 characters) and „Erklärung“ (one or two
-sentences, at most 300 characters). An empty field means the default text, shown below the field. Defaults:
+sentences, at most 300 characters). An empty field means the default text, shown below the field; a field holding only
+spaces and invisible format characters counts as empty. Bidi control characters (U+202A–U+202E, U+2066–U+2069) are
+refused at the field and by the store (stored texts with them are dropped on reading like other invalid texts). Defaults:
 
 | | Title | Explanation |
 | --- | --- | --- |
 | de | Mein Zweitpasswort | Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort. |
-| en | My secondary password | A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password. |
+| en | My secondary password | A separate password for connected services such as Wi-Fi. It’s independent of your ChurchTools password. |
 
 ### 4.7 Zugriff
 
 - A warning banner: „Wer hier etwas ändern kann, hat Zugriff auf alle Passwörter. Halt diesen Kreis sehr klein.“
-  The same holds for the admin group: whoever controls its membership is admin (16.1). The status dot of „Admins“
-  also shows the findings of rule 6 (16.4).
+  The same holds for the admin group: whoever controls its membership is admin (16.1). With the rights check
+  (*deferred*, 16.4), the status dot of „Admins“ also shows the findings of rule 6.
 - **Groups:** for the roles „Nutzer“ (users) and „Admins“, the mapped ChurchTools group with name, member count, a
-  status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
-  ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
-  The service user's group is shown on „Einrichtung“, not here.
-- **Machine clients:** a list with name, `id`, permissions („darf lesen“), number of keys, `createdAt`, and „Bearbeiten“
-  / „Entfernen“. A green „+ Client hinzufügen“ button.
+  status dot from the rights check (16.4; *deferred*, see the rule „Until the setup assistant exists“ below),
+  „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen ↗“. „Gruppe ändern“ starts the change
+  flow of 16.5. A missing or deleted group is shown as an error with the fix. The service user's group is shown on
+  „Einrichtung“, not here.
+- **Machine clients:** every stored entry the backend enables, with name (isolated, `<bdi>`), `id`, permissions
+  („darf lesen“), number of keys, a fingerprint per key, `createdAt` (and who created it), and „Bearbeiten“ /
+  „Entfernen“. A green „+ Client hinzufügen“ button.
+- **Key fingerprint:** the first 16 characters (96 bits) of base64url(SHA-256(the 32 key bytes)), the same whichever
+  encoding was pasted. An admin compares it with the service's key, e.g. for a key in base64url:
+  `printf %s '<key>' | tr '_-' '/+' | base64 -d | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-16`
+  (add the `=` padding first if `base64 -d` asks for it). Look-alike entries (same name, different key) are told
+  apart by it.
+- **Falsch konfiguriert:** every stored entry the backend disables (backend spec 3.2: e.g. without `name` or
+  `createdAt`, a duplicate `id`, a shared key) is listed with its position, its raw `id` (plain text, isolated, cut
+  to 40 characters), its name (isolated, cut to 60), permission, `createdAt` (as is if it is a real date, otherwise
+  isolated and cut to 60), `createdBy` and key fingerprints as far as present, and the reasons in words, each with
+  „Entfernen“ (danger confirm). Names and ids in the dialog's list of entries a removal turns on are cut to 40.
+- **Removing** (any entry): the store removes exactly that entry and changes nothing else in `access` (only
+  `machineClients` and `revision`; no schema repair). It compares the read's `revision`, the entry's index, its raw
+  `id` and the entry itself, and refuses if any of them no longer matches. Before confirming, the dialog names every
+  entry the removal would turn on (removing one of two entries with the same `id`, or one of two clients sharing a
+  key, enables the other one: name, `id`, permission and fingerprints) and, for a duplicate `id`, suggests removing all
+  entries with it.
+- **`access` invalid here** (e.g. `groups.service` broken) while `machineClients` is a list: the backend reads only
+  `groups.admins` and `machineClients`, so it may still enable clients. The page lists the active clients (read-only,
+  no „Bearbeiten“) and the broken entries, and removing works as above. As on save, a stored `revision` that is no
+  integer counts as 0; an integer out of range refuses the removal (nothing can be removed here then). Groups and
+  „+ Client hinzufügen“ need a valid value.
+- The page and the client form need `edit custom data` on `access`; without it they name the right and read nothing.
+- Until the setup assistant exists (12.6), „Gruppe ändern“ is shown disabled with „Kommt mit dem
+  Einrichtungsassistenten.“, and no status dot is shown (the rights check comes with it).
 - **Client form** (`/settings/access/clients/new` and `/:id`):
-  - Name; ID proposed from the name (`^[a-z0-9-]{3,40}$`, unique, fixed after creation).
+  - Name; ID proposed from the name (`^[a-z0-9-]{3,40}$`, unique, fixed after creation). A new or changed name with
+    bidi control characters (U+202A–U+202E, U+2066–U+2069) is refused at the field and by the store on save; a stored
+    name with them is still read (parity with the backend) and kept unchanged when other things are saved.
   - Public keys: one or more, each pasted as base64 or base64url and checked on the spot (decodes to 32 bytes; not a
-    key another client uses, backend spec 3.2).
-  - Permission „Passwörter lesen“ (`entries:read`).
+    key another client uses, including stored entries the backend disables; backend spec 3.2).
+  - The form opens afresh for each client path, asking first if there are unsaved changes.
+  - Permission „Passwörter lesen“ (`entries:read`), off for a new client until turned on.
+  - A new client gets `createdAt` as the admin's **local** calendar date (`YYYY-MM-DD`; the backend only checks that
+    it is a real date) and `createdBy` = the logged-in ChurchTools person (`whoami`). Both are notes only: the client
+    stays valid when that person leaves the church or the admin group. „Zugriff“ says so, and clients nobody needs
+    any more are removed there. A creator ChurchTools no longer shows is listed by ID. `createdBy` is personal data
+    (a person ID kept as long as the client exists; readable by everyone who can read `access`, 6.1); removing the
+    client removes it.
 - „Entfernen“: confirm dialog with „Wirkt innerhalb von 5 Minuten.“
 - The page validates with the same rules as backend spec 3.2, so the backend never disables a client the extension
   saved.
@@ -245,9 +313,32 @@ sentences, at most 300 characters). An empty field means the default text, shown
 
 - Field „Backend-Adresse“ (`backendUrl`): `https://`, no query, fragment or credentials; a trailing slash is removed.
   Changing it shows a warning that machine clients sign tokens for this address (backend spec 4.4a).
-- „Selbsttest“: the checks of `GET /v1/test` as a list with colored dots and messages; a button runs it again. The
-  write test (`?write=1`) is a separate button with a short explanation.
+  Whoever can change this address can make users' browsers send their ChurchTools password (when
+  `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. That is everyone with
+  `edit custom data` on the `settings` category (normally the admin group, which the setup grants it, 16.2), everyone
+  who can grant that right, and everyone who can change the members of a group holding it; all of them must therefore
+  be as trustworthy as ChurchTools administrators (E15). As soon as the field
+  differs from the stored address, the page warns about this, and saving asks in a danger dialog naming the old and the
+  new address. The save writes only `backendUrl` into the value as read (revision-guarded). The app keeps using the
+  address it started with; the new one takes effect with the next page load (everyone then logs in to the new backend),
+  which the page says after saving, with a reload button. The field's rules are the store's (and the backend's
+  `parse_url` check): also no empty credentials (`https://:@host`), no missing host, no whitespace, control characters
+  or backslashes. A new or changed address must not contain invisible format characters (`\p{Cf}`: zero-width spaces,
+  soft hyphens, bidi controls); a stored one is still read and kept, as the backend reads it. A stored trailing slash
+  is no change. A new or changed address must also name the host as the browser connects to it: only ASCII, no `%` in
+  the host part, and the host as written equals `new URL(…).host` (case aside), so an IDN is entered in its `xn--` form
+  and `%2e` or numeric tricks are refused. A stored address whose host the browser rewrites is still read (the backend
+  keeps the written host); the page then shows the real host next to it (the tested line and the dialog's „Bisher“).
+  Addresses are shown isolated (`<bdi>`). A typed address is never contacted, not even without a token: there is no reachability check before
+  saving; the self-test after the reload is that check.
+- „Selbsttest“ (admins only, as the backend requires; settings editors who aren't admins see a note): the checks of
+  `GET /v1/test` as a list with colored dots and messages (plain text); it runs once when the page opens, and a button
+  runs it again. The write test (`?write=1`) is a separate button with a short explanation and never runs on its own.
+  Both go to the address the app runs with. A read-only run also updates the overview's pill.
 - Shows the backend version.
+- **Rights:** the page needs `edit custom data` on `settings` (the right that changes `backendUrl`, E15), for admins
+  too; without it the page names the missing right and reads nothing, and the overview shows its card disabled. The
+  self-test needs the admin role as well (the backend answers it only for admins).
 
 ### 4.9 Über
 
@@ -277,8 +368,8 @@ extension/src/
   admin/       manage, settings pages logic, machine-clients.ts
   app/         app state (3.2), useSession, role, version check
   views/       route pages only
-  setup/       wizard (wizard spec); this spec: only the entry point and the state hook
-  migration/   migration (wizard spec); this spec: only the entry point and the state hook
+  setup/       wizard (wizard spec); this spec: only the entry point and the state hook (deferred: not there yet)
+  migration/   migration (wizard spec); this spec: only the entry point and the state hook (deferred: not there yet)
   dev/         demo mode: FakeChurchTools and FakeBackend for the dev server
 ```
 
@@ -303,8 +394,8 @@ extension/src/
 - The generated `src/utils/ct-types.d.ts` (33,000 lines) and `src/ct-utils/types/ct-types.ts`; `ct/types.ts` declares
   only the fields we read.
 - `setupCompleted` and the old setup components (`src/setup/*`, `src/components/Setup*`), replaced when the wizard
-  spec is built. Until then, `setup-needed` shows the waiting text to everyone, plus a note for setup-capable people
-  that the new wizard comes with the next version.
+  spec is built. Until then, `setup-needed` and `migration-needed` show the waiting text to everyone, plus a note
+  for setup-capable people that the setup assistant sets the extension up and isn't available yet.
 - `VITE_BASE_URL`, `VITE_USERNAME`, `VITE_PASSWORD` (13.6).
 
 ## 6. Data model
@@ -322,7 +413,9 @@ extension/src/
 - `oauthClientId`: the client ID of the backend's OAuth application, written by the setup wizard. It isn't secret; the
   extension needs it for `/oauth/authorize` (7.1). Without it, the state is `setup-needed`.
 - `texts`: `{ "de"?: { "title"?: string, "intro"?: string }, "en"?: {…} }`; title ≤ 60, intro ≤ 300 characters.
-- `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`).
+- `machineClients`: as backend spec 3.2 (`id`, `name`, `publicKeys`, `permissions`, `createdAt`). The extension also
+  writes `createdBy` (the ChurchTools person ID of whoever added the client, 4.7; personal data, kept while the
+  client exists); the backend ignores it, and an invalid `createdBy` never disables a client (shared fixture).
 - `groups`: `{ "users": {…}, "admins": {…}, "service": {…} }`, each `{ "groupId": <positive integer>,
   "createdBySetup": <boolean> }`. `createdBySetup` decides what may be deleted later (16.5): the extension never
   deletes a group it didn't create.
@@ -334,8 +427,46 @@ extension/src/
 - **valibot** schemas in `model/`. Reads are tolerant: unknown fields are ignored and kept on the next write. Writes
   are strict: the value is validated and checked against the 10,000-character limit **before** it's written.
 - A `schema` greater than 2 → `update-needed` (3.2.4), never a misread.
-- Duplicates (several values in a one-value category) are read as the one with the highest value ID and reported to
-  admins; a save removes the others.
+- **Duplicates** (several values in `settings` or `access`) are never used, as the backend refuses them (it requires
+  exactly one value): no value wins by its value ID. At startup that is row 4a of 3.2 (no backend login, nothing sent
+  to any backend address). The read lists every value, oldest (lowest value ID) first, each read on its own, with its
+  stored text: the newest value is the one most likely planted, so it is never shown first, and it is labelled
+  „zuletzt angelegt“.
+  - Every settings page of that category (Passwortregeln, Texte, Backend & Status for `settings`; Zugriff and the client
+    form for `access`) shows the values instead of its form: value ID, revision, state (valid, invalid with the number
+    of problems, newer version), and the fields that decide where passwords go and who may read them, marked where
+    they differ between the values (compared on the full stored values, not the cut text): for `settings` the backend
+    address with, for every address, the host the browser connects to (4.8; marked as the real host when the browser
+    rewrites the written one), shown in full up to 253 characters, longer ones cut from the left so the ending (the
+    real domain) stays visible even when the address itself is cut, and a note on invisible characters, the OAuth client ID, the rules (yes/no
+    for booleans) and whether custom texts exist; for `access` the three group IDs and every machine client the backend
+    would enable with that value (name, `id`, permission, key fingerprints, 4.7; the set is marked when it differs,
+    compared in full and in any order) plus the number of disabled entries. The names of other stored fields are
+    listed. Everything is plain text, cut (120 characters; client names and ids 40) and isolated (`<bdi>`). A warning
+    says that a value nobody created may have been planted. The overview names the categories, with a link to
+    Passwortregeln or Zugriff.
+  - „Diesen Wert behalten“ is not offered for a value that is no JSON object, has a newer schema or an integer revision
+    out of range, nor for `settings` whose `backendUrl` a save would refuse as new (invisible characters or a host the
+    browser rewrites, 4.8; the page says why): keeping it would make an address active nobody could type. It asks in a
+    danger dialog naming the values to be deleted and, where the values differ, what the kept one makes active: its
+    backend address with its host and the other differing fields (`settings`), its differing group IDs and its enabled clients with
+    fingerprints, or that it has none (`access`). When the newest value („zuletzt angelegt“) is the only one that can
+    be kept, its card and the dialog say so: if nobody recognises it, it shouldn't be kept but deleted in ChurchTools
+    (`delete custom data` on the category) and the earlier value repaired. When no value can be kept, the page says
+    so: the wrong values have to be deleted, or one repaired, in ChurchTools (`delete custom data` and
+    `edit custom data` on the category); the page then shows the remaining value. The store then compares the stored values
+    with the ones shown (the same value IDs, each with exactly the same text) and refuses with a conflict, deleting
+    nothing, if anything differs (a value appeared, disappeared or changed). Otherwise it writes the kept value as
+    stored, with only its `revision` raised above the revision of every value that could be kept (so a page that read
+    any of them before gets a conflict instead of overwriting it; values that can't be kept don't count, a page can't
+    save over them; if that raise would leave the safe range, the store refuses and names the value), then deletes the others (value first: an interruption leaves
+    duplicates, never a lost value). Deleting needs `delete custom data` on the category.
+  - Every save and every removal of machine clients is refused as a conflict while a category holds several values: a
+    save never deletes a value nobody has seen. Reloading the page shows the values to choose from.
+  - After resolving a duplicate found at startup, or keeping a `settings` value whose address isn't the one the app
+    runs with, the page says that only a page load makes the extension use the kept value (the app keeps its startup
+    state and address, 4.8). If the delete fails after the kept value was written, the error shows and the values stay
+    (still not used); the list read before is then stale, and reloading shows the current values.
 
 ### 6.3 Detecting the old layout
 
@@ -398,7 +529,7 @@ technical `detail` (English) is never shown to users; admins and settings editor
 | `primary-password-required`, `invalid-primary-password` | At the ChurchTools password field: „Bitte gib dein ChurchTools-Passwort ein.“ / „Das ChurchTools-Passwort stimmt nicht.“ |
 | `password-invalid` | The rules in `violations` turn red in the rule list |
 | `custom-password-not-allowed` | „Eigene Passwörter sind gerade nicht erlaubt.“ and the settings are reloaded |
-| `too-many-attempts`, `upstream-rate-limited` | „Zu viele Versuche. Versuch es in {n} Minuten noch einmal.“ (from `retryAfter`) |
+| `too-many-attempts`, `upstream-rate-limited` | „Zu viele Versuche. Versuch es in {n} Minuten noch einmal.“ (from `retryAfter`, rounded up, 1 to 60; for 1: „… in einer Minute …“) |
 | `token-expired` | Handled by 7.2, not shown |
 | `missing-token`, `invalid-token` | Handled by 7.2 |
 | `no-service-access` | App state `no-access` |
@@ -415,7 +546,8 @@ A test parses `backend/docs/problems.md` and fails if a documented slug has no m
 ### 8.3 ChurchTools errors
 
 - `403` or a `status: "fail"` answer: missing rights, named from the permission checks (`ct/`).
-- `429`: „ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.“ (`retryAfterMs`, at least 60 s).
+- `429`: „ChurchTools bremst gerade. Versuch es in {n} Minuten noch einmal.“ (`retryAfterMs`, at least 60 s; for 1: „… in einer
+  Minute …“).
 - An anonymous `whoami` (`id` −1 or 0) is `no-access`, not a crash.
 
 ## 9. Design system (`src/ui/`)
@@ -458,6 +590,9 @@ A test parses `backend/docs/problems.md` and fails if a documented slug has no m
 - Form buttons stretch to full width.
 - Inputs use a 16 px font (prevents iOS zoom).
 - No horizontal scrolling at 375 px.
+- Touch targets are at least 44 px high on a coarse pointer. Links inside running text are exempt (WCAG 2.5.8 exempts
+  inline targets) and keep the line height; a standalone link (alone in its paragraph, list item or footer) gets the
+  class `cps-link`, which makes it 44 px high.
 
 ### 9.4 Accessibility
 
@@ -523,6 +658,7 @@ This spec fixes only the interfaces:
 2. `isOldLayout()` (6.3) and the schemas of 6.1 are the shared definitions the wizards use.
 3. `src/setup/` and `src/migration/` each have their own entry view and use only `ct/`, `store/`, `model/` and the
    provisioning code; `migration/` doesn't import from `setup/`'s views or flow, only from its provisioning modules.
+   *Deferred:* neither folder exists in 0.1.0; `setup-needed` and `migration-needed` show the waiting text (5.2).
 4. Routes `/settings/backup` and `/settings/setup` are reserved.
 5. Who may run them: setup-capable people (3.1), and after setup only admins who are also setup-capable.
 6. The setup creates or assigns the role groups and grants their rights **exactly as section 16 says**. The
@@ -538,7 +674,7 @@ This spec fixes only the interfaces:
 | **Unit** | Vitest, jsdom | Pure modules (`password/rules`, `password/flow`, `model/`, layout detection, `backend/problems`, language detection, machine-client validation) and single `ui/` components (`@vue/test-utils`) | CI, every push |
 | **App** | Vitest, jsdom | The whole app mounted against `FakeChurchTools` and `FakeBackend`: every app state of 3.2, user and admin, every flow of section 4 (direct path, confirm dialogs, warning banner, re-login with retry, blocked popup, conflict on save), every problem type of 8.2 | CI, every push |
 | **Contract** | Vitest, Node | Only what a fake can't prove: ChurchTools and the real backend behave as the fakes assume (13.2) | By hand, before each release |
-| **Browser** | Playwright, Chromium and WebKit, demo mode | A few flows at desktop width and at 375 px: no horizontal scrolling, 44 px touch targets, 16 px inputs, focus and dialog behavior; also produces the user-guide screenshots | By hand |
+| **Browser** | Playwright, Chromium and WebKit, demo mode | A few flows at desktop width and at 375 px: no horizontal scrolling, 44 px touch targets, 16 px inputs, focus and dialog behavior; also produces the user-guide screenshots | By hand (WebKit pending: not run yet, its system libraries were missing; `extension/docs/development.md`) |
 
 Neither the unit nor the app layer needs network access.
 
@@ -548,14 +684,14 @@ Neither the unit nor the app layer needs network access.
   layer), as in backend spec 6.6.
 - **ChurchTools cases:** KV categories and values (create, read, update, delete; `400` for a missing module key),
   the shape of `permissions/global`, `whoami` (incl. anonymous), person search, group details and member count, group
-  membership read with an OAuth token, and the acceptance of the callback URI (13.7).
+  membership read with an OAuth token, and the acceptance of the callback URI (14.1).
 - **Backend cases:** `POST /v1/auth/token` (answer shape incl. `admin` and `version`), `GET/PUT/DELETE /v1/entries`
   (`200`, `204`, `404 entry-not-found`, `password-invalid` with `violations`, `primary-password-required`,
   `invalid-primary-password`), `GET /v1/test` (shape), and the Problem Details shape and CORS headers of error answers.
 - **The password rules** (`password/rules.ts`) run against a shared list of test passwords that the backend's
-  `PasswordPolicy` tests also use (a JSON file in `specs/fixtures/` or similar, decided in the plan), so the mirror
-  can't drift.
-- Without its configuration (`.env` with instance, test users, backend URL), the contract layer aborts with a message
+  `PasswordPolicy` tests also use (`shared/password-policy-cases.json`), so the mirror can't drift.
+- Without its configuration (`CT_API_URL` and `CT_API_TOKEN` as in the backend's `phpunit.xml`, the backend's test-user
+  fixtures; the backend itself runs as a local sandbox, see `extension/docs/development.md`), the contract layer aborts with a message
   naming what's missing; it's never reported as passed. Recorded responses come only from the test instance, are
   stripped of personal data and tokens, and are gitignored; tests that need them are skipped visibly.
 
@@ -573,13 +709,13 @@ Neither the unit nor the app layer needs network access.
 4. `ui/` imports nothing from outside `ui/`.
 5. Every slug in `backend/docs/problems.md` has a mapping in `backend/problems.ts`.
 6. Every right in the rights table (16.2, as code in `setup/rights.ts`) appears in the user guide's rights table, and
-   the other way round (as infoscreen's `rights-doc.test.ts`).
+   the other way round (as infoscreen's `rights-doc.test.ts`). *Deferred* with `setup/rights.ts` (16.3).
 
 ### 13.5 Build check (`scripts/check-dist.js`, after every build)
 
 - exactly one JS bundle and no inline `<script>` (ChurchTools' CSP)
 - no instance host (`*.church.tools` except `example.church.tools`), no dev credentials in `dist/`
-- no external fonts, no demo code (`dev/`)
+- no external fonts, no demo code (`dev/`: the marker `__DEMO__` in every module) and no demo data string
 - the third-party license file is present
 
 ### 13.6 Development setup
@@ -587,7 +723,21 @@ Neither the unit nor the app layer needs network access.
 - `.env` has `CT_BASE_URL` and `CT_LOGIN_TOKEN`, **without** the `VITE_` prefix, so they never reach the bundle. A Vite
   dev proxy forwards `/api` to the instance and adds `Authorization: Login <token>`.
 - **Demo mode is the default** for `npm run dev`: `FakeChurchTools` and `FakeBackend` with invented data, so
-  development never writes into a real instance. A switch uses the real instance and a real backend instead.
+  development never writes into a real instance. `--mode real` uses the real instance instead, for the ChurchTools
+  side only (see below).
+  - Selected in `main.ts` by the literal `import.meta.env.DEV && import.meta.env.MODE !== 'real'`, so a build drops it.
+    A floating switch picks the scenario (user, admin, setup missing, no access, ChurchTools error, version mismatch);
+    the demo state lives in `localStorage` (development only; the production app never uses it).
+  - `npm run dev -- --mode real` covers the **ChurchTools side only** (KV values, persons, groups, rights) through the
+    dev proxy for `/api`. There is no backend login on the dev server: its origin serves no `/oauth/authorize`, and
+    proxying `/oauth` with the login token would authorize as the token's user without asking, so it isn't done. The
+    app refuses the login there (`LoginUnavailable`: „Die Anmeldung hat nicht geklappt“) instead of leaving for a
+    404. Backend flows (login, entries, self-test) are tested in the build hosted on the test instance and in the
+    contract and browser checks. The backend client accepts `https://` only, in every mode. `envPrefix` is not
+    `VITE_`, so no `.env` value can be inlined into a build; `vite preview` gets no proxy.
+  - The real-mode proxy adds the login token only to requests from the dev server's own page (loopback `Host`,
+    `Sec-Fetch-Site: same-origin` or none, `Origin` the dev server or none; anything else gets a 404) and drops
+    `Cookie` and `Origin`. The dev server refuses mode `real` on a non-loopback host (`--host`).
 - `__APP_VERSION__` from `git describe` (`x.y.z`, `x.y.z+sha`, `x.y.z+sha-dirty`).
 - `modulePreload.polyfill: false` (CSP).
 - Credential files (`.env`, recorded fixtures) are created with mode `600`; the testing docs say so.
@@ -600,6 +750,14 @@ Neither the unit nor the app layer needs network access.
   `package-lock.json` = a dated section in `extension/CHANGELOG.md`, and `MAJOR.MINOR` = `backend/VERSION`; it builds
   the ZIP and publishes a GitHub release with the CHANGELOG section as notes.
 - CHANGELOG in Keep a Changelog format, written for users, no "Unreleased" section on a release.
+- Only production builds: `vite.config.ts` refuses a build in another mode than `production` or with `NODE_ENV` other
+  than production (`import.meta.env.DEV` true); only the build tests pass it, with `CPS_ALLOW_NON_PRODUCTION_BUILD=1`.
+  CI runs `npm run build` (with its check), never a bare `vite build`.
+- A second CI job scans the whole git history with gitleaks (pinned version and checksum; default rules plus path-scoped test-file exceptions in `.gitleaks.toml`). Locally, `check-dist` also
+  fails when the value of a `CT_*` variable (or an old `VITE_PASSWORD`/`VITE_BASE_URL`) of `.env` or `.env.*` appears
+  in `dist/`, naming the variable, never the value.
+- Not in CI: the contract tests (they need the shared test instance and its credentials) and the browser tests (run by
+  hand before a release and after UI changes; their popup-activation tests depend on timing).
 
 ## 14. To measure before implementation
 
@@ -607,7 +765,9 @@ On the test instance, recorded in `ct-extension-info.md` and as contract cases:
 
 1. ~~ChurchTools accepts `https://<instance>/ccm/ctpassstore/auth/callback` as an OAuth redirect URI and redirects
    there.~~ **measured 2026-11-13:** yes; contract case AG-11.
-2. ChurchTools serves the extension's `index.html` for that deep path (history routing under `/ccm/<key>/`).
+2. ~~ChurchTools serves the extension's `index.html` for that deep path (history routing under `/ccm/<key>/`).~~
+   **measured 2026-11-14:** yes, `200` for `/ccm/ctpassstore/`, `/settings/rules` and `/auth/callback`
+   (`ct-extension-info.md` section 2).
 3. ~~With a user's OAuth token (`scope=api`), `GET /api/persons/{id}/groups` lists the person's groups including the
    admin group, and shows whether the membership is active.~~ **measured 2026-11-13:** yes, `200`, the same active
    memberships as with a session, `group.domainIdentifier` a string; contract case AG-10.
@@ -681,12 +841,16 @@ right on `encryptionSettings` (only the setup writes it, with the setup-capable 
 
 ### 16.3 Where the table lives
 
+*Deferred to the setup assistant (12):* none of this exists in 0.1.0.
+
 - In code, once: `src/setup/rights.ts`, as data. The setup, the check and the group change read it.
 - In the user guide, as a table generated from or checked against the code (13.4.6).
 - The backend's own check of the service user (backend spec 4.8) must agree with rows S1–S4; a contract case runs both
   against the test instance.
 
 ### 16.4 Rights check
+
+*Deferred to the setup assistant (12):* not built in 0.1.0; „Zugriff“ shows no status dots until then (4.7).
 
 `checkRights(table, loadedRights)` is a pure function; the loading code lives in `setup/` and `ct/`. It reports
 per group and role, with the traffic-light levels ok / warn / fail:
@@ -721,6 +885,8 @@ It runs on „Einrichtung“ (full list) and feeds the status pills of „Zugrif
 confirmation; rule-4 findings are only reported, never changed automatically.
 
 ### 16.5 Changing a group later
+
+*Deferred to the setup assistant (12):* „Gruppe ändern“ is shown disabled until then (4.7).
 
 On „Zugriff“ (users, admins) or „Einrichtung“ (service), „Gruppe ändern“ lets the admin pick an **existing group** or
 **create a new one**. Before anything is written, a plan shows:

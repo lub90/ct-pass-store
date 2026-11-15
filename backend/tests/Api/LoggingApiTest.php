@@ -141,6 +141,85 @@ final class LoggingApiTest extends ApiTestCase
         self::assertNotSame([], preg_grep('/^Deleted password entry \d+ of person 42\./', $info));
     }
 
+    /**
+     * The info messages of the log.
+     *
+     * @return list<string>
+     */
+    private function infoMessages(): array
+    {
+        return array_values(array_map(static fn(array $r): string => $r['message'], array_filter($this->log->getRecords(), static fn(array $r): bool => $r['level'] === Logger::INFO)));
+    }
+
+    /** B1: a change names who made it and whose password it was, by ID only. */
+    public function testASetOfOnesOwnPasswordNamesThePerson(): void
+    {
+        $this->setSettings([]);
+        self::assertSame(204, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => self::CUSTOM])->getStatusCode());
+
+        self::assertSame(['User ' . self::USER . ' set the password of person ' . self::USER . '.'], array_values(preg_grep('/ set the password of /', $this->infoMessages())));
+    }
+
+    /** B1: an admin setting another person's password is attributed to the admin. */
+    public function testAnAdminsSetForAnotherPersonNamesTheAdminAndTheTarget(): void
+    {
+        $this->setSettings([]);
+        $generated = $this->request('PUT', '/v1/entries/' . self::USER, self::ADMIN, []);
+        self::assertSame(200, $generated->getStatusCode(), (string) $generated->getBody());
+
+        self::assertSame(['User ' . self::ADMIN . ' set the password of person ' . self::USER . '.'], array_values(preg_grep('/ set the password of /', $this->infoMessages())));
+        $password = (string) $this->json($generated)['secondaryPwd'];
+        foreach ($this->log->getRecords() as $record) {
+            self::assertStringNotContainsString($password, (string) json_encode([$record['message'], $record['context']], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
+        }
+    }
+
+    /** B1: deletes are attributed the same way, for oneself and by an admin for another person. */
+    public function testDeletesNameThePrincipalAndTheTarget(): void
+    {
+        $this->setSettings([]);
+        $this->seedEntry(self::USER);
+        $this->seedEntry(self::OTHER);
+        self::assertSame(204, $this->request('DELETE', '/v1/entries/' . self::USER, self::USER, [])->getStatusCode());
+        self::assertSame(204, $this->request('DELETE', '/v1/entries/' . self::OTHER, self::ADMIN, [])->getStatusCode());
+
+        self::assertSame([
+            'User ' . self::USER . ' deleted the password of person ' . self::USER . '.',
+            'User ' . self::ADMIN . ' deleted the password of person ' . self::OTHER . '.',
+        ], array_values(preg_grep('/ deleted the password of /', $this->infoMessages())));
+    }
+
+    /**
+     * A DELETE is idempotent (spec 4.7): the line records the successful request, also when there was no entry. Only
+     * the "Deleted password entry …" lines say that an entry was removed.
+     */
+    public function testADeleteWithoutAnEntryIsLoggedAsTheRequestItWas(): void
+    {
+        $this->setSettings([]);
+        self::assertSame(204, $this->request('DELETE', '/v1/entries/' . self::USER, self::ADMIN, [])->getStatusCode());
+
+        $info = $this->infoMessages();
+        self::assertSame(['User ' . self::ADMIN . ' deleted the password of person ' . self::USER . '.'], array_values(preg_grep('/ deleted the password of /', $info)));
+        self::assertSame([], preg_grep('/^Deleted password entry /', $info));
+    }
+
+    /** B1: a change that fails or is refused logs no change line. */
+    public function testFailedChangesLogNoChangeLine(): void
+    {
+        $this->login();
+        $this->seedEntry(self::PERSON);
+        // Wrong primary password, policy violation, someone else's entry, an upstream failure while saving and deleting.
+        self::assertSame(403, $this->asAlice('PUT', ['primaryPwd' => 'Wrong-SECRET-primary', 'secondaryPwd' => self::CUSTOM])->getStatusCode());
+        self::assertSame(400, $this->asAlice('PUT', ['primaryPwd' => self::PRIMARY, 'secondaryPwd' => 'weakSECRET'])->getStatusCode());
+        self::assertSame(403, $this->request('DELETE', '/v1/entries/' . self::USER, null, [], ['Authorization' => 'Bearer ' . $this->backendToken])->getStatusCode());
+        $this->churchTools->failNext('updateValue', new UnavailableException('down'));
+        self::assertSame(502, $this->asAlice('PUT', ['primaryPwd' => self::PRIMARY, 'secondaryPwd' => self::CUSTOM])->getStatusCode());
+        $this->churchTools->failNext('deleteValue', new UnavailableException('down'));
+        self::assertSame(502, $this->asAlice('DELETE', ['primaryPwd' => self::PRIMARY])->getStatusCode());
+
+        self::assertSame([], preg_grep('/ (set|deleted) the password of /', $this->infoMessages()));
+    }
+
     /** LG-07 end to end: the backend version is on error records only. */
     public function testErrorRecordsCarryTheVersion(): void
     {

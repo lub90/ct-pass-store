@@ -23,15 +23,17 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - The `access` category (`groups.admins.groupId`, `machineClients`) is new; the service user needs `view custom
   category` and `view custom data` on it, and no write right.
 - The login answer has `admin` and `version`.
-- **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the extension's setup or
-  migration has written the new `access` category. Run the extension's migration right after uploading the backend.
-  Until then nobody is an admin and ct-radius logins (machine clients) are refused; the cause is in the backend log
-  (`warning`) and in the extension's setup/migration. `GET /v1/test` (admins only) checks a working installation.
+- **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the new `access`
+  category is written. Writing it is the job of the extension's setup and migration assistant, which isn't built yet;
+  this release waits for it and comes out together with the extension version that has it. Without `access`, nobody
+  is an admin and ct-radius logins (machine clients) are refused; the cause is in the backend log (`warning`).
+  `GET /v1/test` (admins only) checks a working installation.
 - Errors are RFC 9457 problem details; clients switch on `type` (see `docs/problems.md`). A wrong primary password is
   `403 invalid-primary-password`, an invalid custom password `400 password-invalid` with `violations`, a missing entry
   `404 entry-not-found`.
 - `GET /v1/test` is for admins only and reports the version; `?write=1` also tests writing to `passwordStore`.
 - `credentials.php` needs `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET`; `LOG_LEVEL` is new.
+- PHP needs the extensions `mbstring` and `sodium`; `composer.json` requires them.
 - The ChurchTools client is an own small implementation instead of `churchtools/php-client`.
 
 ### Added
@@ -51,6 +53,12 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - Limits: 5 wrong primary passwords per person and 15 minutes; per address 30 logins and 60 rejected tokens per minute,
   plus 100 logins per minute overall.
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.
+- Audit log: every password change and deletion names who made it and whose password it was, by ID
+  (`User 100 set the password of person 10.`), so an admin's change of another person's password is attributable. A
+  change of the enabled machine clients (ID, permissions, key fingerprints as the extension shows them), of the admin
+  group or of `backendUrl` is logged at `notice` (old and new), the first values once as "first seen"; each machine
+  client gets a usage summary at most once per hour (request count and addresses since the last summary, kept at most
+  14 days). Unicode control and format characters in log lines are escaped.
 - Daily rotated logs (14 files), the version in every error log entry, `setup/setup.sh` with permissions and a check of
   the deploy folder (`bin/check-deploy.php`), and a release workflow with `bin/release-check.php`.
 - Optional OPcache template `config/php.ini-example` for hosts that read a `php.ini` per folder; `public/.htaccess`

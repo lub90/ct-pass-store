@@ -15,10 +15,10 @@ const projectName = packageJson.name;
 const version = packageJson.version;
 
 // Get git commit hash (short)
-let gitHash = '';
+let gitHash;
 try {
     gitHash = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
-} catch (error) {
+} catch {
     console.warn('Warning: Could not get git hash, using timestamp');
     gitHash = Date.now().toString(36);
 }

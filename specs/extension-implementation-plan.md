@@ -24,6 +24,9 @@ against the real backend).
 **Branch:** `feature/extension-rework` from the branch that holds the specs (`docs/extension-spec`, or `main` after
 it's merged). Work in a worktree; another agent may be working in the main checkout.
 
+Tasks marked **[security-critical]** get, after Superpowers' own task review, a `test-reviewer` and a
+`security-reviewer` pass on their diff (project `.claude/CLAUDE.md`, review point A; added 2026-11-14).
+
 ## Global Constraints
 
 - All commands run in `extension/`. Every commit passes `npm run check` (lint → typecheck → unit and app tests →
@@ -214,7 +217,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: vue-i18n with German and English, browser language, custom page texts"`.
 
-### Task 6: ChurchTools layer and its fake
+### Task 6: ChurchTools layer and its fake [security-critical]
 
 **Files:**
 - Create: `src/ct/client.ts`, `ct/api.ts`, `ct/types.ts`, `ct/errors.ts`, `src/dev/fake-churchtools.ts`
@@ -244,7 +247,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: ChurchTools API layer with an in-memory fake and shared contract cases"`.
 
-### Task 7: KV store, schemas and layout detection
+### Task 7: KV store, schemas and layout detection [security-critical]
 
 **Files:**
 - Create: `src/store/kv.ts`, `store/churchtools-kv.ts`, `store/memory-kv.ts`, `store/repository.ts`,
@@ -274,7 +277,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: KV repository with v2 schemas, revisions and old-layout detection"`.
 
-### Task 8: Backend client, Problem Details and the fake backend
+### Task 8: Backend client, Problem Details and the fake backend [security-critical]
 
 **Files:**
 - Create: `src/backend/http.ts`, `backend/api.ts`, `backend/problems.ts`, `src/dev/fake-backend.ts`,
@@ -305,7 +308,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: backend client with Problem Details, fake backend and shared contract cases"`.
 
-### Task 9: Login, session and renewal
+### Task 9: Login, session and renewal [security-critical]
 
 **Files:**
 - Create: `src/backend/pkce.ts`, `backend/auth.ts`, `src/app/useSession.ts`, `src/views/AuthCallbackView.vue`
@@ -334,7 +337,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: OAuth login with PKCE, callback route, popup renewal and retry"`.
 
-### Task 10: Password rules and the password flow
+### Task 10: Password rules and the password flow [security-critical]
 
 **Files:**
 - Create: `src/password/rules.ts`, `password/flow.ts`, `shared/password-policy-cases.json` (repository root)
@@ -363,7 +366,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` and `composer check` in `backend/` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: password rules mirrored from the backend with shared test cases; flow logic"`.
 
-### Task 11: App state, routes and frame
+### Task 11: App state, routes and frame [security-critical]
 
 **Files:**
 - Create: `src/app/app-state.ts`, `app/useAppState.ts`, `app/version.ts`, `app/services.ts`, `src/router.ts` (all
@@ -398,7 +401,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
   `ct-extension-info.md` section 2.
 - [ ] **Step 5: Commit:** `"Extension: app state from spec 3.2, routes, frame by role"`.
 
-### Task 12: „Mein Passwort“
+### Task 12: „Mein Passwort“ [security-critical]
 
 **Files:**
 - Create: `src/views/PasswordView.vue`, `src/password/PasswordFlow.vue` (states 2 and 3, reused by Task 13),
@@ -425,7 +428,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Mein Passwort with direct path, choice, rules and one-time result"`.
 
-### Task 13: „Passwörter verwalten“
+### Task 13: „Passwörter verwalten“ [security-critical]
 
 **Files:**
 - Create: `src/views/ManageView.vue`, `src/admin/manage.ts`
@@ -447,7 +450,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Passwörter verwalten with search in the users group, banner and confirmations"`.
 
-### Task 14: Settings overview, rules and texts
+### Task 14: Settings overview, rules and texts [security-critical]
 
 **Files:**
 - Create: `src/views/settings/SettingsView.vue`, `settings/RulesView.vue`, `settings/TextsView.vue`,
@@ -469,7 +472,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: settings overview, Passwortregeln and Texte with conflict detection"`.
 
-### Task 15: „Zugriff“ and machine clients
+### Task 15: „Zugriff“ and machine clients [security-critical]
 
 **Files:**
 - Create: `src/views/settings/AccessView.vue`, `settings/ClientFormView.vue`, `src/admin/machine-clients.ts`
@@ -491,7 +494,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Zugriff with groups and machine clients"`.
 
-### Task 16: Backend & Status, Über
+### Task 16: Backend & Status, Über [security-critical]
 
 **Files:**
 - Create: `src/views/settings/BackendView.vue`, `src/views/AboutView.vue`, `src/admin/backend-url.ts`,
@@ -514,7 +517,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS.
 - [ ] **Step 5: Commit:** `"Extension: Backend & Status with self-test, Über with versioned links"`.
 
-### Task 17: Demo mode and real mode for development
+### Task 17: Demo mode and real mode for development [security-critical]
 
 **Files:**
 - Create: `src/dev/demo-data.ts`, `src/dev/services.ts`
@@ -529,7 +532,7 @@ it's merged). Work in a worktree; another agent may be working in the main check
 - [ ] **Step 4: Run** `npm run check` → PASS; `npm run dev` shows the password card with demo data.
 - [ ] **Step 5: Commit:** `"Extension: demo mode by default, real mode through the dev proxy"`.
 
-### Task 18: Contract layer against ChurchTools and the backend
+### Task 18: Contract layer against ChurchTools and the backend [security-critical]
 
 **Files:**
 - Create: `extension/tests/contract/ct.contract.test.ts`, `tests/contract/backend.contract.test.ts`,
@@ -582,3 +585,101 @@ it's merged). Work in a worktree; another agent may be working in the main check
   users may want to set a new one. User guide: pages, phone use, the versioning sentence of `versioning.md` section 4,
   screenshots from Task 19.
 - [ ] **Step 6: Run** `npm run check` → PASS. **Commit:** `"Extension: CI, release workflow, CHANGELOG and user guide"`.
+
+## Review point B, round 1 — follow-up tasks (2026-11-14)
+
+Added from the end-of-branch reviews (Superpowers final review, security-reviewer, test-reviewer full depth). Each runs
+with subagent-driven development, TDD and the per-task reviews like the tasks above.
+
+### Task 21: Duplicate settings and access values fail closed [security-critical]
+
+**Files:** Modify `src/store/repository.ts`, `src/app/useAppState.ts`, settings pages / `SettingsFormPage.vue`,
+`specs/extension-spec.md` 6.2, `specs/ct-extension-info.md`.
+
+- [ ] Normal users: a `settings` or `access` category with more than one value reads like the backend reads it (fail
+  closed: no backend login, nothing sent; a clear state for admins/editors). Never let the newest id win silently.
+- [ ] Editors and admins see the duplicates (plain text, cut, isolated) and choose which value stays before any save
+  deletes the others; a save never deletes unseen values. Revision- and id-guarded.
+- [ ] Spec 6.2 says what was built; ct-extension-info.md records the 2026-11-14 CSRF measurement (cookie SameSite=None;
+  cross-site text/plain form refused with 401 „CSRF-Token is invalid“; same-origin JSON needs no token).
+- [ ] Commit: `"Extension: duplicate settings and access values fail closed and are shown to editors"`.
+
+### Task 22: Backend audit trail and shared-fixture CI [security-critical]
+
+**Files:** `backend/src/Application/SetPassword.php`, `DeletePassword.php`, `Application/Auth/MachineTokens.php`,
+the access/settings cache refresh, `.github/workflows/backend.yml`, backend tests, backend CHANGELOG.
+
+- [ ] On success, log at `info` „<principal> set|deleted the password of person <target>“ (ids only, never a password).
+- [ ] On each `access` refresh, log at `notice` when the set of enabled machine clients (ids, permissions, key
+  fingerprints) differs from the last one seen; a rate-limited usage summary per client (e.g. first use per hour with id,
+  address, request count).
+- [ ] Log at `notice` when the parsed `backendUrl` differs from the last one seen.
+- [ ] `backend.yml` also runs on `shared/**`.
+- [ ] Commit: `"Backend: audit log for admin changes, machine clients and the backend address; CI on shared fixtures"`.
+
+### Task 23: Page-level hardening and test gaps [security-critical]
+
+**Files:** `ui/PersonPicker.vue`, `password/PasswordFlow.vue`, `views/settings/BackendView.vue`, tests across
+`src/`, `vitest.config.ts`, `playwright.config.ts`, `scripts/check-dist.js`.
+
+- [ ] Person names isolated (`<bdi>` / U+2068–2069) in the picker, the replace dialog text and the banner.
+- [ ] Settings pages in `backend-error`: app tests that a settings editor can open Backend & Status, save a new address
+  through the danger dialog, and that Rules and Access render their forms (spec 3.1.2).
+- [ ] BackendView registers its unsaved address with `trackUnsaved`; a self-test after `invalid-token` settles.
+- [ ] Test gaps: 2xx with a non-JSON content type refused; `latest++` in `usePasswordEntry.change()` pinned or removed;
+  the overview's own rights check; check-dist refuses zero bundles and pins the 8-character secret boundary;
+  ConfirmDialog Escape `stopPropagation`; „Sitzung erneuern“ success then the next submit is sent; the 50 ms race in
+  `services.test.ts`; unit config `passWithNoTests: false`; Playwright output folder per run.
+- [ ] Commit: `"Extension: isolated person names, backend-error settings tests and remaining test gaps"`.
+
+### Task 24: Contract variants and one instance run [security-critical]
+
+**Files:** `tests/contract/backend.contract.test.ts`, `tests/contract/backend-sandbox.ts`.
+
+- [ ] Run the backend subject in both settings variants (primary password required on/off, custom passwords on/off)
+  through a sandbox-side settings override — never by changing the instance's settings.
+- [ ] One `npm run test:contract` run against the instance (also covers the preflight change of 2620400); cleanup
+  verified.
+- [ ] Commit: `"Extension: contract cases in both settings variants against the real backend"`.
+
+### Task 25: Release pipeline hardening
+
+**Files:** `.github/workflows/*.yml`, `.gitleaks.toml`, `extension/docs/development.md`.
+
+- [ ] Pin actions by commit SHA (at least in the release workflows, with the version in a comment).
+- [ ] Publish the release ZIP's SHA-256 (and, if cheap, a build-provenance attestation).
+- [ ] Narrow the source-file allowlists in `.gitleaks.toml` to the invented values (`condition = "AND"` + regexes).
+- [ ] Commit: `"CI: SHA-pinned actions, release checksum, narrower gitleaks exceptions"`.
+
+### Task 26: Docs and spec match what was built
+
+**Files:** `specs/extension-spec.md`, `extension/docs/*.md`, `extension/CHANGELOG.md`, `backend/CHANGELOG.md`, root
+`README.md`, `TODO.md`, `src/i18n/*`, small code tidy-ups.
+
+- [ ] Spec: header status; mark the wizard-dependent parts as deferred (5.1/12.3, 13.4.6, 16.3/16.4, 13.1 WebKit
+  pending); 4.7 status-dot wording; 4.8 settings-right rule; 13.2 reference; E15 heading names the settings editors.
+- [ ] Docs: setup.md and README describe the current install (no wizard yet, release ZIP); CHANGELOG and user guide say
+  the browser language; CHANGELOGs don't promise a migration this version doesn't ship (release waits for the wizard);
+  user guide: review machine clients when an admin leaves.
+- [ ] Texts: no dead-end pointers to „Einrichtung“ while it is a placeholder (or hide the cards); placeholder wording for
+  users; remove unused i18n keys and duplicate texts; consistent apostrophes; fix the intlify parent-scope warning.
+- [ ] Tidy-ups: one callback-path matcher; one trailing-slash helper; stale comments; stale TODO items; the
+  `inlineDynamicImports` deprecation.
+- [ ] Commit: `"Docs and spec describe what 0.1.0 contains; texts and small tidy-ups"`.
+
+## Review point B, round 2 — follow-up task (2026-11-15)
+
+### Task 27: Point-B round-2 fixes [security-critical]
+
+**Files:** `extension/e2e/admin.spec.ts`, `src/backend/fake.contract.test.ts`, `shared/key-fingerprint-cases.json`
+and both fingerprint tests, `src/admin/duplicates*`, `src/store/repository*`, `src/views/settings/*`,
+`backend/src/Infrastructure/Logging/EscapeControlCharacters.php` tests, `FileMachineClientUsage` tests,
+`.github/workflows/backend.yml`, docs, `TODO.md`, `src/i18n/*`.
+
+- [x] Browser suite green (isolated name in the replace description); order-independent wrongPrimaryPasswordCases test;
+  key-fingerprint vectors with `-` and two `_`, each character required separately on both sides.
+- [x] Test gaps M1–M12 of the point-B round-2 test report; docs/text minors from the Task 26 review and the final
+  review (LOG_LEVEL info, „nächste Version“ wording, spec 3.2 markers, stale TODOs, „(Host: …)“, one CI matrix leg,
+  `bare()` helper).
+- [x] `npm run check`, `npm run test:browser -- --project='chromium-*'`, `composer check`.
+- [x] Commit: `"Point-B round-2 fixes: green browser suite, stronger fixtures, remaining gaps"`.

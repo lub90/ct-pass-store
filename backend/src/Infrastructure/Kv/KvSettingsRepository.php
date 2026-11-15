@@ -58,11 +58,18 @@ final class KvSettingsRepository implements SettingsRepository
     /** Whether access is missing or unreadable: access() logs that finding itself, once when it's remembered. */
     private bool $accessUnusable = false;
 
+    /**
+     * Whether settings or access were read from ChurchTools (or access found missing) since the change log last
+     * looked, rather than coming from the cache. The public key doesn't count.
+     */
+    private bool $loadedFresh = false;
+
     public function __construct(
         private readonly ExtensionData $extension,
         private readonly LoggerInterface $logger,
         private readonly ?SignedFileCache $cache = null,
         private readonly Clock $clock = new SystemClock(),
+        private readonly ?SettingsChangeLog $changeLog = null,
     ) {}
 
     public function settings(): Settings
@@ -82,8 +89,14 @@ final class KvSettingsRepository implements SettingsRepository
             $this->logger->warning($finding);
         }
         $this->findings = $findings;
+        $settings = $parsed->settings->withAccess($access->adminGroupId, $access->machineClients);
+        // Compared only when something came from ChurchTools (about once per TTL), not on every request (spec 6.4).
+        if ($this->loadedFresh) {
+            $this->loadedFresh = false;
+            $this->changeLog?->observe($settings);
+        }
 
-        return $this->settings = $parsed->settings->withAccess($access->adminGroupId, $access->machineClients);
+        return $this->settings = $settings;
     }
 
     /**
@@ -115,6 +128,7 @@ final class KvSettingsRepository implements SettingsRepository
     private function rememberNoAccess(string $finding): ParsedAccess
     {
         $this->cache?->put(self::CACHE_ACCESS_MISSING, ['finding' => $finding], self::SETTINGS_TTL);
+        $this->loadedFresh = true;
         $this->logger->warning($finding);
         $this->accessUnusable = true;
 
@@ -237,6 +251,9 @@ final class KvSettingsRepository implements SettingsRepository
             throw $e;
         }
         $this->cache?->forget($failureName);
+        if ($category !== KvSchema::ENCRYPTION_CATEGORY) {
+            $this->loadedFresh = true;
+        }
 
         return $json;
     }

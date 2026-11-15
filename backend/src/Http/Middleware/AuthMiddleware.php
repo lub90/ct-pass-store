@@ -10,6 +10,8 @@ use CtPassStore\Application\Exception\InvalidTokenException;
 use CtPassStore\Application\Exception\TokenExpiredException;
 use CtPassStore\Application\Exception\TooManyAttemptsException;
 use CtPassStore\Application\Port\AddressLimiter;
+use CtPassStore\Application\Port\MachineClientUsage;
+use CtPassStore\Domain\MachinePrincipal;
 use CtPassStore\Http\Problem\ProblemException;
 use CtPassStore\Http\Problem\ProblemType;
 use Psr\Http\Message\ResponseInterface as Response;
@@ -31,6 +33,7 @@ final class AuthMiddleware implements MiddlewareInterface
         private readonly Authenticator $authenticator,
         private readonly AddressLimiter $limiter,
         private readonly LoggerInterface $logger,
+        private readonly ?MachineClientUsage $usage = null,
     ) {}
 
     public function process(Request $request, Handler $handler): Response
@@ -60,6 +63,11 @@ final class AuthMiddleware implements MiddlewareInterface
                 $this->countRejection($ip, $e);
             }
             throw $e;
+        }
+
+        // Counted after authentication only, so unknown callers can't create records (spec 6.1, 6.4).
+        if ($principal instanceof MachinePrincipal) {
+            $this->usage?->record($principal->clientId, $ip);
         }
 
         return $handler->handle($request->withAttribute(self::PRINCIPAL, $principal));

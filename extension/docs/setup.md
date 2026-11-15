@@ -1,53 +1,63 @@
 # CtPassStore Extension Setup
 
-Currently, there is no ready‑to‑use build of the CtPassStore extension (though this is planned for future releases). For now, the extension must be built locally and then uploaded to your ChurchTools instance. This setup guide walks you through the process of building and installing the CtPassStore extension.
+> **State of version 0.1.0:** the extension's new **setup and migration assistant** is not built yet. Without it, a
+> new installation can't be set up and an existing one can't be migrated to the new data layout. Version 0.1.0 is
+> therefore **not released** until the assistant exists (its own spec, together with the backend's `/v1/setup`).
+> Keep running your current version until then. This guide describes what already works: getting the extension's
+> ZIP and uploading it.
 
-## Build CtPassStore extension
+## Get the extension package
 
-Clone the CtPassStore repository (if not already done) from [https://github.com/lub90/ct-pass-store](https://github.com/lub90/ct-pass-store). Stable builds are available on the **main** branch.
+**From a release** (once one is published): the GitHub release `extension-vX.Y.Z` of
+[lub90/ct-pass-store](https://github.com/lub90/ct-pass-store/releases) has `ctpassstore-extension-X.Y.Z.zip` and its
+checksum `ctpassstore-extension-X.Y.Z.zip.sha256`. Check the download before uploading it:
 
-Next, navigate into the extension directory. Inside the directory, run a package install, and then start the build process.
+```sh
+sha256sum --check ctpassstore-extension-X.Y.Z.zip.sha256
+# Stronger: proves the ZIP was built by the release workflow from that tag (GitHub CLI, logged in).
+gh attestation verify ctpassstore-extension-X.Y.Z.zip --repo lub90/ct-pass-store \
+  --signer-workflow lub90/ct-pass-store/.github/workflows/extension-release.yml \
+  --source-ref refs/tags/extension-vX.Y.Z
+```
 
+**Built yourself** (development and test instances): with Node.js 24 and npm,
 
-```bash
+```sh
 git clone https://github.com/lub90/ct-pass-store
 cd ct-pass-store/extension/
-npm install
+npm ci
 npm run deploy
 ```
 
-The `npm` commands will:
+`npm run deploy` builds the extension, checks the build (`scripts/check-dist.js`) and writes the ZIP to
+`extension/releases/`.
 
-1. Install all necessary dependencies
-2. Build the project
-3. Package the extension to a zip file
+Install backend and extension with the same first two version numbers (extension `0.1.x` with backend `0.1.x`; see
+[`specs/versioning.md`](../../specs/versioning.md)). The backend is installed by hand, see
+[`backend/docs/setup.md`](../../backend/docs/setup.md).
 
-You can find the extension package in the releases directory.
+## Upload the extension to ChurchTools
 
-> **Note:** We use npm for dependency and build management. Ensure npm is installed and available in your system’s PATH. Otherwise, the above commands will fail with an error.
+1. In ChurchTools, open **Extensions** from the system settings menu in the toolbar (tools icon) and click **Add
+   extension** (or open the existing CtPassStore extension to update it).
+2. Name the extension as you like; everyone sees the name in the toolbar.
+3. Set the short identifier to **`ctpassstore`**. The extension works only under this key (its pages live under
+   `/ccm/ctpassstore/`).
+4. Optionally add a description, for example: "Your secondary password for services connected to ChurchTools, such as
+   the Wi-Fi."
+5. Drop the ZIP into the upload area and click **Save**.
 
----
+Updating an extension in ChurchTools keeps its stored data.
 
-## Upload extension to your ChurchTools instance
+## After the upload
 
-Go to your ChurchTools instance and select **Extensions** from the system settings dropdown in the toolbar (tools icon). Then click **Add extension**.
+Open the extension from the toolbar. Until the setup assistant exists:
 
-Name the extension as you like, but keep in mind that this name will be visible to all users in the toolbar.  
+- On a new installation, and on an installation of an earlier version (old data layout), everyone sees „Die
+  Erweiterung wird gerade eingerichtet“; people with the rights to set it up also see that the setup assistant
+  sets it up and isn't available yet. Nothing is changed in ChurchTools.
+- The settings, the admin group and the machine clients can only be managed once the extension's data (`settings`
+  with the backend address and the OAuth client ID, and `access` with the role groups) exists. Writing them is the
+  assistant's job; its spec also defines the rights each group gets (extension spec section 16).
 
-Set the short identifier for the extension. **Important:** The short identifier must be set to `ctpassstore` for the extension to work properly.
-
-You can also add a description if desired. For example, you might use something like:
-
-    This third-party ChurchTools extension manages your secondary password. Your secondary password can be used to login to selected services connected to ChurchTools, such as Wi-Fi or network drives.
-
-Subsequently, select a sorting index according to your preference.
-
-Finally, drop the generated extension package (`*.zip` file) into the bottom area of the creation window and click **Save**.
-
-## Setup CtPassStore extension
-
-The extension should now appear in the ChurchTools toolbar. If it does not, try refreshing the page and/or clearing your browser cache.  
-
-Click on the extension in the toolbar. A message will indicate that the extension is not yet set up correctly. To begin the setup, click **Run setup** in the message dialog or select **Setup** from the left-hand side menu bar.  
-
-The setup wizard will guide you through configuring the CtPassStore extension, including all required data categories, custom settings, and installation of the necessary PHP backend.
+What the extension's pages do once it is set up is described in the [user guide](user-guide.md).

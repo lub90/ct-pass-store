@@ -31,6 +31,12 @@ may change between versions, so verify anything critical against your own instan
 - Managing extensions requires the separate permission **"administer custom modules"**. "administer settings" or
   "administer persons" isn't enough (`POST /custommodules` then returns `401`).
 - **Update = Edit + upload the new ZIP to the existing module.** This keeps all data.
+  - Over the API (measured 2026-11-14; not in the OpenAPI document): the admin page does `PUT /api/custommodules/{id}`
+    with the module JSON (only needed when name, shorty etc. change), then `POST /api/files/custom_module/{id}` with the
+    ZIP as multipart field `files[]` (plus `CSRF-Token`). That answers `200` with the stored file; the module serves the
+    new build at once, with its data kept.
+  - Deep paths are served: after the upload, `/ccm/ctpassstore/`, `/ccm/ctpassstore/settings/rules` and
+    `/ccm/ctpassstore/auth/callback` all answered `200` with the extension's `index.html` (spec 14.2).
 - **Delete + reinstall is NOT an update.** Deleting an extension removes:
   - all its categories and data values
   - its permissions on every role, including permissions an admin assigned manually
@@ -129,6 +135,25 @@ may change between versions, so verify anything critical against your own instan
   - For other REST write requests it's currently optional. The JS client sends it when `setLoadCSRFForAPI()` is
     enabled (since client version 1.7.1). The instance configuration has a `csrf_enabled` flag. Be prepared for
     ChurchTools to start requiring CSRF tokens for REST writes.
+  - **Measured 2026-11-14 (extension contract test):** with `Authorization: Login <token>` and **no cookie at all**,
+    `POST`, `PUT` and `DELETE` on `customdatavalues` answer `201`/`200`/`204` without a `CSRF-Token` header and with a
+    bogus one alike; `GET /api/csrftoken` without a cookie answers `200` and sets cookies. So a proxy that drops the
+    browser's cookies and adds the login token (the real-mode dev proxy) can write; nothing ties the CSRF token to a
+    session for REST writes today.
+  - **Measured 2026-11-14 (cookie-only cross-site writes, Chromium, test instance, a throwaway category only):**
+    - The session cookies are `SameSite=None; Secure; HttpOnly`, so the browser may send them on cross-site requests.
+    - Same-origin JSON writes with the session cookie succeed **without** a `CSRF-Token` header (`201`); same-origin
+      `text/plain` bodies answer `500`.
+    - A cross-site top-level form post (`text/plain`, a body a form can send without a preflight) **does** carry the
+      cookie, and ChurchTools answers `401` „CSRF-Token is invalid“; nothing is created. Same after more than two
+      minutes.
+    - A cross-site `fetch` in `no-cors` mode doesn't send the cookie at all (third-party cookie blocking); nothing is
+      created. A cross-site JSON request needs a CORS preflight, which ChurchTools doesn't grant.
+    - So on this ChurchTools version a foreign site can't make an editor's browser create or change KV values: the
+      protection is ChurchTools' server-side CSRF check for cookie-authenticated cross-site requests, plus the
+      browser's cookie blocking. Both are outside an extension's control. Firefox wasn't measured.
+    - The extension doesn't rely on it: a second value in a one-value category is never used and never deleted
+      unseen (extension spec 6.2).
   - Never send a CSRF token with `POST /login`.
 - Checking a user's password via `POST /api/login` creates a real session each time. Rate-limit that yourself.
   - The response is `{"data": {"status", "message", "personId", "location"}}`. `status` is `success` for a complete
@@ -178,6 +203,10 @@ seeing their password or login token. Observed behavior:
   (e.g. about 10 minutes for authorization codes) probably apply.
 - **Redirect into an extension:** the registered redirect URI can be the extension's page (`/ccm/<key>/`). ChurchTools
   serves the extension for any sub-path, and the query parameters (`code`, `state`) survive client-side routing.
+- **No Cross-Origin-Opener-Policy (measured 2026-11-14):** ChurchTools sends no COOP, COEP or CORP header on
+  `/oauth/authorize` (consent page logged in and anonymous) nor on `/ccm/<key>/…`. The CSP has `connect-src *` and
+  `frame-ancestors 'self'`, plus `X-Frame-Options: SAMEORIGIN`. So an OAuth popup keeps `window.opener` and can hand
+  the code back to the extension page; an iframe for silent renewal is not an option.
 - **Deep redirect URI and consent (measured 2026-11-13, contract test `AdminGroupContractTest`):**
   - `POST /api/oauthclients` accepts the `redirectUri` string `https://<instance>/ccm/ctpassstore/auth/callback` (`200`;
     the answer holds `data.identifier`, `data.clientSecret` and `redirectUri` as a list) and `DELETE
@@ -196,6 +225,10 @@ seeing their password or login token. Observed behavior:
     list removes only those entries). `/permissions/global` showed the client at once.
   - `POST /oauth/access_token` with the code, the `code_verifier`, `client_id`, `client_secret` and `redirect_uri` as
     form fields answers `200` with an `access_token`.
+  - **The secret is required (measured 2026-11-14, extension contract test):** for a confidential client, the same
+    request **without** `client_secret` answers `400 {"error": "invalid_request", "hint": "Check the `client_secret`
+    parameter"}`, and with a wrong secret `401 {"error": "invalid_client"}`; no token in either case. So a code that
+    leaks from the browser (URL, history, Referer) is useless without the backend's secret.
   - **Groups with the OAuth token:** `GET /api/persons/{id}/groups` with `Authorization: Bearer <token>` (and
     `X-OnlyAuthenticated: 1`) answers `200`. The active memberships are the same as with a session login;
     `group.domainIdentifier` is a string and `groupMemberStatus` is `active` for them.
@@ -252,6 +285,12 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
     case-sensitive (`ID` doesn't clash with `id`).
 - **Limits:** 10,000 characters per value, 2,000 characters for a category's `data`. Check sizes before saving.
   Binary data (images as data URIs) doesn't fit.
+  - **How the 10,000 are counted (measured 2026-11-14, contract case in `src/ct/contract-cases.ts`):** in characters
+    (code points), not bytes or UTF-16 units. 10,000 × `ä` (20,000 bytes), 10,000 × `€` (30,000 bytes) and 10,000 × `😀`
+    (20,000 UTF-16 units, 40,000 bytes) are stored and read back unchanged (emoji survive, so the database is
+    4-byte-safe); 10,001 characters of any of them answer `400 validation.error` („Die Länge der Eingabe muss zwischen
+    0 und 10000 sein.“), for `POST` and `PUT`. JavaScript's `string.length` counts UTF-16 units, so a check with it is
+    stricter than ChurchTools for text with emoji, never looser.
 - **No key, no version, no ETag, no transactions, no server-side filtering.** You always read a whole category and
   filter on the client. Consequences:
   - Store your own identifier (slug or entity ID) inside the JSON; don't rely on the server `id` as a stable address.
@@ -335,6 +374,17 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
     `view`, but finds only the persons the searcher may see (on the test instance a normal user saw 229 of 625).
   - A member of a group can read that group and its members (`GET /groups/{id}`, `/groups/{id}/members`); other groups
     answer `403 Forbidden to see group`.
+  - **Membership without a role** (measured 2026-11-14 while building the extension contract test): active members
+    added to a new distribution list (`groupTypeId` 4) through `PUT /groups/{id}/members/{personId}` with only
+    `groupMemberStatus` (no `groupTypeRoleId`) could not read it (`403` for over 30 s). Members added to a new team
+    (`groupTypeId` 2) with the type's default role (`GET /group/roles`, `isDefault`) read it at once. Whether the role or
+    the group type made the difference wasn't separated; the contract test always sets the default role.
+  - **Waiting and archived members:** `/groups/{id}/members` lists `waiting` members with that `groupMemberStatus`
+    (filter for `active`). An archived person can be added (`200`), but ChurchTools leaves it out of the member list
+    itself.
+  - `GET /persons/{id}` of a person the caller may not see answers `403`; of a deleted person `404`.
+  - Creating and deleting a group needs an admin: `POST /groups` with `name`, `groupTypeId`, `groupStatusId` and
+    `force: true` answers `201`; `DELETE /groups/{id}` answers `204`, then `GET` gives `404`.
   - `churchgroup` „view group“ („Gruppe inkl. ihrer Gruppenmitglieder sehen“, data = group ID) on one group lets a
     person read that group and its members with names, and makes those members visible to them in
     `GET /persons/{id}`, `/persons?query=` and `/search`. That's a far narrower way to let someone find a known set of
