@@ -225,6 +225,56 @@ test('a file path that contains a term is reported without printing the path', (
   assertNoValues(r.all);
 });
 
+// Git prints no "+++" header for empty files, binary files and renames of them; their paths are checked anyway.
+const PATH_HIT = '(path withheld): file path matches block list entry #1\n';
+
+test('the path of an empty new file is checked (unquoted, with spaces and non-ASCII)', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term2]);
+  stage(repo, `d/ä ${V.term2} empty.txt`, '');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('the path of a binary file is checked', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term2]);
+  write(repo, `d/${V.term2} scan.bin`, Buffer.from([0, 1, 2, 0, 3]));
+  git(repo, 'add', '.');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('a pure rename of an empty file into a path that contains a term is reported', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'e/plain.txt', '');
+  git(repo, 'add', 'e/plain.txt');
+  git(repo, 'commit', '-q', '-m', 'empty');
+  blockList(repo, [V.term2]);
+  git(repo, 'mv', 'e/plain.txt', `e/${V.term2}-moved.txt`);
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('deleting a file whose path contains a term is not a hit', (t) => {
+  const repo = makeRepo(t);
+  write(repo, `e/${V.term2}.txt`, 'content\n');
+  write(repo, `e/${V.term2}-empty.txt`, '');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'files');
+  blockList(repo, [V.term2]);
+  git(repo, 'rm', '-q', `e/${V.term2}.txt`, `e/${V.term2}-empty.txt`);
+  const r = check(repo);
+  assert.equal(r.code, 0);
+  assert.equal(r.out, '');
+});
+
 test('a pure rename into a path that contains a term is reported (no rename detection)', (t) => {
   const repo = makeRepo(t);
   write(repo, 'docs/plain.txt', 'clean content\n');
@@ -709,6 +759,27 @@ test('a failing git command is named by its subcommand, not by its leading -c op
   assert.equal(r.code, 2);
   assert.equal(r.out, '');
   assert.equal(r.err, 'check-private: git diff failed\n');
+});
+
+test('--range checks the path of a binary file, once per commit', (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, `${V.term2}-photo.png`, Buffer.from([0x89, 0x50, 0, 0, 1]));
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'photo');
+  const first = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  write(repo, `${V.term2}-photo.png`, Buffer.from([0x89, 0x50, 0, 0, 2]));
+  git(repo, 'commit', '-q', '-am', 'photo again');
+  const second = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, [V.term2]);
+  const r = check(repo, ['--range', 'main..HEAD']);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    `(path withheld): file path matches block list entry #1 (commit ${first})\n` +
+      `(path withheld): file path matches block list entry #1 (commit ${second})\n`,
+  );
+  assertNoValues(r.all);
 });
 
 test('--range=<A..B> checks the range like --range <A..B>', (t) => {

@@ -46,8 +46,9 @@ from a parent are checked in that parent's commit when it is in the range, not a
 
 - **Content of binary files:** this script doesn't check it. A file with a NUL byte shows up in a diff only as
   `Binary files differ`, and `--all` skips files with a NUL byte in their first 8000 bytes. Only gitleaks scans such
-  content: in CI, or locally in the hook if a `gitleaks` binary is installed. The **paths** of binary files are still
-  checked against the block list and the credential values.
+  content: in CI, or locally in the hook if a `gitleaks` binary is installed. The **paths** of binary files, like those
+  of empty files and of renamed files, are still checked against the block list and the credential values in every
+  mode (taken from the `diff --git` header). The path of a deleted file is not a hit.
 
 ### Emergency bypass
 
