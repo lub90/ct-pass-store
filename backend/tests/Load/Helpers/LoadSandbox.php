@@ -37,8 +37,10 @@ final class LoadSandbox
      * @param Clock $clock the clock of the cache records it writes (the system clock; a frozen one in its unit test)
      */
     public function __construct(
-        #[\SensitiveParameter] array $credentials,
-        #[\SensitiveParameter] private readonly string $jwtSecret,
+        #[\SensitiveParameter]
+        array $credentials,
+        #[\SensitiveParameter]
+        private readonly string $jwtSecret,
         private readonly Clock $clock = new SystemClock(),
     ) {
         $this->folder = sys_get_temp_dir() . '/ctps-load-' . bin2hex(random_bytes(6));
