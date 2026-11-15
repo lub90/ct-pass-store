@@ -300,7 +300,35 @@ final class LoginApiTest extends ApiTestCase
         yield 'sub with letters' => [['sub' => '42a']];
         yield 'sub as float' => [['sub' => 42.5]];
         yield 'sub 0' => [['sub' => '0']];
+        yield 'sub as integer 0' => [['sub' => 0]];
+        yield 'sub as integer -1' => [['sub' => -1]];
+        yield 'sub -1' => [['sub' => '-1']];
         yield 'no sub' => [['sub' => null]];
+    }
+
+    /**
+     * @return iterable<string, array{int|string}>
+     */
+    public static function nonPositiveSubs(): iterable
+    {
+        yield 'integer 0' => [0];
+        yield 'integer -1' => [-1];
+        yield 'string 0' => ['0'];
+    }
+
+    /**
+     * A non-positive sub that whoami confirms (so the whoami match can't catch it) is still an invalid upstream answer,
+     * never a person ID 0 or below (which would be a 500).
+     */
+    #[DataProvider('nonPositiveSubs')]
+    public function testANonPositiveSubConfirmedByWhoamiIsUpstreamInvalid(int|string $sub): void
+    {
+        $this->grant(self::churchToolsToken(['sub' => $sub]), ['id' => (int) $sub, 'cmsUserId' => 'alice']);
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::UpstreamInvalid, $response);
+        $this->assertNoTokenIssued($response);
     }
 
     public function testSubAsNumberMatchesWhoami(): void
