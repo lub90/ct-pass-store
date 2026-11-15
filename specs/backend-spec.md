@@ -1299,13 +1299,14 @@ The security stores (`jti` replay cache, rate-limit counters;
 
 - PHPStan at an agreed level. Start with a baseline, then raise the level step by step.
 - A code-style check.
-- **Three test layers**, each its own PHPUnit suite and folder:
+- **Four test layers**, each its own PHPUnit suite and folder:
 
   | Layer | Suite / folder | What it tests | Runs |
   | --- | --- | --- | --- |
   | Unit | `Unit` / `tests/Unit` | Single classes in isolation (validator, encryption, store logic, token checks, error mapping) | CI, every push |
   | API | `Api` / `tests/Api` | The complete Slim app in-process: real HTTP requests and responses, ChurchTools replaced by a fake implementation of the client interface (5.6). The whole authorization matrix, every status code and every problem type are covered here. | CI, every push |
   | Contract | `Contract` / `tests/Contract` | Only what a fake can't prove: that ChurchTools really behaves as assumed (KV read/write and `meta.count`, service-user permissions, primary password check, OAuth code exchange errors), plus a few smoke tests against the running backend. Needs a test instance. | By hand, before each release |
+  | Load | `Load` / `tests/Load` | The backend under realistic data sizes (up to 500 entries): response times of reads and writes, and the gone-persons cleanup. Needs a test instance and an admin token. | By hand, on demand (about 15 minutes) |
 
   Neither the unit nor the API layer needs network access.
 - **Keeping the fake honest:** the contract cases for the ChurchTools client are written once and run against both the

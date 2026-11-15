@@ -1,6 +1,6 @@
 # PHP Backend Testing
 
-The backend has three test layers (see `specs/backend-spec.md`, section 6.6):
+The backend has four test layers (see `specs/backend-spec.md`, section 6.6):
 
 | Layer | Suite | Needs | Command |
 | --- | --- | --- | --- |
