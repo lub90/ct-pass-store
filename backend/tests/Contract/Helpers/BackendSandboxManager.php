@@ -74,7 +74,8 @@ class BackendSandboxManager
         }
     }
 
-    private const ROUTER = <<<'PHP'
+    /** The router script, public for its unit test (BackendSandboxRouterTest). */
+    public const ROUTER = <<<'PHP'
         <?php
         // Router of the test server: HTTPS as behind a TLS front end, then static file or index.php.
         $_SERVER['HTTPS'] = 'on';
