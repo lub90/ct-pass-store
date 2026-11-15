@@ -4,8 +4,8 @@ import { defineBackendContract, type BackendContractSubject } from '@/backend/co
 import { backendBase, createHttp } from '@/backend/http';
 import { BackendProblem } from '@/backend/problems';
 import { tokenPerson } from '@/backend/jwt';
-import { BackendSandbox, SANDBOX_BASE } from './backend-sandbox';
-import { ctApiFor } from './ct-session';
+import { BackendSandbox, type SettingsVariant } from './backend-sandbox';
+import { CtSession, ctApiFor, listOf } from './ct-session';
 import { Cleanup } from './cleanup';
 import { adminSession, createTempOAuthClient, grantLoginRight, type TempOAuthClient } from './instance';
 import { exchangeCode, fetchOAuthCode } from './oauth-code';
@@ -15,27 +15,44 @@ import { contractEnv } from './setup';
 
 /**
  * The shared backend cases (`src/backend/contract-cases.ts`) against the real backend of this repository, run locally
- * as a sandbox (`backend-sandbox.ts`) against the test instance, through the app's real `BackendApi`.
+ * as sandboxes (`backend-sandbox.ts`) against the test instance, through the app's real `BackendApi`.
  *
  * - The deployed backend of the test instance can't be used: its address answers `500` to every request (measured
  *   2026-11-14). The sandbox gets a temporary confidential OAuth client with the extension's deep redirect URI
  *   (as the backend's AdminGroupContractTest); the normal test user is granted "login to external system" for it
  *   only, and both are removed in `afterAll`.
- * - "user": the normal test user, logged in through the real OAuth flow and `POST /v1/auth/token`.
- * - "admin": nobody is an admin on the test instance (no `access` category), so this subject uses a token minted
- *   with the sandbox's per-run secret, exactly as `POST /v1/auth/token` issues it for an admin (as the backend's
- *   LiveEntriesTest does). Its login cases are skipped; the real login answer is checked by the "user" subject.
+ * - Settings variants: every case runs once per entry of `VARIANTS`, each with its own sandboxes. The sandbox's
+ *   backend reads `requirePasswordForPasswordChange` and `allowCustomPassword` from the variant instead of the
+ *   instance's settings value (`sandbox/SandboxChurchTools.php`); the instance's settings are never written. Every
+ *   other setting (`passwordLength`, …), the persons, groups, rights and entries are the instance's.
+ * - "user": the normal test user, logged in through the real OAuth flow and `POST /v1/auth/token`, on a sandbox that
+ *   reads `access` from the instance (it has none, so nobody is an admin).
+ * - "admin": the same user and the same real login, on a sandbox whose backend sees an `access` value naming a group
+ *   the user is already an active member of as the admin group (the instance has no `access` category, and its groups
+ *   stay as they are). Membership is read from ChurchTools with the user's own token, as in production.
  * - Entries are only written for persons that have none before (checked first); the run refuses to start otherwise.
  *   Whatever is left after a failure is removed in `afterAll`.
  */
+// Rate-limited calls are waited out (`patiently`, `CtSession.login`), so a case may take a few minutes.
+vi.setConfig({ testTimeout: 600_000 });
+
 const env = contractEnv();
 const cleanup = new Cleanup();
 const realFetch = globalThis.fetch;
 const service = ctApiFor(env, { loginToken: env.apiToken });
 
+/** Each variant un-skips the cases the other one skips: custom passwords on/off, primary password required or not. */
+const VARIANTS: { key: string; name: string; settings: SettingsVariant }[] = [
+    { key: 'open', name: 'primary password not required, custom passwords allowed', settings: { requirePasswordForPasswordChange: false, allowCustomPassword: true } },
+    { key: 'strict', name: 'primary password required, custom passwords off', settings: { requirePasswordForPasswordChange: true, allowCustomPassword: false } },
+];
+/** The variant of the wire checks below. */
+const WIRE_VARIANT = VARIANTS[0]!;
+const sandboxes = new Map<string, { user: BackendSandbox; admin: BackendSandbox }>();
+/** The sandbox of the wire checks below: the user sandbox of `WIRE_VARIANT`. */
 let sandbox: BackendSandbox;
 let client: TempOAuthClient;
-let settings: { requirePasswordForPasswordChange: boolean; allowCustomPassword: boolean; passwordLength: number };
+let instance: { passwordLength: number; settingsCategoryId: number };
 const touched = [env.normal.id, env.persons.active, env.persons.archived, env.persons.deleted];
 
 async function passwordStore() {
@@ -59,43 +76,110 @@ async function touchedEntries(): Promise<number[]> {
         .map((v) => v.id);
 }
 
+/** The instance's settings value (read only) and its category, which the sandboxes override. */
 async function readSettings() {
     const moduleId = (await service.moduleId('ctpassstore')) as number;
     const category = (await service.categories(moduleId)).find((c) => c.name === 'settings');
-    const values = category ? await service.values(moduleId, category.id) : [];
+    if (!category) throw new Error('the service user sees no settings category');
+    const values = await service.values(moduleId, category.id);
     const newest = values.reduce<(typeof values)[number] | undefined>((a, b) => (a === undefined || b.id > a.id ? b : a), undefined);
     const s = newest ? (JSON.parse(newest.value) as Record<string, unknown>) : {};
     if (typeof s.requirePasswordForPasswordChange !== 'boolean' || typeof s.allowCustomPassword !== 'boolean' || typeof s.passwordLength !== 'number') {
         throw new Error('the settings of the test instance lack requirePasswordForPasswordChange, allowCustomPassword or passwordLength');
     }
-    return { requirePasswordForPasswordChange: s.requirePasswordForPasswordChange, allowCustomPassword: s.allowCustomPassword, passwordLength: s.passwordLength };
+    return { passwordLength: s.passwordLength, settingsCategoryId: category.id };
 }
 
-const api = (token: () => string | null): BackendApi => createBackendApi(SANDBOX_BASE, token);
-const freshCode = () => fetchOAuthCode(env, env.normal, client.identifier, client.redirectUri);
+/** A group the normal user is an active member of (the backend's admin check reads exactly that), or an error. */
+async function activeGroupOfNormalUser(): Promise<number> {
+    const session = await new CtSession(env).login(env.normal);
+    const memberships = listOf(await session.ok('GET', `/persons/${env.normal.id}/groups?limit=100`));
+    const id = memberships
+        .filter((m) => m.groupMemberStatus === 'active')
+        .map((m) => Number((m.group as { domainIdentifier?: unknown } | undefined)?.domainIdentifier))
+        .find((n) => Number.isSafeInteger(n) && n > 0);
+    if (id === undefined) throw new Error(`person ${env.normal.id} is an active member of no group; the admin subject needs one`);
+    return id;
+}
 
-async function loginAsUser(): Promise<string> {
+const apiOn = (box: BackendSandbox, token: () => string | null): BackendApi => createBackendApi(box.base, token);
+const api = (token: () => string | null): BackendApi => apiOn(sandbox, token);
+/** The normal user's ChurchTools session for the authorization step, so a code doesn't cost a login of its own. */
+let normalSession: Promise<CtSession> | null = null;
+const freshCode = async () => {
+    normalSession ??= new CtSession(env).login(env.normal);
+    return fetchOAuthCode(env, env.normal, client.identifier, client.redirectUri, await normalSession);
+};
+
+/**
+ * ChurchTools limits logins, and with a required primary password every write is one (the backend checks the password
+ * with `POST /login`). An `upstream-rate-limited` answer is therefore waited out (its `retryAfter`, at most 90 s) and
+ * the same call sent again, twice at most; any other answer, the last one included, goes to the case unchanged.
+ */
+let rateLimitWaits = 0;
+async function patiently<T>(call: () => Promise<T>): Promise<T> {
+    for (let retry = 0; ; retry++) {
+        try {
+            return await call();
+        } catch (e) {
+            if (retry >= 2 || !(e instanceof BackendProblem) || e.slug !== 'upstream-rate-limited') throw e;
+            rateLimitWaits++;
+            await new Promise((r) => setTimeout(r, Math.min(e.retryAfter ?? 60, 90) * 1000));
+        }
+    }
+}
+
+/** `api` with the entry and self-test calls sent `patiently` (login isn't: a code is used up by the first try). */
+function patientApi(api: BackendApi): BackendApi {
+    return {
+        ...api,
+        getEntry: (id) => patiently(() => api.getEntry(id)),
+        putEntry: (id, body) => patiently(() => api.putEntry(id, body)),
+        deleteEntry: (id, pwd) => patiently(() => api.deleteEntry(id, pwd)),
+        selfTest: (write) => patiently(() => api.selfTest(write)),
+    };
+}
+
+async function loginOn(box: BackendSandbox): Promise<string> {
     const code = await freshCode();
-    return (await api(() => null).login(code.code, code.codeVerifier, client.redirectUri)).accessToken;
+    return (await apiOn(box, () => null).login(code.code, code.codeVerifier, client.redirectUri)).accessToken;
 }
 
 beforeAll(async () => {
     const before = await touchedEntries();
     if (before.length > 0) throw new Error(`persons ${touched.join(', ')} must have no password entry on the test instance; the contract won't touch real entries`);
-    settings = await readSettings();
+    instance = await readSettings();
+    const adminGroupId = await activeGroupOfNormalUser();
     const admin = await adminSession(env);
     try {
         client = await createTempOAuthClient(env, admin, cleanup, env.normal);
         await grantLoginRight(env, admin, cleanup, env.normal, client);
-        sandbox = new BackendSandbox(env, { oauthClientId: client.identifier, oauthClientSecret: client.secret });
         cleanup.add('password entries of the touched persons removed', async () => {
             const { moduleId, categoryId } = await passwordStore();
             for (const id of await touchedEntries()) await service.deleteValue(moduleId, categoryId, id);
             if ((await touchedEntries()).length > 0) throw new Error('entries of the touched persons are left');
         });
-        cleanup.add('backend sandbox stopped, its cache and logs deleted', () => sandbox.stop());
-        await sandbox.start();
-        vi.stubGlobal('fetch', sandbox.fetchFor(realFetch));
+        let fetchChain = realFetch;
+        for (const variant of VARIANTS) {
+            const make = (role: 'user' | 'admin') => {
+                const box = new BackendSandbox(env, {
+                    oauthClientId: client.identifier,
+                    oauthClientSecret: client.secret,
+                    base: `https://${variant.key}-${role}.backend.contract.invalid`,
+                    settings: { variant: variant.settings, categoryId: instance.settingsCategoryId },
+                    ...(role === 'admin' ? { adminGroupId } : {}),
+                });
+                cleanup.add(`backend sandbox ${variant.key}-${role} stopped, its cache and logs deleted`, () => box.stop());
+                return box;
+            };
+            const pair = { user: make('user'), admin: make('admin') };
+            await pair.user.start();
+            await pair.admin.start();
+            fetchChain = pair.admin.fetchFor(pair.user.fetchFor(fetchChain));
+            sandboxes.set(variant.key, pair);
+        }
+        sandbox = sandboxes.get(WIRE_VARIANT.key)!.user;
+        vi.stubGlobal('fetch', fetchChain);
         cleanup.add('fetch restored', async () => void vi.unstubAllGlobals());
     } catch (e) {
         await cleanup.runAll().catch(() => undefined);
@@ -104,23 +188,26 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+    if (rateLimitWaits > 0) console.info(`[contract] waited out ${rateLimitWaits} upstream-rate-limited answer(s) of the backend`);
     await cleanup.runAll();
 });
 
-function subject(token: () => string | null, ownPersonId: number, admin: boolean): BackendContractSubject {
-    const http = createHttp(backendBase(SANDBOX_BASE), token);
+/** The normal user on `box` with the token of a real login there, as a user or (admin sandbox) as an admin. */
+function subject(variant: (typeof VARIANTS)[number], box: BackendSandbox, admin: boolean, token: string): BackendContractSubject {
+    const current = () => token;
+    const http = createHttp(backendBase(box.base), current);
     return {
-        ...api(token),
-        ownPersonId,
+        ...patientApi(apiOn(box, current)),
+        ownPersonId: env.normal.id,
         admin,
         otherPersonId: env.persons.active,
         gonePersonId: env.persons.deleted,
-        primaryPwd: settings.requirePasswordForPasswordChange ? env.normal.pwd : null,
-        allowCustomPassword: settings.allowCustomPassword,
-        passwordLength: settings.passwordLength,
-        withoutToken: () => api(() => null),
+        primaryPwd: variant.settings.requirePasswordForPasswordChange ? env.normal.pwd : null,
+        allowCustomPassword: variant.settings.allowCustomPassword,
+        passwordLength: instance.passwordLength,
+        withoutToken: () => apiOn(box, () => null),
         // Issued 16 minutes ago with the 15-minute lifetime: valid signature and claims, expired (beyond the leeway).
-        expiredToken: () => api(() => sandbox.mintToken(ownPersonId, env.normal.username, admin, 16 * 60)),
+        expiredToken: () => apiOn(box, () => box.mintToken(env.normal.id, env.normal.username, admin, 16 * 60)),
         getEntryRaw: async (id) => {
             try {
                 await http('GET', `/entries/${id}`);
@@ -130,24 +217,27 @@ function subject(token: () => string | null, ownPersonId: number, admin: boolean
                 throw e;
             }
         },
-    };
-}
-
-let userToken: string | null = null;
-defineBackendContract('real backend, user (OAuth login)', async () => {
-    userToken ??= await loginAsUser();
-    return {
-        ...subject(() => userToken, env.normal.id, false),
         loginArguments: async () => {
             const code = await freshCode();
             return [code.code, code.codeVerifier, client.redirectUri];
         },
     };
-});
+}
 
-defineBackendContract('real backend, admin (token minted as the login issues it)', async () =>
-    subject(() => sandbox.mintToken(env.normal.id, env.normal.username, true), env.normal.id, true),
-);
+for (const variant of VARIANTS) {
+    for (const role of ['user', 'admin'] as const) {
+        // One real login per subject, on first use (the token lives 15 minutes, longer than a subject's cases). A failed
+        // login fails the subject's cases without trying again for each of them.
+        let made: Promise<BackendContractSubject> | null = null;
+        defineBackendContract(`real backend, ${variant.name}, ${role} (OAuth login)`, () => {
+            made ??= (async () => {
+                const box = sandboxes.get(variant.key)![role];
+                return subject(variant, box, role === 'admin', await loginOn(box));
+            })();
+            return made;
+        });
+    }
+}
 
 describe('ChurchTools OAuth, measured on the test instance', () => {
     it('refuses to exchange a code without the client secret (invalid_request) or with a wrong one (invalid_client)', async () => {
@@ -204,7 +294,7 @@ describe('Backend on the wire, as the browser sees it', () => {
         const token = sandbox.mintToken(env.normal.id, env.normal.username, false);
         const user = api(() => token);
         await user.getEntry(env.normal.id);
-        await user.deleteEntry(env.normal.id, settings.requirePasswordForPasswordChange ? env.normal.pwd : undefined);
+        await user.deleteEntry(env.normal.id, WIRE_VARIANT.settings.requirePasswordForPasswordChange ? env.normal.pwd : undefined);
         await expect(user.putEntry(env.normal.id, { secondaryPwd: 'abc' })).rejects.toMatchObject({
             slug: expect.stringMatching(/^(password-invalid|custom-password-not-allowed|primary-password-required)$/),
         });

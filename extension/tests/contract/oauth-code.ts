@@ -14,11 +14,11 @@ const b64url = (b: Buffer) => b.toString('base64').replace(/\+/g, '-').replace(/
 
 /**
  * Plays the browser's part of the authorization code flow (port of the backend's `OAuthCodeFetcher`): logs in as the
- * user in a session of its own, calls `/oauth/authorize` with PKCE (S256) and, if the consent page appears, approves
+ * user in a session of its own (or uses `loggedIn`, the user's session, so a run doesn't log in for every code), calls `/oauth/authorize` with PKCE (S256) and, if the consent page appears, approves
  * it. The redirect to the redirect URI is never followed; `code` and `state` are read from its `Location`.
  */
-export async function fetchOAuthCode(env: ContractEnv, user: FixtureUser, clientId: string, redirectUri: string): Promise<OAuthCode> {
-    const session = await new CtSession(env).login(user);
+export async function fetchOAuthCode(env: ContractEnv, user: FixtureUser, clientId: string, redirectUri: string, loggedIn?: CtSession): Promise<OAuthCode> {
+    const session = loggedIn ?? (await new CtSession(env).login(user));
     const codeVerifier = b64url(randomBytes(48));
     const state = randomBytes(8).toString('hex');
     const query = new URLSearchParams({

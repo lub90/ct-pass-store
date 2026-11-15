@@ -15,9 +15,24 @@ export const SANDBOX_BASE = 'https://backend.contract.invalid';
 
 const DIR_PREFIX = 'cps-backend-sandbox-';
 
+/** The folders of the sandboxes this process runs; the sweep for crashed runs leaves them alone. */
+const liveDirs = new Set<string>();
+
+/** The settings a sandbox's backend sees instead of the instance's (`sandbox/SandboxChurchTools.php`). */
+export interface SettingsVariant {
+    requirePasswordForPasswordChange: boolean;
+    allowCustomPassword: boolean;
+}
+
 export interface SandboxOptions {
     oauthClientId: string;
     oauthClientSecret: string;
+    /** The https address the client is given for this sandbox (several sandboxes run side by side). */
+    base?: string;
+    /** Replaces these settings in what the backend reads; the instance's settings value stays as it is. */
+    settings?: { variant: SettingsVariant; categoryId: number };
+    /** The backend sees an `access` value naming this group as the admin group (the instance has none). */
+    adminGroupId?: number;
 }
 
 /** A request the extension sent to the sandbox, as seen on the wire (for the CORS checks). */
@@ -35,6 +50,7 @@ export interface SeenRequest {
 export class BackendSandbox {
     readonly jwtSecret = randomBytes(32).toString('hex');
     readonly seen: SeenRequest[] = [];
+    readonly base: string;
     private process: ChildProcess | null = null;
     private dir: string | null = null;
     private port = 0;
@@ -47,6 +63,7 @@ export class BackendSandbox {
     constructor(env: ContractEnv, options: SandboxOptions) {
         this.env = env;
         this.options = options;
+        this.base = options.base ?? SANDBOX_BASE;
     }
 
     get httpBase(): string {
@@ -56,8 +73,9 @@ export class BackendSandbox {
     async start(): Promise<void> {
         this.port = await freePort();
         // Folders of a crashed run (one contract run per instance at a time, so none of them is in use).
-        sweepStaleDirs(os.tmpdir(), DIR_PREFIX, process.getuid?.() ?? -1);
+        sweepStaleDirs(os.tmpdir(), DIR_PREFIX, process.getuid?.() ?? -1, liveDirs);
         this.dir = fs.mkdtempSync(path.join(os.tmpdir(), DIR_PREFIX));
+        liveDirs.add(this.dir);
         fs.mkdirSync(path.join(this.dir, 'cache'), { mode: 0o700 });
         fs.mkdirSync(path.join(this.dir, 'logs'), { mode: 0o700 });
         const childEnv: NodeJS.ProcessEnv = {
@@ -71,6 +89,7 @@ export class BackendSandbox {
             CPS_SANDBOX_OAUTH_CLIENT_ID: this.options.oauthClientId,
             CPS_SANDBOX_OAUTH_CLIENT_SECRET: this.options.oauthClientSecret,
             CPS_SANDBOX_JWT_SECRET: this.jwtSecret,
+            ...sandboxOverrideEnv(this.options),
         };
         // Output is discarded: the built-in server logs request lines, which must not end up in the test output.
         this.process = spawn('php', ['-S', `127.0.0.1:${this.port}`, path.join(import.meta.dirname, 'sandbox/router.php')], {
@@ -127,21 +146,24 @@ export class BackendSandbox {
             if (child.exitCode === null) child.kill('SIGKILL');
         }
         // The cache and logs hold person ids and signed records of this run only.
-        if (this.dir) fs.rmSync(this.dir, { recursive: true, force: true });
+        if (this.dir) {
+            fs.rmSync(this.dir, { recursive: true, force: true });
+            liveDirs.delete(this.dir);
+        }
         this.dir = null;
     }
 
     /**
-     * A `fetch` for `vi.stubGlobal`: requests to `SANDBOX_BASE` go to the sandbox (recording method and header
-     * names), everything else to the real `fetch`.
+     * A `fetch` for `vi.stubGlobal`: requests to this sandbox's `base` go to the sandbox (recording method and header
+     * names), everything else to `realFetch` (the real `fetch`, or another sandbox's `fetchFor`).
      */
     fetchFor(realFetch: typeof fetch): typeof fetch {
         return async (input, init) => {
             const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
-            if (!url.startsWith(`${SANDBOX_BASE}/`)) return realFetch(input, init);
+            if (!url.startsWith(`${this.base}/`)) return realFetch(input, init);
             const headers = new Headers(init?.headers);
             this.seen.push({ method: init?.method ?? 'GET', headerNames: [...headers.keys()] });
-            return realFetch(`${this.httpBase}${url.slice(SANDBOX_BASE.length)}`, init);
+            return realFetch(`${this.httpBase}${url.slice(this.base.length)}`, init);
         };
     }
 
@@ -155,14 +177,28 @@ export class BackendSandbox {
     }
 }
 
+/** The environment of `sandbox/SandboxChurchTools.php` for the options (nothing when there is no override). */
+export function sandboxOverrideEnv(options: Pick<SandboxOptions, 'settings' | 'adminGroupId'>): Record<string, string> {
+    const env: Record<string, string> = {};
+    if (options.settings) {
+        const { requirePasswordForPasswordChange, allowCustomPassword } = options.settings.variant;
+        env.CPS_SANDBOX_SETTINGS = JSON.stringify({ requirePasswordForPasswordChange, allowCustomPassword });
+        env.CPS_SANDBOX_SETTINGS_CATEGORY_ID = String(options.settings.categoryId);
+    }
+    if (options.adminGroupId !== undefined) env.CPS_SANDBOX_ADMIN_GROUP_ID = String(options.adminGroupId);
+    return env;
+}
+
 /**
  * Deletes the folders in `dir` whose name starts with `prefix` and that belong to `uid` (another user's folders are
- * none of this run's business). A folder that can't be deleted is skipped; the sweep goes on.
+ * none of this run's business), except those in `keep` (sandboxes of this run). A folder that can't be deleted is
+ * skipped; the sweep goes on.
  */
-export function sweepStaleDirs(dir: string, prefix: string, uid: number): void {
+export function sweepStaleDirs(dir: string, prefix: string, uid: number, keep: ReadonlySet<string> = new Set()): void {
     for (const name of fs.readdirSync(dir)) {
         if (!name.startsWith(prefix)) continue;
         const full = path.join(dir, name);
+        if (keep.has(full)) continue;
         try {
             const stat = fs.lstatSync(full);
             if (!stat.isDirectory() || stat.uid !== uid) continue;

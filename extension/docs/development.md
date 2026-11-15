@@ -136,19 +136,41 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
   test“ (a team with the service user, the normal test user, a `waiting` member and an archived person; a
   distribution list without the service user). Probe values in `passwordStore`, deleted right away.
 - **Backend** (`tests/contract/backend.contract.test.ts`): the backend runs locally on PHP's built-in server
-  (`tests/contract/backend-sandbox.ts`, 127.0.0.1, a free port, a fresh cache and log folder per run, deleted after).
+  (`tests/contract/backend-sandbox.ts`, 127.0.0.1, a free port, a fresh cache and log folder per sandbox, deleted
+  after); four sandboxes run side by side, one per settings variant and role.
   Its configuration (`tests/contract/sandbox/credentials.php`) holds no values; everything comes from the PHP
   process's environment, with a random `JWT_SECRET` per run. The deployed backend of the test instance is not used.
   - A temporary confidential OAuth client with the redirect URI `https://<instance>/ccm/ctpassstore/auth/callback`;
     its secret stays in memory. The normal test user gets „login to external system“ for this client only (`PUT`
     adds it; `DELETE` with the same body removes exactly it; afterwards all of the user's own grants are compared
     with the start).
-  - "user" logs in through the real OAuth flow and `POST /v1/auth/token`. "admin" uses a token signed with the
-    per-run secret exactly as the login issues it, because nobody is an admin on the test instance.
+  - **Settings variants:** every backend case runs in two variants, "primary password not required, custom
+    passwords allowed" and "primary password required, custom passwords off", whatever the instance's settings are.
+    The instance's settings are never written: the sandbox's router (`tests/contract/sandbox/router.php`, test code
+    only, nothing in `backend/src` or `backend/public`) wires the backend as `Kernel::bootstrap()` does, but wraps its
+    ChurchTools client in `tests/contract/sandbox/SandboxChurchTools.php`. That wrapper replaces exactly
+    `requirePasswordForPasswordChange` and `allowCustomPassword` (from `CPS_SANDBOX_SETTINGS`, booleans only) in the
+    settings value as the backend reads it; every other setting, the persons, groups, rights and entries come from
+    the instance. It refuses any write to the settings (or access) it overrides, and a malformed override keeps the
+    sandbox from starting. Its own checks are `tests/contract/sandbox-overrides.test.ts` (a fake inner client, no
+    network; in this suite because it needs PHP and `backend/vendor`).
+  - "user" and "admin" are both the normal test user, logged in through the real OAuth flow and
+    `POST /v1/auth/token`. The "user" sandbox reads `access` from the instance, which has none, so nobody is an
+    admin. The "admin" sandbox's backend sees an `access` value (`CPS_SANDBOX_ADMIN_GROUP_ID`) naming a group the
+    normal test user is already an active member of as the admin group; the membership is read with the user's own
+    token as in production, and no group is created or changed for it. So the login's `admin: true` is checked for
+    real. (Only the wire check "an admin gets person-not-found for an archived person too" still uses a token signed
+    with the sandbox's per-run secret.)
+  - **Rate limits:** ChurchTools limits `POST /login`, and with a required primary password every backend write is
+    one (the backend checks the password that way). The run reuses one session of the normal test user for all
+    authorization codes; a `429` on a fixture login is waited out (`Retry-After`, at most 90 s, twice at most), and
+    so is an `upstream-rate-limited` answer of the backend to an entry or self-test call (the same call sent again,
+    twice at most; the answer the case sees is otherwise unchanged). The run says how often it waited. It takes
+    about three minutes.
   - Entries are written only for persons that have none; the run refuses to start otherwise.
 - **HTTPS:** the extension's backend client accepts `https://` only, and `src/` has no switch for plain HTTP. So the
-  tests give the client the address `https://backend.contract.invalid` and replace `fetch` (`vi.stubGlobal`, test
-  code only) with one that sends those requests to the sandbox. The sandbox's router sets `HTTPS=on`, as a TLS
+  tests give the client an address like `https://open-user.backend.contract.invalid` (one per sandbox) and replace
+  `fetch` (`vi.stubGlobal`, test code only) with one that sends those requests to the matching sandbox. The sandbox's router sets `HTTPS=on`, as a TLS
   terminator does in production, so the backend's own HTTPS check passes.
 - **Cleanup:** every temporary object is removed in `afterAll`, also after a failure; each step runs even if an earlier
   one fails, and a failed step fails the run with „check the test instance by hand“.
@@ -167,9 +189,13 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
 - **One contract run per instance at a time.** The runs (this suite and the backend's PHP contract suite) grant and
   remove the same right and look for leftovers by name; two runs at once would undo each other's objects. There is no
   lock.
-- **Skipped cases**, by design: the read-only-rights case (no test user may read without writing), the
-  primary-password cases while the instance doesn't require it, and the cases for the other value of
-  `allowCustomPassword`. Vitest lists them as skipped.
+- **Skipped cases**, by design, listed as skipped by Vitest:
+  - Backend: each subject skips the cases of the other variant or role (custom-password cases in the "custom off"
+    variant, `custom-password-not-allowed` and the primary-password cases in the "open" variant, admin cases for
+    "user", the non-admin case for "admin"). Every backend case runs for at least one subject: 11, 12, 12 and 13
+    cases run for open/user, open/admin, strict/user and strict/admin.
+  - ChurchTools: the read-only-rights case (no test user may read the categories without also writing them); it runs
+    against the fake only.
 
 ### Recorded responses
 

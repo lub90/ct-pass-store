@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sweepStaleDirs } from './backend-sandbox';
+import { sandboxOverrideEnv, sweepStaleDirs } from './backend-sandbox';
 import { Cleanup } from './cleanup';
 import { CtSession, ctApiFor, scrubAxiosError } from './ct-session';
 import { record } from './record';
@@ -156,6 +156,34 @@ describe('CtSession', () => {
         expect(init.headers).toMatchObject({ Authorization: `Login ${TOKEN}`, Cookie: 'ChurchTools_x=1' });
         expect(init.redirect).toBe('manual');
     });
+
+    it('waits out a rate-limited login (Retry-After, at most 90 s) and tries again, twice at most', async () => {
+        const answers = [new Response('{}', { status: 429, headers: { 'Retry-After': '7' } }), new Response('{}', { status: 429 }), new Response('{"data":{"status":"success"}}')];
+        vi.stubGlobal('fetch', vi.fn(async () => answers.shift()));
+        const waits: number[] = [];
+        await new CtSession(env).login(env.normal, async (s) => void waits.push(s));
+        expect(waits).toEqual([7, 60]);
+
+        const huge = [new Response('{}', { status: 429, headers: { 'Retry-After': '3600' } }), new Response('{"data":{"status":"success"}}')];
+        vi.stubGlobal('fetch', vi.fn(async () => huge.shift()));
+        waits.length = 0;
+        await new CtSession(env).login(env.normal, async (s) => void waits.push(s));
+        expect(waits).toEqual([90]);
+
+        vi.stubGlobal('fetch', vi.fn(async () => new Response('{}', { status: 429, headers: { 'Retry-After': '1' } })));
+        waits.length = 0;
+        await expect(new CtSession(env).login(env.normal, async (s) => void waits.push(s))).rejects.toThrow('Login of fixture person 2 answered 429');
+        expect(waits).toEqual([1, 1]);
+    });
+
+    it('does not retry a refused login', async () => {
+        const fetch = vi.fn(async () => new Response('{}', { status: 400 }));
+        vi.stubGlobal('fetch', fetch);
+        const wait = vi.fn(async () => undefined);
+        await expect(new CtSession(env).login(env.normal, wait)).rejects.toThrow('answered 400');
+        expect(wait).not.toHaveBeenCalled();
+        expect(fetch).toHaveBeenCalledTimes(1);
+    });
 });
 
 describe('the test ChurchTools client never carries the token in an error', () => {
@@ -236,5 +264,30 @@ describe('sweepStaleDirs', () => {
         fs.mkdirSync(path.join(tmp, 'cps-backend-sandbox-a'));
         sweepStaleDirs(tmp, 'cps-backend-sandbox-', process.getuid!() + 1);
         expect(fs.readdirSync(tmp)).toEqual(['cps-backend-sandbox-a']);
+    });
+
+    it('keeps the folders of sandboxes this run still uses', () => {
+        for (const d of ['cps-backend-sandbox-a', 'cps-backend-sandbox-b']) fs.mkdirSync(path.join(tmp, d));
+        sweepStaleDirs(tmp, 'cps-backend-sandbox-', process.getuid!(), new Set([path.join(tmp, 'cps-backend-sandbox-b')]));
+        expect(fs.readdirSync(tmp)).toEqual(['cps-backend-sandbox-b']);
+    });
+});
+
+describe('sandboxOverrideEnv', () => {
+    it('is empty without an override', () => {
+        expect(sandboxOverrideEnv({})).toEqual({});
+    });
+
+    it('names exactly the two settings of the variant, the settings category and the admin group', () => {
+        const variant = { requirePasswordForPasswordChange: true, allowCustomPassword: false, passwordLength: 64 } as never;
+        expect(sandboxOverrideEnv({ settings: { variant, categoryId: 406 }, adminGroupId: 7 })).toEqual({
+            CPS_SANDBOX_SETTINGS: '{"requirePasswordForPasswordChange":true,"allowCustomPassword":false}',
+            CPS_SANDBOX_SETTINGS_CATEGORY_ID: '406',
+            CPS_SANDBOX_ADMIN_GROUP_ID: '7',
+        });
+        expect(sandboxOverrideEnv({ settings: { variant: { requirePasswordForPasswordChange: false, allowCustomPassword: true }, categoryId: 1 } })).toEqual({
+            CPS_SANDBOX_SETTINGS: '{"requirePasswordForPasswordChange":false,"allowCustomPassword":true}',
+            CPS_SANDBOX_SETTINGS_CATEGORY_ID: '1',
+        });
     });
 });

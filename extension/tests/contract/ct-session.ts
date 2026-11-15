@@ -39,6 +39,14 @@ export const listOf = (a: Answer): Record<string, unknown>[] => {
     return Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
 };
 
+const waitSeconds = (seconds: number) => new Promise<void>((r) => setTimeout(r, seconds * 1000));
+
+/** The wait a `429` asks for: its `Retry-After` seconds (60 when missing or unreadable), at most 90. */
+export function retryAfterSeconds(header: string | null): number {
+    const seconds = header !== null && /^\d+$/.test(header.trim()) ? Number(header.trim()) : 60;
+    return Math.min(seconds, 90);
+}
+
 /**
  * A ChurchTools session for the contract layer's own calls (admin set-up, OAuth): a cookie jar of its own and, when
  * given, a login token sent as `Authorization: Login`. Redirects are never followed. Error messages carry only the
@@ -91,8 +99,17 @@ export class CtSession {
         return a;
     }
 
-    async login(user: FixtureUser): Promise<this> {
-        const a = await this.request('POST', '/login', { json: { username: user.username, password: user.pwd } });
+    /**
+     * `POST /login` as the fixture user. ChurchTools limits logins (`429`; a contract run logs in often, and the
+     * backend's primary-password checks are logins too): such an answer is waited out (`Retry-After`, else 60 s, at
+     * most 90 s) and the login tried again, twice at most.
+     */
+    async login(user: FixtureUser, wait: (seconds: number) => Promise<void> = waitSeconds): Promise<this> {
+        let a = await this.request('POST', '/login', { json: { username: user.username, password: user.pwd } });
+        for (let retry = 0; retry < 2 && a.status === 429; retry++) {
+            await wait(retryAfterSeconds(a.headers.get('Retry-After')));
+            a = await this.request('POST', '/login', { json: { username: user.username, password: user.pwd } });
+        }
         if (a.status !== 200 || dataOf(a).status !== 'success') throw new Error(`Login of fixture person ${user.id} answered ${a.status}`);
         this.csrf = null;
         return this;
