@@ -25,10 +25,13 @@ Open issues and planned improvements, roughly ordered by severity.
   - If needed: split `passwordStore` into a fixed number of categories (e.g. by `personId mod 16`), so a read lists only one small category. This changes the backend and the extension.
   - Re-check when ChurchTools' reworked KV store arrives; it may offer reads by key.
 
-- [ ] **Timing issues caused by the many backend calls to ChurchTools**
-  A single request makes about 5–7 round trips to ChurchTools (whoami, permissions, module ID, categories, settings, data), none of them cached. This causes noticeable latency and can run into timeouts.
-  - Cache the settings, the public key and the module/category IDs for a short time (per request and across requests).
-  - Reduce or parallelize the remaining calls where possible.
+- [x] **Timing issues caused by the many backend calls to ChurchTools** (done: backend tokens replace the per-request `whoami` and permission calls; settings, `access` and the public key are cached for 5 minutes, module and category IDs for 1 hour, active persons for 10 minutes, spec 6.1)
+  A single request made about 5–7 round trips to ChurchTools (whoami, permissions, module ID, categories, settings, data), none of them cached. This caused noticeable latency and could run into timeouts.
+
+- [ ] **Backend tuning file: revise design and plan before building it**
+  [`specs/backend-tuning-design.md`](specs/backend-tuning-design.md) (Draft) and [`specs/backend-tuning-implementation-plan.md`](specs/backend-tuning-implementation-plan.md) (approved 2026-11-13, needs revision) let `SETTINGS_CACHE_SECONDS` go up to 3600 s. That cache also holds `access`, so revoking a machine client or key, or changing the admin group, could take up to an hour instead of 5 minutes.
+  - Either cap `SETTINGS_CACHE_SECONDS` at 300 s, or give `access` its own fixed cache time of at most 300 s.
+  - Not built; there is no installation asking for it.
 
 ## Security
 
@@ -49,11 +52,10 @@ Open issues and planned improvements, roughly ordered by severity.
   exclusive lock; the list holds about requests per second × 330 s entries. That's fine for a parish, but at many
   RADIUS logins per second the file becomes a bottleneck; then split it by a `jti` prefix.
 
-- [ ] **Harden the primary-password check**
+- [x] **Harden the primary-password check** (done: limited to 5 wrong passwords per caller in 15 minutes, spec 6.3; two-factor users covered by unit, API and contract tests, spec 5.5.3 and Q13)
   [`ChurchToolsPasswordVerifier.php`](backend/src/Infrastructure/ChurchTools/ChurchToolsPasswordVerifier.php) (formerly `ChurchtoolsAuthVerifier.php`) checks the primary password by calling the real `POST /api/login`.
-  - Every check opens a new ChurchTools session.
-  - The backend has no rate limiting, so it can be used to guess primary passwords. It's unverified whether ChurchTools' own login lockout would then block the backend's IP for all users.
-  - The behaviour for users with 2FA enabled is untested.
+  - Every check opens a new ChurchTools session; its cookie is discarded (spec 5.5.3). Accepted.
+  - The per-caller limit keeps the backend from being used to guess primary passwords, and from getting its IP locked out by ChurchTools' own login lockout.
 
 - [x] **Switch backend authentication from login tokens to JWTs** (done in backend and extension, machine clients sign Ed25519 JWTs; only the setup-wizard step below is open and comes with the setup assistant)
   Right now clients send their ChurchTools login token (`Authorization: Login <token>`) to the backend, which uses it to call ChurchTools. So the backend sees long-lived credentials with full access to the user's ChurchTools account. If the backend is compromised, those tokens are exposed too.
@@ -89,8 +91,8 @@ Open issues and planned improvements, roughly ordered by severity.
 
   Set them to `600`, and mention that in the testing docs.
 
-- [ ] **Backend: set and check file permissions on the server**
-  Local permissions don't survive deployment. FTP/SFTP uploads get the server's defaults (usually `644`/`755`), and [`backend/setup/setup.sh`](backend/setup/setup.sh) copies files without setting any permissions. The right values depend on which user PHP runs as:
+- [x] **Backend: set and check file permissions on the server** (done: `setup.sh` sets files `640`, folders `750`, `config/`, `cache/` and `logs/` `700`, and reminds the admin to check them after uploading; [`backend/docs/setup.md`](backend/docs/setup.md) step 5 has the target values for both cases; `/v1/test` accepts `0600` or `0640` for `credentials.php`, checks that `cache/` is closed to other users and that PHP can write `logs/`; spec 3.1)
+  Local permissions don't survive deployment. FTP/SFTP uploads get the server's defaults (usually `644`/`755`), and [`backend/setup/setup.sh`](backend/setup/setup.sh) copied files without setting any permissions. The right values depend on which user PHP runs as:
   - **PHP runs as the hosting user** (PHP-FPM, suPHP; most shared hosts): `credentials.php` → `600`.
   - **PHP runs as the web server user** (e.g. `www-data` with `mod_php`): `600` owned by the hosting user would make the file unreadable for PHP and break the backend. Use e.g. `640` with the web server's group instead.
 
@@ -113,7 +115,7 @@ Open issues and planned improvements, roughly ordered by severity.
 ## Data Management
 
 - [x] **Clean up entries of deleted users**
-  Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). `adminUsers` is only reported, never changed.
+  Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). Admins are members of a ChurchTools group (D9), so the cleanup reads no admin list.
 
 - [ ] **Backup & restore of the extension data**
   Updating the extension (a new ZIP uploaded to the existing module) keeps its data (measured 2026-11-14, [`specs/ct-extension-info.md`](specs/ct-extension-info.md) section 2). Deleting and reinstalling it removes all of it: settings, encryption settings and every stored password. A backup also protects against mistakes and lost values.
@@ -142,18 +144,15 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Dependencies & Shared Code
 
-- [ ] **Fix shared code upstream, not in the subtree copies**
-  [`extension/src/ct-utils/`](extension/src/ct-utils/) and [`extension/src/ct-extension-utils/`](extension/src/ct-extension-utils/) are squashed git subtrees of `lub90/ct-utils` and `lub90/ct-extension-utils`. So far, every change has come in through `git subtree pull --squash`, and the copies haven't drifted from upstream.
-  - Make fixes to shared code (e.g. the KV helpers in `ExtensionData.ts`, `Permissions.ts`, the ChurchTools types) in the upstream repos, then pull them in. Editing the copies here makes them diverge, and the next pull will conflict.
-  - Bugs in code that belongs only to ct-pass-store (e.g. the race condition in `ChurchToolsStore.php`) are fixed here as usual.
+The subtree copies of `lub90/ct-utils` and `lub90/ct-extension-utils` were removed from the extension in its rework (extension spec 5.2). The extension's own `src/ui/` moves to `ct-extension-utils` once ct-radius uses it too (extension spec E2). The two items below concern the upstream repositories.
 
 - [ ] **Bring the shared libraries out of prototype state**
-  Both subtree READMEs contain only TODOs.
+  Both READMEs (in `lub90/ct-utils` and `lub90/ct-extension-utils`) contain only TODOs.
   - Write real READMEs and add `.gitignore` files.
   - Rewrite `ExtensionData` in ct-utils to follow the boilerplate's [`kv-store.ts`](https://github.com/churchtools/extension-boilerplate/blob/main/src/utils/kv-store.ts), as already noted in its README.
 
 - [ ] **Consider publishing the shared libraries as packages**
-  Subtrees work for a single developer. If other extensions will reuse `ct-utils` and `ct-extension-utils`, publish them as versioned npm packages (private or GitHub-hosted is fine) instead of copying them in.
+  Copying them in (as git subtrees) works for a single developer. If other extensions will reuse `ct-utils` and `ct-extension-utils`, publish them as versioned npm packages (private or GitHub-hosted is fine) instead.
 
 - [x] **Replace `churchtools/php-client` with our own thin ChurchTools client** (done: [`GuzzleChurchToolsClient.php`](backend/src/Infrastructure/ChurchTools/GuzzleChurchToolsClient.php); the library and the fork are gone from `composer.json`)
   [`backend/composer.json`](backend/composer.json) requires `churchtools/php-client` from the fork `lub90/ct-php-client` as `dev-version/3.126.2`, which is a branch. The library is 59 MB and about 3,800 files, but the backend uses only `SimpleClient`, `GeneralApi::getWhoami()`, `Configuration`, `ApiException` and one model.
@@ -169,7 +168,7 @@ Open issues and planned improvements, roughly ordered by severity.
 - [x] The class name is spelled two ways: `ChurchtoolsAuthVerifier` and `ChurchToolsAuthVerifier`. (Now `ChurchToolsPasswordVerifier`.)
 - [ ] Translate the remaining German code comments to English.
 - [x] Extension `package.json`: remove the unused `angular-route` dependency and move the Vite plugins to `devDependencies`.
-- [x] Reconsider committing the generated 33k-line [`ct-types.d.ts`](extension/src/utils/ct-types.d.ts).
+- [x] Reconsider committing the generated 33k-line `ct-types.d.ts`. (Removed in the extension rework; `extension/src/ct/types.ts` declares only the fields the extension reads, extension spec 5.2.)
 
 ## Documentation
 
