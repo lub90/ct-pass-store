@@ -445,7 +445,7 @@ key and send it as `Authorization: Bearer <jwt>`. The backend only knows the pub
      accepted without replay protection.
 6. The client's `permissions` decide what it may do (4.3 matrix).
 
-**Revocation:** remove the client or one of its keys from the settings. This takes effect within the settings cache
+**Revocation:** remove the client or one of its keys from `access`. This takes effect within the settings cache
 TTL (6.1), so within 5 minutes.
 
 ### 4.5 `GET /v1/entries/{id}`
