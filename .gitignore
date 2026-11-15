@@ -11,3 +11,6 @@
 
 # Local block list of the pre-commit check (.private-terms.example)
 .private-terms
+
+# Local notes on the review process (experiment log, not part of the project)
+process-notes/
