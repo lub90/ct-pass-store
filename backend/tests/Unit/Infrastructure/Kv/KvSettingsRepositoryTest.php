@@ -383,6 +383,8 @@ final class KvSettingsRepositoryTest extends TestCase
         yield 'with query' => ['https://backend.example.org/?x=1'];
         yield 'with fragment' => ['https://backend.example.org/#x'];
         yield 'with credentials' => ['https://u:p@backend.example.org'];
+        yield 'without host, one slash' => ['https:/backend.example.org'];
+        yield 'without host, no slash' => ['https:backend.example.org'];
         yield 'not a string' => [42];
     }
 
