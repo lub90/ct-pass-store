@@ -177,6 +177,7 @@ The subtree copies of `lub90/ct-utils` and `lub90/ct-extension-utils` were remov
 
 - [ ] Add a README for contributors that explains the architecture, the reasoning behind it and how to run the tests.
 - [ ] Document the procedures for key rotation and for offboarding users.
+- [ ] Restructure README.md: lean and well structured for users; contributor and developer material moved to their own documents (CONTRIBUTING.md, docs/), README links to them. Requested 2026-11-15.
 
 ## ct-radius (after the backend changes)
 
