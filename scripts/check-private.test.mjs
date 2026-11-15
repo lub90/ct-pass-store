@@ -1,5 +1,6 @@
 // Tests of the pre-commit privacy and secrets check (scripts/check-private.mjs, .githooks/pre-commit,
-// scripts/install-hooks.sh). Run: `node --test scripts/` from the repository root (also in CI, extension.yml).
+// scripts/install-hooks.sh). Run: `node --test 'scripts/*.test.mjs'` from the repository root (also in CI,
+// extension.yml).
 //
 // Every term and credential value below is INVENTED. They are deliberately low-entropy so that the repository's own
 // gitleaks scan doesn't take them for real secrets.
@@ -192,6 +193,18 @@ test('only added lines are checked, with correct new-file line numbers across hu
   const r = check(repo);
   assert.equal(r.code, 1);
   assert.equal(r.out, 'big.txt:2: matches block list entry #2\nbig.txt:26: matches block list entry #1\n');
+});
+
+test('"\\ No newline at end of file" markers do not shift the line numbers', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'n.txt', 'a\nb'); // no newline at the end
+  git(repo, 'add', 'n.txt');
+  git(repo, 'commit', '-q', '-m', 'no newline');
+  blockList(repo, [V.term1]);
+  stage(repo, 'n.txt', `a\nnew\n${V.term1}`); // replaces the last line, again without a newline
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'n.txt:3: matches block list entry #1\n');
 });
 
 test('unstaged changes are not checked in staged mode', (t) => {
@@ -553,6 +566,19 @@ test("linked worktree: the worktree's own block list wins over the main checkout
   assertNoValues(r.all);
 });
 
+test("linked worktree: the worktree's own extension/.env wins over the main checkout's credential files", (t) => {
+  const repo = makeRepo(t);
+  credentialFiles(repo);
+  const wt = makeWorktree(t, repo);
+  write(wt, 'extension/.env', 'VITE_PASSWORD=ownown-wt-zz\n');
+  stage(wt, 'a.txt', `ownown-wt-zz\n${V.envPassword}\n`);
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
+  assert.doesNotMatch(r.all, /ownown/);
+  assertNoValues(r.all);
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // Range mode
 
@@ -615,27 +641,62 @@ test("--range checks a merge commit's own changes, not again the lines it takes 
   git(repo, 'commit', '-q', '-am', 'feature');
   const feature = git(repo, 'rev-parse', '--short', 'HEAD').trim();
   git(repo, 'checkout', '-q', 'main');
-  write(repo, 'g.txt', 'main\n');
+  write(repo, 'g.txt', `main ${V.term1}\n`);
   git(repo, 'add', 'g.txt');
   git(repo, 'commit', '-q', '-m', 'main');
+  const mainCommit = git(repo, 'rev-parse', '--short', 'HEAD').trim();
   git(repo, 'merge', '-q', '--no-ff', '--no-commit', 'feature');
-  // Changes of the merge itself, in two files; the merged line sits next to a line from the feature parent.
+  // Changes of the merge itself, in two files; each merged line sits next to a line from a parent: from the feature
+  // parent in f.txt ("+ "), from main in g.txt (" +").
   write(repo, 'f.txt', `a\nb\nc\nmerged ${V.term2}\nfeature ${V.term1}\n`);
-  write(repo, 'g.txt', `main\nmerged ${V.term2}\n`);
+  write(repo, 'g.txt', `main ${V.term1}\nmerged ${V.term2}\n`);
   git(repo, 'add', 'f.txt', 'g.txt');
   git(repo, 'commit', '-q', '-m', 'merge');
   const merge = git(repo, 'rev-parse', '--short', 'HEAD').trim();
   blockList(repo, [V.term1, V.term2]);
   const r = check(repo, ['--range', `${base}..HEAD`]);
   assert.equal(r.code, 1);
+  // The two parents' commits may come in either order (same timestamp); the merge comes last.
+  const lines = r.out.split('\n').filter(Boolean);
+  assert.deepEqual(lines.slice(0, 2).sort(), [
+    `f.txt:4: matches block list entry #1 (commit ${feature})`,
+    `g.txt:1: matches block list entry #1 (commit ${mainCommit})`,
+  ].sort());
+  assert.deepEqual(lines.slice(2), [
+    `f.txt:4: matches block list entry #2 (commit ${merge})`,
+    `g.txt:2: matches block list entry #2 (commit ${merge})`,
+  ]);
+  assertNoValues(r.all);
+});
+
+test('--range reads the combined diff of an octopus merge (three parents)', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'f.txt', 'a\nb\nc\n');
+  git(repo, 'add', 'f.txt');
+  git(repo, 'commit', '-q', '-m', 'base');
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  git(repo, 'checkout', '-q', '-b', 'one');
+  write(repo, 'one.txt', 'one\n');
+  git(repo, 'add', 'one.txt');
+  git(repo, 'commit', '-q', '-m', 'one');
+  git(repo, 'checkout', '-q', '-b', 'two', base);
+  write(repo, 'f.txt', `a\nb\nc\ntwo ${V.term1}\n`);
+  git(repo, 'commit', '-q', '-am', 'two');
+  const two = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  git(repo, 'checkout', '-q', 'main');
+  git(repo, 'merge', '-q', '--no-ff', '--no-commit', 'one', 'two');
+  // The merge's own line sits next to the line from the third parent ("++ ").
+  write(repo, 'f.txt', `a\nb\nc\nmerged ${V.term2}\ntwo ${V.term1}\n`);
+  git(repo, 'add', 'f.txt');
+  git(repo, 'commit', '-q', '-m', 'octopus');
+  const merge = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  assert.equal(git(repo, 'rev-list', '--parents', '-1', 'HEAD').trim().split(' ').length, 4, 'three parents');
+  blockList(repo, [V.term1, V.term2]);
+  const r = check(repo, ['--range', `${base}..HEAD`]);
+  assert.equal(r.code, 1);
   assert.equal(
     r.out,
-    [
-      `f.txt:4: matches block list entry #1 (commit ${feature})`,
-      `f.txt:4: matches block list entry #2 (commit ${merge})`,
-      `g.txt:2: matches block list entry #2 (commit ${merge})`,
-      '',
-    ].join('\n'),
+    `f.txt:4: matches block list entry #1 (commit ${two})\nf.txt:4: matches block list entry #2 (commit ${merge})\n`,
   );
   assertNoValues(r.all);
 });
