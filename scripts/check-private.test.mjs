@@ -629,6 +629,44 @@ test("linked worktree: the worktree's own extension/.env wins over the main chec
   assertNoValues(r.all);
 });
 
+test('linked worktree: a main checkout with only backend/phpunit.xml is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="phponly-zz"/>\n</php></phpunit>\n');
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'phponly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches backend/phpunit.xml CT_API_TOKEN entry #2\n');
+  assert.doesNotMatch(r.all, /phponly/);
+});
+
+test('linked worktree: a main checkout with only contract fixtures is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/tests/Contract/fixtures/users.json', JSON.stringify({ pwd: 'fixonly-zz' }));
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'fixonly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches backend/tests/Contract/fixtures/users.json pwd entry #1\n');
+  assert.doesNotMatch(r.all, /fixonly/);
+});
+
+test('linked worktree: credential sources are chosen one by one (own .env, phpunit.xml from the main checkout)', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=mainenv-zz\n');
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="mainphp-zz"/>\n</php></phpunit>\n');
+  const wt = makeWorktree(t, repo);
+  write(wt, 'extension/.env', 'VITE_PASSWORD=wtenv-zz\n');
+  stage(wt, 'a.txt', 'wtenv-zz\nmainenv-zz\nmainphp-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\na.txt:3: matches backend/phpunit.xml CT_API_TOKEN entry #2\n',
+  );
+  assert.doesNotMatch(r.all, /wtenv|mainenv|mainphp/);
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // Range mode
 
