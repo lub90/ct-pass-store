@@ -27,6 +27,11 @@ Check:
 
 Run the relevant tests (Bash) where possible and report the result.
 
+Mutation testing (real mutants, not only mental ones) never touches the worktree you were given: other reviewers and checks may run there at the same time, and a mutant left behind could be committed.
+- First record `git status --short` of the given worktree.
+- Create a private, detached worktree at the reviewed commit in your scratchpad, e.g. `git -C <given worktree> worktree add --detach <scratchpad>/mutants <commit>`, install dependencies there if needed, and apply every mutant only there.
+- When done (also after errors), remove it with `git worktree remove --force <path>` and confirm the given worktree's `git status --short` is unchanged. Report it if it changed.
+
 Output:
 - Verdict: APPROVED or CHANGES_REQUIRED
 - Findings, each with severity (CRITICAL / IMPORTANT / MINOR), file:line, problem, concrete recommendation

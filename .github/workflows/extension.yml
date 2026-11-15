@@ -101,6 +101,9 @@ jobs:
       - name: Tests of the check and the hook
         run: node --test 'scripts/*.test.mjs'
 
+      - name: Tests of the security-reviewer write guard
+        run: bash .claude/hooks/only-threat-model-writes.test.sh
+
       - name: Check the commits of this push or pull request
         env:
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
