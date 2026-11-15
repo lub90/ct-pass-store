@@ -89,3 +89,38 @@ The tasks touch separate areas, so each runs in its own worktree and branch and 
 
 ## After the tasks
 Run review point B again on `main..HEAD`, with the test-reviewer at full depth and the security-reviewer. Then the maintainer runs `/security-review`.
+
+---
+
+## Task M5 [security-critical]: tests of the review and privacy tooling (review point B round 2)
+
+The source is the test review at full depth of `main..fdf67e6` plus `a618f6b`. Its full report is in the controller's scratchpad (`final/test-report-b2.md`).
+
+- **I2 (IMPORTANT):** `scripts/check-private.mjs` reads `.private-terms` and the credential files from the main checkout when it runs in a linked worktree (`mainWorktreeRoot`, `loadEntries`). Nothing tests this.
+  - Test 1: create a worktree with `git worktree add`, keep `.private-terms` only in the main checkout, and stage a hit in the worktree. The check must exit 1 and name the entry.
+  - Test 2: a worktree's own `.private-terms` wins over the main checkout's.
+  - Check: a mutant that makes `mainWorktreeRoot` return null must fail both tests.
+- **M-N1, `scripts/check-private.mjs`:** add a test for each of these:
+  - `unquotePath`, for paths with non-ASCII characters or a tab;
+  - a `**/` glob that matches zero folders;
+  - a credential value of exactly 6 characters;
+  - a bad range with no sources at all, which is what CI runs;
+  - `decodeXml` for `phpunit.xml` values;
+  - a successful `--range=A..B` run;
+  - deduplication of a value found in two sources;
+  - `.env` lines with `export` and with an inline ` # comment`;
+  - tracked symlinks in `--all` mode;
+  - a pure `git mv` into a path that contains a term (`--no-renames`).
+
+  Also:
+  - Merge commits in `--range` mode: either test that hits in a merge's own changes are caught (for example with `--cc` or `-m`), or document this as an accepted gap in `README.md`.
+  - Fix the hollow test at `scripts/check-private.test.mjs:629-633`: its name promises a content check, but it only checks that the file exists.
+- **M-N2, `.claude/hooks/only-threat-model-writes.test.sh`:**
+  - add cases where `docs/threat-model.md` itself, or the `docs/` folder, is a symlink to another file or another repository;
+  - add a case where the project folder is not a git repository;
+  - test that the ERR trap turns an unexpected failure into exit 2.
+- **M-N3, `.githooks/pre-commit`:**
+  - test that missing node blocks the commit (fails closed);
+  - test that the hook checks only the staged changes. A mutant replacing `--staged` with `--all` must fail.
+- **M-N4, `backend/tests/Unit/Load/StatsTest.php`:** add a case with n = 12 to tell `round` from `ceil` in the p95 rank.
+- **M-N5, `backend/tests/Load/Helpers/ResultsFile.php:47`:** the docblock of the post-open check's test says why its use inside `create()` can't be unit-tested (a race).
