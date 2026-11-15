@@ -11,6 +11,7 @@ use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use CtPassStore\Tests\Load\Helpers\ChurchToolsCalls;
+use CtPassStore\Tests\Load\Helpers\LoadOptIn;
 use CtPassStore\Tests\Load\Helpers\LoadSandbox;
 use CtPassStore\Tests\Load\Helpers\Stats;
 use GuzzleHttp\Client;
@@ -29,6 +30,9 @@ use Random\Randomizer;
  * phpunit.xml; the admin login token from `config/credentials.php` is used only to create, archive and delete the 20
  * load persons. All requests are sequential. Values that existed before the run (the baseline) are never changed;
  * teardown deletes exactly what the run created and checks that the baseline is what remains.
+ *
+ * It runs only with the explicit opt-in `CPS_LOAD_TEST=1` ({@see LoadOptIn}); without it the class is skipped before
+ * anything is read or sent.
  *
  * Results go to STDERR and to a JSON file (env `LOAD_RESULTS_FILE`, default in the temp folder). They name person IDs
  * only, never names, tokens or the instance URL.
@@ -80,6 +84,11 @@ final class LoadTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        // First: without the explicit opt-in nothing is read, created or sent.
+        $skip = LoadOptIn::skipReason(getenv(LoadOptIn::VARIABLE));
+        if ($skip !== null) {
+            self::markTestSkipped($skip);
+        }
         ContractPrerequisites::assertMet();
         if (!is_readable(self::FIXTURES . 'admin_users.json')) {
             throw new \RuntimeException('The load test needs tests/Contract/fixtures/admin_users.json. See docs/testing.md.');

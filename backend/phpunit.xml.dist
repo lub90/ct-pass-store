@@ -10,12 +10,14 @@
 
     Contract and Load write to the instance: run them only against a dedicated TEST instance, never production.
 
-    `composer test` runs Unit and Api. `composer test:contract` runs Contract and `composer test:load` runs Load with your local phpunit.xml,
-    created from phpunit-example.xml.
+    `composer test` runs Unit and Api, and so does a plain `phpunit` (defaultTestSuite). `composer test:contract` runs
+    Contract and `CPS_LOAD_TEST=1 composer test:load` runs Load with your local phpunit.xml, created from
+    phpunit-example.xml. Without CPS_LOAD_TEST=1 the load test skips itself before it reads or sends anything.
 -->
 <phpunit xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
+         defaultTestSuite="Unit,Api"
          cacheDirectory=".phpunit.cache"
          colors="true"
          failOnWarning="true"

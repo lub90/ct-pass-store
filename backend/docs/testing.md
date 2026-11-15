@@ -7,10 +7,11 @@ The backend has three test layers (see `specs/backend-spec.md`, section 6.6):
 | Unit tests | `Unit` | nothing | `composer test` |
 | API tests (the whole app with a fake ChurchTools) | `Api` | nothing | `composer test` |
 | Contract tests | `Contract` | a ChurchTools test instance, one fixture, local config | `composer test:contract` |
-| Load test | `Load` | a ChurchTools test instance, the fixtures, local config, an admin token | `composer test:load` |
+| Load test | `Load` | a ChurchTools test instance, the fixtures, local config, an admin token, the opt-in `CPS_LOAD_TEST=1` | `CPS_LOAD_TEST=1 composer test:load` |
 
 `composer test` runs the unit and API tests with the shared configuration `phpunit.xml.dist`. They need no network
-access and also run in the CI. `composer check` runs code style, PHPStan and these tests together, like the CI.
+access and also run in the CI. A plain `vendor/bin/phpunit -c <file>` without a suite or path also runs only `Unit` and
+`Api`: both `phpunit.xml.dist` and `phpunit-example.xml` set `defaultTestSuite="Unit,Api"`. `composer check` runs code style, PHPStan and these tests together, like the CI.
 
 The contract tests run only on demand, before each release, with your local `phpunit.xml`. They check only what a fake
 can't prove: that ChurchTools behaves as the backend assumes, and that the backend works against it. If something they
@@ -115,8 +116,12 @@ Machine tokens are signed with a test key. This only works for test systems whos
 > entries into `passwordStore`, archives and deletes persons, and runs the cleanup job, which deletes entries.
 
 ```bash
-composer test:load
+CPS_LOAD_TEST=1 composer test:load
 ```
+
+The environment variable `CPS_LOAD_TEST=1` is the explicit opt-in. Without it (or with any other value) the load test
+is skipped with a message, before it checks its prerequisites, reads `config/credentials.php` or sends any request, so
+it never runs by accident, e.g. with `vendor/bin/phpunit -c phpunit.xml tests/` or an IDE "run all".
 
 A full run takes about 15 minutes; `composer test:load` turns off Composer's 300-second process timeout for it.
 
