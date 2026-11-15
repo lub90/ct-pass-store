@@ -31,6 +31,7 @@ const services = useServices();
 const confirm = useConfirm();
 
 const shown = computed(() => describeDuplicates(props.category, props.values));
+const noneKeepable = computed(() => shown.value.every((v) => !v.keepable));
 const busy = ref(false);
 const conflict = ref(false);
 const error = ref<string | null>(null);
@@ -57,11 +58,12 @@ const clientText = (c: NonNullable<ShownValue['clients']>[number]): string =>
 function keptDetails(value: ShownValue): string[] {
     const parts: string[] = [];
     for (const field of value.fields) {
-        const hostDiffers = field.name === 'backendUrl' && shown.value.some((v) => v.fields.find((f) => f.name === 'backendUrl')?.host !== field.host);
-        if (!field.differs && !hostDiffers) continue;
-        // A kept address never has a host the browser rewrites (such a value can't be kept, S6): it is its real host.
-        parts.push(t('duplicates.confirmField', { field: fieldLabel(field.name), value: field.isolate ? isolate(field.text) : fieldText(field) }));
+        if (!field.differs) continue;
+        const text = field.isolate ? isolate(field.text) : fieldText(field);
+        // The address with the host it connects to: a long address is cut, its host shows the real domain.
+        parts.push(field.host ? t('duplicates.confirmFieldHost', { field: fieldLabel(field.name), value: text, host: isolate(field.host) }) : t('duplicates.confirmField', { field: fieldLabel(field.name), value: text }));
     }
+    if (value.onlyKeepableNewest) parts.push(t('duplicates.onlyNewest', { category: props.category }));
     if (value.clients && value.clientsDiffer) {
         parts.push(value.clients.length === 0 ? t('duplicates.confirmNoClients') : t('duplicates.confirmClients', { list: value.clients.map(clientText).join('; ') }));
     }
@@ -112,6 +114,12 @@ async function keep(valueId: number): Promise<void> {
         >
             <p>{{ t('duplicates.intro', { category, n: values.length }) }}</p>
             <p>{{ t('duplicates.warning') }}</p>
+            <p
+                v-if="noneKeepable"
+                class="cps-duplicates__none"
+            >
+                {{ t('duplicates.noneKeepable', { category }) }}
+            </p>
         </Banner>
         <p
             v-if="conflict"
@@ -165,7 +173,7 @@ async function keep(valueId: number): Promise<void> {
                             <span
                                 v-if="field.host"
                                 class="cps-duplicates__host"
-                            >{{ ` ${t('backend.realHost')} ` }}<bdi>{{ field.host }}</bdi></span>
+                            >{{ ` ${field.hostRewritten ? t('backend.realHost') : t('duplicates.host')} ` }}<bdi>{{ field.host }}</bdi></span>
                             <span
                                 v-if="field.invisible"
                                 class="cps-duplicates__flag"
@@ -222,6 +230,12 @@ async function keep(valueId: number): Promise<void> {
                         {{ t('duplicates.disabledClients', { n: value.disabledClients }) }}
                     </p>
                 </template>
+                <p
+                    v-if="value.onlyKeepableNewest"
+                    class="cps-duplicates__only-newest"
+                >
+                    {{ t('duplicates.onlyNewest', { category }) }}
+                </p>
                 <div class="cps-form-actions">
                     <button
                         v-if="value.keepable"
@@ -295,6 +309,9 @@ async function keep(valueId: number): Promise<void> {
 }
 .cps-duplicates__newest {
     font-weight: var(--cps-weight-strong);
+    color: var(--cps-danger);
+}
+.cps-duplicates__only-newest {
     color: var(--cps-danger);
 }
 .cps-duplicates__flag {

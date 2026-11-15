@@ -74,9 +74,24 @@ describe('describeDuplicates: settings', () => {
     it('names the host the browser really connects to, and invisible characters', async () => {
         const shown = describeDuplicates('settings', await values('settings', { ...settings, backendUrl: 'https://p​w.example' }, { ...settings, backendUrl: 'https://pw.example%2eevil.com' }, settings));
         expect(field(at(shown, 2), 'backendUrl')).toMatchObject({ host: 'pw.example.evil.com' });
-        expect(field(at(shown, 3), 'backendUrl')?.host).toBeUndefined();
+        // Every address names the host it connects to, also when it is written as such (round 2).
+        expect(field(at(shown, 3), 'backendUrl')?.host).toBe('pw.example');
         expect(field(at(shown, 1), 'backendUrl')?.invisible).toBe(true);
         expect(field(at(shown, 2), 'backendUrl')?.invisible).toBeUndefined();
+    });
+
+    it('a long plain host whose address is cut still shows its full host, so the real domain stays visible (round 2)', async () => {
+        const host = `pw.gemeinde.de.${'a'.repeat(50)}.${'b'.repeat(50)}.attacker.example`;
+        const shown = describeDuplicates('settings', await values('settings', settings, { ...settings, backendUrl: `https://${host}/api` }));
+        const f = field(at(shown, 2), 'backendUrl')!;
+        expect(f.text).not.toContain('attacker.example');
+        expect(f.host).toBe(host);
+        expect(at(shown, 2).keepable).toBe(true);
+    });
+
+    it('an address that doesn\'t parse names no host', async () => {
+        const shown = describeDuplicates('settings', await values('settings', settings, { ...settings, backendUrl: 'nonsense' }));
+        expect(field(at(shown, 2), 'backendUrl')?.host).toBeUndefined();
     });
 
     it('shows a long host in full up to 253 characters, longer ones cut from the left so the end stays visible (S3)', async () => {
@@ -145,6 +160,12 @@ describe('describeDuplicates: access', () => {
         const names = describeDuplicates('access', await values('access', { ...access, machineClients: [{ ...reader, name: `${'N'.repeat(40)}b` }] }, { ...access, machineClients: [longName] }));
         expect(names[0]!.clients![0]!.name).toBe(names[1]!.clients![0]!.name);
         expect(names.map((v) => v.clientsDiffer)).toEqual([true, true]);
+    });
+
+    it('the enabled-client comparison includes permissions: a client that gains reading differs (D5)', async () => {
+        const shown = describeDuplicates('access', await values('access', { ...access, machineClients: [{ ...reader, permissions: [] }] }, { ...access, machineClients: [reader] }));
+        expect(shown.map((v) => v.clientsDiffer)).toEqual([true, true]);
+        expect(shown.map((v) => v.clients![0]!.canRead)).toEqual([false, true]);
     });
 
     it('marks another admin group as different, and lists clients of an invalid value too; names and ids cut to 40', async () => {

@@ -421,8 +421,9 @@ extension/src/
     form for `access`) shows the values instead of its form: value ID, revision, state (valid, invalid with the number
     of problems, newer version), and the fields that decide where passwords go and who may read them, marked where
     they differ between the values (compared on the full stored values, not the cut text): for `settings` the backend
-    address (with the host the browser really connects to, 4.8, shown in full up to 253 characters, longer ones cut
-    from the left so the end stays visible, and a note on invisible characters), the OAuth client ID, the rules (yes/no
+    address with, for every address, the host the browser connects to (4.8; marked as the real host when the browser
+    rewrites the written one), shown in full up to 253 characters, longer ones cut from the left so the ending (the
+    real domain) stays visible even when the address itself is cut, and a note on invisible characters, the OAuth client ID, the rules (yes/no
     for booleans) and whether custom texts exist; for `access` the three group IDs and every machine client the backend
     would enable with that value (name, `id`, permission, key fingerprints, 4.7; the set is marked when it differs,
     compared in full and in any order) plus the number of disabled entries. The names of other stored fields are
@@ -433,8 +434,12 @@ extension/src/
     out of range, nor for `settings` whose `backendUrl` a save would refuse as new (invisible characters or a host the
     browser rewrites, 4.8; the page says why): keeping it would make an address active nobody could type. It asks in a
     danger dialog naming the values to be deleted and, where the values differ, what the kept one makes active: its
-    backend address and the other differing fields (`settings`), its differing group IDs and its enabled clients with
-    fingerprints, or that it has none (`access`). The store then compares the stored values
+    backend address with its host and the other differing fields (`settings`), its differing group IDs and its enabled clients with
+    fingerprints, or that it has none (`access`). When the newest value („zuletzt angelegt“) is the only one that can
+    be kept, its card and the dialog say so: if nobody recognises it, it shouldn't be kept but deleted in ChurchTools
+    (`delete custom data` on the category) and the earlier value repaired. When no value can be kept, the page says
+    so: the wrong values have to be deleted, or one repaired, in ChurchTools (`delete custom data` and
+    `edit custom data` on the category); the page then shows the remaining value. The store then compares the stored values
     with the ones shown (the same value IDs, each with exactly the same text) and refuses with a conflict, deleting
     nothing, if anything differs (a value appeared, disappeared or changed). Otherwise it writes the kept value as
     stored, with only its `revision` raised above the revision of every value that could be kept (so a page that read

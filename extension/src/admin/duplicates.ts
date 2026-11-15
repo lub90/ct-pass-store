@@ -27,8 +27,14 @@ export interface ShownField extends ShownText {
     differs: boolean;
     /** The stored value is a boolean (shown as yes/no). */
     bool?: boolean;
-    /** `backendUrl` only: the host the browser really connects to, when it differs from the written one. */
+    /**
+     * `backendUrl` only: the host the browser connects to (`URL.host`), for every address that parses, in full up to
+     * 253 characters, else cut from the left so its ending (the real domain) stays visible. A cut address alone could
+     * hide it.
+     */
     host?: string;
+    /** `backendUrl` only: that host differs from the one as written (the browser rewrites it). */
+    hostRewritten?: boolean;
     /** `backendUrl` only: contains invisible format characters. */
     invisible?: boolean;
 }
@@ -52,6 +58,8 @@ export interface ShownValue {
     notKeepable?: 'address' | 'other';
     /** The highest value id: the value created last (S2), the one most likely planted. */
     newest: boolean;
+    /** It is the newest value and the only one that can be kept: then keeping it needs a warning. */
+    onlyKeepableNewest: boolean;
     fields: ShownField[];
     /** Names of the other stored fields, if any. */
     otherFields?: ShownText;
@@ -94,6 +102,14 @@ function shownField(name: string, value: unknown): RawField {
     return { name, ...shownText(value), ...(typeof value === 'boolean' ? { bool: value } : {}), full: fullText(value) };
 }
 
+function hostOf(url: string): string | null {
+    try {
+        return new URL(url).host || null;
+    } catch {
+        return null;
+    }
+}
+
 const cutLeft = (text: string, max: number): string => (text.length > max ? `…${text.slice(-(max - 1))}` : text);
 
 function fieldsOf(category: 'settings' | 'access', raw: Record<string, unknown>): RawField[] {
@@ -108,8 +124,9 @@ function fieldsOf(category: 'settings' | 'access', raw: Record<string, unknown>)
         const value = raw[name];
         const field = shownField(name, value);
         if (name === 'backendUrl' && typeof value === 'string') {
-            const host = connectedHost(value);
+            const host = hostOf(value);
             if (host !== null) field.host = cutLeft(host, MAX_HOST);
+            if (connectedHost(value) !== null) field.hostRewritten = true;
             if (INVISIBLE.test(value)) field.invisible = true;
         }
         return field;
@@ -135,6 +152,8 @@ function clientsOf(raw: Record<string, unknown>): { clients: ShownClient[]; disa
 /** Every value as shown, in the order given; a field `differs` when not every value has the same text there. */
 export function describeDuplicates(category: 'settings' | 'access', values: readonly StoredValue<unknown>[]): ShownValue[] {
     const newest = Math.max(...values.map((v) => v.valueId));
+    const keepable = values.filter((v) => v.keepable);
+    const onlyNewest = values.length > 1 && keepable.length === 1 && keepable[0]!.valueId === newest;
     const described = values.map((v) => {
         const raw = parsed(v.text);
         const others = Object.keys(raw).filter((k) => !KNOWN[category].has(k));
@@ -149,6 +168,7 @@ export function describeDuplicates(category: 'settings' | 'access', values: read
             keepable: v.keepable,
             ...(v.keepable ? {} : { notKeepable: badAddress ? ('address' as const) : ('other' as const) }),
             newest: v.valueId === newest,
+            onlyKeepableNewest: onlyNewest && v.valueId === newest,
             fields: fields.map((f) => {
                 const shownOnly: Partial<RawField> & { differs: boolean } = { ...f, differs: false };
                 delete shownOnly.full;
