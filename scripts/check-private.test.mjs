@@ -228,10 +228,50 @@ test('a file path that contains a term is reported without printing the path', (
 // Git prints no "+++" header for empty files, binary files and renames of them; their paths are checked anyway.
 const PATH_HIT = '(path withheld): file path matches block list entry #1\n';
 
-test('the path of an empty new file is checked (unquoted, with spaces and non-ASCII)', (t) => {
+test('the path of an empty new file is checked from its header: quoted (non-ASCII), and with " b/" inside', (t) => {
   const repo = makeRepo(t);
   blockList(repo, [V.term2]);
   stage(repo, `d/ä ${V.term2} empty.txt`, '');
+  assert.equal(check(repo).out, PATH_HIT);
+  git(repo, 'reset', '-q');
+  stage(repo, `d/${V.term2} b/x.txt`, ''); // header "diff --git a/d/<term> b/x.txt b/d/<term> b/x.txt"
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('the paths of consecutive empty files are each checked', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1, V.term2]);
+  stage(repo, `d/a-${V.term1}.txt`, '');
+  stage(repo, `d/b-${V.term2}.txt`, '');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    '(path withheld): file path matches block list entry #1\n(path withheld): file path matches block list entry #2\n',
+  );
+  assertNoValues(r.all);
+});
+
+test('an allow glob applies to the path from the header of an empty file', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [`${V.term2} ## allow: docs/*.md`]);
+  stage(repo, `docs/${V.term2}.md`, '');
+  const r = check(repo);
+  assert.equal(r.code, 0);
+  assert.equal(r.all, '');
+});
+
+test('a mode-only change of a file whose path contains a term is reported', (t) => {
+  const repo = makeRepo(t);
+  write(repo, `bin/${V.term2}.sh`, 'echo hi\n');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'script');
+  blockList(repo, [V.term2]);
+  chmodSync(join(repo, `bin/${V.term2}.sh`), 0o755);
+  git(repo, 'add', '.');
   const r = check(repo);
   assert.equal(r.code, 1);
   assert.equal(r.out, PATH_HIT);
@@ -841,6 +881,28 @@ test('--range checks the path of a binary file, once per commit', (t) => {
       `(path withheld): file path matches block list entry #1 (commit ${second})\n`,
   );
   assertNoValues(r.all);
+});
+
+test('--range checks the paths of a binary and an empty file that a merge adds itself', (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, 'x.txt', 'x\n');
+  git(repo, 'add', 'x.txt');
+  git(repo, 'commit', '-q', '-m', 'feature');
+  git(repo, 'checkout', '-q', 'main');
+  git(repo, 'merge', '-q', '--no-ff', '--no-commit', 'feature');
+  // A non-ASCII term: the quoted "diff --cc" header must be unquoted to match. The binary file has no "+++" line.
+  write(repo, 'ä Müllmüll scan.bin', Buffer.from([0, 1, 2]));
+  write(repo, 'Müllmüll empty.txt', '');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'merge');
+  const merge = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, ['Müllmüll']);
+  const r = check(repo, ['--range', 'main~1..HEAD']);
+  assert.equal(r.code, 1);
+  const hit = `(path withheld): file path matches block list entry #1 (commit ${merge})`;
+  assert.equal(r.out, `${hit}\n${hit}\n`);
+  assert.doesNotMatch(r.all, /müll/i);
 });
 
 test('--range=<A..B> checks the range like --range <A..B>', (t) => {
