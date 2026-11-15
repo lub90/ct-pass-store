@@ -78,19 +78,7 @@ export class BackendSandbox {
         liveDirs.add(this.dir);
         fs.mkdirSync(path.join(this.dir, 'cache'), { mode: 0o700 });
         fs.mkdirSync(path.join(this.dir, 'logs'), { mode: 0o700 });
-        const childEnv: NodeJS.ProcessEnv = {
-            PATH: process.env.PATH,
-            PHP_CLI_SERVER_WORKERS: '4',
-            CPS_SANDBOX_BACKEND_DIR: BACKEND_DIR,
-            CPS_SANDBOX_CACHE_DIR: path.join(this.dir, 'cache'),
-            CPS_SANDBOX_CT_API_URL: this.env.apiUrl,
-            CPS_SANDBOX_CT_API_TOKEN: this.env.apiToken,
-            CPS_SANDBOX_CORS_ORIGIN: this.env.root,
-            CPS_SANDBOX_OAUTH_CLIENT_ID: this.options.oauthClientId,
-            CPS_SANDBOX_OAUTH_CLIENT_SECRET: this.options.oauthClientSecret,
-            CPS_SANDBOX_JWT_SECRET: this.jwtSecret,
-            ...sandboxOverrideEnv(this.options),
-        };
+        const childEnv = sandboxChildEnv(this.env, this.options, path.join(this.dir, 'cache'), this.jwtSecret);
         // Output is discarded: the built-in server logs request lines, which must not end up in the test output.
         this.process = spawn('php', ['-S', `127.0.0.1:${this.port}`, path.join(import.meta.dirname, 'sandbox/router.php')], {
             env: childEnv,
@@ -123,6 +111,11 @@ export class BackendSandbox {
             await new Promise((r) => setTimeout(r, 100));
         }
         throw new Error(`The backend sandbox did not start within 5 s (${last}).`);
+    }
+
+    /** Whether this sandbox's cache and log folder is (still) there. */
+    folderExists(): boolean {
+        return this.dir !== null && fs.existsSync(this.dir);
     }
 
     private removeExitHooks(): void {
@@ -175,6 +168,23 @@ export class BackendSandbox {
         const unsigned = `${part({ typ: 'JWT', alg: 'HS256' })}.${part(claims)}`;
         return `${unsigned}.${createHmac('sha256', this.jwtSecret).update(unsigned).digest('base64url')}`;
     }
+}
+
+/** The whole environment of a sandbox's PHP process: its configuration and its override, nothing else. */
+export function sandboxChildEnv(env: ContractEnv, options: SandboxOptions, cacheDir: string, jwtSecret: string): NodeJS.ProcessEnv {
+    return {
+        PATH: process.env.PATH,
+        PHP_CLI_SERVER_WORKERS: '4',
+        CPS_SANDBOX_BACKEND_DIR: BACKEND_DIR,
+        CPS_SANDBOX_CACHE_DIR: cacheDir,
+        CPS_SANDBOX_CT_API_URL: env.apiUrl,
+        CPS_SANDBOX_CT_API_TOKEN: env.apiToken,
+        CPS_SANDBOX_CORS_ORIGIN: env.root,
+        CPS_SANDBOX_OAUTH_CLIENT_ID: options.oauthClientId,
+        CPS_SANDBOX_OAUTH_CLIENT_SECRET: options.oauthClientSecret,
+        CPS_SANDBOX_JWT_SECRET: jwtSecret,
+        ...sandboxOverrideEnv(options),
+    };
 }
 
 /** The environment of `sandbox/SandboxChurchTools.php` for the options (nothing when there is no override). */

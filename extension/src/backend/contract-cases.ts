@@ -19,6 +19,11 @@ export type BackendContractSubject = BackendApi & {
     gonePersonId?: number;
     /** The caller's ChurchTools password, when the backend requires it for changes. `null`: not required. */
     primaryPwd: string | null;
+    /**
+     * `false`: skip the cases that send a deliberately wrong primary password. Against a real instance each of those is
+     * a failed ChurchTools login of a shared test user, so they run for one subject only. Default: they run.
+     */
+    wrongPrimaryPasswordCases?: boolean;
     /** Whether custom passwords are allowed. */
     allowCustomPassword: boolean;
     /** The setting `passwordLength` (12 to 64). */
@@ -160,7 +165,7 @@ export function defineBackendContract(name: string, make: () => Promise<BackendC
 
         it('primary-password-required (400) and invalid-primary-password (403), nothing written or deleted', async (ctx) => {
             const s = await make();
-            if (s.primaryPwd === null) return ctx.skip();
+            if (s.primaryPwd === null || s.wrongPrimaryPasswordCases === false) return ctx.skip();
             await clean(s);
             const wrong = `${s.primaryPwd}-wrong`;
             expect(await problemOf(s.putEntry(s.ownPersonId, {}))).toMatchObject({ slug: 'primary-password-required', status: 400 });
@@ -179,7 +184,7 @@ export function defineBackendContract(name: string, make: () => Promise<BackendC
 
         it('a wrong primary password beats a bad or forbidden custom password (order of checks)', async (ctx) => {
             const s = await make();
-            if (s.primaryPwd === null) return ctx.skip();
+            if (s.primaryPwd === null || s.wrongPrimaryPasswordCases === false) return ctx.skip();
             await clean(s);
             const wrong = `${s.primaryPwd}-wrong`;
             expect(await problemOf(s.putEntry(s.ownPersonId, { primaryPwd: wrong, secondaryPwd: 'abc' }))).toMatchObject({

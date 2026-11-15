@@ -260,6 +260,7 @@ final class Kernel
     /**
      * The app as `public/index.php` runs it: configuration from `credentials.php`, the real ChurchTools client and the
      * log file. A missing or broken `credentials.php` gives the misconfigured app instead (spec 3.1).
+     * The extension's `tests/contract/sandbox/router.php` mirrors this wiring; keep the two in step.
      *
      * @return App<null>
      */

@@ -5,6 +5,7 @@ import { backendBase, createHttp } from '@/backend/http';
 import { BackendProblem } from '@/backend/problems';
 import { tokenPerson } from '@/backend/jwt';
 import { BackendSandbox, type SettingsVariant } from './backend-sandbox';
+import { patientApi } from './patience';
 import { CtSession, ctApiFor, listOf } from './ct-session';
 import { Cleanup } from './cleanup';
 import { adminSession, createTempOAuthClient, grantLoginRight, type TempOAuthClient } from './instance';
@@ -33,15 +34,23 @@ import { contractEnv } from './setup';
  * - Entries are only written for persons that have none before (checked first); the run refuses to start otherwise.
  *   Whatever is left after a failure is removed in `afterAll`.
  */
-// Rate-limited calls are waited out (`patiently`, `CtSession.login`), so a case may take a few minutes.
-vi.setConfig({ testTimeout: 600_000 });
+// Rate-limited calls are waited out (`patience.ts`, `CtSession.login`), so a case may take a few minutes. The set-up
+// makes three fixture logins (each may wait 2 × 90 s, 9 minutes in all); the hooks get 15 minutes, so set-up never
+// outlives the cleanup it registered.
+const HOOK_TIMEOUT = 900_000;
+vi.setConfig({ testTimeout: 600_000, hookTimeout: HOOK_TIMEOUT });
 
 const env = contractEnv();
 const cleanup = new Cleanup();
 const realFetch = globalThis.fetch;
 const service = ctApiFor(env, { loginToken: env.apiToken });
 
-/** Each variant un-skips the cases the other one skips: custom passwords on/off, primary password required or not. */
+/**
+ * "open" runs the custom-password cases, "strict" the custom-password-not-allowed and primary-password cases. Not
+ * covered against the real backend: storing a custom password while the primary password is required, and the "bad
+ * custom password" half of the order-of-checks case (both need "required + custom on"; a third variant would add
+ * deliberately failed logins of the shared test user). The backend's own API tests cover them against a fake.
+ */
 const VARIANTS: { key: string; name: string; settings: SettingsVariant }[] = [
     { key: 'open', name: 'primary password not required, custom passwords allowed', settings: { requirePasswordForPasswordChange: false, allowCustomPassword: true } },
     { key: 'strict', name: 'primary password required, custom passwords off', settings: { requirePasswordForPasswordChange: true, allowCustomPassword: false } },
@@ -92,7 +101,7 @@ async function readSettings() {
 
 /** A group the normal user is an active member of (the backend's admin check reads exactly that), or an error. */
 async function activeGroupOfNormalUser(): Promise<number> {
-    const session = await new CtSession(env).login(env.normal);
+    const session = await normalUserSession();
     const memberships = listOf(await session.ok('GET', `/persons/${env.normal.id}/groups?limit=100`));
     const id = memberships
         .filter((m) => m.groupMemberStatus === 'active')
@@ -106,39 +115,11 @@ const apiOn = (box: BackendSandbox, token: () => string | null): BackendApi => c
 const api = (token: () => string | null): BackendApi => apiOn(sandbox, token);
 /** The normal user's ChurchTools session for the authorization step, so a code doesn't cost a login of its own. */
 let normalSession: Promise<CtSession> | null = null;
-const freshCode = async () => {
-    normalSession ??= new CtSession(env).login(env.normal);
-    return fetchOAuthCode(env, env.normal, client.identifier, client.redirectUri, await normalSession);
-};
+const normalUserSession = () => (normalSession ??= new CtSession(env).login(env.normal));
+const freshCode = async () => fetchOAuthCode(env, env.normal, client.identifier, client.redirectUri, await normalUserSession());
 
-/**
- * ChurchTools limits logins, and with a required primary password every write is one (the backend checks the password
- * with `POST /login`). An `upstream-rate-limited` answer is therefore waited out (its `retryAfter`, at most 90 s) and
- * the same call sent again, twice at most; any other answer, the last one included, goes to the case unchanged.
- */
+/** How often a backend call was rate-limited and waited out (`patience.ts`); the run says so at the end. */
 let rateLimitWaits = 0;
-async function patiently<T>(call: () => Promise<T>): Promise<T> {
-    for (let retry = 0; ; retry++) {
-        try {
-            return await call();
-        } catch (e) {
-            if (retry >= 2 || !(e instanceof BackendProblem) || e.slug !== 'upstream-rate-limited') throw e;
-            rateLimitWaits++;
-            await new Promise((r) => setTimeout(r, Math.min(e.retryAfter ?? 60, 90) * 1000));
-        }
-    }
-}
-
-/** `api` with the entry and self-test calls sent `patiently` (login isn't: a code is used up by the first try). */
-function patientApi(api: BackendApi): BackendApi {
-    return {
-        ...api,
-        getEntry: (id) => patiently(() => api.getEntry(id)),
-        putEntry: (id, body) => patiently(() => api.putEntry(id, body)),
-        deleteEntry: (id, pwd) => patiently(() => api.deleteEntry(id, pwd)),
-        selfTest: (write) => patiently(() => api.selfTest(write)),
-    };
-}
 
 async function loginOn(box: BackendSandbox): Promise<string> {
     const code = await freshCode();
@@ -178,6 +159,10 @@ beforeAll(async () => {
             fetchChain = pair.admin.fetchFor(pair.user.fetchFor(fetchChain));
             sandboxes.set(variant.key, pair);
         }
+        // A later start sweeps stale sandbox folders; it must have left the running ones alone.
+        for (const [key, pair] of sandboxes) {
+            if (!pair.user.folderExists() || !pair.admin.folderExists()) throw new Error(`a folder of the ${key} sandboxes is gone after the start`);
+        }
         sandbox = sandboxes.get(WIRE_VARIANT.key)!.user;
         vi.stubGlobal('fetch', fetchChain);
         cleanup.add('fetch restored', async () => void vi.unstubAllGlobals());
@@ -185,24 +170,29 @@ beforeAll(async () => {
         await cleanup.runAll().catch(() => undefined);
         throw e;
     }
-});
+}, HOOK_TIMEOUT);
 
 afterAll(async () => {
     if (rateLimitWaits > 0) console.info(`[contract] waited out ${rateLimitWaits} upstream-rate-limited answer(s) of the backend`);
     await cleanup.runAll();
-});
+}, HOOK_TIMEOUT);
 
 /** The normal user on `box` with the token of a real login there, as a user or (admin sandbox) as an admin. */
-function subject(variant: (typeof VARIANTS)[number], box: BackendSandbox, admin: boolean, token: string): BackendContractSubject {
+/**
+ * The normal user on `box`. `wrongPasswords`: whether the cases with a deliberately wrong primary password run for this
+ * subject; they don't depend on the role, and each wrong password is a failed ChurchTools login of the shared user.
+ */
+function subject(variant: (typeof VARIANTS)[number], box: BackendSandbox, admin: boolean, token: string, wrongPasswords: boolean): BackendContractSubject {
     const current = () => token;
     const http = createHttp(backendBase(box.base), current);
     return {
-        ...patientApi(apiOn(box, current)),
+        ...patientApi(apiOn(box, current), variant.settings.requirePasswordForPasswordChange ? env.normal.pwd : null, undefined, () => rateLimitWaits++),
         ownPersonId: env.normal.id,
         admin,
         otherPersonId: env.persons.active,
         gonePersonId: env.persons.deleted,
         primaryPwd: variant.settings.requirePasswordForPasswordChange ? env.normal.pwd : null,
+        wrongPrimaryPasswordCases: wrongPasswords,
         allowCustomPassword: variant.settings.allowCustomPassword,
         passwordLength: instance.passwordLength,
         withoutToken: () => apiOn(box, () => null),
@@ -232,7 +222,7 @@ for (const variant of VARIANTS) {
         defineBackendContract(`real backend, ${variant.name}, ${role} (OAuth login)`, () => {
             made ??= (async () => {
                 const box = sandboxes.get(variant.key)![role];
-                return subject(variant, box, role === 'admin', await loginOn(box));
+                return subject(variant, box, role === 'admin', await loginOn(box), role === 'user');
             })();
             return made;
         });
@@ -295,9 +285,8 @@ describe('Backend on the wire, as the browser sees it', () => {
         const user = api(() => token);
         await user.getEntry(env.normal.id);
         await user.deleteEntry(env.normal.id, WIRE_VARIANT.settings.requirePasswordForPasswordChange ? env.normal.pwd : undefined);
-        await expect(user.putEntry(env.normal.id, { secondaryPwd: 'abc' })).rejects.toMatchObject({
-            slug: expect.stringMatching(/^(password-invalid|custom-password-not-allowed|primary-password-required)$/),
-        });
+        // WIRE_VARIANT allows custom passwords and requires no primary password.
+        await expect(user.putEntry(env.normal.id, { secondaryPwd: 'abc' })).rejects.toMatchObject({ slug: 'password-invalid' });
         await expect(user.selfTest()).rejects.toMatchObject({ slug: 'forbidden' });
         await expect(api(() => null).login('not-a-code', 'verifier', client.redirectUri)).rejects.toMatchObject({ slug: 'oauth-code-invalid' });
         expect(new Set(sandbox.seen.map((r) => r.method.toUpperCase()))).toEqual(new Set(['GET', 'DELETE', 'PUT', 'POST']));

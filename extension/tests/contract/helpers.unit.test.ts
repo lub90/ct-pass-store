@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sandboxOverrideEnv, sweepStaleDirs } from './backend-sandbox';
+import { sandboxChildEnv, sandboxOverrideEnv, sweepStaleDirs } from './backend-sandbox';
 import { Cleanup } from './cleanup';
-import { CtSession, ctApiFor, scrubAxiosError } from './ct-session';
+import { CtSession, ctApiFor, retryAfterSeconds, scrubAxiosError } from './ct-session';
 import { record } from './record';
 import { redactBody } from './redact';
 import type { ContractEnv } from './setup';
@@ -289,5 +289,41 @@ describe('sandboxOverrideEnv', () => {
             CPS_SANDBOX_SETTINGS: '{"requirePasswordForPasswordChange":false,"allowCustomPassword":true}',
             CPS_SANDBOX_SETTINGS_CATEGORY_ID: '1',
         });
+    });
+});
+
+describe('sandboxChildEnv', () => {
+    it('gives the PHP process its configuration and its override, and nothing of the test process', () => {
+        const options = { oauthClientId: 'cid', oauthClientSecret: 'csecret', settings: { variant: { requirePasswordForPasswordChange: true, allowCustomPassword: false }, categoryId: 406 }, adminGroupId: 7 };
+        const child = sandboxChildEnv(env, options, '/tmp/x/cache', 'jwt');
+        expect(child).toEqual({
+            PATH: process.env.PATH,
+            PHP_CLI_SERVER_WORKERS: '4',
+            CPS_SANDBOX_BACKEND_DIR: expect.stringMatching(/backend$/),
+            CPS_SANDBOX_CACHE_DIR: '/tmp/x/cache',
+            CPS_SANDBOX_CT_API_URL: env.apiUrl,
+            CPS_SANDBOX_CT_API_TOKEN: TOKEN,
+            CPS_SANDBOX_CORS_ORIGIN: env.root,
+            CPS_SANDBOX_OAUTH_CLIENT_ID: 'cid',
+            CPS_SANDBOX_OAUTH_CLIENT_SECRET: 'csecret',
+            CPS_SANDBOX_JWT_SECRET: 'jwt',
+            ...sandboxOverrideEnv(options),
+        });
+        expect(child.CPS_SANDBOX_SETTINGS).toBe('{"requirePasswordForPasswordChange":true,"allowCustomPassword":false}');
+        expect(child.CPS_SANDBOX_ADMIN_GROUP_ID).toBe('7');
+    });
+});
+
+describe('retryAfterSeconds', () => {
+    it('reads whole seconds (spaces around allowed), else 60, at most 90', () => {
+        expect(retryAfterSeconds('7')).toBe(7);
+        expect(retryAfterSeconds(' 7 ')).toBe(7);
+        expect(retryAfterSeconds('0')).toBe(0);
+        expect(retryAfterSeconds('7.5')).toBe(60);
+        expect(retryAfterSeconds('Wed, 21 Oct 2026 07:28:00 GMT')).toBe(60);
+        expect(retryAfterSeconds('7a')).toBe(60);
+        expect(retryAfterSeconds('a7')).toBe(60);
+        expect(retryAfterSeconds(null)).toBe(60);
+        expect(retryAfterSeconds('91')).toBe(90);
     });
 });

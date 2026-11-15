@@ -152,8 +152,10 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
     `requirePasswordForPasswordChange` and `allowCustomPassword` (from `CPS_SANDBOX_SETTINGS`, booleans only) in the
     settings value as the backend reads it; every other setting, the persons, groups, rights and entries come from
     the instance. It refuses any write to the settings (or access) it overrides, and a malformed override keeps the
-    sandbox from starting. Its own checks are `tests/contract/sandbox-overrides.test.ts` (a fake inner client, no
-    network; in this suite because it needs PHP and `backend/vendor`).
+    sandbox from starting. Its own checks are `tests/contract/sandbox-overrides.unit.test.ts` (a fake inner client and
+    the router with a dummy configuration; no network, no credentials). They run in `npm test` wherever PHP and
+    `backend/vendor` exist, and are skipped where they don't (the extension's CI job). `backend/src/Kernel.php`'s
+    `bootstrap()` notes that the router mirrors its wiring.
   - "user" and "admin" are both the normal test user, logged in through the real OAuth flow and
     `POST /v1/auth/token`. The "user" sandbox reads `access` from the instance, which has none, so nobody is an
     admin. The "admin" sandbox's backend sees an `access` value (`CPS_SANDBOX_ADMIN_GROUP_ID`) naming a group the
@@ -164,9 +166,19 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
   - **Rate limits:** ChurchTools limits `POST /login`, and with a required primary password every backend write is
     one (the backend checks the password that way). The run reuses one session of the normal test user for all
     authorization codes; a `429` on a fixture login is waited out (`Retry-After`, at most 90 s, twice at most), and
-    so is an `upstream-rate-limited` answer of the backend to an entry or self-test call (the same call sent again,
-    twice at most; the answer the case sees is otherwise unchanged). The run says how often it waited. It takes
-    about three minutes.
+    so is an `upstream-rate-limited` answer of the backend to an entry or self-test call (`tests/contract/patience.ts`:
+    the same call sent again, twice at most; the answer the case sees is otherwise unchanged). Resending a PUT or
+    DELETE is safe because the backend answers `upstream-rate-limited` before it writes. A call carrying a
+    deliberately wrong primary password is never resent: a rate limit there fails the case. The run says how often it
+    waited. It takes about three minutes; the set-up and cleanup hooks get 15 minutes, more than the set-up's three
+    fixture logins can wait.
+  - **Deliberately failed ChurchTools logins:** the cases with a wrong primary password run for one subject only
+    (strict/user; they don't depend on the role, and the open variant sends no primary password). That is **3 failed
+    logins of the normal test user per run** (a wrong password on PUT and on DELETE, and one in the order-of-checks
+    case), each followed by a successful one, which resets the backend's own limiter (5 failures in 15 minutes). A
+    rate-limited retry of a call with the right password may count as one more failure there. Whether ChurchTools
+    itself locks an account after failed logins, and after how many, is **unknown** (not measured, deliberately not
+    probed). The other files make no failed logins on purpose.
   - Entries are written only for persons that have none; the run refuses to start otherwise.
 - **HTTPS:** the extension's backend client accepts `https://` only, and `src/` has no switch for plain HTTP. So the
   tests give the client an address like `https://open-user.backend.contract.invalid` (one per sandbox) and replace
@@ -192,8 +204,13 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
 - **Skipped cases**, by design, listed as skipped by Vitest:
   - Backend: each subject skips the cases of the other variant or role (custom-password cases in the "custom off"
     variant, `custom-password-not-allowed` and the primary-password cases in the "open" variant, admin cases for
-    "user", the non-admin case for "admin"). Every backend case runs for at least one subject: 11, 12, 12 and 13
-    cases run for open/user, open/admin, strict/user and strict/admin.
+    "user", the non-admin case for "admin") and strict/admin skips the two wrong-primary-password cases (see above).
+    Every backend case runs for at least one subject: 11, 12, 12 and 11 cases run for open/user, open/admin,
+    strict/user and strict/admin.
+  - Not covered against the real backend: the variant "primary password required, custom passwords allowed", so
+    storing a custom password together with the primary password, and the "bad custom password" half of the
+    order-of-checks case. A third variant would add more deliberately failed logins of the shared user; the backend's
+    own API tests (`backend/tests/Api/PrimaryPasswordApiTest.php`) cover the combination against a fake ChurchTools.
   - ChurchTools: the read-only-rights case (no test user may read the categories without also writing them); it runs
     against the fake only.
 

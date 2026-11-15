@@ -1,13 +1,21 @@
-import { spawnSync } from 'node:child_process';
+// @vitest-environment node
+import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
+import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { BACKEND_DIR } from './setup';
 
 /**
- * `sandbox/SandboxChurchTools.php`, the sandbox's settings and admin-group override, against a fake inner client (no
- * ChurchTools, no network). It runs in the contract suite because it needs PHP and the backend's `vendor/`, like the
- * sandbox itself. Each scenario is a PHP snippet whose last expression is printed as JSON.
+ * `sandbox/SandboxChurchTools.php`, the sandbox's settings and admin-group override, against a fake inner client, and
+ * `sandbox/router.php` with a dummy configuration: no ChurchTools, no network, no credentials. In the unit suite, so
+ * the guard that keeps the sandbox from writing the instance's settings is checked before any contract run. It needs
+ * PHP and the backend's `vendor/` (`composer install`); without them (as in the extension's CI job) it is skipped.
+ * Each scenario is a PHP snippet whose last expression is printed as JSON.
  */
+const phpReady = spawnSync('php', ['-v'], { stdio: 'ignore' }).status === 0 && fs.existsSync(path.join(BACKEND_DIR, 'vendor/autoload.php'));
+
 const PRELUDE = String.raw`
 require getenv('BACKEND') . '/vendor/autoload.php';
 require getenv('SANDBOX') . '/SandboxChurchTools.php';
@@ -17,12 +25,12 @@ $inner = new class implements ChurchToolsClient {
     public array $calls = [];
     public array $values = [];
     public function exchangeAuthorizationCode(string $a, string $b, string $c, string $d, string $e): string { $this->calls[] = 'exchange'; return 'ct-token'; }
-    public function whoami(Credential $u): WhoAmI { throw new RuntimeException('unused'); }
-    public function globalPermissions(Credential $u): Permissions { throw new RuntimeException('unused'); }
+    public function whoami(Credential $u): WhoAmI { $this->calls[] = 'whoami'; return new WhoAmI(4, 'user4'); }
+    public function globalPermissions(Credential $u): Permissions { $this->calls[] = 'permissions'; return new Permissions(['ctpassstore' => ['view' => true]]); }
     public function activeGroupIds(Credential $u, int $p): array { $this->calls[] = "groups:$p"; return [7]; }
-    public function serviceUserGlobalPermissions(): Permissions { throw new RuntimeException('unused'); }
+    public function serviceUserGlobalPermissions(): Permissions { $this->calls[] = 'service-permissions'; return new Permissions(['ctpassstore' => ['view' => false]]); }
     public function verifyLogin(string $u, string $p): ?LoginResult { $this->calls[] = "verify:$u"; return null; }
-    public function personStatus(int $p): PersonStatus { throw new RuntimeException('unused'); }
+    public function personStatus(int $p): PersonStatus { $this->calls[] = "status:$p"; return PersonStatus::Archived; }
     public function activePersonIds(array $ids): array { $this->calls[] = 'active'; return $ids; }
     public function personDepartmentIds(): array { $this->calls[] = 'departments'; return [1]; }
     public function getModuleByKey(string $k): array { $this->calls[] = "module:$k"; return ['id' => 5]; }
@@ -51,7 +59,7 @@ function php(env: Record<string, string>, code: string): unknown {
 const WRAP = '$c = SandboxChurchTools::wrap($inner, getenv());';
 const SETTINGS = { CPS_SANDBOX_SETTINGS: '{"requirePasswordForPasswordChange":true,"allowCustomPassword":false}', CPS_SANDBOX_SETTINGS_CATEGORY_ID: '10' };
 
-describe('the backend sandbox override (SandboxChurchTools)', () => {
+describe.skipIf(!phpReady)('the backend sandbox override (SandboxChurchTools)', () => {
     it('without an override the real client is used as it is', () => {
         expect(php({}, `${WRAP} return $c === $inner;`)).toBe(true);
         expect(php({ CPS_SANDBOX_SETTINGS: '', CPS_SANDBOX_ADMIN_GROUP_ID: '' }, `${WRAP} return $c === $inner;`)).toBe(true);
@@ -125,8 +133,76 @@ describe('the backend sandbox override (SandboxChurchTools)', () => {
     });
 
     it('passes every other call through unchanged', () => {
-        const code = `${WRAP} return [$c->exchangeAuthorizationCode('id', 's', 'code', 'r', 'v'), $c->activeGroupIds(Credential::bearerToken('t'), 4), $c->verifyLogin('u', 'p'),
-            $c->activePersonIds([3, 4]), $c->personDepartmentIds(), $c->getModuleByKey('ctpassstore'), $inner->calls];`;
-        expect(php({ ...SETTINGS, CPS_SANDBOX_ADMIN_GROUP_ID: '7' }, code)).toEqual(['ct-token', [7], null, [3, 4], [1], { id: 5 }, ['exchange', 'groups:4', 'verify:u', 'active', 'departments', 'module:ctpassstore']]);
+        const code = `${WRAP} $t = Credential::bearerToken('t'); return [$c->exchangeAuthorizationCode('id', 's', 'code', 'r', 'v'), $c->activeGroupIds($t, 4), $c->verifyLogin('u', 'p'),
+            $c->activePersonIds([3, 4]), $c->personDepartmentIds(), $c->getModuleByKey('ctpassstore'),
+            [$c->whoami($t)->id, $c->whoami($t)->username], $c->globalPermissions($t)->mayView('ctpassstore'), $c->serviceUserGlobalPermissions()->mayView('ctpassstore'),
+            $c->personStatus(9)->value, $inner->calls];`;
+        expect(php({ ...SETTINGS, CPS_SANDBOX_ADMIN_GROUP_ID: '7' }, code)).toEqual([
+            'ct-token',
+            [7],
+            null,
+            [3, 4],
+            [1],
+            { id: 5 },
+            [4, 'user4'],
+            true,
+            false,
+            'archived',
+            ['exchange', 'groups:4', 'verify:u', 'active', 'departments', 'module:ctpassstore', 'whoami', 'whoami', 'permissions', 'service-permissions', 'status:9'],
+        ]);
     });
+});
+
+/** `sandbox/router.php` on PHP's built-in server with a dummy configuration; the status of an unknown route. */
+async function routerStatus(extraEnv: Record<string, string>): Promise<number> {
+    const port = await new Promise<number>((resolve, reject) => {
+        const server = net.createServer();
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', () => {
+            const { port: p } = server.address() as net.AddressInfo;
+            server.close(() => resolve(p));
+        });
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-router-unit-'));
+    fs.mkdirSync(path.join(dir, 'cache'));
+    const child = spawn('php', ['-S', `127.0.0.1:${port}`, path.join(import.meta.dirname, 'sandbox/router.php')], {
+        cwd: path.join(BACKEND_DIR, 'public'),
+        stdio: 'ignore',
+        env: {
+            PATH: process.env.PATH,
+            CPS_SANDBOX_BACKEND_DIR: BACKEND_DIR,
+            CPS_SANDBOX_CACHE_DIR: path.join(dir, 'cache'),
+            // Dummy values: `.invalid` never resolves, and an unknown route never reaches ChurchTools.
+            CPS_SANDBOX_CT_API_URL: 'https://ct.invalid/api',
+            CPS_SANDBOX_CT_API_TOKEN: 'dummy-token',
+            CPS_SANDBOX_CORS_ORIGIN: 'https://ct.invalid',
+            CPS_SANDBOX_OAUTH_CLIENT_ID: 'dummy-client',
+            CPS_SANDBOX_OAUTH_CLIENT_SECRET: 'dummy-secret',
+            CPS_SANDBOX_JWT_SECRET: 'x'.repeat(64),
+            ...extraEnv,
+        },
+    });
+    try {
+        for (let i = 0; i < 50; i++) {
+            try {
+                return (await fetch(`http://127.0.0.1:${port}/v1/no-such-route`)).status;
+            } catch {
+                await new Promise((r) => setTimeout(r, 100));
+            }
+        }
+        throw new Error('the router did not answer within 5 s');
+    } finally {
+        child.kill('SIGKILL');
+        fs.rmSync(dir, { recursive: true, force: true });
+    }
+}
+
+describe.skipIf(!phpReady)('the backend sandbox router (sandbox/router.php)', () => {
+    it('starts the backend with a well-formed override (an unknown route is 404), and refuses a malformed one with 500', async () => {
+        const settings = { CPS_SANDBOX_SETTINGS: '{"allowCustomPassword":false}', CPS_SANDBOX_SETTINGS_CATEGORY_ID: '10', CPS_SANDBOX_ADMIN_GROUP_ID: '7' };
+        expect(await routerStatus({})).toBe(404);
+        expect(await routerStatus(settings)).toBe(404);
+        expect(await routerStatus({ ...settings, CPS_SANDBOX_SETTINGS: '{"passwordLength":64}' })).toBe(500);
+        expect(await routerStatus({ ...settings, CPS_SANDBOX_ADMIN_GROUP_ID: '0' })).toBe(500);
+    }, 30_000);
 });
