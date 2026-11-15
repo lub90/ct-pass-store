@@ -12,6 +12,9 @@ use CtPassStore\Application\Port\CooldownStore;
  */
 final class FileCooldownStore implements CooldownStore
 {
+    /** Prefix of the record names in the security store: `cooldown:<name>`. */
+    public const RECORD_PREFIX = 'cooldown:';
+
     public function __construct(
         private readonly SignedFileStore $store,
         private readonly Clock $clock,
@@ -21,7 +24,7 @@ final class FileCooldownStore implements CooldownStore
     {
         $now = $this->clock->now()->getTimestamp();
         $left = null;
-        $this->store->update('cooldown:' . $name, static function (array $state) use ($now, $seconds, &$left): array {
+        $this->store->update(self::RECORD_PREFIX . $name, static function (array $state) use ($now, $seconds, &$left): array {
             $startedAt = $state['startedAt'] ?? null;
             // A start "in the future" means the clock went back; it would block for longer than one period, so it
             // counts as none.

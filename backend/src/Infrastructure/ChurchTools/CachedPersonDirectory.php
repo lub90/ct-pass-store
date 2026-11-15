@@ -20,7 +20,8 @@ final class CachedPersonDirectory implements PersonDirectory
 {
     public const TTL_SECONDS = 600;
 
-    private const RECORD = 'persons-active';
+    /** The cache record's name; public for the load test's sandbox. */
+    public const RECORD = 'persons-active';
 
     public function __construct(
         private readonly PersonDirectory $inner,
