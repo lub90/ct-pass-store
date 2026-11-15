@@ -1,4 +1,4 @@
-# Changes to the CI, release and secret-scan configuration, the Claude Code setup, the threat model and the backend's
+# Changes to the CI, release and secret-scan configuration, the privacy check and hooks, the Claude Code setup, the threat model and the backend's
 # deploy and web-server files need the maintainer's review
 # (extension/docs/development.md, „CI and releases“). Effective only with branch protection that requires code owner
 # reviews, which the maintainer sets on GitHub.
@@ -12,3 +12,7 @@
 /backend/public/ @lub90
 /backend/setup/ @lub90
 /backend/bin/check-deploy.php @lub90
+/backend/config/php.ini-example @lub90
+/.githooks/ @lub90
+/scripts/check-private.mjs @lub90
+/scripts/install-hooks.sh @lub90
