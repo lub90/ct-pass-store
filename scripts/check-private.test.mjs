@@ -679,17 +679,67 @@ test("linked worktree: the worktree's own block list wins over the main checkout
   assertNoValues(r.all);
 });
 
-test("linked worktree: the worktree's own extension/.env wins over the main checkout's credential files", (t) => {
+test("linked worktree: its own extension/.env and the main checkout's are both read; its own comes first", (t) => {
   const repo = makeRepo(t);
   credentialFiles(repo);
   const wt = makeWorktree(t, repo);
-  write(wt, 'extension/.env', 'VITE_PASSWORD=ownown-wt-zz\n');
-  stage(wt, 'a.txt', `ownown-wt-zz\n${V.envPassword}\n`);
+  write(wt, 'extension/.env', `VITE_PASSWORD=ownown-wt-zz\nVITE_SAME=${V.envPassword}\n`);
+  stage(wt, 'a.txt', `ownown-wt-zz\n${V.envPassword}\n${V.envUser}\n`);
   const r = check(wt);
   assert.equal(r.code, 1);
-  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
+  assert.equal(
+    r.out,
+    [
+      'a.txt:1: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:2: matches extension/.env VITE_SAME entry #2', // the worktree's entry, not the main checkout's #5
+      'a.txt:3: matches extension/.env VITE_USERNAME entry #4',
+      '',
+    ].join('\n'),
+  );
   assert.doesNotMatch(r.all, /ownown/);
   assertNoValues(r.all);
+});
+
+test("linked worktree: its own extension/.env.local doesn't hide the main checkout's extension/.env", (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=mainenv-zz\n');
+  const wt = makeWorktree(t, repo);
+  write(wt, 'extension/.env.local', 'VITE_OTHER=wtlocal-zz\n');
+  stage(wt, 'a.txt', 'wtlocal-zz\nmainenv-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches extension/.env.local VITE_OTHER entry #1\na.txt:2: matches extension/.env VITE_PASSWORD entry #1\n',
+  );
+  assert.doesNotMatch(r.all, /wtlocal|mainenv/);
+});
+
+test("linked worktree: one fixture of its own doesn't hide the main checkout's fixtures", (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/tests/Contract/fixtures/main.json', JSON.stringify({ pwd: 'mainfix-zz' }));
+  const wt = makeWorktree(t, repo);
+  write(wt, 'backend/tests/Contract/fixtures/own.json', JSON.stringify({ pwd: 'ownfix-zz' }));
+  stage(wt, 'a.txt', 'ownfix-zz\nmainfix-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches backend/tests/Contract/fixtures/own.json pwd entry #1\n' +
+      'a.txt:2: matches backend/tests/Contract/fixtures/main.json pwd entry #1\n',
+  );
+  assert.doesNotMatch(r.all, /ownfix|mainfix/);
+});
+
+test('linked worktree: a main checkout with only extension/.env.local is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env.local', 'VITE_OTHER=localonly-zz\n');
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'localonly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env.local VITE_OTHER entry #1\n');
+  assert.doesNotMatch(r.all, /localonly/);
 });
 
 test('linked worktree: a main checkout with only backend/phpunit.xml is used', (t) => {
@@ -714,20 +764,27 @@ test('linked worktree: a main checkout with only contract fixtures is used', (t)
   assert.doesNotMatch(r.all, /fixonly/);
 });
 
-test('linked worktree: credential sources are chosen one by one (own .env, phpunit.xml from the main checkout)', (t) => {
+test('linked worktree: every kind of credential file is read from the worktree and from the main checkout', (t) => {
   const repo = makeRepo(t);
   write(repo, 'extension/.env', 'VITE_PASSWORD=mainenv-zz\n');
   write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="mainphp-zz"/>\n</php></phpunit>\n');
   const wt = makeWorktree(t, repo);
   write(wt, 'extension/.env', 'VITE_PASSWORD=wtenv-zz\n');
-  stage(wt, 'a.txt', 'wtenv-zz\nmainenv-zz\nmainphp-zz\n');
+  write(wt, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="wtphp-zz"/>\n</php></phpunit>\n');
+  stage(wt, 'a.txt', 'wtenv-zz\nmainenv-zz\nmainphp-zz\nwtphp-zz\n');
   const r = check(wt);
   assert.equal(r.code, 1);
   assert.equal(
     r.out,
-    'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\na.txt:3: matches backend/phpunit.xml CT_API_TOKEN entry #2\n',
+    [
+      'a.txt:1: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:2: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:3: matches backend/phpunit.xml CT_API_TOKEN entry #2',
+      'a.txt:4: matches backend/phpunit.xml CT_API_TOKEN entry #2',
+      '',
+    ].join('\n'),
   );
-  assert.doesNotMatch(r.all, /wtenv|mainenv|mainphp/);
+  assert.doesNotMatch(r.all, /wtenv|mainenv|mainphp|wtphp/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------

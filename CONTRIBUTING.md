@@ -25,6 +25,9 @@ sh scripts/install-hooks.sh      # or: git config core.hooksPath .githooks
   more characters, plus the host name of URL values), the `<env value>`s of `backend/phpunit.xml`, and the
   pwd/password/token/secret/username fields of `backend/tests/Contract/fixtures/*.json`.
 
+In a linked worktree (`git worktree add` doesn't copy these gitignored files), the block list is the worktree's own
+`.private-terms` if it has one, else the main checkout's; the credential files are read from both.
+
 Harmless words that coincide with such values (`ctpassstore`, `churchtools`) never block. A hit prints only
 `<file>:<line>: matches <source> entry #<n>` (the term's line in `.private-terms`, or the key and line in the credential
 file), **never the value**; the commit is refused. Without `.private-terms` the hook prints a one-line hint and still

@@ -120,11 +120,6 @@ function unquote(v) {
   return m ? m[2] : v.replace(/\s+#.*$/, '');
 }
 
-function hasEnvFile(root) {
-  const dir = join(root, 'extension');
-  return existsSync(dir) && readdirSync(dir).some((f) => f === '.env' || f.startsWith('.env.'));
-}
-
 function readEnvFiles(root, entries, notes) {
   const dir = join(root, 'extension');
   if (!existsSync(dir)) return;
@@ -222,11 +217,11 @@ function loadEntries(root) {
   const termsRoot = roots.find((r) => existsSync(join(r, '.private-terms')));
   if (termsRoot) readBlockList(termsRoot, entries);
   else notes.push('check-private: hint: no .private-terms block list found; copy .private-terms.example to fill one');
-  // Each kind of credential file comes from the first root that has it (the worktree's own wins).
-  const first = (has) => roots.find(has) || root;
-  readEnvFiles(first(hasEnvFile), entries, notes);
-  readPhpunit(first((r) => existsSync(join(r, 'backend', 'phpunit.xml'))), entries);
-  readFixtures(first((r) => existsSync(join(r, 'backend', 'tests', 'Contract', 'fixtures'))), entries, notes);
+  // Credential files are read from the worktree and from the main checkout, so a file of the worktree's own never
+  // hides one of the main checkout; the worktree's come first, so a value in both is reported under its entry.
+  for (const r of roots) readEnvFiles(r, entries, notes);
+  for (const r of roots) readPhpunit(r, entries);
+  for (const r of roots) readFixtures(r, entries, notes);
 
   // The first source of a value wins; a value that is itself an allowlisted word never blocks.
   const seen = new Set();
