@@ -105,6 +105,27 @@ describe('describeDuplicates: settings', () => {
         expect(field(at(shown, 3), 'backendUrl')?.host).toBe(`…${longer.slice(-252)}`);
     });
 
+    it('the 253-character boundary: a host of exactly 253 shows in full, 254 is cut from the left', async () => {
+        const at253 = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(61)}`;
+        const at254 = `${'a'.repeat(63)}.${'b'.repeat(63)}.${'c'.repeat(63)}.${'d'.repeat(62)}`;
+        expect([at253.length, at254.length]).toEqual([253, 254]);
+        const shown = describeDuplicates('settings', await values('settings', { ...settings, backendUrl: `https://${at253}` }, { ...settings, backendUrl: `https://${at254}` }));
+        expect(field(at(shown, 1), 'backendUrl')?.host).toBe(at253);
+        expect(field(at(shown, 2), 'backendUrl')?.host).toBe(`…${at254.slice(-252)}`);
+    });
+
+    it('"differs" looks at every value: with three, a field only the third changes differs in all of them', async () => {
+        const shown = describeDuplicates('settings', await values('settings', settings, settings, { ...settings, backendUrl: 'https://evil.example' }));
+        expect(shown.map((v) => field(v, 'backendUrl')?.differs)).toEqual([true, true, true]);
+        expect(shown.map((v) => field(v, 'passwordLength')?.differs)).toEqual([false, false, false]);
+    });
+
+    it('a stored JSON array is no object: no fields, no other fields (its indexes are not field names)', async () => {
+        const shown = describeDuplicates('settings', await values('settings', settings, '["https://evil.example", 1]'));
+        expect(at(shown, 2).otherFields).toBeUndefined();
+        expect(at(shown, 2).fields.every((f) => f.text === '–')).toBe(true);
+    });
+
     it('a value whose address a save would refuse can\'t be kept, and says why (S6)', async () => {
         const shown = describeDuplicates('settings', await values('settings', settings, { ...settings, backendUrl: 'https://pw.example%2eevil.com' }, '{nope'));
         expect(shown.map((v) => [v.keepable, v.notKeepable])).toEqual([
@@ -181,6 +202,28 @@ describe('describeDuplicates: access', () => {
     it('a group id stored as text differs from the same number', async () => {
         const shown = describeDuplicates('access', await values('access', access, { ...access, groups: { ...access.groups, admins: { groupId: '41', createdBySetup: true } } }));
         expect(field(at(shown, 2), 'groups.admins')).toMatchObject({ text: '41', isolate: true, differs: true });
+    });
+
+    it('other fields of an access value: anything but schema, revision, groups and machineClients, also settings-like names', async () => {
+        const shown = describeDuplicates('access', await values('access', access, { ...access, backendUrl: 'https://evil.example', extra: 1 }));
+        expect(at(shown, 2).otherFields).toEqual({ text: 'backendUrl, extra', isolate: true });
+        expect(at(shown, 1).otherFields).toBeUndefined();
+    });
+
+    it('clientsDiffer looks at every value: with three, only the third enabling a reader differs in all of them', async () => {
+        const shown = describeDuplicates('access', await values('access', access, access, { ...access, machineClients: [reader] }));
+        expect(shown.map((v) => v.clientsDiffer)).toEqual([true, true, true]);
+    });
+
+    it('a client\'s keys compare in any order (the same client with its keys swapped doesn\'t differ)', async () => {
+        const two = { ...reader, publicKeys: [key('r'), key('s')] };
+        const shown = describeDuplicates('access', await values('access', { ...access, machineClients: [two] }, { ...access, machineClients: [{ ...two, publicKeys: [key('s'), key('r')] }] }));
+        expect(shown.map((v) => v.clientsDiffer)).toEqual([false, false]);
+    });
+
+    it('machineClients that is no list enables as few clients as an empty list: not different', async () => {
+        const shown = describeDuplicates('access', await values('access', access, { ...access, machineClients: 'x' }));
+        expect(shown.map((v) => v.clientsDiffer)).toEqual([false, false]);
     });
 
     it('machineClients that is no list: no clients known, nothing enabled', async () => {

@@ -300,6 +300,28 @@ final class FileMachineClientUsageTest extends TestCase
         self::assertSame([], $this->stored());
     }
 
+    /** One prune dropping both an expired entry and one of a client no longer configured logs both pending summaries. */
+    public function testPruneDroppingExpiredAndUnconfiguredEntriesLogsBothPendingSummaries(): void
+    {
+        $this->use('expired-reader', '192.0.2.9');
+        $this->use('expired-reader', '192.0.2.9');
+        $this->clock->advance(FileMachineClientUsage::RETENTION_SECONDS);
+        $logger = new Logger('test', [$this->log]);
+        $since = $this->clock->now()->getTimestamp() - 60;
+        (new SignedFileStore($this->dir, self::SECRET, $logger))->update(FileMachineClientUsage::RECORD, static fn(array $all): array => $all + [
+            'c:old-reader' => ['since' => $since, 'count' => 3, 'addresses' => ['198.51.100.2']],
+        ]);
+        $this->log->clear();
+
+        $this->usage()->prune(['ct-radius']);
+
+        self::assertSame([
+            'Machine client expired-reader is in use; 2 requests from 1 address since the last summary at 2026-11-01T12:00:00+00:00.',
+            'Machine client old-reader is in use; 3 requests from 1 address since the last summary at 2026-11-15T11:59:00+00:00.',
+        ], array_column($this->summaries(), 'message'));
+        self::assertSame([], $this->stored());
+    }
+
     public function testPruneWithoutARecordCreatesNone(): void
     {
         $this->usage()->prune(['ct-radius']);

@@ -41,8 +41,9 @@ test('an admin sets the password of someone else: banner, then a confirm dialog 
     await expect(dialog).toBeVisible();
     await expect(dialog.locator('bdi').first()).toHaveText(CLARA.name);
     await expect(dialog.locator('bdi').nth(1)).toHaveText(`ID ${CLARA.id}`);
+    // U+2068/U+2069 around the name in the sentence: isolate() keeps a right-to-left name from reordering it.
     await expect(dialog).toHaveAccessibleDescription(
-        `${CLARA.name} ID ${CLARA.id} Das bisherige Passwort von ${CLARA.name} funktioniert danach nicht mehr. Fortfahren?`,
+        `${CLARA.name} ID ${CLARA.id} Das bisherige Passwort von \u2068${CLARA.name}\u2069 funktioniert danach nicht mehr. Fortfahren?`,
     );
     await expect(dialog.getByRole('button', { name: 'Fortfahren' })).toBeFocused();
 

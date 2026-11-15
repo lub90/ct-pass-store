@@ -114,6 +114,21 @@ final class LoggerTest extends TestCase
         self::assertStringContainsString('evil.example/\xE2\x80\xAEgro\xE2\x80\xA8[2026] forged\xE2\x80\xA9\xC2\x85\xE2\x81\xA6x\xE2\x81\xA9\xE2\x80\xAA', $content);
     }
 
+    /** The other format characters of the invalid-UTF-8 list: U+061C, U+200B-U+200F, U+2060-U+2065 and U+FEFF (range ends). */
+    public function testInvalidUtf8StillHasItsOtherFormatCharactersEscaped(): void
+    {
+        $logger = Kernel::logger($this->file, 'debug', '0.1.0');
+        $controls = ["\u{061C}", "\u{200B}", "\u{200F}", "\u{2060}", "\u{2065}", "\u{FEFF}"];
+
+        $logger->warning("stray \xFF " . implode('|', $controls));
+
+        $content = $this->content();
+        foreach ($controls as $control) {
+            self::assertStringNotContainsString($control, $content, bin2hex($control));
+        }
+        self::assertStringContainsString('\xD8\x9C|\xE2\x80\x8B|\xE2\x80\x8F|\xE2\x81\xA0|\xE2\x81\xA5|\xEF\xBB\xBF', $content);
+    }
+
     /** LG-04 */
     public function testTheLevelIsRespected(): void
     {

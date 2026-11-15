@@ -109,7 +109,7 @@ return [
 | `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` | From the OAuth application (step 2). |
 | `JWT_SECRET` | Signs the backend's own access tokens. Generate it, at least 32 bytes: `php -r 'echo bin2hex(random_bytes(32)), PHP_EOL;'` |
 | `CLEANUP_TOKEN` | Optional. Turns on the web-cron endpoint `POST /v1/cleanup` (step 7). At least 43 characters; generate it, do not choose it. |
-| `LOG_LEVEL` | Optional. `debug`, `info` (default), `notice`, `warning` or `error`. Anything else makes the backend answer `500 misconfigured`. |
+| `LOG_LEVEL` | Optional. `debug`, `info` (default), `notice`, `warning` or `error`. Anything else makes the backend answer `500 misconfigured`. Keep `info`: `notice` or higher hides the `info` audit lines (who set or deleted whose password, machine-client usage summaries; see [Logs and personal data](#logs-and-personal-data)). |
 
 A missing or invalid key never fails silently: every request answers `500 misconfigured` and names the key (never its
 value).
@@ -272,7 +272,8 @@ ones are deleted. The log contains IP addresses and ChurchTools person IDs (deni
 and deletions). These are **personal data**: the backend logs them only to detect abuse. Tell your users, and do not
 copy the logs elsewhere for longer than 14 days. Passwords, tokens, codes and ciphertexts are never logged.
 
-What to look for when you review the log (the default `LOG_LEVEL` `info` shows all of it):
+What to look for when you review the log. The default `LOG_LEVEL` `info` shows all of it; with `notice` or higher
+the `info` lines below (password changes and deletions, usage summaries) are not written, so keep `info`:
 
 | Level | Line | Meaning |
 | --- | --- | --- |

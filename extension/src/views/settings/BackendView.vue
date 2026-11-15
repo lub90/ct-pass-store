@@ -25,7 +25,7 @@ import { useSession } from '../../app/useSession';
 import type { SelfTestResult } from '../../backend/api';
 import { PopupBlocked, PopupClosed } from '../../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams } from '../../backend/problems';
-import { connectedHost, withoutTrailingSlashes, type SettingsV2 } from '../../model/schemas';
+import { bareUrl, connectedHost, type SettingsV2 } from '../../model/schemas';
 import Banner from '../../ui/Banner.vue';
 import Field from '../../ui/Field.vue';
 import Pill from '../../ui/Pill.vue';
@@ -44,7 +44,6 @@ const admin = computed(() => app.state.value === 'admin');
 /** The address the app runs with (startup); the only one ever asked. */
 const runningUrl = computed(() => app.settings.value?.backendUrl ?? null);
 /** Addresses compare without trailing slashes, as the store and the backend normalize them. */
-const bare = (url: string | null | undefined): string | null => (url == null ? null : withoutTrailingSlashes(url));
 /**
  * A stored address may be written with a host the browser rewrites (`%2e`, an IDN look-alike): the backend keeps the
  * text, the browser connects to `URL.host`. Then both are shown. A new address can't be like that (the field refuses it).
@@ -63,9 +62,9 @@ const form = useSettingsForm<SettingsV2>(
     (value, revision) => services.store.saveSettings(value, revision),
     {
         // A stored trailing slash is no change of its own: the unchanged state holds the normalized address.
-        prepare: (stored) => (stored.backendUrl === undefined ? stored : { ...stored, backendUrl: bare(stored.backendUrl)! }),
+        prepare: (stored) => (stored.backendUrl === undefined ? stored : { ...stored, backendUrl: bareUrl(stored.backendUrl)! }),
         beforeSave: async (next, previous) => {
-            if (bare(next.backendUrl) === bare(previous?.backendUrl)) return true;
+            if (bareUrl(next.backendUrl) === bareUrl(previous?.backendUrl)) return true;
             const answer = await confirm({
                 title: t('backend.confirmTitle'),
                 // Both addresses isolated in the dialog's subject (`<bdi>`).
@@ -125,13 +124,13 @@ const storedUrl = ref<string | null>(null);
 watch(
     () => [form.status.value, form.savedAt.value] as const,
     () => {
-        if (form.status.value === 'ready' && !form.dirty.value) storedUrl.value = bare(form.value.value?.backendUrl);
+        if (form.status.value === 'ready' && !form.dirty.value) storedUrl.value = bareUrl(form.value.value?.backendUrl);
     },
     { immediate: true },
 );
 const changed = computed(() => form.value.value !== null && checked.value.ok && checked.value.url !== storedUrl.value);
 /** The stored address isn't the one the app runs with (saved here, or elsewhere since startup). */
-const needsReload = computed(() => form.status.value === 'ready' && !form.dirty.value && storedUrl.value !== null && storedUrl.value !== bare(runningUrl.value));
+const needsReload = computed(() => form.status.value === 'ready' && !form.dirty.value && storedUrl.value !== null && storedUrl.value !== bareUrl(runningUrl.value));
 
 function reloadPage(): void {
     if (services.reloadPage) services.reloadPage();

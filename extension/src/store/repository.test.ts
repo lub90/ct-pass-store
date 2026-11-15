@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { CtForbiddenError } from '@/ct/errors';
 import type { CtValue } from '@/ct/types';
 import { ConflictError, InvalidValueError, ValueTooLargeError } from '@/model/errors';
-import type { AccessV2, SettingsV2 } from '@/model/schemas';
+import { MAX_REVISION, type AccessV2, type SettingsV2 } from '@/model/schemas';
 import type { KvBackend } from './kv';
 import { MemoryKv } from './memory-kv';
 import { ExtensionStore } from './repository';
@@ -397,6 +397,21 @@ describe('duplicates (point B E1): never the highest value ID silently', () => {
             expect(error).toBeInstanceOf(InvalidValueError);
             expect((error as InvalidValueError).issues.join(' ')).toContain('value 2');
             expect(kv.writes).toEqual([]);
+        });
+
+        it('a revision that is a number but no integer (8.5) counts as 0 in the raise, so the kept value gets an integer one', async () => {
+            const kv = new StubKv([stored(1, { ...settings, revision: 8.5 }), stored(2, { ...settings, revision: 2 })]);
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 1, await seen(store));
+            expect(JSON.parse(kv.updated[1]!)).toMatchObject({ revision: 3 });
+        });
+
+        it('the top revision one below the end of the range still leaves room: raised to MAX_REVISION', async () => {
+            const kv = new StubKv([stored(1, settings), stored(2, { ...settings, revision: MAX_REVISION - 1 })]);
+            const store = new ExtensionStore(kv);
+            await store.resolveDuplicates('settings', 1, await seen(store));
+            expect(JSON.parse(kv.updated[1]!)).toMatchObject({ revision: MAX_REVISION });
+            expect(kv.writes).toEqual(['update:1', 'delete:2']);
         });
 
         it('a kept value of exactly 10,000 characters after the raise is written (R4)', async () => {

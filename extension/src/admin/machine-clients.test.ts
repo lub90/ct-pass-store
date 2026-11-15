@@ -175,15 +175,24 @@ describe('sha256 and keyFingerprint (spec 4.7)', () => {
         expect(expected).toMatch(/^[A-Za-z0-9_-]{16}$/);
     });
 
+    it('the shared vectors hold a - and a _ each, and a print with two of one (a partial mapping fails them)', () => {
+        const prints = fingerprintCases.map((c) => c.fingerprint);
+        expect(prints.some((p) => p.includes('-'))).toBe(true);
+        expect(prints.some((p) => p.includes('_'))).toBe(true);
+        expect(prints.some((p) => p.split('-').length > 2)).toBe(true);
+        expect(prints.some((p) => p.split('_').length > 2)).toBe(true);
+    });
+
     it('uses the base64url alphabet (- and _), like node’s base64url, over many keys (N3)', () => {
-        const prints = Array.from({ length: 64 }, (_, n) => {
+        const prints = Array.from({ length: 256 }, (_, n) => {
             const bytes = new Uint8Array(32).fill(n);
             const print = keyFingerprint(bytes);
             expect(print, String(n)).toBe(createHash('sha256').update(bytes).digest('base64url').slice(0, 16));
+            expect(print, String(n)).toMatch(/^[A-Za-z0-9_-]{16}$/);
             return print;
         });
-        expect(prints.some((p) => /[-_]/.test(p))).toBe(true);
-        expect(prints.every((p) => !/[+/=]/.test(p))).toBe(true);
+        expect(prints.some((p) => p.includes('-'))).toBe(true);
+        expect(prints.some((p) => p.includes('_'))).toBe(true);
     });
 });
 

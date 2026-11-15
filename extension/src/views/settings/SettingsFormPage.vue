@@ -10,7 +10,7 @@ import { useI18n } from 'vue-i18n';
 import { settingsErrorText, type SettingsForm } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
-import { withoutTrailingSlashes } from '../../model/schemas';
+import { bareUrl } from '../../model/schemas';
 import Banner from '../../ui/Banner.vue';
 import type { IconName } from '../../ui/Icon.vue';
 import PageHeader from '../../ui/PageHeader.vue';
@@ -63,7 +63,6 @@ const app = useAppState();
 /** Duplicates were resolved here: the value kept (E1), and its `backendUrl` as stored (settings only). */
 const keptId = ref<number | null>(null);
 const keptUrl = ref<string | null>(null);
-const bare = (url: string | null | undefined): string | null => (typeof url === 'string' ? withoutTrailingSlashes(url) : null);
 /**
  * Only a page load makes the app use the kept value: when the app started without these values (row 4a), or when the
  * kept address isn't the one the app runs with (S7, like „Backend & Status“).
@@ -71,7 +70,7 @@ const bare = (url: string | null | undefined): string | null => (typeof url === 
 const needsPageLoad = computed(
     () =>
         (app.failure.value?.kind === 'duplicates' && app.failure.value.categories.includes(category.value)) ||
-        (category.value === 'settings' && keptId.value !== null && keptUrl.value !== bare(app.settings.value?.backendUrl)),
+        (category.value === 'settings' && keptId.value !== null && keptUrl.value !== bareUrl(app.settings.value?.backendUrl)),
 );
 function resolved(valueId: number): void {
     const text = props.form.duplicatesRead.value?.values.find((v) => v.valueId === valueId)?.text;
@@ -81,7 +80,7 @@ function resolved(valueId: number): void {
     } catch {
         url = undefined;
     }
-    keptUrl.value = typeof url === 'string' ? bare(url) : null;
+    keptUrl.value = bareUrl(url);
     keptId.value = valueId;
     void props.form.load();
 }

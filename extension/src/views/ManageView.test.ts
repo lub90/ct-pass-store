@@ -38,9 +38,9 @@ const OUTSIDER = 5;
 /** Two members with the same name. */
 const TWIN_A = 6;
 const TWIN_B = 7;
-/** A name with a right-to-left override (U+202E). */
+/** A name with a right-to-left override (U+202E), after a zero-width space (two format characters in a row). */
 const BIDI = 8;
-const BIDI_LAST = '\u202Enamffoh';
+const BIDI_LAST = '\u200B\u202Enamffoh';
 /** A name that tries to close the isolate around it (U+2069) and override the rest of the sentence (U+202E). */
 const ESCAPE = 9;
 const ESCAPE_LAST = 'Beck\u2069\u202E';
@@ -418,7 +418,7 @@ describe('page head and search (spec 4.3)', () => {
     });
 
     it('the avatar skips invisible format characters (a bidi control is never an initial)', async () => {
-        // „Rafa ‮namffoh“: the last word starts with U+202E; its first letter is „n“.
+        // „Rafa \u200B\u202Enamffoh“: the last word starts with two format characters; its first letter is „n“.
         const { wrapper } = await start({ path: `/manage/${BIDI}` });
         expect(card(wrapper).find('.cps-manage__avatar').text()).toBe('RN');
     });
@@ -1149,7 +1149,7 @@ describe('ChurchTools names are plain text', () => {
     it('names are isolated against bidi controls: <bdi> in the list, the card and the banner, U+2068/U+2069 (controls neutralised) in both dialogs', async () => {
         const name = `Rafa ${BIDI_LAST}`;
         /** In the dialogs' plain text the override itself is neutralised as well. */
-        const inDialog = 'Rafa \uFFFDnamffoh';
+        const inDialog = 'Rafa \u200B\uFFFDnamffoh';
         const { wrapper } = await start({ entries: { [BIDI]: VALID } });
         await search(wrapper, 'rafa');
         const option = wrapper.findAll('[role="option"]').find((o) => o.text().includes('Rafa'))!;

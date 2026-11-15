@@ -10,7 +10,7 @@ Open issues and planned improvements, roughly ordered by severity.
   - Unify the ID comparison: `getPwd()` uses `==`, while `putPwd()`/`deletePwd()` use `===`. An entry stored with a string `personId` is found by one and missed by the other.
   - Add a test for this scenario.
 
-- [ ] **Missing error middleware**
+- [x] **Missing error middleware** (done: [`ErrorMiddleware.php`](backend/src/Http/Middleware/ErrorMiddleware.php) answers every error as RFC 9457 problem details, see `backend/docs/problems.md`)
   When ChurchTools is unreachable or the settings are malformed, callers get Slim's default HTML 500 page instead of a JSON error response.
 
 - [ ] **Backend: be ready for required CSRF tokens**
@@ -54,7 +54,7 @@ Open issues and planned improvements, roughly ordered by severity.
   - The backend has no rate limiting, so it can be used to guess primary passwords. It's unverified whether ChurchTools' own login lockout would then block the backend's IP for all users.
   - The behaviour for users with 2FA enabled is untested.
 
-- [ ] **Switch backend authentication from login tokens to JWTs**
+- [x] **Switch backend authentication from login tokens to JWTs** (done in backend and extension, machine clients sign Ed25519 JWTs; only the setup-wizard step below is open and comes with the setup assistant)
   Right now clients send their ChurchTools login token (`Authorization: Login <token>`) to the backend, which uses it to call ChurchTools. So the backend sees long-lived credentials with full access to the user's ChurchTools account. If the backend is compromised, those tokens are exposed too.
   - **Decided (D4 in [`specs/backend-spec.md`](specs/backend-spec.md)):** users log in via ChurchTools OAuth (authorization code with PKCE, `scope=api`). The backend exchanges the code, checks identity and the `view` permission once, and issues its own short-lived JWT. Verified on the test instance on 2026-11-01.
   - Backend: implement `POST /auth/token` and bearer-token validation (spec 4.3, 4.4); add `OAUTH_CLIENT_ID`, `OAUTH_CLIENT_SECRET` and `JWT_SECRET` to `credentials.php`.
@@ -121,8 +121,8 @@ Open issues and planned improvements, roughly ordered by severity.
 
 ## Testing & Tooling
 
-- [ ] **Add unit tests**
-  Right now there are only end-to-end tests, and they need a live ChurchTools instance.
+- [x] **Add unit tests** (done: PHPUnit unit and API layers in `backend/tests/`, Vitest in `extension/`, both in CI)
+  Back then there were only end-to-end tests, and they need a live ChurchTools instance.
   - Add PHPUnit unit tests for `PasswordValidator`, `EncryptionService` (encrypt/decrypt round trip with the test keys) and the store logic against a mocked client.
   - Add frontend tests.
 
@@ -154,7 +154,7 @@ Open issues and planned improvements, roughly ordered by severity.
 - [ ] **Consider publishing the shared libraries as packages**
   Subtrees work for a single developer. If other extensions will reuse `ct-utils` and `ct-extension-utils`, publish them as versioned npm packages (private or GitHub-hosted is fine) instead of copying them in.
 
-- [ ] **Replace `churchtools/php-client` with our own thin ChurchTools client**
+- [x] **Replace `churchtools/php-client` with our own thin ChurchTools client** (done: [`GuzzleChurchToolsClient.php`](backend/src/Infrastructure/ChurchTools/GuzzleChurchToolsClient.php); the library and the fork are gone from `composer.json`)
   [`backend/composer.json`](backend/composer.json) requires `churchtools/php-client` from the fork `lub90/ct-php-client` as `dev-version/3.126.2`, which is a branch. The library is 59 MB and about 3,800 files, but the backend uses only `SimpleClient`, `GeneralApi::getWhoami()`, `Configuration`, `ApiException` and one model.
   - Decided in [`specs/backend-spec.md`](specs/backend-spec.md) (D1); the client's behavior is specified in section 5.6.
   - Write a small client on top of Guzzle behind an interface: `whoami`, global permissions, login check and the KV store calls. It gets central timeouts, `429` handling and one exception type per error case.

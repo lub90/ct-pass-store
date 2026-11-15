@@ -11,6 +11,10 @@ on:
       # The contract sandbox wraps the backend's ChurchTools client; its guard test needs PHP and vendor/ (below).
       - 'extension/tests/contract/sandbox/**'
       - 'extension/tests/contract/sandbox-overrides.unit.test.ts'
+      - 'extension/tests/contract/setup.ts'
+      # The guard runs with the extension's test runner and its dependencies.
+      - 'extension/package-lock.json'
+      - 'extension/vitest.config.ts'
       - '.github/workflows/backend.yml'
   pull_request:
     paths:
@@ -20,6 +24,10 @@ on:
       # The contract sandbox wraps the backend's ChurchTools client; its guard test needs PHP and vendor/ (below).
       - 'extension/tests/contract/sandbox/**'
       - 'extension/tests/contract/sandbox-overrides.unit.test.ts'
+      - 'extension/tests/contract/setup.ts'
+      # The guard runs with the extension's test runner and its dependencies.
+      - 'extension/package-lock.json'
+      - 'extension/vitest.config.ts'
       - '.github/workflows/backend.yml'
 
 # Read only, explicitly.
@@ -85,18 +93,21 @@ jobs:
 
       # The contract sandbox's override guard (extension/tests/contract/sandbox-overrides.unit.test.ts) runs PHP
       # against vendor/; the extension job has no PHP and skips it, so it runs here. A skip would hide it, so the
-      # step fails unless every test in the file ran and passed.
+      # step fails unless every test in the file ran and passed. It doesn't depend on the PHP version: one leg is enough.
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: matrix.php == '8.3'
         with:
           node-version: '24'
           cache: npm
           cache-dependency-path: extension/package-lock.json
 
       - name: Install extension dependencies
+        if: matrix.php == '8.3'
         working-directory: extension
         run: npm ci
 
       - name: Contract sandbox override guard
+        if: matrix.php == '8.3'
         working-directory: extension
         run: |
           npx vitest run tests/contract/sandbox-overrides.unit.test.ts --reporter=default --reporter=json --outputFile="$RUNNER_TEMP/sandbox-overrides.json"

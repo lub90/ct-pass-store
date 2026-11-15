@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createFakeBackend, type FakeBackendOptions } from '@/dev/fake-backend';
-import { defineBackendContract, type BackendContractSubject } from './contract-cases';
+import { defineBackendContract, type BackendContractSubject, type ContractCase } from './contract-cases';
 import { BackendProblem } from './problems';
 
 const PRIMARY = 'ct-Secret-1';
@@ -28,12 +28,10 @@ const subject = (over: FakeBackendOptions = {}): BackendContractSubject => {
     };
 };
 
-/** Calls that carried a deliberately wrong primary password (`…-wrong`), per subject; checked after the contracts. */
-const wrongSent = new Map<string, number>();
-const counting = (label: string, s: BackendContractSubject): BackendContractSubject => {
-    wrongSent.set(label, wrongSent.get(label) ?? 0);
+/** Counts the calls that carry a deliberately wrong primary password (`…-wrong`). */
+const counting = (s: BackendContractSubject, sent: () => void): BackendContractSubject => {
     const count = (pwd?: string) => {
-        if (pwd !== undefined && pwd !== PRIMARY && pwd.endsWith('-wrong')) wrongSent.set(label, (wrongSent.get(label) ?? 0) + 1);
+        if (pwd !== undefined && pwd !== PRIMARY && pwd.endsWith('-wrong')) sent();
     };
     return {
         ...s,
@@ -42,13 +40,37 @@ const counting = (label: string, s: BackendContractSubject): BackendContractSubj
     };
 };
 
-defineBackendContract('fake, user', async () => counting('default', subject()));
-defineBackendContract('fake, user, without the wrong-primary-password cases', async () => counting('off', { ...subject(), wrongPrimaryPasswordCases: false }));
+const SKIPPED = Symbol('skipped');
+
+/** Runs every contract case inside this test (not as tests of its own) and returns how many wrong primary passwords were sent. */
+async function wrongPasswordsSent(fresh: () => BackendContractSubject): Promise<number> {
+    let sent = 0;
+    const cases: ContractCase[] = [];
+    defineBackendContract('collected', async () => counting(fresh(), () => sent++), {
+        describe: (_name, body) => body(),
+        it: (_name, run) => cases.push(run),
+    });
+    expect(cases.length).toBeGreaterThan(10);
+    const ctx = {
+        skip: (): never => {
+            throw SKIPPED;
+        },
+    };
+    for (const run of cases) {
+        await run(ctx).catch((e: unknown) => {
+            if (e !== SKIPPED) throw e;
+        });
+    }
+    return sent;
+}
+
+defineBackendContract('fake, user', async () => subject());
 
 describe('wrongPrimaryPasswordCases', () => {
-    it('false skips both wrong-primary-password cases; unset runs them (3 wrong passwords: PUT, DELETE, order of checks)', () => {
-        expect(wrongSent.get('off')).toBe(0);
-        expect(wrongSent.get('default')).toBe(3);
+    it('false skips both wrong-primary-password cases; unset runs them (3 wrong passwords: PUT, DELETE, order of checks)', async () => {
+        expect(await wrongPasswordsSent(() => ({ ...subject(), wrongPrimaryPasswordCases: false }))).toBe(0);
+        expect(await wrongPasswordsSent(() => subject())).toBe(3);
+        expect(await wrongPasswordsSent(() => ({ ...subject(), wrongPrimaryPasswordCases: true }))).toBe(3);
     });
 });
 defineBackendContract('fake, admin', async () => subject({ admin: true }));

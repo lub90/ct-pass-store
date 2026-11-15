@@ -54,8 +54,8 @@ Updating an extension in ChurchTools keeps its stored data.
 Open the extension from the toolbar. Until the setup assistant exists:
 
 - On a new installation, and on an installation of an earlier version (old data layout), everyone sees „Die
-  Erweiterung wird gerade eingerichtet“; people with the rights to set it up also see that the assistant comes with
-  the next version. Nothing is changed in ChurchTools.
+  Erweiterung wird gerade eingerichtet“; people with the rights to set it up also see that the setup assistant
+  sets it up and isn't available yet. Nothing is changed in ChurchTools.
 - The settings, the admin group and the machine clients can only be managed once the extension's data (`settings`
   with the backend address and the OAuth client ID, and `access` with the role groups) exists. Writing them is the
   assistant's job; its spec also defines the rights each group gets (extension spec section 16).

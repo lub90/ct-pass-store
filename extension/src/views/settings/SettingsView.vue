@@ -102,31 +102,28 @@ interface Card {
     disabledReason?: string;
 }
 
-const cards = computed<Card[]>(() => {
-    const list: Card[] = [
-        { to: '/settings/rules', icon: 'lock', title: t('pages.rules'), text: t('settings.cards.rules'), disabledReason: canSettings.value ? undefined : missing('settings') },
-        { to: '/settings/texts', icon: 'text', title: t('pages.texts'), text: t('settings.cards.texts'), disabledReason: canSettings.value ? undefined : missing('settings') },
-        {
-            to: '/settings/access',
-            icon: 'shield',
-            title: t('pages.access'),
-            text: t('settings.cards.access'),
-            pill: clients.value === null ? null : { text: t('settings.clients', { n: clients.value }), kind: 'neutral' },
-            // The page needs the edit right (spec 4.7), admins too.
-            disabledReason: canAccess.value ? undefined : missing('access'),
-        },
-        {
-            to: '/settings/backend',
-            icon: 'server',
-            title: t('pages.backend'),
-            text: t('settings.cards.backend'),
-            pill: selfTest.value,
-            disabledReason: canSettings.value ? undefined : missing('settings'),
-        },
-    ];
-    // „Sicherung“ and „Einrichtung“ (spec 3.1.3) come with the setup assistant; until then no card leads to them.
-    return list;
-});
+// „Sicherung“ and „Einrichtung“ (spec 3.1.3) come with the setup assistant; until then no card leads to them.
+const cards = computed<Card[]>(() => [
+    { to: '/settings/rules', icon: 'lock', title: t('pages.rules'), text: t('settings.cards.rules'), disabledReason: canSettings.value ? undefined : missing('settings') },
+    { to: '/settings/texts', icon: 'text', title: t('pages.texts'), text: t('settings.cards.texts'), disabledReason: canSettings.value ? undefined : missing('settings') },
+    {
+        to: '/settings/access',
+        icon: 'shield',
+        title: t('pages.access'),
+        text: t('settings.cards.access'),
+        pill: clients.value === null ? null : { text: t('settings.clients', { n: clients.value }), kind: 'neutral' },
+        // The page needs the edit right (spec 4.7), admins too.
+        disabledReason: canAccess.value ? undefined : missing('access'),
+    },
+    {
+        to: '/settings/backend',
+        icon: 'server',
+        title: t('pages.backend'),
+        text: t('settings.cards.backend'),
+        pill: selfTest.value,
+        disabledReason: canSettings.value ? undefined : missing('settings'),
+    },
+]);
 </script>
 
 <template>

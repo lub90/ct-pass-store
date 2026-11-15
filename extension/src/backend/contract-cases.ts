@@ -52,7 +52,25 @@ async function problemOf(call: Promise<unknown>): Promise<BackendProblem> {
     return error as BackendProblem;
 }
 
-export function defineBackendContract(name: string, make: () => Promise<BackendContractSubject>): void {
+/** One contract case; it calls `ctx.skip()` when the subject cannot offer what it needs. */
+export type ContractCase = (ctx: { skip: () => never }) => Promise<void>;
+
+/** Where the cases are registered: vitest by default; a test can collect them to run them itself. */
+export interface ContractRegistrar {
+    describe: (name: string, body: () => void) => void;
+    it: (name: string, run: ContractCase) => void;
+}
+
+const vitest: ContractRegistrar = {
+    describe: (name, body) => describe(name, body),
+    it: (name, run) => it(name, (ctx) => run(ctx)),
+};
+
+export function defineBackendContract(
+    name: string,
+    make: () => Promise<BackendContractSubject>,
+    { describe, it }: ContractRegistrar = vitest,
+): void {
     describe(`Backend contract: ${name}`, () => {
         const primary = (s: BackendContractSubject) => (s.primaryPwd === null ? {} : { primaryPwd: s.primaryPwd });
         const clean = async (s: BackendContractSubject, id = s.ownPersonId) => s.deleteEntry(id, s.primaryPwd ?? undefined);

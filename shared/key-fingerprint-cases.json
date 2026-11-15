@@ -18,5 +18,25 @@
     "name": "ascending bytes 0x00..0x1f",
     "keyHex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "fingerprint": "Yw3NKWbEM2aRElRI"
+  },
+  {
+    "name": "all bytes 0x02 (the print has a -)",
+    "keyHex": "0202020202020202020202020202020202020202020202020202020202020202",
+    "fingerprint": "dYd7tB05O1-4RVzm"
+  },
+  {
+    "name": "all bytes 0x48 (the print has two -)",
+    "keyHex": "4848484848484848484848484848484848484848484848484848484848484848",
+    "fingerprint": "Pp6aMAfR-Ed6MN-O"
+  },
+  {
+    "name": "all bytes 0xd8 (the print has two _)",
+    "keyHex": "d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8d8",
+    "fingerprint": "z0MTPmU_zH3p_dtZ"
+  },
+  {
+    "name": "all bytes 0x57 (the print has a _ and a -)",
+    "keyHex": "5757575757575757575757575757575757575757575757575757575757575757",
+    "fingerprint": "3G2G1n4fGgJbM_r-"
   }
 ]

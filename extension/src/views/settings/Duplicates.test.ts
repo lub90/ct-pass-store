@@ -74,7 +74,7 @@ describe('duplicate settings at startup', () => {
         expect(dialog()?.textContent).toContain(`Wert ${SETTINGS_VALUE_ID}`);
         expect(dialog()?.textContent).toContain('Die anderen Werte werden gelöscht: Wert 301. Das lässt sich nicht rückgängig machen.');
         // The address differs between the values: the dialog names the kept one's (S1); it is a danger dialog (I1).
-        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069 (Host: \u2068pw.example\u2069).`);
+        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069 (verbindet zu \u2068pw.example\u2069).`);
         expect(dialog()?.textContent).toContain('OAuth-Client-ID dieses Werts: \u2068oauth-client-1\u2069.');
         expect(dialog()?.textContent).not.toContain('Passwortlänge');
         expect(document.activeElement?.textContent?.trim()).toBe(TEXT.cancel);
@@ -217,7 +217,7 @@ describe('duplicate settings at startup', () => {
         expect(card(wrapper, SETTINGS_VALUE_ID).find('.cps-duplicates__other bdi').text()).toBe('x\u202Ey');
         expect(card(wrapper, 301).find('.cps-duplicates__revision bdi').exists()).toBe(false);
         await keep(wrapper, 301);
-        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069 (Host: \u2068pw.example\u2069).`);
+        expect(dialog()?.textContent).toContain(`Backend-Adresse dieses Werts: \u2068${SETTINGS.backendUrl}\u2069 (verbindet zu \u2068pw.example\u2069).`);
         await answer(TEXT.cancel);
     });
 
@@ -250,7 +250,7 @@ describe('duplicate settings at startup', () => {
         expect(url.find('bdi').text()).not.toContain('attacker.example');
         expect(url.find('.cps-duplicates__host bdi').text()).toBe(host);
         await keep(wrapper, 301);
-        expect(dialog()?.textContent).toContain(`(Host: \u2068${host}\u2069).`);
+        expect(dialog()?.textContent).toContain(`(verbindet zu \u2068${host}\u2069).`);
         await answer(TEXT.cancel);
     });
 
@@ -435,6 +435,45 @@ describe('duplicate access values („Zugriff“)', () => {
         expect((await all('settings')).map((v) => v.id)).toEqual([SETTINGS_VALUE_ID]);
         expect((await all('access')).map((v) => v.id)).toEqual([ACCESS_VALUE_ID, 301]);
         expect(planted).not.toBe(SETTINGS_VALUE_ID);
+    });
+
+    it('on „Zugriff“, a value that appeared meanwhile: conflict, nothing deleted; „Neu laden“ shows the new list', async () => {
+        const { wrapper, all, plant } = await start({ path: '/settings/access', extra: [{ category: 'access', value: plantedAccess }] });
+        const third = await plant('access', { ...ACCESS, revision: 7 });
+        await keep(wrapper, ACCESS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-duplicates__error[role="alert"]').text()).toContain(TEXT.conflict);
+        expect(await all('access')).toHaveLength(3);
+        await click(wrapper, TEXT.reload);
+        expect(card(wrapper, third).exists()).toBe(true);
+        expect(wrapper.text()).toContain(TEXT.intro('access', 3));
+    });
+
+    it('on „Zugriff“, a delete that fails after the update: the error shows, nothing is reported done, the duplicates stay', async () => {
+        const { wrapper, all } = await start({ path: '/settings/access', extra: [{ category: 'access', value: plantedAccess }], failDelete: true });
+        await keep(wrapper, ACCESS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.find('.cps-duplicates__error[role="alert"]').text()).toBe('ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.');
+        expect(wrapper.text()).not.toContain(TEXT.done(ACCESS_VALUE_ID));
+        expect(wrapper.find('.cps-duplicates').exists()).toBe(true);
+        expect((await all('access')).map((v) => v.id)).toEqual([ACCESS_VALUE_ID, 301]);
+    });
+
+    it('resolving on the client form during a visit (no startup duplicates) asks for no page load', async () => {
+        const { wrapper, plant, all } = await start({ path: '/settings/access/clients/new' });
+        const planted = await plant('access', plantedAccess);
+        await wrapper.find('#cps-client-name').setValue('WLAN');
+        await settle();
+        await wrapper.find<HTMLInputElement>('#cps-client-key-0').setValue(key('w'));
+        await settle();
+        await click(wrapper, TEXT.save);
+        await click(wrapper, TEXT.reload);
+        await keep(wrapper, ACCESS_VALUE_ID);
+        await answer(TEXT.confirm);
+        expect(wrapper.text()).toContain(TEXT.done(ACCESS_VALUE_ID));
+        expect(wrapper.text()).not.toContain(TEXT.reloadNote);
+        expect((await all('access')).map((v) => v.id)).toEqual([ACCESS_VALUE_ID]);
+        expect(planted).not.toBe(ACCESS_VALUE_ID);
     });
 
     it('the client form shows the values to choose from too', async () => {

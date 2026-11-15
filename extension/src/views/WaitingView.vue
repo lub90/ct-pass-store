@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * `setup-needed` and `migration-needed` (spec 3.3, 5.2): everyone sees the waiting text; setup-capable people also
- * learn that the setup assistant comes with the next version (it replaces this page then).
+ * learn that the setup assistant sets it up and isn't available yet (it replaces this page then).
  */
 import { useI18n } from 'vue-i18n';
 import Banner from '../ui/Banner.vue';

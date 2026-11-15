@@ -83,9 +83,8 @@ Which ChurchTools rights each role's group gets, and why, is section 16.
    `backendUrl` can always be fixed by someone with the right.
 3. „Sicherung“ (backup) and „Einrichtung“ (setup) are shown only to admins who are also setup-capable. *Deferred:*
    until the setup assistant exists, the overview shows no card for them (for anyone); their reserved routes (12.4)
-   show the page title and „Diese Seite kommt mit dem Einrichtungsassistenten in der nächsten Version der
-   Erweiterung.“ Hints that would point there say instead that the setup assistant of the next version can repair
-   it.
+   show the page title and „Diese Seite kommt mit dem Einrichtungsassistenten.“ Hints that would point there say
+   instead that the setup assistant can repair it once it is available (no version is promised).
 
 ### 3.2 App states
 
@@ -95,10 +94,10 @@ The app computes one state at startup (`src/app/`), in this order. The first mat
 | --- | --- | --- | --- |
 | 1 | Still loading | `loading` | Frame with a muted „Lade …“ line |
 | 2 | `whoami` is anonymous, or the extension's `view` permission is missing | `no-access` | „Du hast keinen Zugriff auf diese Erweiterung. Wende dich an die Verantwortlichen in deiner Gemeinde.“ |
-| 3 | Old data layout (6.3) | `migration-needed` | Setup-capable: the migration wizard. Others: the waiting text (3.3). |
+| 3 | Old data layout (6.3) | `migration-needed` | Setup-capable: the migration wizard (*deferred*: until it exists, the waiting text plus a note that the setup assistant isn't available yet, 5.2). Others: the waiting text (3.3). |
 | 4 | Stored data has a newer `schema` than the code (a single value; a newer value among several is row 4a) | `update-needed` | „Bitte aktualisiere die Erweiterung.“ (admins: with the versions) |
 | 4a | `settings`, or `access` if the person can read it, holds more than one value (6.2), also when one of them has a newer `schema` (it can't be kept) | `backend-error` | Users: as row 7. Settings editors: „In ChurchTools sind mehrere Werte für „{Kategorien}“ gespeichert. Die Erweiterung verwendet keinen davon, bis unter „Einstellungen“ ausgewählt ist, welcher bleibt.“ with a link to „Einstellungen“. No login, nothing is sent to any backend address. |
-| 5 | `settings` missing, invalid, or without `backendUrl` or `oauthClientId` | `setup-needed` | Setup-capable: the setup wizard. Others: the waiting text. |
+| 5 | `settings` missing, invalid, or without `backendUrl` or `oauthClientId` | `setup-needed` | Setup-capable: the setup wizard (*deferred*: until it exists, the waiting text plus a note that the setup assistant isn't available yet, 5.2). Others: the waiting text. |
 | 6 | Backend login fails with `no-service-access` | `no-access` | As in row 2 |
 | 7 | Backend unreachable, or login fails otherwise | `backend-error` | Users: „Der Dienst ist gerade nicht erreichbar. Versuch es später noch einmal.“ Settings editors (3.1): the problem text plus a link to „Backend & Status“. |
 | 8 | Backend `MAJOR.MINOR` differs from the extension's | `version-mismatch` | As in `versioning.md` section 3 |
@@ -261,14 +260,15 @@ refused at the field and by the store (stored texts with them are dropped on rea
   The same holds for the admin group: whoever controls its membership is admin (16.1). With the rights check
   (*deferred*, 16.4), the status dot of „Admins“ also shows the findings of rule 6.
 - **Groups:** for the roles „Nutzer“ (users) and „Admins“, the mapped ChurchTools group with name, member count, a
-  status dot from the rights check (16.4; *deferred*, see the last rule of this list), „Mitglieder verwaltest du in
-  ChurchTools“ and a link „In ChurchTools öffnen ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
-  The service user's group is shown on „Einrichtung“, not here.
+  status dot from the rights check (16.4; *deferred*, see the rule „Until the setup assistant exists“ below),
+  „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen ↗“. „Gruppe ändern“ starts the change
+  flow of 16.5. A missing or deleted group is shown as an error with the fix. The service user's group is shown on
+  „Einrichtung“, not here.
 - **Machine clients:** every stored entry the backend enables, with name (isolated, `<bdi>`), `id`, permissions
   („darf lesen“), number of keys, a fingerprint per key, `createdAt` (and who created it), and „Bearbeiten“ /
   „Entfernen“. A green „+ Client hinzufügen“ button.
-- **Key fingerprint:** the first 16 characters (96 bits) of base64url(SHA-256(the 32 key bytes)), the same whichever encoding was
-  pasted. An admin compares it with the service's key, e.g. for a key in base64url:
+- **Key fingerprint:** the first 16 characters (96 bits) of base64url(SHA-256(the 32 key bytes)), the same whichever
+  encoding was pasted. An admin compares it with the service's key, e.g. for a key in base64url:
   `printf %s '<key>' | tr '_-' '/+' | base64 -d | openssl dgst -sha256 -binary | base64 | tr '+/' '-_' | cut -c1-16`
   (add the `=` padding first if `base64 -d` asks for it). Look-alike entries (same name, different key) are told
   apart by it.
@@ -286,7 +286,8 @@ refused at the field and by the store (stored texts with them are dropped on rea
 - **`access` invalid here** (e.g. `groups.service` broken) while `machineClients` is a list: the backend reads only
   `groups.admins` and `machineClients`, so it may still enable clients. The page lists the active clients (read-only,
   no „Bearbeiten“) and the broken entries, and removing works as above. As on save, a stored `revision` that is no
-  integer counts as 0; an integer out of range refuses the removal (nothing can be removed here then). Groups and „+ Client hinzufügen“ need a valid value.
+  integer counts as 0; an integer out of range refuses the removal (nothing can be removed here then). Groups and
+  „+ Client hinzufügen“ need a valid value.
 - The page and the client form need `edit custom data` on `access`; without it they name the right and read nothing.
 - Until the setup assistant exists (12.6), „Gruppe ändern“ is shown disabled with „Kommt mit dem
   Einrichtungsassistenten.“, and no status dot is shown (the rights check comes with it).
@@ -393,8 +394,8 @@ extension/src/
 - The generated `src/utils/ct-types.d.ts` (33,000 lines) and `src/ct-utils/types/ct-types.ts`; `ct/types.ts` declares
   only the fields we read.
 - `setupCompleted` and the old setup components (`src/setup/*`, `src/components/Setup*`), replaced when the wizard
-  spec is built. Until then, `setup-needed` shows the waiting text to everyone, plus a note for setup-capable people
-  that the new wizard comes with the next version.
+  spec is built. Until then, `setup-needed` and `migration-needed` show the waiting text to everyone, plus a note
+  for setup-capable people that the setup assistant sets the extension up and isn't available yet.
 - `VITE_BASE_URL`, `VITE_USERNAME`, `VITE_PASSWORD` (13.6).
 
 ## 6. Data model

@@ -30,4 +30,5 @@ works with backend `0.1.x`.
 - Update the backend to `0.1.x` as well; its CHANGELOG lists what changes there.
 - The extension stores its data in a new layout. Moving existing data into it, and setting up a new installation, is
   the job of the setup and migration assistant, which isn't part of this version yet: this version is released only
-  together with it. Until the data is migrated, everyone sees „Die Erweiterung wird gerade eingerichtet“.
+  together with it. Until the data is migrated, everyone who can't run the migration sees „Die Erweiterung wird
+  gerade eingerichtet“.

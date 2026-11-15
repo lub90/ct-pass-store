@@ -23,7 +23,7 @@ const TEXT = {
     issuesTitle: 'Ein Teil der gespeicherten Einstellungen ist ungültig und wird nicht verwendet:',
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
-    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, sobald es ihn gibt.',
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     bidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
 };

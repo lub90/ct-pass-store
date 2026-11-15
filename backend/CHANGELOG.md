@@ -25,9 +25,9 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - The login answer has `admin` and `version`.
 - **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the new `access`
   category is written. Writing it is the job of the extension's setup and migration assistant, which isn't built yet;
-  this release waits for it (see above). Without `access`, nobody is an admin and ct-radius logins (machine clients)
-  are refused; the cause is in the backend log (`warning`). `GET /v1/test` (admins only) checks a working
-  installation.
+  this release waits for it and comes out together with the extension version that has it. Without `access`, nobody
+  is an admin and ct-radius logins (machine clients) are refused; the cause is in the backend log (`warning`).
+  `GET /v1/test` (admins only) checks a working installation.
 - Errors are RFC 9457 problem details; clients switch on `type` (see `docs/problems.md`). A wrong primary password is
   `403 invalid-primary-password`, an invalid custom password `400 password-invalid` with `violations`, a missing entry
   `404 entry-not-found`.

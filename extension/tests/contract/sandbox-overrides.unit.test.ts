@@ -1,7 +1,6 @@
 // @vitest-environment node
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
-import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -153,21 +152,20 @@ describe.skipIf(!phpReady)('the backend sandbox override (SandboxChurchTools)', 
     });
 });
 
-/** `sandbox/router.php` on PHP's built-in server with a dummy configuration; the status of an unknown route. */
+/** How long the built-in server may take to start and answer (generous: the unit suite runs many workers at once). */
+const ROUTER_READY_MS = 20_000;
+
+/**
+ * `sandbox/router.php` on PHP's built-in server with a dummy configuration; the status of an unknown route. The
+ * server binds port 0 (a free port the system picks) and names it in its start line, so no other process can take
+ * the port between choosing and binding it.
+ */
 async function routerStatus(extraEnv: Record<string, string>): Promise<number> {
-    const port = await new Promise<number>((resolve, reject) => {
-        const server = net.createServer();
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', () => {
-            const { port: p } = server.address() as net.AddressInfo;
-            server.close(() => resolve(p));
-        });
-    });
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-router-unit-'));
     fs.mkdirSync(path.join(dir, 'cache'));
-    const child = spawn('php', ['-S', `127.0.0.1:${port}`, path.join(import.meta.dirname, 'sandbox/router.php')], {
+    const child = spawn('php', ['-S', '127.0.0.1:0', path.join(import.meta.dirname, 'sandbox/router.php')], {
         cwd: path.join(BACKEND_DIR, 'public'),
-        stdio: 'ignore',
+        stdio: ['ignore', 'ignore', 'pipe'],
         env: {
             PATH: process.env.PATH,
             CPS_SANDBOX_BACKEND_DIR: BACKEND_DIR,
@@ -183,14 +181,32 @@ async function routerStatus(extraEnv: Record<string, string>): Promise<number> {
         },
     });
     try {
-        for (let i = 0; i < 50; i++) {
+        const port = await new Promise<number>((resolve, reject) => {
+            let log = '';
+            const timer = setTimeout(() => reject(new Error(`the router did not start within ${ROUTER_READY_MS} ms: ${log}`)), ROUTER_READY_MS);
+            child.stderr.setEncoding('utf8');
+            child.stderr.on('data', (chunk: string) => {
+                log += chunk;
+                const started = /Development Server \(http:\/\/127\.0\.0\.1:(\d+)\) started/.exec(log);
+                if (started) {
+                    clearTimeout(timer);
+                    resolve(Number(started[1]));
+                }
+            });
+            child.once('exit', (code) => {
+                clearTimeout(timer);
+                reject(new Error(`the router exited (${code}) before it started: ${log}`));
+            });
+        });
+        const deadline = Date.now() + ROUTER_READY_MS;
+        for (;;) {
             try {
                 return (await fetch(`http://127.0.0.1:${port}/v1/no-such-route`)).status;
-            } catch {
+            } catch (e) {
+                if (Date.now() > deadline) throw new Error(`the router did not answer within ${ROUTER_READY_MS} ms`, { cause: e });
                 await new Promise((r) => setTimeout(r, 100));
             }
         }
-        throw new Error('the router did not answer within 5 s');
     } finally {
         child.kill('SIGKILL');
         fs.rmSync(dir, { recursive: true, force: true });
@@ -204,5 +220,5 @@ describe.skipIf(!phpReady)('the backend sandbox router (sandbox/router.php)', ()
         expect(await routerStatus(settings)).toBe(404);
         expect(await routerStatus({ ...settings, CPS_SANDBOX_SETTINGS: '{"passwordLength":64}' })).toBe(500);
         expect(await routerStatus({ ...settings, CPS_SANDBOX_ADMIN_GROUP_ID: '0' })).toBe(500);
-    }, 30_000);
+    }, 4 * 2 * ROUTER_READY_MS);
 });

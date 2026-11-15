@@ -31,11 +31,26 @@ final class MachineClientTest extends TestCase
         self::assertSame($fingerprint, MachineClient::keyFingerprint($key));
     }
 
-    public function testTheSharedCasesCoverTheBase64urlAlphabet(): void
+    public function testTheSharedCasesHoldEachBase64urlSpecialCharacterAndARepeatedOne(): void
     {
-        $prints = implode('', array_column(iterator_to_array(self::cases()), 1));
+        $prints = array_column(iterator_to_array(self::cases()), 1);
 
-        self::assertMatchesRegularExpression('/[-_]/', $prints);
-        self::assertDoesNotMatchRegularExpression('/[+\/=]/', $prints);
+        // A '-' (from '+') and a '_' (from '/') each, and a print with two of one: a mapping that misses '+' or replaces
+        // only the first '/' fails the vectors above.
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => str_contains($p, '-')));
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => str_contains($p, '_')));
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => substr_count($p, '_') >= 2));
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => substr_count($p, '-') >= 2));
+    }
+
+    public function testTheFingerprintUsesOnlyTheBase64urlAlphabetOverManyKeys(): void
+    {
+        $prints = array_map(static fn(int $n): string => MachineClient::keyFingerprint(str_repeat(chr($n), 32)), range(0, 255));
+
+        foreach ($prints as $n => $print) {
+            self::assertMatchesRegularExpression('/^[A-Za-z0-9_-]{16}$/', $print, (string) $n);
+        }
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => str_contains($p, '-')));
+        self::assertNotEmpty(array_filter($prints, static fn(string $p): bool => str_contains($p, '_')));
     }
 }

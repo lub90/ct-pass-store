@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import type { PageTextsInput } from '@/i18n/custom-texts';
-import { AccessSchema, MachineClientSchema, SettingsSchema, withoutTrailingSlashes, type SettingsTexts } from './schemas';
+import { AccessSchema, bareUrl, MachineClientSchema, SettingsSchema, withoutTrailingSlashes, type SettingsTexts } from './schemas';
 
 const key32 = btoa('a'.repeat(32));
 const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key32], permissions: ['entries:read'], createdAt: '2026-01-01' };
@@ -75,5 +75,11 @@ describe('withoutTrailingSlashes (backend spec 3.2: the one normalization of bac
         expect(withoutTrailingSlashes('https://pw.example/ ')).toBe('https://pw.example/ ');
         expect(withoutTrailingSlashes('///')).toBe('');
         expect(withoutTrailingSlashes('')).toBe('');
+    });
+
+    it('bareUrl: the same for text, null for a missing address or one that is no text', () => {
+        expect(bareUrl('https://pw.example//')).toBe('https://pw.example');
+        expect(bareUrl('')).toBe('');
+        for (const x of [undefined, null, 5, ['https://pw.example'], { url: 'x' }]) expect(bareUrl(x)).toBeNull();
     });
 });

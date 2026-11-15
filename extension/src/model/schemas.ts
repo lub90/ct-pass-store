@@ -12,6 +12,9 @@ export function withoutTrailingSlashes(url: string): string {
     return url.replace(/\/+$/, '');
 }
 
+/** `withoutTrailingSlashes` for an address that may be missing or not text: `null` then (comparisons of stored values). */
+export const bareUrl = (url: unknown): string | null => (typeof url === 'string' ? withoutTrailingSlashes(url) : null);
+
 /**
  * `https://` (compared case-sensitively), a host, no credentials (not even empty ones), no query, no fragment, no
  * whitespace, control characters or backslashes — the same as the backend's `parse_url` check (backend spec 3.2).

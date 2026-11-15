@@ -676,10 +676,10 @@ and both fingerprint tests, `src/admin/duplicates*`, `src/store/repository*`, `s
 `backend/src/Infrastructure/Logging/EscapeControlCharacters.php` tests, `FileMachineClientUsage` tests,
 `.github/workflows/backend.yml`, docs, `TODO.md`, `src/i18n/*`.
 
-- [ ] Browser suite green (isolated name in the replace description); order-independent wrongPrimaryPasswordCases test;
+- [x] Browser suite green (isolated name in the replace description); order-independent wrongPrimaryPasswordCases test;
   key-fingerprint vectors with `-` and two `_`, each character required separately on both sides.
-- [ ] Test gaps M1–M12 of the point-B round-2 test report; docs/text minors from the Task 26 review and the final
+- [x] Test gaps M1–M12 of the point-B round-2 test report; docs/text minors from the Task 26 review and the final
   review (LOG_LEVEL info, „nächste Version“ wording, spec 3.2 markers, stale TODOs, „(Host: …)“, one CI matrix leg,
   `bare()` helper).
-- [ ] `npm run check`, `npm run test:browser -- --project='chromium-*'`, `composer check`.
-- [ ] Commit: `"Point-B round-2 fixes: green browser suite, stronger fixtures, remaining gaps"`.
+- [x] `npm run check`, `npm run test:browser -- --project='chromium-*'`, `composer check`.
+- [x] Commit: `"Point-B round-2 fixes: green browser suite, stronger fixtures, remaining gaps"`.
