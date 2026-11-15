@@ -50,6 +50,21 @@ interface ChurchToolsClient
     public function globalPermissions(Credential $user): Permissions;
 
     /**
+     * `GET /persons/{id}/groups` as the given user (their own OAuth token): the IDs of the groups in which the
+     * person's membership status is `active`, over all pages. Other statuses (`waiting`, `requested`, `to_delete`)
+     * are left out. The group ID is `group.domainIdentifier`, a string in ChurchTools ({@see GroupId}).
+     *
+     * @return list<int> distinct group IDs
+     * @throws Exception\NotAuthenticatedException for `401`
+     * @throws Exception\NotPermittedException for `403`
+     * @throws Exception\NotFoundException for `404`
+     * @throws Exception\RateLimitedException for `429`
+     * @throws Exception\UnavailableException for `5xx` or no connection
+     * @throws Exception\InvalidResponseException if the answer isn't well-formed
+     */
+    public function activeGroupIds(Credential $user, int $personId): array;
+
+    /**
      * `GET /permissions/global` as the service user (for the self-check).
      */
     public function serviceUserGlobalPermissions(): Permissions;

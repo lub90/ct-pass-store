@@ -34,6 +34,8 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
     public const DEFAULT_TIMEOUT_SECONDS = 5.0;
     public const MIN_RETRY_AFTER_SECONDS = 60;
 
+    private const GROUPS_PAGE_SIZE = 100;
+    private const MAX_GROUP_PAGES = 100;
     private const MODULE_KEY_PATTERN = '/^[a-z0-9-]{1,64}\z/';
 
     private readonly ClientInterface $http;
@@ -133,6 +135,43 @@ final class GuzzleChurchToolsClient implements ChurchToolsClient
     public function globalPermissions(Credential $user): Permissions
     {
         return new Permissions($this->expectObject($this->data($this->send('GET', 'permissions/global', $user, false)), 'GET permissions/global'));
+    }
+
+    public function activeGroupIds(Credential $user, int $personId): array
+    {
+        $ids = [];
+        $lastPage = 1;
+        for ($page = 1; $page <= $lastPage; $page++) {
+            $path = sprintf('persons/%d/groups?page=%d&limit=%d', $this->positive($personId), $page, self::GROUPS_PAGE_SIZE);
+            $what = 'GET persons/{id}/groups';
+            $result = $this->send('GET', $path, $user, false);
+            $body = $this->decode($result['response'], $what);
+
+            foreach ($this->expectList($body['data'] ?? null, $what) as $membership) {
+                $status = $membership['groupMemberStatus'] ?? null;
+                if (!is_string($status)) {
+                    throw new InvalidResponseException($what . ': a membership has no groupMemberStatus.');
+                }
+                if ($status !== 'active') {
+                    continue;
+                }
+                $group = $membership['group'] ?? null;
+                $id = is_array($group) ? GroupId::parse($group['domainIdentifier'] ?? null) : null;
+                if ($id === null) {
+                    throw new InvalidResponseException($what . ': an active membership has no valid group ID.');
+                }
+                $ids[$id] = $id;
+            }
+
+            // Without pagination info the answer is one page.
+            $last = $body['meta']['pagination']['lastPage'] ?? 1;
+            if (!is_int($last) || $last < 1 || $last > self::MAX_GROUP_PAGES) {
+                throw new InvalidResponseException($what . ': meta.pagination.lastPage is invalid.');
+            }
+            $lastPage = $last;
+        }
+
+        return array_values($ids);
     }
 
     public function serviceUserGlobalPermissions(): Permissions

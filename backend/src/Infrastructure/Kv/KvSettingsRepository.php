@@ -8,7 +8,9 @@ use CtPassStore\Application\Exception\ConfigurationException;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\Port\SettingsRepository;
 use CtPassStore\Domain\Settings;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Crypto\RsaPublicKey;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
@@ -39,6 +41,11 @@ final class KvSettingsRepository implements SettingsRepository
 
     private const CACHE_SETTINGS = 'settings';
 
+    private const CACHE_ACCESS = 'access';
+
+    /** The remembered outcome of a missing or unusable access value (the finding), so it isn't asked for on every request. */
+    private const CACHE_ACCESS_MISSING = 'access-missing';
+
     private const CACHE_PUBLIC_KEY = 'publicKey';
 
     private ?Settings $settings = null;
@@ -47,6 +54,9 @@ final class KvSettingsRepository implements SettingsRepository
 
     /** @var list<string> */
     private array $findings = [];
+
+    /** Whether access is missing or unreadable: access() logs that finding itself, once when it's remembered. */
+    private bool $accessUnusable = false;
 
     public function __construct(
         private readonly ExtensionData $extension,
@@ -64,24 +74,65 @@ final class KvSettingsRepository implements SettingsRepository
         $raw = $this->cachedValue(self::CACHE_SETTINGS, KvSchema::SETTINGS_CATEGORY, 'The extension settings', 'Save the settings in the extension.');
 
         $parsed = SettingsParser::parse($raw);
-        // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why.
-        foreach ($parsed->findings as $finding) {
+        $access = $this->access();
+        $findings = [...$parsed->findings, ...$access->findings];
+        // A disabled client only sees 401 invalid-token, like an unknown one; the log tells the admin why. A missing or
+        // unreadable access is logged once per TTL, when it's remembered, not on every request.
+        foreach ($this->accessUnusable ? $parsed->findings : $findings as $finding) {
             $this->logger->warning($finding);
         }
-        $this->findings = $parsed->findings;
+        $this->findings = $findings;
 
-        return $this->settings = $parsed->settings;
+        return $this->settings = $parsed->settings->withAccess($access->adminGroupId, $access->machineClients);
     }
 
     /**
-     * Forgets everything this repository remembers, in memory and in the cache (settings, public key and remembered
+     * The admin group and machine clients. A missing or unusable access category or value is a finding, never an
+     * exception: nobody is an admin and no machine client is enabled, but users can log in. That outcome is cached
+     * like a valid value, so the normal state before the setup isn't asked for on every request. So is a service user
+     * that may not read the category (rejected, or 404 on its values): a partial rights grant never makes the backend
+     * unusable for users. A failing
+     * ChurchTools (unavailable, rate limiting) still throws, with the same failure memory as for the settings.
+     */
+    private function access(): ParsedAccess
+    {
+        $missing = $this->cache?->get(self::CACHE_ACCESS_MISSING);
+        if ($missing !== null && is_string($missing['finding'] ?? null)) {
+            $this->accessUnusable = true;
+
+            return new ParsedAccess(null, [], [$missing['finding']]);
+        }
+
+        try {
+            return AccessParser::parseJson($this->cachedJson(self::CACHE_ACCESS, KvSchema::ACCESS_CATEGORY, 'The access settings', 'Run the extension setup.'));
+        } catch (ConfigurationException $e) {
+            return $this->rememberNoAccess($e->getMessage() . ' Nobody is an admin and no machine client is enabled.');
+        } catch (ServiceCredentialRejectedException|NotFoundException) {
+            return $this->rememberNoAccess("The service user can't read the category access; grant it view custom category and view custom data on access. Nobody is an admin and no machine client is enabled.");
+        }
+    }
+
+    private function rememberNoAccess(string $finding): ParsedAccess
+    {
+        $this->cache?->put(self::CACHE_ACCESS_MISSING, ['finding' => $finding], self::SETTINGS_TTL);
+        $this->logger->warning($finding);
+        $this->accessUnusable = true;
+
+        return new ParsedAccess(null, [], [$finding]);
+    }
+
+    /**
+     * Forgets everything this repository remembers, in memory and in the cache (settings, access, public key and remembered
      * upstream failures), so the next call asks ChurchTools. For the self-check, so a fix shows at once (spec 4.8).
      */
     public function refresh(): void
     {
         $this->settings = null;
         $this->findings = [];
+        $this->accessUnusable = false;
         $this->forget(self::CACHE_SETTINGS);
+        $this->forget(self::CACHE_ACCESS);
+        $this->cache?->forget(self::CACHE_ACCESS_MISSING);
         $this->refreshPublicKey();
     }
 
@@ -144,11 +195,40 @@ final class KvSettingsRepository implements SettingsRepository
             return $cached;
         }
 
+        /** @var array<string, mixed> $decoded */
+        $decoded = json_decode($this->loadValue($cacheName, $category, $what, $fix), true);
+        $this->cache?->put($cacheName, $decoded, self::SETTINGS_TTL);
+
+        return $decoded;
+    }
+
+    /**
+     * The JSON text of the only value in a category (a JSON object), from the cache if it holds a valid entry. The
+     * text is cached as it is, so the difference between objects and lists survives (`{"0": …}` is no list).
+     */
+    private function cachedJson(string $cacheName, string $category, string $what, string $fix): string
+    {
+        $cached = $this->cache?->get($cacheName);
+        if ($cached !== null && is_string($cached['json'] ?? null) && json_decode($cached['json'], false) instanceof \stdClass) {
+            return $cached['json'];
+        }
+
+        $json = $this->loadValue($cacheName, $category, $what, $fix);
+        $this->cache?->put($cacheName, ['json' => $json], self::SETTINGS_TTL);
+
+        return $json;
+    }
+
+    /**
+     * Reads the value from ChurchTools, with the failure memory for outages and rate limits.
+     */
+    private function loadValue(string $cacheName, string $category, string $what, string $fix): string
+    {
         $failureName = $cacheName . '-failure';
         $this->rethrowRememberedFailure($failureName);
 
         try {
-            $raw = $this->singleValue($category, $what, $fix);
+            $json = $this->singleValue($category, $what, $fix);
         } catch (RateLimitedException $e) {
             $this->rememberFailure($failureName, 'rateLimited', max(self::FAILURE_MIN_SECONDS, $e->retryAfterSeconds()));
             throw $e;
@@ -157,9 +237,8 @@ final class KvSettingsRepository implements SettingsRepository
             throw $e;
         }
         $this->cache?->forget($failureName);
-        $this->cache?->put($cacheName, $raw, self::SETTINGS_TTL);
 
-        return $raw;
+        return $json;
     }
 
     private function rememberFailure(string $name, string $kind, int $seconds): void
@@ -183,11 +262,9 @@ final class KvSettingsRepository implements SettingsRepository
     }
 
     /**
-     * The decoded JSON object of the only value in a category.
-     *
-     * @return array<string, mixed>
+     * The JSON text of the only value in a category, checked to be a JSON object.
      */
-    private function singleValue(string $category, string $what, string $fix): array
+    private function singleValue(string $category, string $what, string $fix): string
     {
         $values = $this->extension->values($category);
         if (count($values) !== 1) {
@@ -195,11 +272,10 @@ final class KvSettingsRepository implements SettingsRepository
         }
 
         $value = $values[0]['value'] ?? null;
-        $decoded = is_string($value) ? json_decode($value, true) : null;
-        if (!is_array($decoded) || ($decoded !== [] && array_is_list($decoded))) {
+        if (!is_string($value) || !(json_decode($value, false) instanceof \stdClass)) {
             throw new ConfigurationException("$what aren't a valid JSON object. $fix");
         }
 
-        return $decoded;
+        return $value;
     }
 }

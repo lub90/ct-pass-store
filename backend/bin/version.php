@@ -33,7 +33,7 @@ function git(array $arguments, string $directory): ?array
 }
 
 $backendDir = dirname(__DIR__);
-$tag = git(['describe', '--exact-match', '--tags', 'HEAD'], $backendDir);
+$tag = git(['describe', '--exact-match', '--tags', '--match', 'backend-v*', 'HEAD'], $backendDir);
 $sha = git(['rev-parse', '--short=7', 'HEAD'], $backendDir);
 $status = git(['status', '--porcelain', '--untracked-files=no'], $backendDir);
 

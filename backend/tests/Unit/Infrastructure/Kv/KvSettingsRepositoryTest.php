@@ -49,6 +49,7 @@ final class KvSettingsRepositoryTest extends TestCase
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
             KvSchema::PASSWORD_CATEGORY,
+            KvSchema::ACCESS_CATEGORY,
         ]);
     }
 
@@ -98,10 +99,15 @@ final class KvSettingsRepositoryTest extends TestCase
 
     /**
      * @param array<string, mixed>|string $settings a JSON object, or a raw value
+     * @param array<string, mixed>|string|false|null $access the value of the access category; null seeds a valid one, false none
      */
-    private function settings(array|string $settings): KvSettingsRepository
+    private function settings(array|string $settings, array|string|false|null $access = null): KvSettingsRepository
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], is_string($settings) ? $settings : json_encode($settings, JSON_THROW_ON_ERROR));
+        $access ??= self::validAccess();
+        if ($access !== false) {
+            $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], is_string($access) ? $access : json_encode($access, JSON_THROW_ON_ERROR));
+        }
 
         return $this->repository = new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]));
     }
@@ -122,8 +128,8 @@ final class KvSettingsRepositoryTest extends TestCase
     {
         $settings = $this->settings(['readAccessUsers' => 'not even a list'] + self::validSettings())->settings();
 
-        // No error, and the list grants nothing: only adminUsers carries rights.
-        self::assertSame([7, 8], $settings->adminUsers);
+        // No error, and the list grants nothing.
+        self::assertSame(16, $settings->passwordLength);
     }
 
     public function testValidSettingsAreTyped(): void
@@ -133,17 +139,15 @@ final class KvSettingsRepositoryTest extends TestCase
         self::assertTrue($settings->settings()->requirePrimaryPassword);
         self::assertFalse($settings->settings()->allowCustomPasswords);
         self::assertSame(16, $settings->settings()->passwordLength);
-        self::assertSame([7, 8], $settings->settings()->adminUsers);
         self::assertSame('https://backend.example.org/ctpassstore', $settings->settings()->backendUrl, 'A trailing slash is removed.');
     }
 
     public function testMissingOptionalListsAreEmpty(): void
     {
         $raw = self::validSettings();
-        unset($raw['adminUsers'], $raw['readAccessUsers'], $raw['backendUrl']);
+        unset($raw['readAccessUsers'], $raw['backendUrl']);
         $settings = $this->settings($raw);
 
-        self::assertSame([], $settings->settings()->adminUsers);
         self::assertNull($settings->settings()->backendUrl);
     }
 
@@ -154,7 +158,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $settings->settings();
         $settings->settings();
 
-        self::assertSame(1, $this->fake->countCalls(['getValues']));
+        self::assertSame(2, $this->fake->countCalls(['getValues']), 'The settings and the access value, once each.');
     }
 
     /**
@@ -186,14 +190,6 @@ final class KvSettingsRepositoryTest extends TestCase
         yield 'passwordLength string' => ['passwordLength', '12'];
         yield 'passwordLength huge' => ['passwordLength', 1_000_000_000];
         yield 'passwordLength missing' => ['passwordLength', null];
-        yield 'adminUsers with a string' => ['adminUsers', ['1; drop']];
-        yield 'adminUsers with a numeric string' => ['adminUsers', ['7']];
-        yield 'adminUsers with negative' => ['adminUsers', [-1]];
-        yield 'adminUsers with 0' => ['adminUsers', [0]];
-        yield 'adminUsers with float' => ['adminUsers', [1.5]];
-        yield 'adminUsers with null' => ['adminUsers', [null]];
-        yield 'adminUsers not a list' => ['adminUsers', ['a' => 1]];
-        yield 'adminUsers a number' => ['adminUsers', 7];
         yield 'requirePassword as string' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 'false'];
         yield 'requirePassword as 0' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 0];
         yield 'requirePassword as 1' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 1];
@@ -408,11 +404,102 @@ final class KvSettingsRepositoryTest extends TestCase
     }
 
     /**
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private static function validAccess(array $overrides = []): array
+    {
+        return $overrides + [KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]]];
+    }
+
+    /**
      * @param mixed $machineClients
      */
     private function machineSettings(mixed $machineClients): \CtPassStore\Domain\Settings
     {
-        return $this->settings(['machineClients' => $machineClients] + self::validSettings())->settings();
+        return $this->settings(self::validSettings(), self::validAccess([KvSchema::ACCESS_MACHINE_CLIENTS => $machineClients]))->settings();
+    }
+
+    // ---------------------------------------------------------------- access (AG-04, AG-09)
+
+    /**
+     * AG-13: every case of the shared fixture through the real path: KV value, signed cache file and parser. The
+     * second repository reads the cache, which has to keep JSON objects and lists apart.
+     */
+    #[DataProvider('fixtureCases')]
+    public function testFixtureCaseThroughTheCache(\stdClass $case): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], AccessParserTest::accessJson($case));
+
+        $enabled = [
+            array_map(strval(...), array_keys($this->cachedRepository()->settings()->machineClients)),
+            array_map(strval(...), array_keys($this->cachedRepository()->settings()->machineClients)),
+        ];
+
+        $expected = property_exists($case, 'enabled') ? $case->enabled : ($case->valid ? [$case->client->id] : []);
+        self::assertSame([$expected, $expected], $enabled);
+    }
+
+    /**
+     * @return iterable<string, array{\stdClass}>
+     */
+    public static function fixtureCases(): iterable
+    {
+        return AccessParserTest::fixtureCases();
+    }
+
+    public function testTheAdminGroupAndClientsComeFromAccess(): void
+    {
+        $settings = $this->settings(self::validSettings(), [
+            'schema' => 2,
+            'revision' => 4,
+            KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12, 'createdBySetup' => true], 'users' => [KvSchema::GROUP_ID => 11]],
+            KvSchema::ACCESS_MACHINE_CLIENTS => [self::client()],
+        ])->settings();
+
+        self::assertSame(12, $settings->adminGroupId);
+        self::assertSame(['ct-radius'], array_keys($settings->machineClients));
+        self::assertSame([], $this->repository->findings());
+    }
+
+    public function testAMachineClientsKeyInSettingsIsIgnored(): void
+    {
+        $settings = $this->settings(['machineClients' => [self::client()]] + self::validSettings(), [KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]]])->settings();
+
+        self::assertSame([], $settings->machineClients);
+    }
+
+    public function testAMissingAccessCategoryIsAFindingNotAnError(): void
+    {
+        $fake = new FakeChurchToolsClient();
+        $ids = $fake->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
+        $fake->seedValue($ids[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+        $repository = new KvSettingsRepository(new ExtensionData($fake), new \Monolog\Logger('test', [$this->log]));
+
+        $settings = $repository->settings();
+
+        self::assertNull($settings->adminGroupId);
+        self::assertSame([], $settings->machineClients);
+        self::assertSame(16, $settings->passwordLength, 'Users are not affected.');
+        self::assertStringContainsString('access', $repository->findings()[0]);
+        self::assertTrue($this->log->hasWarningThatContains('access'));
+    }
+
+    public function testAMissingAccessValueIsAFindingNotAnError(): void
+    {
+        $missing = $this->settings(self::validSettings(), false);
+        self::assertNull($missing->settings()->adminGroupId);
+        self::assertStringContainsString('access', $missing->findings()[0]);
+    }
+
+    public function testABrokenAccessValueIsAFindingNotAnError(): void
+    {
+        $broken = $this->settings(self::validSettings(), 'not json');
+
+        self::assertNull($broken->settings()->adminGroupId);
+        self::assertStringContainsString('access', $broken->findings()[0]);
+        self::assertSame(16, $broken->settings()->passwordLength);
     }
 
     public function testMissingMachineClientsMeansNone(): void
@@ -565,7 +652,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $this->clock->advance(KvSettingsRepository::SETTINGS_TTL - 1);
         $second = $this->cachedRepository()->settings();
 
-        self::assertSame([7, 8], $first->adminUsers);
+        self::assertSame(16, $first->passwordLength);
         self::assertEquals($first, $second);
         self::assertSame(1, $this->settingsReads());
     }
@@ -580,10 +667,10 @@ final class KvSettingsRepositoryTest extends TestCase
         $this->cachedRepository()->settings();
 
         $this->fake->clearValues($category);
-        $this->fake->seedValue($category, json_encode(['adminUsers' => [42]] + self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($category, json_encode(['passwordLength' => 42] + self::validSettings(), JSON_THROW_ON_ERROR));
         $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
 
-        self::assertSame([42], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(42, $this->cachedRepository()->settings()->passwordLength);
         self::assertSame(2, $this->settingsReads());
     }
 
@@ -606,6 +693,7 @@ final class KvSettingsRepositoryTest extends TestCase
     public function testFindingsAreLoggedOnEveryRequestFromTheCache(): void
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(['backendUrl' => 'http://x.example'] + self::validSettings(), JSON_THROW_ON_ERROR));
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], json_encode(self::validAccess(), JSON_THROW_ON_ERROR));
 
         $first = $this->cachedRepository();
         $second = $this->cachedRepository();
@@ -622,13 +710,13 @@ final class KvSettingsRepositoryTest extends TestCase
     public function testATamperedSettingsCacheIsReloadedFromChurchTools(): void
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
-        $this->cache()->put('settings', ['adminUsers' => [99]] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
+        $this->cache()->put('settings', ['passwordLength' => 64] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
         $file = $this->cacheDir . '/cache-' . hash('sha256', 'settings') . '.json';
         $record = json_decode((string) file_get_contents($file), true, 512, JSON_THROW_ON_ERROR);
         $record['mac'] = str_repeat('0', strlen((string) $record['mac']));
         file_put_contents($file, json_encode($record, JSON_THROW_ON_ERROR));
 
-        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(16, $this->cachedRepository()->settings()->passwordLength);
         self::assertSame(1, $this->settingsReads());
         self::assertTrue($this->log->hasErrorThatContains('integrity check'));
     }
@@ -639,9 +727,9 @@ final class KvSettingsRepositoryTest extends TestCase
     public function testAnOldKeySettingsCacheIsReloadedFromChurchTools(): void
     {
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
-        $this->cache('the-old-secret-before-the-rotation-32b')->put('settings', ['adminUsers' => [99]] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
+        $this->cache('the-old-secret-before-the-rotation-32b')->put('settings', ['passwordLength' => 64] + self::validSettings(), KvSettingsRepository::SETTINGS_TTL);
 
-        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(16, $this->cachedRepository()->settings()->passwordLength);
         self::assertSame(1, $this->settingsReads());
         self::assertFalse($this->log->hasErrorRecords());
     }
@@ -655,7 +743,7 @@ final class KvSettingsRepositoryTest extends TestCase
         mkdir($this->cacheDir, 0o700);
         file_put_contents($this->cacheDir . '/cache-' . hash('sha256', 'settings') . '.json', '{not json');
 
-        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(16, $this->cachedRepository()->settings()->passwordLength);
         self::assertSame(1, $this->settingsReads());
     }
 
@@ -669,7 +757,7 @@ final class KvSettingsRepositoryTest extends TestCase
         try {
             $cache = new SignedFileCache($file . '/cache', new RecordSigner(self::CACHE_SECRET, SignedFileCache::PURPOSE), $this->clock, new \Monolog\Logger('test', [$this->log]));
             foreach ([1, 2] as $request) {
-                self::assertSame([7, 8], (new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $cache))->settings()->adminUsers);
+                self::assertSame(16, (new KvSettingsRepository(new ExtensionData($this->fake), new \Monolog\Logger('test', [$this->log]), $cache))->settings()->passwordLength);
             }
         } finally {
             @unlink($file);
@@ -712,7 +800,7 @@ final class KvSettingsRepositoryTest extends TestCase
         $this->fake->clearValues($category);
         $this->fake->seedValue($category, json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
 
-        self::assertSame([7, 8], $this->cachedRepository()->settings()->adminUsers);
+        self::assertSame(16, $this->cachedRepository()->settings()->passwordLength);
     }
 
     // ---------------------------------------------------------------- remembered ChurchTools failures (spec 6.2)
@@ -802,5 +890,125 @@ final class KvSettingsRepositoryTest extends TestCase
             }
         }
         self::assertSame(2, $this->settingsReads());
+    }
+
+    private function accessReads(): int
+    {
+        return count(array_filter(
+            $this->fake->calls(),
+            fn(array $call): bool => $call['method'] === 'getValues' && $call['args'][1] === $this->categories[KvSchema::ACCESS_CATEGORY],
+        ));
+    }
+
+    private function seededSettingsOnly(): void
+    {
+        $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode(self::validSettings(), JSON_THROW_ON_ERROR));
+    }
+
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function unreadableAccess(): iterable
+    {
+        yield '403 on the values' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException('403')];
+        yield '404 on the values' => [new \CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException('404')];
+    }
+
+    /**
+     * The service user may read the settings but not access: a finding like a missing category, remembered, logged once.
+     */
+    #[DataProvider('unreadableAccess')]
+    public function testAnUnreadableAccessIsAFindingRememberedAndLoggedOnce(\Throwable $failure): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], $failure);
+
+        for ($i = 0; $i < 2; $i++) {
+            $repository = $this->cachedRepository();
+            $settings = $repository->settings();
+            self::assertNull($settings->adminGroupId);
+            self::assertSame([], $settings->machineClients);
+            self::assertSame(16, $settings->passwordLength);
+            self::assertStringContainsString("can't read the category access; grant it view custom category and view custom data on access.", $repository->findings()[0]);
+        }
+
+        self::assertSame(1, $this->accessReads(), 'Remembered like a missing category.');
+        $warnings = array_filter($this->log->getRecords(), static fn(array $r): bool => $r['level_name'] === 'WARNING');
+        self::assertCount(1, $warnings, 'Logged when remembered, not on the cached read.');
+    }
+
+    public function testAMissingAccessValueIsAskedForOnceWithinTheTtl(): void
+    {
+        $this->seededSettingsOnly();
+
+        for ($i = 0; $i < 3; $i++) {
+            $repository = $this->cachedRepository();
+            self::assertNull($repository->settings()->adminGroupId);
+            self::assertStringContainsString('access', $repository->findings()[0]);
+        }
+        self::assertSame(1, $this->accessReads());
+        self::assertSame(1, $this->settingsReads());
+
+        $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
+        $this->cachedRepository()->settings();
+        self::assertSame(2, $this->accessReads(), 'After the TTL ChurchTools is asked again.');
+    }
+
+    public function testRefreshMakesTheNextReadAskForAMissingAccessAgain(): void
+    {
+        $this->seededSettingsOnly();
+        $repository = $this->cachedRepository();
+        $repository->settings();
+        self::assertSame(1, $this->accessReads());
+
+        $this->fake->seedValue($this->categories[KvSchema::ACCESS_CATEGORY], json_encode(self::validAccess(), JSON_THROW_ON_ERROR));
+        $repository->refresh();
+
+        self::assertSame(12, $repository->settings()->adminGroupId);
+        self::assertSame(2, $this->accessReads());
+    }
+
+    public function testAnOutageOnAccessPropagatesAndIsRemembered(): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException('503'));
+
+        foreach ([0, 9] as $later) {
+            $this->clock->advance($later);
+            try {
+                $this->cachedRepository()->settings();
+                self::fail('expected the outage to propagate');
+            } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException) {
+            }
+        }
+        self::assertSame(1, $this->accessReads(), 'The failed read; the second failure is remembered.');
+        self::assertSame(1, $this->settingsReads(), 'The settings stayed cached.');
+
+        $this->clock->advance(2);
+        self::assertNull($this->cachedRepository()->settings()->adminGroupId);
+        self::assertSame(2, $this->accessReads(), 'After the memory ran out ChurchTools is asked again.');
+    }
+
+    public function testARateLimitOnAccessPropagatesAndIsRemembered(): void
+    {
+        $this->seededSettingsOnly();
+        $this->fake->failNextRead($this->categories[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException('429', 60));
+
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('expected the rate limit to propagate');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException) {
+        }
+        $reads = $this->accessReads();
+
+        $this->clock->advance(20);
+        try {
+            $this->cachedRepository()->settings();
+            self::fail('expected the remembered rate limit');
+        } catch (\CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException $e) {
+            self::assertGreaterThanOrEqual(60, $e->retryAfterSeconds());
+        }
+        self::assertSame($reads, $this->accessReads(), 'ChurchTools isn\'t asked within the window.');
+        self::assertSame(1, $this->settingsReads(), 'The settings stayed cached.');
     }
 }

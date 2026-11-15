@@ -6,6 +6,7 @@ namespace CtPassStore\Tests\Api;
 
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
 
@@ -64,7 +65,7 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('0.1.0+test', $body['version']);
         self::assertIsString($body['summary']);
         self::assertSame(
-            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Admin users', 'Web cron token'],
+            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'access', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Web cron token'],
             array_keys($this->checks($response)),
         );
         foreach ($this->checks($response) as $name => $test) {
@@ -75,6 +76,17 @@ final class SelfCheckApiTest extends ApiTestCase
     public function testNormalUserGets403(): void
     {
         $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/test', self::USER));
+    }
+
+    /** AG-06 */
+    public function testTheAdminGateReadsTheTokenClaim(): void
+    {
+        $asAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::USER, admin: true)];
+        $notAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::ADMIN, admin: false)];
+
+        self::assertSame(200, $this->request('GET', '/v1/test', headers: $asAdmin)->getStatusCode(), 'Any person with admin: true.');
+        // Naming the person in an old adminUsers setting would not count either (AG-06); only the claim does.
+        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/test', headers: $notAdmin));
     }
 
     /** TS-05 */
@@ -187,7 +199,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-02: a disabled machine client is reported by its id. */
     public function testDisabledMachineClientIsReportedByClientId(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => ['entries:read']]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01']]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
@@ -198,7 +210,7 @@ final class SelfCheckApiTest extends ApiTestCase
     /** TS-02: an unknown permission is reported by client id and value. */
     public function testUnknownPermissionIsReportedByClientAndValue(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:write']]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:write'], 'createdAt' => '2026-11-01']]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
@@ -211,13 +223,13 @@ final class SelfCheckApiTest extends ApiTestCase
     /** The checks bypass the cache, so a fix shows at once (controller ruling). */
     public function testSettingsFixedInChurchToolsShowWithoutWaitingForTheCache(): void
     {
-        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => []]]]);
+        $this->setSettings(['machineClients' => [['id' => 'radius-door', 'name' => 'Door', 'publicKeys' => [], 'permissions' => [], 'createdAt' => '2026-11-01']]]);
         $this->assertOnlyFails('Settings', $this->request('GET', '/v1/test', self::ADMIN));
 
         // Changed in ChurchTools only; the cache entries of the first request are still there.
-        $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
+        $categoryId = $this->categoryIds[KvSchema::ACCESS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
-        $this->churchTools->seedValue($categoryId, json_encode(['adminUsers' => [self::ADMIN], 'backendUrl' => self::BACKEND_URL, 'passwordLength' => 12, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true, 'machineClients' => []], JSON_THROW_ON_ERROR));
+        $this->churchTools->seedValue($categoryId, json_encode([KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12]], KvSchema::ACCESS_MACHINE_CLIENTS => []], JSON_THROW_ON_ERROR));
 
         self::assertSame(200, $this->request('GET', '/v1/test', self::ADMIN)->getStatusCode());
     }
@@ -304,56 +316,48 @@ final class SelfCheckApiTest extends ApiTestCase
         $this->assertOnlyFails('Service user rights', $this->request('GET', '/v1/test', self::ADMIN));
     }
 
-    /** TS-09 */
-    public function testGoneAdminIsReportedByIdOnly(): void
+    /** AG-08 */
+    public function testAccessCheckIsOkAndNamesTheAdminGroup(): void
     {
-        $this->setSettings(['adminUsers' => [self::ADMIN, 56]]);
-        $this->churchTools->addPerson(56, archived: true);
+        self::assertSame('The service user can read access; the admin group is 12.', $this->checks($this->request('GET', '/v1/test', self::ADMIN))['access']['message']);
+    }
+
+    /**
+     * AG-08: the measured case is a 403 on the values (category readable, values not); a 404 is the same finding.
+     */
+    #[\PHPUnit\Framework\Attributes\DataProvider('unreadableAccess')]
+    public function testUnreadableAccessFails(\Throwable $failure): void
+    {
+        // The Settings check reads access first, then this check.
+        foreach ([1, 2] as $read) {
+            $this->churchTools->failNextRead($this->categoryIds[KvSchema::ACCESS_CATEGORY], $failure);
+        }
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
-        $this->assertOnlyFails('Admin users', $response);
-        self::assertSame('adminUsers contains person 56, who is deleted or archived; remove them in the extension settings.', $this->checks($response)['Admin users']['message']);
+        $this->assertFails('access', $response);
+        self::assertStringContainsString("can't read the category access", $this->checks($response)['access']['message']);
     }
 
-    /** TS-09 */
-    public function testSeveralGoneAdminsAreListed(): void
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function unreadableAccess(): iterable
     {
-        $this->setSettings(['adminUsers' => [self::ADMIN, 56, 57]]);
-        $this->churchTools->addPerson(56, archived: true);
+        yield '403 on the values' => [new ServiceCredentialRejectedException('GET customdatavalues: ChurchTools answered 403.')];
+        yield '404 on the values' => [new NotFoundException('GET customdatavalues: ChurchTools answered 404.')];
+    }
+
+    /** AG-08 */
+    public function testAnInvalidGroupIdFails(): void
+    {
+        $this->setAccess([KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 0]]]);
 
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
-        $this->assertOnlyFails('Admin users', $response);
-        self::assertSame('adminUsers contains persons 56, 57, who are deleted or archived; remove them in the extension settings.', $this->checks($response)['Admin users']['message']);
-    }
-
-    /** TS-09 */
-    public function testAdminUsersOkMessage(): void
-    {
-        self::assertSame('Every person in adminUsers exists.', $this->checks($this->request('GET', '/v1/test', self::ADMIN))['Admin users']['message']);
-    }
-
-    /** TS-10 */
-    public function testAdminLookupFailureFailsGenericallyAndLogsClassAndMessage(): void
-    {
-        $this->churchTools->failNext('activePersonIds', new UnavailableException('GET persons?ids[]=1&limit=1: ChurchTools answered 503.'));
-
-        $response = $this->request('GET', '/v1/test', self::ADMIN);
-
-        $this->assertOnlyFails('Admin users', $response);
-        self::assertSame("The persons in adminUsers can't be checked right now; see the log.", $this->checks($response)['Admin users']['message']);
-        self::assertStringNotContainsString('answered 503', (string) $response->getBody());
-
-        $errors = array_values(array_filter($this->log->getRecords(), static fn($r): bool => $r['level_name'] === 'ERROR'));
-        self::assertCount(1, $errors);
-        self::assertSame(UnavailableException::class, $errors[0]['context']['exception']);
-        self::assertSame('The admin users could not be checked: GET persons?ids[]=1&limit=1: ChurchTools answered 503.', $errors[0]['message']);
-        // The log never gets a token: not the service user's, not the caller's.
-        $logged = json_encode($this->log->getRecords(), JSON_THROW_ON_ERROR);
-        self::assertStringNotContainsString('service-token', $logged);
-        self::assertStringNotContainsString('Bearer', $logged);
-        self::assertStringNotContainsString('Login ', $logged);
+        // The Settings check reports the same finding for the settings and access as a whole.
+        $this->assertFails('access', $response);
+        self::assertStringContainsString('groups.admins.groupId is missing or not a positive integer', $this->checks($response)['access']['message']);
     }
 
     /** TS-11 */

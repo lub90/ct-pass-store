@@ -16,8 +16,17 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - All routes live under `/v1/`; the old paths `/entries/{id}` and `/test` answer `404 not-found`.
 - Users log in once with ChurchTools OAuth (`POST /v1/auth/token`) and get a 15-minute backend token. The backend no
   longer receives the permanent ChurchTools login token and makes no ChurchTools call per request.
-- Machine clients (ct-radius) sign an Ed25519 JWT for every request and are registered in `machineClients`;
+- Machine clients (ct-radius) sign an Ed25519 JWT for every request and are registered in the `access` category;
   `readAccessUsers` is removed.
+- Admins come from a ChurchTools group: the members of the admin group named in `access` are admins, the backend signs
+  the role into the user token (`admin`) when it issues it, and `adminUsers` in `settings` is no longer read.
+- The `access` category (`groups.admins.groupId`, `machineClients`) is new; the service user needs `view custom
+  category` and `view custom data` on it, and no write right.
+- The login answer has `admin` and `version`.
+- **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the extension's setup or
+  migration has written the new `access` category. Run the extension's migration right after uploading the backend.
+  Until then nobody is an admin and ct-radius logins (machine clients) are refused; the cause is in the backend log
+  (`warning`) and in the extension's setup/migration. `GET /v1/test` (admins only) checks a working installation.
 - Errors are RFC 9457 problem details; clients switch on `type` (see `docs/problems.md`). A wrong primary password is
   `403 invalid-primary-password`, an invalid custom password `400 password-invalid` with `violations`, a missing entry
   `404 entry-not-found`.
@@ -32,11 +41,13 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - `PUT /v1/entries/{id}` refuses deleted and archived persons with `404 person-not-found`.
 - Cleanup of gone persons: `php bin/cleanup.php [--apply]` for server cron (dry run by default, exit codes 0, 1, 2) and the
   web-cron endpoint `POST /v1/cleanup[?apply=1]`, which is off unless `CLEANUP_TOKEN` is set in `credentials.php` and
-  runs at most once per 10 minutes. Gone persons in `adminUsers` are reported, never changed.
-- `GET /v1/test` checks the persons right, gone persons in `adminUsers` and the length of `CLEANUP_TOKEN`.
+  runs at most once per 10 minutes.
+- `GET /v1/test` checks the persons right, the `access` category (readable, admin group set) and the length of
+  `CLEANUP_TOKEN`.
 - New problem types `person-not-found`, `cleanup-running` and `cleanup-too-soon`.
 - Cache for module and category IDs (1 hour), settings and the public key (5 minutes), with HMAC-protected files.
-  Changes to admins and machine clients therefore take up to 5 minutes to apply.
+  Changes to machine clients take up to 5 minutes to apply. Adding an admin takes effect at their next login, removing
+  one up to 15 minutes later (token expiry), and a changed `groupId` after up to 5 minutes (cache) plus a new login.
 - Limits: 5 wrong primary passwords per person and 15 minutes; per address 30 logins and 60 rejected tokens per minute,
   plus 100 logins per minute overall.
 - Security headers, exact CORS matching, the `https-required` problem type and `405` for `HEAD`.

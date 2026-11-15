@@ -7,6 +7,7 @@ namespace CtPassStore\Application;
 use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Application\Exception\InvalidRedirectUriException;
 use CtPassStore\Application\Port\IdentityProvider;
+use CtPassStore\Application\Port\SettingsRepository;
 use Psr\Log\LoggerInterface;
 
 /**
@@ -20,6 +21,7 @@ final class Login
     public function __construct(
         private readonly string $instanceOrigin,
         private readonly IdentityProvider $identities,
+        private readonly SettingsRepository $settings,
         private readonly UserTokens $tokens,
         private readonly LoggerInterface $logger,
     ) {}
@@ -36,8 +38,13 @@ final class Login
             throw new InvalidRedirectUriException('redirectUri must be a page of the ChurchTools instance this backend belongs to.');
         }
 
-        $person = $this->identities->authenticate($code, $codeVerifier, $redirectUri);
-        $this->logger->info(ucfirst($person->describe()) . ' logged in.');
+        // Before the code is exchanged: broken settings fail the login without using up the code. A missing or invalid
+        // admin group is null here and means no admins (spec 3.2).
+        $adminGroupId = $this->settings->settings()->adminGroupId;
+
+        $person = $this->identities->authenticate($code, $codeVerifier, $redirectUri, $adminGroupId);
+        // The role is logged because it comes from the membership of a ChurchTools group (spec 4.4, D9); no token, no name.
+        $this->logger->info(ucfirst($person->describe()) . ($person->admin ? ' logged in as admin.' : ' logged in.'));
 
         return $this->tokens->issue($person);
     }

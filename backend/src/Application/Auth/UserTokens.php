@@ -14,7 +14,8 @@ use CtPassStore\Domain\PersonPrincipal;
 
 /**
  * The backend's own access tokens for users (spec 4.4, Q21): HS256 with `JWT_SECRET`, 15 minutes. The algorithm is
- * pinned; `iss` and `aud` are constants and never come from the request. All claims are required.
+ * pinned; `iss` and `aud` are constants and never come from the request. All claims are required, `admin` as a JSON
+ * boolean.
  */
 final class UserTokens
 {
@@ -38,13 +39,14 @@ final class UserTokens
             'aud' => self::AUDIENCE,
             'sub' => (string) $person->id->value,
             'username' => $person->username,
+            'admin' => $person->admin,
             'iat' => $now,
             'nbf' => $now,
             'exp' => $now + self::LIFETIME_SECONDS,
             'jti' => bin2hex(random_bytes(16)),
         ], self::ALGORITHM, $this->secret);
 
-        return new IssuedToken($token, self::LIFETIME_SECONDS);
+        return new IssuedToken($token, self::LIFETIME_SECONDS, $person->admin);
     }
 
     /**
@@ -72,10 +74,13 @@ final class UserTokens
         $sub = $claims['sub'] ?? null;
         $personId = is_string($sub) ? PersonId::decimal($sub) : null;
         $username = $claims['username'] ?? null;
+        // A JSON boolean only: `"true"` or `1` is invalid, and a token from before the claim existed fails (AG-07).
+        $admin = $claims['admin'] ?? null;
         $valid = ($claims['iss'] ?? null) === self::ISSUER
             && ($claims['aud'] ?? null) === self::AUDIENCE
             && $personId !== null && $personId > 0
             && is_string($username) && $username !== ''
+            && is_bool($admin)
             && is_string($claims['jti'] ?? null) && $claims['jti'] !== ''
             && is_int($claims['iat'] ?? null) && is_int($claims['nbf'] ?? null) && is_int($claims['exp'] ?? null);
         if (!$valid) {
@@ -85,6 +90,6 @@ final class UserTokens
             throw new TokenExpiredException('The access token has expired. Log in again.');
         }
 
-        return new PersonPrincipal(new PersonId($personId), $username);
+        return new PersonPrincipal(new PersonId($personId), $username, $admin);
     }
 }

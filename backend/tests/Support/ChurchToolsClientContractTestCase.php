@@ -301,6 +301,24 @@ abstract class ChurchToolsClientContractTestCase extends TestCase
         self::assertIsBool($permissions['view'] ?? null);
     }
 
+    /** AG-10 (shape; the OAuth token itself is measured in AdminGroupContractTest) */
+    public function testActiveGroupIdsAreDistinctPositiveIntegers(): void
+    {
+        $credential = $this->validUserCredential();
+        $ids = $this->client()->activeGroupIds($credential, $this->client()->whoami($credential)->id);
+
+        foreach ($ids as $id) {
+            self::assertGreaterThan(0, $id);
+        }
+        self::assertSame($ids, array_values(array_unique($ids)));
+    }
+
+    public function testActiveGroupIdsWithAnUnknownTokenAreNotAuthenticated(): void
+    {
+        $this->expectException(NotAuthenticatedException::class);
+        $this->client()->activeGroupIds(Credential::loginToken('contract-test-unknown-token'), 1);
+    }
+
     public function testUnknownTokenIsNotAuthenticated(): void
     {
         $this->expectException(NotAuthenticatedException::class);

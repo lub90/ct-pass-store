@@ -36,8 +36,8 @@ final class EntryGuard
      */
     public function authorizeRead(Principal $principal, PersonId $target): void
     {
-        // Reading one's own entry doesn't depend on the settings, so they aren't loaded for it.
-        if (!AccessPolicy::isOwner($principal, $target) && !AccessPolicy::mayRead($principal, $target, $this->settings->settings())) {
+        // Reading depends on the principal only (the admin role is in the token), so the settings aren't loaded for it.
+        if (!AccessPolicy::mayRead($principal, $target)) {
             $this->deny($principal, $target);
         }
     }
@@ -50,10 +50,10 @@ final class EntryGuard
      */
     public function authorizeChange(Principal $principal, PersonId $target, #[\SensitiveParameter] ?string $primaryPassword): void
     {
-        $settings = $this->settings->settings();
-        if (!AccessPolicy::mayChange($principal, $target, $settings)) {
+        if (!AccessPolicy::mayChange($principal, $target)) {
             $this->deny($principal, $target);
         }
+        $settings = $this->settings->settings();
         if (!$settings->requirePrimaryPassword) {
             return;
         }

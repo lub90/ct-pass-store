@@ -8,14 +8,20 @@ use CtPassStore\Application\Auth\UserTokens;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\ChurchTools\Credential;
+use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotAuthenticatedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\RateLimitedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
+use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use Firebase\JWT\JWT;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Psr\Http\Message\ResponseInterface;
 
 /**
- * `POST /v1/auth/token` (spec 4.4, catalog AX-01 to AX-19, TK-14).
+ * `POST /v1/auth/token` (spec 4.4, catalog AX-01 to AX-20, TK-14, AG-02 to AG-05).
  */
 final class LoginApiTest extends ApiTestCase
 {
@@ -23,6 +29,8 @@ final class LoginApiTest extends ApiTestCase
     private const CODE = 'authorization-code-SECRET-1';
     private const VERIFIER = 'pkce-verifier-SECRET-0123456789012345678901234';
     private const PERSON = 42;
+    /** The admin group of ApiTestCase::setAccess(). */
+    private const ADMIN_GROUP = 12;
 
     protected function setUp(): void
     {
@@ -108,9 +116,11 @@ final class LoginApiTest extends ApiTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame('application/json', $response->getHeaderLine('Content-Type'));
         $body = $this->json($response);
-        self::assertSame(['accessToken', 'tokenType', 'expiresIn'], array_keys($body));
+        self::assertSame(['accessToken', 'tokenType', 'expiresIn', 'admin', 'version'], array_keys($body));
         self::assertSame('Bearer', $body['tokenType']);
         self::assertSame(900, $body['expiresIn']);
+        self::assertFalse($body['admin'], 'AG-03: no membership in the admin group.');
+        self::assertSame(self::VERSION, $body['version'], 'AG-03: the version the Kernel was given (Version::current()).');
 
         $person = (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->verify((string) $body['accessToken']);
         self::assertSame(self::PERSON, $person->id->value);
@@ -442,5 +452,241 @@ final class LoginApiTest extends ApiTestCase
         $this->login();
 
         self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
+    }
+
+    public function testTheLoginLogLineNamesTheAdminRoleWithoutSecrets(): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in as admin.'));
+        foreach ($this->log->getRecords() as $record) {
+            self::assertStringNotContainsString(self::CODE, (string) $record['message']);
+        }
+    }
+
+    public function testTheLoginLogLineOfAPlainUserHasNoRole(): void
+    {
+        $this->grant();
+
+        $this->login();
+
+        self::assertTrue($this->log->hasInfoThatContains('User ' . self::PERSON . ' logged in.'));
+        self::assertFalse($this->log->hasInfoThatContains('as admin'));
+    }
+
+    // ---------------------------------------------------------------- AG-02, AG-03
+
+    /**
+     * @return iterable<string, array{list<array{int, string}>, bool}>
+     */
+    public static function memberships(): iterable
+    {
+        yield 'active in the admin group' => [[[self::ADMIN_GROUP, 'active']], true];
+        yield 'active in another group too' => [[[7, 'active'], [self::ADMIN_GROUP, 'active']], true];
+        yield 'no groups' => [[], false];
+        yield 'waiting' => [[[self::ADMIN_GROUP, 'waiting']], false];
+        yield 'requested' => [[[self::ADMIN_GROUP, 'requested']], false];
+        yield 'to_delete' => [[[self::ADMIN_GROUP, 'to_delete']], false];
+        yield 'active in another group only' => [[[13, 'active'], [112, 'active'], [1, 'active']], false];
+    }
+
+    /**
+     * @param list<array{int, string}> $memberships
+     */
+    #[DataProvider('memberships')]
+    public function testAdminOnlyWithAnActiveMembershipInTheAdminGroup(array $memberships, bool $admin): void
+    {
+        $this->grant();
+        foreach ($memberships as [$groupId, $status]) {
+            $this->churchTools->addGroupMembership(self::PERSON, $groupId, $status);
+        }
+
+        $response = $this->login();
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertSame($admin, $this->json($response)['admin']);
+        self::assertSame($admin, $this->issuedClaims($response)['admin'], 'The token carries the same role.');
+        $groupCalls = array_values(array_filter($this->churchTools->calls(), static fn(array $c): bool => $c['method'] === 'activeGroupIds'));
+        self::assertCount(1, $groupCalls);
+        self::assertSame(['Bearer', self::PERSON], $groupCalls[0]['args'], "Asked with the user's own token, for the user.");
+    }
+
+    public function testAnAdminTokenFromTheLoginMayActOnOthers(): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+        $this->seedEntry(self::OTHER);
+
+        $token = (string) $this->json($this->login())['accessToken'];
+
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, headers: ['Authorization' => 'Bearer ' . $token])->getStatusCode());
+    }
+
+    // ---------------------------------------------------------------- AG-02, AG-04 (API part)
+
+    /**
+     * @return iterable<string, array{array<string, mixed>}>
+     */
+    public static function noAdminGroup(): iterable
+    {
+        yield 'no groups' => [[KvSchema::ACCESS_GROUPS => []]];
+        yield 'no groups.admins' => [[KvSchema::ACCESS_GROUPS => ['others' => [KvSchema::GROUP_ID => self::ADMIN_GROUP]]]];
+        yield 'groupId missing' => [[KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => []]]];
+        yield 'groupId 0' => [[KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 0]]]];
+        yield 'groupId negative' => [[KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => -12]]]];
+        yield 'groupId as string' => [[KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => '12']]]];
+    }
+
+    /**
+     * @param array<string, mixed> $access
+     */
+    #[DataProvider('noAdminGroup')]
+    public function testWithoutAValidAdminGroupNobodyIsAdminAndGroupsArentAsked(array $access): void
+    {
+        $this->setAccess($access);
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $response = $this->login();
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertFalse($this->json($response)['admin']);
+        self::assertSame(0, $this->churchTools->countCalls(['activeGroupIds']));
+    }
+
+    public function testWithoutAnAccessValueNobodyIsAdminAndMachineClientsAreRefused(): void
+    {
+        $this->churchTools->clearValues($this->categoryIds[KvSchema::ACCESS_CATEGORY]);
+        $this->forgetCache();
+
+        $this->assertLoginWorksWithoutAdminsOrMachineClients();
+    }
+
+    public function testWithoutTheAccessCategoryNobodyIsAdminAndMachineClientsAreRefused(): void
+    {
+        $settings = $this->churchTools->storedValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY])[0]['value'];
+        $encryption = $this->churchTools->storedValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY])[0]['value'];
+        $this->churchTools->removeModule(KvSchema::EXTENSION_KEY);
+        $this->categoryIds = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
+        $this->churchTools->seedValue($this->categoryIds[KvSchema::SETTINGS_CATEGORY], (string) $settings);
+        $this->churchTools->seedValue($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY], (string) $encryption);
+        $this->forgetCache();
+
+        $this->assertLoginWorksWithoutAdminsOrMachineClients();
+    }
+
+    public function testAnUnreadableAccessCategoryDoesNotStopLoginsAndMakesNobodyAdmin(): void
+    {
+        $this->forgetCache();
+        $this->churchTools->failNextRead($this->categoryIds[KvSchema::ACCESS_CATEGORY], new \CtPassStore\Infrastructure\ChurchTools\Exception\ServiceCredentialRejectedException('GET customdatavalues: ChurchTools answered 403.'));
+
+        $this->assertLoginWorksWithoutAdminsOrMachineClients();
+    }
+
+    private function assertLoginWorksWithoutAdminsOrMachineClients(): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $response = $this->login();
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertFalse($this->json($response)['admin']);
+        self::assertSame(0, $this->churchTools->countCalls(['activeGroupIds']));
+        $this->assertProblem(ProblemType::InvalidToken, $this->request('GET', '/v1/entries/' . self::USER, self::READER_CLIENT));
+    }
+
+    public function testGroupsAreAskedOnlyAfterTheViewCheck(): void
+    {
+        $this->grant(permissions: [KvSchema::EXTENSION_KEY => ['view' => false]]);
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+
+        $this->assertProblem(ProblemType::NoServiceAccess, $this->login());
+        self::assertSame(0, $this->churchTools->countCalls(['activeGroupIds']));
+    }
+
+    // ---------------------------------------------------------------- AG-05
+
+    /**
+     * @return iterable<string, array{\Throwable}>
+     */
+    public static function unreadableGroups(): iterable
+    {
+        yield '404' => [new NotFoundException('GET persons/{id}/groups: ChurchTools answered 404.')];
+        yield '403' => [new NotPermittedException('GET persons/{id}/groups: ChurchTools answered 403.')];
+    }
+
+    #[DataProvider('unreadableGroups')]
+    public function testUnreadableGroupsMeanNoAdminAndAWarning(\Throwable $failure): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+        $this->churchTools->failNext('activeGroupIds', $failure);
+
+        $response = $this->login();
+
+        self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
+        self::assertFalse($this->json($response)['admin']);
+        self::assertFalse($this->issuedClaims($response)['admin']);
+        self::assertTrue($this->log->hasWarningThatContains("Login: the admin group can't be read with the user's token; user " . self::PERSON . ' is treated as a user.'));
+    }
+
+    /**
+     * @return iterable<string, array{\Throwable, ProblemType}>
+     */
+    public static function failingGroups(): iterable
+    {
+        yield '500' => [new UnavailableException('GET persons/{id}/groups: ChurchTools answered 500.'), ProblemType::UpstreamUnavailable];
+        yield 'timeout' => [new UnavailableException('GET persons/{id}/groups: ChurchTools is unreachable (ConnectException).'), ProblemType::UpstreamUnavailable];
+        yield '429' => [new RateLimitedException('GET persons/{id}/groups: ChurchTools answered 429.', 30), ProblemType::UpstreamRateLimited];
+        yield '401' => [new NotAuthenticatedException('GET persons/{id}/groups: ChurchTools answered 401.'), ProblemType::UpstreamInvalid];
+        yield 'malformed answer' => [new InvalidResponseException('GET persons/{id}/groups: a membership has no groupMemberStatus.'), ProblemType::UpstreamInvalid];
+    }
+
+    #[DataProvider('failingGroups')]
+    public function testFailingGroupsIssueNoToken(\Throwable $failure, ProblemType $expected): void
+    {
+        $this->grant();
+        $this->churchTools->addGroupMembership(self::PERSON, self::ADMIN_GROUP);
+        $this->churchTools->failNext('activeGroupIds', $failure);
+
+        $response = $this->login();
+
+        $this->assertProblem($expected, $response);
+        $this->assertNoTokenIssued($response);
+    }
+
+    // ---------------------------------------------------------------- AX-20
+
+    public function testABrokenSettingsValueFailsTheLoginBeforeTheCodeIsUsed(): void
+    {
+        $this->grant();
+        $this->churchTools->clearValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY]);
+        $this->forgetCache();
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::Misconfigured, $response);
+        $this->assertNoTokenIssued($response);
+        self::assertSame(0, $this->churchTools->countCalls(['exchangeAuthorizationCode']), 'The code stays usable for a retry.');
+    }
+
+    public function testAnOutageWhileLoadingTheSettingsFailsTheLoginBeforeTheCodeIsUsed(): void
+    {
+        $this->grant();
+        $this->churchTools->failNext('getModuleByKey', new UnavailableException('GET custommodules/ctpassstore: ChurchTools is unreachable (ConnectException).'));
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::UpstreamUnavailable, $response);
+        $this->assertNoTokenIssued($response);
+        self::assertSame(0, $this->churchTools->countCalls(['exchangeAuthorizationCode']), 'The code stays usable for a retry.');
+        // The outage is remembered for a short while (spec 6.2); afterwards the same code still works.
+        $this->clock->advance(KvSettingsRepository::FAILURE_MIN_SECONDS + 1);
+        $retry = $this->login();
+        self::assertSame(200, $retry->getStatusCode(), (string) $retry->getBody());
     }
 }

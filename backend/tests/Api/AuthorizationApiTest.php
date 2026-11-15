@@ -9,8 +9,8 @@ use CtPassStore\Infrastructure\Kv\KvSchema;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 /**
- * The authentication and authorization pipeline (spec 4.1, 4.3, 4.4a): catalog AZ-01, AZ-03 to AZ-10, AZ-12, PR-01,
- * MC-15 and the bearer header rules.
+ * The authentication and authorization pipeline (spec 4.1, 4.3, 4.4a): catalog AZ-01, AZ-03, AZ-06 to AZ-10, AZ-12,
+ * PR-01, MC-15, AG-06 and the bearer header rules.
  */
 final class AuthorizationApiTest extends ApiTestCase
 {
@@ -62,8 +62,8 @@ final class AuthorizationApiTest extends ApiTestCase
 
     public function testAMachineClientNamedLikeAPersonHasNoOwnEntry(): void
     {
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
-            ['id' => '100', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
+            ['id' => '100', 'name' => 'Numeric', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => [], 'createdAt' => '2026-11-01'],
         ]]);
         $token = fn(): string => 'Bearer ' . $this->machineTokenOf('100', keyOf: self::NO_RIGHTS_CLIENT);
 
@@ -75,8 +75,8 @@ final class AuthorizationApiTest extends ApiTestCase
     public function testAPersonWhoseIdEqualsAClientIdGetsNoneOfItsRights(): void
     {
         // Client "123" may read every entry. Person 123 is an ordinary user; the two are never compared (spec 4.3).
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
-            ['id' => '123', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
+            ['id' => '123', 'name' => 'Numeric', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
         ]]);
         $this->seedEntry(self::OTHER);
 
@@ -85,22 +85,32 @@ final class AuthorizationApiTest extends ApiTestCase
         self::assertSame(204, $this->request('PUT', '/v1/entries/123', 123, ['secondaryPwd' => 'Custom-pass12!'])->getStatusCode(), 'Person 123 still owns entry 123.');
     }
 
-    // ---------------------------------------------------------------- AZ-04, AZ-05
+    // ---------------------------------------------------------------- AG-06
 
-    public function testAdminRightsFollowTheCurrentSettings(): void
+    public function testTheAdminRoleComesFromTheTokenOnly(): void
     {
-        $token = $this->tokenOf(self::USER);
-        $asUser = ['Authorization' => 'Bearer ' . $token];
-
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, headers: $asUser));
-
-        $this->setSettings(['adminUsers' => [self::USER]]);
         $this->seedEntry(self::OTHER);
-        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, headers: $asUser)->getStatusCode(), 'AZ-05: no new login needed.');
+        $adminToken = ['Authorization' => 'Bearer ' . $this->tokenOf(self::USER, admin: true)];
 
-        $this->setSettings(['adminUsers' => []]);
-        // AZ-04: the token is still valid, but the rights are gone.
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, headers: $asUser));
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, headers: $adminToken)->getStatusCode());
+        self::assertSame(204, $this->request('PUT', '/v1/entries/' . self::OTHER, null, ['secondaryPwd' => 'Custom-pass12!'], $adminToken)->getStatusCode());
+        self::assertSame(204, $this->request('DELETE', '/v1/entries/' . self::OTHER, null, [], $adminToken)->getStatusCode());
+    }
+
+    public function testAPersonStillListedInTheOldAdminUsersIsNoAdmin(): void
+    {
+        // The settings still name ADMIN in adminUsers (ApiTestCase::setSettings()); only the token counts.
+        $this->setSettings(['adminUsers' => [self::ADMIN, self::USER]]);
+        $this->seedEntry(self::OTHER);
+        $writes = $this->churchTools->writeCount();
+
+        foreach ([self::ADMIN, self::USER] as $person) {
+            $userToken = ['Authorization' => 'Bearer ' . $this->tokenOf($person, admin: false)];
+            $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, headers: $userToken));
+            $this->assertProblem(ProblemType::Forbidden, $this->request('PUT', '/v1/entries/' . self::OTHER, null, ['secondaryPwd' => 'Custom-pass12!'], $userToken));
+            $this->assertProblem(ProblemType::Forbidden, $this->request('DELETE', '/v1/entries/' . self::OTHER, null, [], $userToken));
+        }
+        self::assertSame($writes, $this->churchTools->writeCount());
     }
 
     // ---------------------------------------------------------------- AZ-06
@@ -270,7 +280,7 @@ final class AuthorizationApiTest extends ApiTestCase
 
     public function testAnInvalidBackendUrlRefusesMachinesButNotUsers(): void
     {
-        $this->setSettings(['backendUrl' => 'http://backend.example.org/ctpassstore', 'adminUsers' => [self::ADMIN]]);
+        $this->setSettings(['backendUrl' => 'http://backend.example.org/ctpassstore']);
         $this->seedEntry(self::OTHER);
 
         $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::OTHER, self::READER_CLIENT));
@@ -281,8 +291,8 @@ final class AuthorizationApiTest extends ApiTestCase
     public function testADisabledClientGets401AndTheLogSaysWhy(): void
     {
         $token = $this->machineTokenOf(self::READER_CLIENT);
-        $this->setSettings([KvSchema::SETTING_MACHINE_CLIENTS => [
-            ['id' => self::READER_CLIENT, 'publicKeys' => [], 'permissions' => ['entries:read']],
+        $this->setSettings([KvSchema::ACCESS_MACHINE_CLIENTS => [
+            ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
         ]]);
 
         $this->assertProblem(ProblemType::InvalidToken, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $token]));

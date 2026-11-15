@@ -5,3 +5,6 @@
 
 # Claude Code: personal settings stay local
 .claude/settings.local.json
+
+# Brainstorming mockups of the superpowers plugin
+.superpowers/

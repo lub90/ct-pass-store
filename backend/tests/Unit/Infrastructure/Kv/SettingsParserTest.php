@@ -27,7 +27,45 @@ final class SettingsParserTest extends TestCase
         self::assertSame(16, $parsed->settings->passwordLength);
         self::assertNull($parsed->settings->backendUrl);
         self::assertSame([], $parsed->settings->machineClients);
-        self::assertCount(2, $parsed->findings);
+        self::assertCount(1, $parsed->findings, 'machineClients in settings is ignored; only backendUrl is reported.');
+    }
+
+    /**
+     * AG-09: the fields the extension writes besides the ones the backend reads change nothing.
+     */
+    public function testFieldsTheBackendDoesntUseChangeNothing(): void
+    {
+        $base = ['requirePasswordForPasswordChange' => true, 'allowCustomPassword' => false, 'passwordLength' => 16, 'adminUsers' => [7], 'backendUrl' => 'https://backend.example.org'];
+        $extra = $base + [
+            'schema' => 2,
+            'revision' => 9,
+            'oauthClientId' => 'abc',
+            'texts' => ['de' => ['title' => 'Passwörter']],
+            'machineClients' => [['id' => 'ct-radius', 'publicKeys' => [], 'permissions' => []]],
+        ];
+
+        $plain = SettingsParser::parse($base);
+        $withExtras = SettingsParser::parse($extra);
+
+        self::assertEquals($plain->settings, $withExtras->settings);
+        self::assertSame($plain->findings, $withExtras->findings);
+        self::assertSame([], $withExtras->settings->machineClients);
+        self::assertNull($withExtras->settings->adminGroupId);
+    }
+
+    /**
+     * AG-09: an `adminUsers` key in old settings is accepted and ignored, even a malformed one (the migration removes it).
+     */
+    public function testAnOldAdminUsersKeyIsIgnoredWhateverItHolds(): void
+    {
+        $base = ['requirePasswordForPasswordChange' => true, 'allowCustomPassword' => false, 'passwordLength' => 16, 'backendUrl' => 'https://backend.example.org'];
+
+        foreach ([[7, 8], 'garbage', ['a' => -1], null] as $old) {
+            $parsed = SettingsParser::parse($base + ['adminUsers' => $old]);
+
+            self::assertEquals(SettingsParser::parse($base)->settings, $parsed->settings);
+            self::assertSame([], $parsed->findings);
+        }
     }
 
     public function testInvalidSettingsThrow(): void

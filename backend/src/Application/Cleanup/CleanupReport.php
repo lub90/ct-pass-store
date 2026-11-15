@@ -17,7 +17,6 @@ final class CleanupReport
      * @param list<PersonId> $gone deleted (or, in a dry run, to be deleted)
      * @param list<PersonId> $unchecked left for the next run because the deadline passed
      * @param array<int, string> $failedDeletes person ID => message
-     * @param list<PersonId> $goneAdmins configured admins who are deleted or archived
      */
     public function __construct(
         public readonly bool $applied,
@@ -25,12 +24,11 @@ final class CleanupReport
         public readonly array $gone,
         public readonly array $unchecked,
         public readonly array $failedDeletes,
-        public readonly array $goneAdmins,
     ) {}
 
     public function exitCode(): int
     {
-        return $this->failedDeletes !== [] || $this->goneAdmins !== [] ? 1 : 0;
+        return $this->failedDeletes !== [] ? 1 : 0;
     }
 
     public function deletedCount(): int

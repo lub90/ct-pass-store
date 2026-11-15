@@ -10,6 +10,7 @@ use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use Monolog\Logger;
+use Psr\Http\Message\ResponseInterface;
 
 /**
  * The settings and ID cache through the complete app (spec 6.1, catalog section 12, ST-18).
@@ -21,6 +22,14 @@ final class CacheApiTest extends ApiTestCase
     private function cacheFile(string $name): string
     {
         return $this->cacheDir . '/cache-' . hash('sha256', $name) . '.json';
+    }
+
+    /**
+     * A change of USER's own entry: unlike a person's read, it needs the settings.
+     */
+    private function changeOwnEntry(): ResponseInterface
+    {
+        return $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => self::PASSWORD]);
     }
 
     private function settingsReads(): int
@@ -37,7 +46,7 @@ final class CacheApiTest extends ApiTestCase
     public function testASecondRequestOnlyReadsThePasswordStore(): void
     {
         $this->seedEntry(self::USER);
-        // An admin reading another person's entry needs the settings, the IDs and the password store.
+        // An admin reading another person's entry needs the IDs, the person lookup and the password store.
         $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN);
         $before = count($this->churchTools->calls());
 
@@ -53,17 +62,16 @@ final class CacheApiTest extends ApiTestCase
      */
     public function testChangedSettingsApplyAfterTheTtl(): void
     {
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
+        self::assertSame(204, $this->changeOwnEntry()->getStatusCode());
         // Changed in ChurchTools directly, so the cache isn't cleared.
         $category = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
         $raw = json_decode((string) $this->churchTools->storedValues($category)[0]['value'], true, 512, JSON_THROW_ON_ERROR);
         $this->churchTools->clearValues($category);
-        $this->churchTools->seedValue($category, json_encode(['adminUsers' => [self::USER]] + $raw, JSON_THROW_ON_ERROR));
-        $this->seedEntry(self::OTHER);
+        $this->churchTools->seedValue($category, json_encode([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true] + $raw, JSON_THROW_ON_ERROR));
 
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
+        self::assertSame(204, $this->changeOwnEntry()->getStatusCode(), 'Still the cached settings.');
         $this->clock->advance(KvSettingsRepository::SETTINGS_TTL + 1);
-        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER)->getStatusCode());
+        $this->assertProblem(ProblemType::PrimaryPasswordRequired, $this->changeOwnEntry());
         self::assertSame(2, $this->settingsReads());
     }
 
@@ -91,14 +99,15 @@ final class CacheApiTest extends ApiTestCase
      */
     public function testAPlantedSettingsCacheGrantsNothing(): void
     {
+        $this->setSettings([KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true]);
         $planted = new SignedFileCache($this->cacheDir, new RecordSigner(self::JWT_SECRET, SignedFileCache::PURPOSE), $this->clock, new Logger('planted'));
-        $planted->put('settings', ['adminUsers' => [self::USER], 'passwordLength' => 12, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true], 60);
+        $planted->put('settings', ['passwordLength' => 12, KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false, KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true], 60);
         $record = json_decode((string) file_get_contents($this->cacheFile('settings')), true, 512, JSON_THROW_ON_ERROR);
         $record['mac'] = hash('sha256', 'guessed');
         file_put_contents($this->cacheFile('settings'), json_encode($record, JSON_THROW_ON_ERROR));
-        $this->seedEntry(self::OTHER);
 
-        $this->assertProblem(ProblemType::Forbidden, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
+        // The planted value would waive the primary password; the real settings require it.
+        $this->assertProblem(ProblemType::PrimaryPasswordRequired, $this->changeOwnEntry());
 
         $errors = array_values(array_filter($this->log->getRecords(), static fn($r): bool => $r['level_name'] === 'ERROR'));
         self::assertCount(1, $errors);
@@ -156,7 +165,7 @@ final class CacheApiTest extends ApiTestCase
         $ciphertext = (string) $this->json($this->request('GET', '/v1/entries/' . self::USER, self::USER))['secondaryPwd'];
 
         $files = glob($this->cacheDir . '/cache-*') ?: [];
-        self::assertCount(3, $files, 'settings, publicKey and ids');
+        self::assertCount(4, $files, 'settings, access, publicKey and ids');
         foreach ($files as $file) {
             $content = (string) file_get_contents($file);
             foreach ([self::PASSWORD, $ciphertext, $token, self::JWT_SECRET, self::OAUTH_CLIENT_SECRET, 'service-token'] as $secret) {
@@ -170,15 +179,16 @@ final class CacheApiTest extends ApiTestCase
      */
     public function testCorruptCacheFilesAreLoadedFromChurchTools(): void
     {
-        $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN);
+        // A machine client reading a person's entry needs all four: settings and access to authenticate, IDs, persons.
+        $this->request('GET', '/v1/entries/' . self::USER, self::READER_CLIENT);
         $files = glob($this->cacheDir . '/cache-*') ?: [];
-        self::assertCount(3, $files, 'settings, ids and persons');
+        self::assertCount(4, $files, 'settings, access, ids and persons');
         foreach ($files as $file) {
             file_put_contents($file, '{"format": 1, "keyId"');
         }
         $this->seedEntry(self::USER);
 
-        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN)->getStatusCode());
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, self::READER_CLIENT)->getStatusCode());
         self::assertSame(2, $this->churchTools->countCalls(['getModuleByKey']));
         self::assertSame(2, $this->settingsReads());
     }
@@ -194,7 +204,8 @@ final class CacheApiTest extends ApiTestCase
         try {
             $this->seedEntry(self::USER);
             foreach ([1, 2] as $request) {
-                self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, self::ADMIN)->getStatusCode());
+                // A change needs the settings (and no security store while no primary password is required).
+                self::assertSame(204, $this->changeOwnEntry()->getStatusCode());
             }
         } finally {
             @unlink($file);
@@ -212,8 +223,10 @@ final class CacheApiTest extends ApiTestCase
         $this->request('GET', '/v1/entries/' . self::USER, self::USER);
         $settings = $this->churchTools->storedValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY])[0]['value'];
         $encryption = $this->churchTools->storedValues($this->categoryIds[KvSchema::ENCRYPTION_CATEGORY])[0]['value'];
+        $access = $this->churchTools->storedValues($this->categoryIds[KvSchema::ACCESS_CATEGORY])[0]['value'];
         $this->churchTools->removeModule(KvSchema::EXTENSION_KEY);
-        $ids = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY]);
+        $ids = $this->churchTools->addModule(KvSchema::EXTENSION_KEY, [KvSchema::SETTINGS_CATEGORY, KvSchema::ENCRYPTION_CATEGORY, KvSchema::PASSWORD_CATEGORY, KvSchema::ACCESS_CATEGORY]);
+        $this->churchTools->seedValue($ids[KvSchema::ACCESS_CATEGORY], (string) $access);
         $this->churchTools->seedValue($ids[KvSchema::SETTINGS_CATEGORY], (string) $settings);
         $this->churchTools->seedValue($ids[KvSchema::ENCRYPTION_CATEGORY], (string) $encryption);
         $this->churchTools->seedValue($ids[KvSchema::PASSWORD_CATEGORY], json_encode([KvSchema::ENTRY_PERSON_ID => self::USER, KvSchema::ENTRY_CIPHERTEXT => 'bmV3'], JSON_THROW_ON_ERROR));

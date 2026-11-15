@@ -84,9 +84,6 @@ final class CleanupCommand
                 $this->line($out, "deleted entry of person {$person->value}");
             }
         }
-        foreach ($report->goneAdmins as $person) {
-            $this->line($err, "adminUsers contains person {$person->value}, who is deleted or archived; remove them in the extension settings", LogLevel::WARNING);
-        }
         foreach ($report->failedDeletes as $personId => $message) {
             $this->line($err, "could not delete the entry of person {$personId}: {$message}; the next run retries it", LogLevel::WARNING);
         }

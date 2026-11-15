@@ -34,6 +34,9 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
             'churchdb' => ['view' => true, 'view alldata' => [1], 'view archive' => true, 'view hidden persons' => true],
             KvSchema::EXTENSION_KEY => ['view' => true, 'edit custom data' => [$ids[KvSchema::PASSWORD_CATEGORY]]],
         ]);
+        $this->fake->addGroupMembership(5, 7);
+        $this->fake->addGroupMembership(5, 9, 'waiting');
+        $this->fake->addGroupMembership(5, 3, 'active');
         $this->fake->addPerson(12);
         $this->fake->addPerson(34, archived: true);
         $this->fake->addLogin('jdoe', 'Secret-1!', 5);
@@ -66,6 +69,12 @@ final class FakeChurchToolsClientContractTest extends ChurchToolsClientContractT
     protected function personIds(): array
     {
         return ['active' => 12, 'archived' => 34, 'deleted' => 56];
+    }
+
+    public function testTheFakeLeavesOutMembershipsThatAreNotActive(): void
+    {
+        self::assertSame([7, 3], $this->fake->activeGroupIds($this->validUserCredential(), 5));
+        self::assertSame([], $this->fake->activeGroupIds($this->validUserCredential(), 6));
     }
 
     public function testWithoutThePersonsRightTheFakeBehavesLikeChurchTools(): void

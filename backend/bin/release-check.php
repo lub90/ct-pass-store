@@ -2,8 +2,9 @@
 
 declare(strict_types=1);
 
-// Checks a release before it is built (spec 6.6, catalog DP-03): the tag is `v` plus the VERSION file, and CHANGELOG.md
-// has a section `## [<version>] - <YYYY-MM-DD>` with a real date. Prints that section (the release notes) on success,
+// Checks a release before it is built (spec 6.6, catalog DP-03): the tag is `backend-v` plus the VERSION file, CHANGELOG.md
+// has a section `## [<version>] - <YYYY-MM-DD>` with a real date, and MAJOR.MINOR equals that of ../extension/package.json
+// (AG-12, specs/versioning.md). Prints that section (the release notes) on success,
 // one line per problem on stderr otherwise; exits 0 or 1.
 // Usage: php bin/release-check.php <tag> [backend folder]
 
@@ -22,8 +23,19 @@ function checkRelease(string $tag, string $backendDir): array
     if (preg_match('/^\d+\.\d+\.\d+$/', $version) !== 1) {
         return [['VERSION does not contain a version x.y.z'], ''];
     }
-    if ($tag !== "v$version") {
-        return [["Tag $tag does not match VERSION: expected v$version"], ''];
+    if ($tag !== "backend-v$version") {
+        return [["Tag $tag does not match VERSION: expected backend-v$version"], ''];
+    }
+
+    $package = @file_get_contents(dirname($backendDir) . '/extension/package.json');
+    $decoded = is_string($package) ? json_decode($package, true) : null;
+    $extensionVersion = is_array($decoded) && is_string($decoded['version'] ?? null) ? $decoded['version'] : '';
+    if (preg_match('/^(\d+\.\d+)\.\d+/', $extensionVersion, $extension) !== 1) {
+        return [['extension/package.json is missing or has no version x.y.z'], ''];
+    }
+    $majorMinor = implode('.', array_slice(explode('.', $version), 0, 2));
+    if ($majorMinor !== $extension[1]) {
+        return [["MAJOR.MINOR $majorMinor differs from the extension's {$extension[1]} (versioning.md)"], ''];
     }
 
     $changelog = (string) @file_get_contents("$backendDir/CHANGELOG.md");

@@ -18,6 +18,7 @@ use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use CtPassStore\Tests\Contract\Helpers\BackendSandboxManager;
 use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
+use CtPassStore\Tests\Contract\Helpers\Redact;
 use GuzzleHttp\Client;
 use GuzzleHttp\Promise\Utils;
 use phpseclib3\Crypt\PublicKeyLoader;
@@ -122,20 +123,20 @@ final class LiveEntriesTest extends TestCase
         $password = 'Live-test-' . bin2hex(random_bytes(4)) . '!1';
 
         $put = $this->entries('PUT', ['secondaryPwd' => $password]);
-        self::assertSame(204, $put->getStatusCode(), (string) $put->getBody());
+        self::assertSame(204, $put->getStatusCode(), Redact::body((string) $put->getBody()));
 
         $stored = $this->storedCiphertexts();
         self::assertCount(1, $stored);
 
         $get = $this->entries('GET');
-        self::assertSame(200, $get->getStatusCode(), (string) $get->getBody());
+        self::assertSame(200, $get->getStatusCode(), Redact::body((string) $get->getBody()));
         $ciphertext = (string) $this->json($get)['secondaryPwd'];
         self::assertSame($stored[0], $ciphertext, 'GET returns exactly what is stored.');
         self::assertSame(512, strlen((string) base64_decode($ciphertext, true)), 'RSA-4096 ciphertext.');
         $this->assertDecryptsTo($password, $ciphertext);
 
         $delete = $this->entries('DELETE', []);
-        self::assertSame(204, $delete->getStatusCode(), (string) $delete->getBody());
+        self::assertSame(204, $delete->getStatusCode(), Redact::body((string) $delete->getBody()));
         self::assertSame([], $this->storedCiphertexts());
         self::assertSame(404, $this->entries('GET')->getStatusCode());
         $this->reportOutages();
@@ -169,7 +170,7 @@ final class LiveEntriesTest extends TestCase
 
                 continue;
             }
-            self::assertSame(204, $response->getStatusCode(), "PUT $i: " . $response->getBody());
+            self::assertSame(204, $response->getStatusCode(), "PUT $i: " . Redact::body((string) $response->getBody()));
         }
         self::assertLessThan(self::PARALLEL_PUTS, $outages, 'Every parallel PUT failed to reach ChurchTools.');
 
@@ -181,13 +182,13 @@ final class LiveEntriesTest extends TestCase
         self::assertLessThanOrEqual(self::PARALLEL_PUTS - $outages, count($stored));
 
         $get = $this->entries('GET');
-        self::assertSame(200, $get->getStatusCode(), (string) $get->getBody());
+        self::assertSame(200, $get->getStatusCode(), Redact::body((string) $get->getBody()));
         self::assertSame(end($stored), (string) $this->json($get)['secondaryPwd'], 'The newest entry wins.');
 
         $start = hrtime(true);
         $heal = $this->entries('PUT', ['secondaryPwd' => 'Healing-' . bin2hex(random_bytes(4)) . '!1']);
         $singleMs = (hrtime(true) - $start) / 1e6;
-        self::assertSame(204, $heal->getStatusCode(), (string) $heal->getBody());
+        self::assertSame(204, $heal->getStatusCode(), Redact::body((string) $heal->getBody()));
         self::assertCount(1, $this->storedCiphertexts(), 'The next write removes all duplicates.');
 
         self::assertSame(204, $this->entries('DELETE', [])->getStatusCode());

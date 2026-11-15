@@ -42,7 +42,8 @@ You need:
 ### ChurchTools test instance
 
 **Never use a production instance.** The tests write values with the reserved person ID `0` and the entry of one test
-user, and delete them again; they never change settings or keys.
+user, and delete them again; they never change settings or keys. The one exception is `AdminGroupContractTest`, which
+creates and deletes an OAuth client and temporarily changes one fixture user's permissions (see the table below).
 
 1. Upload the **ctpassstore** extension and run its setup, so the module, its categories, the settings and the public
    key exist. The settings must allow custom passwords without a primary password (for `LiveEntriesTest`).
@@ -89,6 +90,7 @@ composer test:contract
 | --- | --- | --- |
 | `ChurchToolsClientContractTest` | The shared client contract against real ChurchTools (the fake passes the same cases in the unit layer). Its OAuth cases send an unknown code and a wrong client secret. | Values with `personId` `0`, deleted again |
 | `LiveEntriesTest` | The locally started backend (port 8091, several workers) with the instance's real settings and key: a round trip and parallel PUTs. | The first fixture user's entry, deleted again |
+| `AdminGroupContractTest` | The admin-group check against real ChurchTools. Needs `fixtures/admin_users.json` (an account that may manage OAuth clients and person permissions) and `fixtures/normal_users.json`. | Creates the OAuth client "ctpassstore contract test" and deletes it again; temporarily grants the first normal fixture user the churchcore right "login to external system" for that client and removes it again (checked against the previous grants). A consent for that user stays in ChurchTools. |
 | `NodeSignedMachineTokenTest` | A machine token signed with Node.js, as ct-radius signs it, passes the verifier. Skipped without `node`. | Nothing |
 
 Notes on `LiveEntriesTest`:
@@ -134,7 +136,7 @@ What it does, strictly sequentially and paced below the ChurchTools rate limit (
 
 1. Records the values in `passwordStore` (the baseline). They're never changed.
 2. Creates 20 persons "CtPassStore Load 01…20" and gives each an entry, then existing persons (not the fixture users,
-   not the admins, not persons with an entry) entries in stages: 50, 200, 500 in total.
+   not persons with an entry) entries in stages: 50, 200, 500 in total.
 3. At each stage, against a backend in a temporary sandbox (copies of `public/index.php` and `bin/cleanup.php`,
    symlinked `vendor/`, its own `config/`, `cache/`, `logs/`, generated `credentials.php` with a random
    `CLEANUP_TOKEN`): `GET /v1/entries/{id}` as admin for 50 persons with an empty persons cache and again cached,
@@ -146,8 +148,9 @@ What it does, strictly sequentially and paced below the ChurchTools rate limit (
 5. Teardown, also after a failure: deletes the values it created, deletes the 20 persons, removes the sandbox and
    checks that `passwordStore` equals the baseline. A failed check is printed loudly.
 
-If the fixture admin isn't in the instance's `adminUsers`, the run never changes the settings in ChurchTools. It puts
-the real settings plus that admin into the **sandbox's own** settings cache instead, and says so in the results.
+The run never changes the settings in ChurchTools. The fixture admin needs no entry anywhere: the run signs its token
+itself, with `admin: true` (the admin role is a claim of the backend token, from the admin group). The sandbox's own
+settings cache gets a copy of the instance's real settings.
 
 ## Manual OAuth check before each release
 
@@ -157,9 +160,10 @@ The OAuth flow can't be automated. Check it by hand against the test instance:
    `response_type=code`, `scope=api`, `state` and `code_challenge_method=S256`.
 2. On the first login, ChurchTools shows the consent screen; after consenting, it redirects back to the extension page.
    On later logins, the redirect happens without a visible step.
-3. The extension calls `POST /v1/auth/token` and gets `200` with `accessToken`, `tokenType: "Bearer"` and
-   `expiresIn: 900`. Decode the token (e.g. on jwt.io with a test token only): `iss` `ctpassstore-backend`, `aud`
-   `ctpassstore-api`, `sub` the person ID, `username` the ChurchTools username.
+3. The extension calls `POST /v1/auth/token` and gets `200` with `accessToken`, `tokenType: "Bearer"`,
+   `expiresIn: 900`, `admin` and `version`. Decode the token (e.g. on jwt.io with a test token only): `iss`
+   `ctpassstore-backend`, `aud` `ctpassstore-api`, `sub` the person ID, `username` the ChurchTools username, `admin`
+   `true` only for an active member of the admin group.
 4. Repeat the request with the same code: `400 oauth-code-invalid`.
 5. A user without the extension's `view` permission gets `403 no-service-access`.
 6. A user without the right "Bei Drittsystem via ChurchTools-Benutzerkonto einloggen" for the OAuth application sees

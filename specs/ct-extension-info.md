@@ -178,6 +178,27 @@ seeing their password or login token. Observed behavior:
   (e.g. about 10 minutes for authorization codes) probably apply.
 - **Redirect into an extension:** the registered redirect URI can be the extension's page (`/ccm/<key>/`). ChurchTools
   serves the extension for any sub-path, and the query parameters (`code`, `state`) survive client-side routing.
+- **Deep redirect URI and consent (measured 2026-11-13, contract test `AdminGroupContractTest`):**
+  - `POST /api/oauthclients` accepts the `redirectUri` string `https://<instance>/ccm/ctpassstore/auth/callback` (`200`;
+    the answer holds `data.identifier`, `data.clientSecret` and `redirectUri` as a list) and `DELETE
+    /api/oauthclients/{identifier}` removes it.
+  - `GET /oauth/authorize` with a session cookie answers `200` with the consent page on the first use of a client
+    (a Vue page, not a form: the authorize query sits in `window.grantPermissionData.queryParams`). Its approve button
+    submits `POST /oauth/authorize_granted?<the same query>` with the form fields `grant_access=1` and `CSRF-Token`
+    (from `GET /api/csrftoken`); that answers `302` with `Location: <redirect URI>?code=…&state=…`. A second
+    `GET /oauth/authorize` then answers `302` to the same URI directly. `state` comes back exactly as sent.
+  - A user without the right "login to external system" for that client gets `500` with the page text „Du bist nicht
+    berechtigt dich bei „<client>“ einzuloggen.“ instead of a consent page. A freshly created client therefore needs
+    the right for every user (the right's data ID is the client's numeric `id`, not its `identifier`). The contract
+    test measured with a **normal user** after granting the right for the temporary client with
+    `PUT /api/permissions/person/{id}` (`{"authId": <id>, "dataId": [<client id>]}`; `PUT` **adds** to the user's
+    existing list for that right, it doesn't replace it) and removed it with `DELETE` and the same body (a `dataId`
+    list removes only those entries). `/permissions/global` showed the client at once.
+  - `POST /oauth/access_token` with the code, the `code_verifier`, `client_id`, `client_secret` and `redirect_uri` as
+    form fields answers `200` with an `access_token`.
+  - **Groups with the OAuth token:** `GET /api/persons/{id}/groups` with `Authorization: Bearer <token>` (and
+    `X-OnlyAuthenticated: 1`) answers `200`. The active memberships are the same as with a session login;
+    `group.domainIdentifier` is a string and `groupMemberStatus` is `active` for them.
 
 ## 5. The key-value store (custom data)
 
@@ -288,6 +309,36 @@ DELETE /custommodules/{moduleId}/customdatacategories/{categoryId}/customdataval
 - `GET /persons/{id}/groups` returns the group ID as a **string** in `group.domainIdentifier`.
 - **The server enforces permissions**; the UI should only hide what would fail anyway. Show users which permissions
   they're missing.
+- **Reading the rights of others** (measured 2026-11-12, ChurchTools 3.136):
+  - `GET /api/permissions/{domainType}/{id}` with `domainType` `person`, `status` or `group_role` returns the rights
+    granted to that one domain (`authId`, `dataId`, `isInherited`, `type`). `GET /api/permissions/group_role/{id}` for a
+    role without rights answers `200` with an empty list.
+  - **All holders at once:** the legacy `POST ?q=churchauth/ajax`, `func=getMasterData` returns, besides the catalog
+    (`auth_table`, per module: `id`, `datenfeld`, German `bezeichnung`), the field `churchauth` with an `auth` map for
+    **every** person (`churchauth.person`), status (`status`), group role (`groupMemberstatus`, with `group_id` and
+    `group_type_role_id`) and group-type role (`grouptypeMemberstatus`). Each map goes from auth ID to `"<authId>"`
+    (a plain right) or to a map of data IDs (a right per category, group, …). So "who can write category X" is
+    answerable completely, without one request per person.
+  - System admins (`churchauth.admins`) don't get module rights implicitly (see above), so the list has no hidden
+    holders.
+- **Granting rights through the API** (measured 2026-11-12): `PUT /api/permissions/person/{id}` with
+  `{"authId": <id>, "dataId": [<ids>]}` (`dataId` must be a **list**, also for a single ID) answers `204`;
+  `DELETE /api/permissions/person/{id}` with `{"authId": <id>}` removes the right (`204`). Both need the CSRF token.
+  `/permissions/global` of the affected person reflected the change on the next request.
+- **Reading a category needs both rights** (measured 2026-11-12): with only `view custom data` on a category, its
+  values can be read (`GET …/customdatacategories/{id}/customdatavalues` → `200`), but the category is **missing from
+  the category list**, so it can't be found by name. With only `view custom category`, it's listed, but reading its
+  values gives `403`. An extension that looks its categories up by name needs both. (`GET
+  …/customdatacategories/{id}` for a single category doesn't exist: `405`.)
+- **Seeing persons and groups** (measured 2026-11-12):
+  - Person search (`GET /api/search?query=…&domainTypes[]=person`, `GET /api/persons?query=…`) needs only `churchdb`
+    `view`, but finds only the persons the searcher may see (on the test instance a normal user saw 229 of 625).
+  - A member of a group can read that group and its members (`GET /groups/{id}`, `/groups/{id}/members`); other groups
+    answer `403 Forbidden to see group`.
+  - `churchgroup` „view group“ („Gruppe inkl. ihrer Gruppenmitglieder sehen“, data = group ID) on one group lets a
+    person read that group and its members with names, and makes those members visible to them in
+    `GET /persons/{id}`, `/persons?query=` and `/search`. That's a far narrower way to let someone find a known set of
+    persons than `view alldata`.
 
 ## 7. API behaviour and limits
 

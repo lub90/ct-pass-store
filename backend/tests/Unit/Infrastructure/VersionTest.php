@@ -34,11 +34,12 @@ final class VersionTest extends TestCase
     /** @return iterable<string, array{?string, string, bool, string}> */
     public static function formatCases(): iterable
     {
-        yield 'tagged and clean' => ['v0.1.0', 'abc1234', false, '0.1.0'];
-        yield 'tagged and dirty' => ['v0.1.0', 'abc1234', true, '0.1.0+abc1234-dirty'];
+        yield 'tagged and clean' => ['backend-v0.1.0', 'abc1234', false, '0.1.0'];
+        yield 'tagged and dirty' => ['backend-v0.1.0', 'abc1234', true, '0.1.0+abc1234-dirty'];
         yield 'untagged' => [null, 'abc1234', false, '0.1.0+abc1234'];
         yield 'untagged and dirty' => [null, 'abc1234', true, '0.1.0+abc1234-dirty'];
-        yield 'other tag' => ['v0.0.9', 'abc1234', false, '0.1.0+abc1234'];
+        yield 'old tag pattern' => ['v0.1.0', 'abc1234', false, '0.1.0+abc1234'];
+        yield 'other tag' => ['backend-v0.0.9', 'abc1234', false, '0.1.0+abc1234'];
     }
 
     #[DataProvider('formatCases')]

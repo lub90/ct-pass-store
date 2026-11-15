@@ -38,7 +38,7 @@ use Slim\Psr7\Factory\StreamFactory;
  * | ------------- | ----------- | ----------------------------------- |
  * | user          | 10          | –                                   |
  * | other         | 11          | –                                   |
- * | admin         | 100         | adminUsers                          |
+ * | admin         | 100         | – (its tokens carry `admin: true`)  |
  * | machine       | ct-radius   | machineClients, `entries:read`      |
  * | machine       | no-rights   | machineClients, no permission       |
  */
@@ -107,6 +107,7 @@ abstract class ApiTestCase extends TestCase
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
             KvSchema::PASSWORD_CATEGORY,
+            KvSchema::ACCESS_CATEGORY,
         ]);
 
         foreach (self::NAMES as $personId => $name) {
@@ -144,7 +145,7 @@ abstract class ApiTestCase extends TestCase
 
     /**
      * Replaces the settings value. Unset keys get these defaults: no primary password required, custom passwords
-     * allowed, length 12, admin 100, the backend URL and the two machine clients.
+     * allowed, length 12, the backend URL and the two machine clients.
      *
      * Takes effect with the next request: the settings cache is cleared (spec 6.1; Review Focus 1).
      *
@@ -155,15 +156,34 @@ abstract class ApiTestCase extends TestCase
         $this->forgetCache();
         $categoryId = $this->categoryIds[KvSchema::SETTINGS_CATEGORY];
         $this->churchTools->clearValues($categoryId);
-        $this->churchTools->seedValue($categoryId, json_encode($overrides + [
+        $this->churchTools->seedValue($categoryId, json_encode(array_diff_key($overrides, [KvSchema::ACCESS_MACHINE_CLIENTS => true]) + [
             KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => false,
             KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => true,
             'passwordLength' => 12,
-            'adminUsers' => [self::ADMIN],
             'backendUrl' => self::BACKEND_URL,
-            'machineClients' => [
-                ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read']],
-                ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => []],
+        ], JSON_THROW_ON_ERROR));
+        // The machine clients live in the access category; tests keep passing them with the settings.
+        $this->setAccess(array_intersect_key($overrides, [KvSchema::ACCESS_MACHINE_CLIENTS => true]));
+    }
+
+    /**
+     * Replaces the access value (admin group and machine clients; by default the two test clients). Takes effect
+     * with the next request, like setSettings().
+     *
+     * @param array<string, mixed> $overrides
+     */
+    protected function setAccess(array $overrides): void
+    {
+        $this->forgetCache();
+        $categoryId = $this->categoryIds[KvSchema::ACCESS_CATEGORY];
+        $this->churchTools->clearValues($categoryId);
+        $this->churchTools->seedValue($categoryId, json_encode($overrides + [
+            'schema' => 2,
+            'revision' => 1,
+            KvSchema::ACCESS_GROUPS => [KvSchema::GROUP_ADMINS => [KvSchema::GROUP_ID => 12, 'createdBySetup' => true]],
+            KvSchema::ACCESS_MACHINE_CLIENTS => [
+                ['id' => self::READER_CLIENT, 'name' => 'RADIUS', 'publicKeys' => [$this->machinePublicKey(self::READER_CLIENT)], 'permissions' => ['entries:read'], 'createdAt' => '2026-11-01'],
+                ['id' => self::NO_RIGHTS_CLIENT, 'name' => 'No rights', 'publicKeys' => [$this->machinePublicKey(self::NO_RIGHTS_CLIENT)], 'permissions' => [], 'createdAt' => '2026-11-01'],
             ],
         ], JSON_THROW_ON_ERROR));
     }
@@ -192,11 +212,14 @@ abstract class ApiTestCase extends TestCase
     }
 
     /**
-     * A backend access token for the person, as POST /v1/auth/token would issue it now.
+     * A backend access token for the person, as POST /v1/auth/token would issue it now. The admin role is the token's
+     * claim (spec 4.3); by default only ADMIN has it.
      */
-    protected function tokenOf(int $personId): string
+    protected function tokenOf(int $personId, ?bool $admin = null): string
     {
-        return (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->issue(new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId"))->token;
+        $person = new PersonPrincipal(new PersonId($personId), self::NAMES[$personId] ?? "person$personId", $admin ?? $personId === self::ADMIN);
+
+        return (new UserTokens(self::JWT_SECRET, $this->clock, new FirebaseTokenCodec()))->issue($person)->token;
     }
 
     /**

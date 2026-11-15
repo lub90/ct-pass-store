@@ -46,7 +46,7 @@ final class EntryGuardAttemptsTest extends TestCase
         $settings = new class implements SettingsRepository {
             public function settings(): Settings
             {
-                return new Settings(true, true, 16, [], null);
+                return new Settings(true, true, 16, null);
             }
         };
         $verifier = new class ($this) implements PrimaryPasswordVerifier {

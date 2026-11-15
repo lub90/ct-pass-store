@@ -50,6 +50,7 @@ final class UserTokensTest extends TestCase
             'aud' => UserTokens::AUDIENCE,
             'sub' => '5',
             'username' => 'jdoe',
+            'admin' => false,
             'iat' => $now,
             'nbf' => $now,
             'exp' => $now + 900,
@@ -112,6 +113,7 @@ final class UserTokensTest extends TestCase
         self::assertSame('ctpassstore-api', $claims['aud']);
         self::assertSame('5', $claims['sub'], 'sub is a string.');
         self::assertSame('jdoe', $claims['username']);
+        self::assertFalse($claims['admin']);
         self::assertSame($now, $claims['iat']);
         self::assertSame($now, $claims['nbf']);
         self::assertSame($now + 900, $claims['exp']);
@@ -180,7 +182,7 @@ final class UserTokensTest extends TestCase
         yield 'wrong aud' => [['aud' => 'other-api']];
         yield 'aud as list' => [['aud' => ['ctpassstore-api']]];
         yield 'wrong iss' => [['iss' => 'https://evil.example']];
-        foreach (['iss', 'aud', 'sub', 'username', 'iat', 'nbf', 'exp', 'jti'] as $claim) {
+        foreach (['iss', 'aud', 'sub', 'username', 'admin', 'iat', 'nbf', 'exp', 'jti'] as $claim) {
             yield "missing $claim" => [[$claim => null]];
         }
         yield 'empty sub' => [['sub' => '']];
@@ -199,6 +201,39 @@ final class UserTokensTest extends TestCase
         yield 'sub with whitespace' => [['sub' => ' 5']];
         yield 'username as number' => [['username' => 5]];
         yield 'jti as number' => [['jti' => 5]];
+        // AG-07: admin is a JSON boolean, never cast. Tokens issued before the claim existed fail like any other.
+        yield 'admin as string "true"' => [['admin' => 'true']];
+        yield 'admin as 1' => [['admin' => 1]];
+        yield 'admin as 0' => [['admin' => 0]];
+        yield 'admin as string "false"' => [['admin' => 'false']];
+        yield 'admin as list' => [['admin' => [true]]];
+    }
+
+    // ---------------------------------------------------------------- AG-07
+
+    public function testTheAdminClaimSurvivesTheRoundTrip(): void
+    {
+        foreach ([true, false] as $admin) {
+            $token = $this->tokens->issue(new PersonPrincipal(new PersonId(5), 'jdoe', $admin));
+            self::assertSame($admin, $token->admin);
+
+            $claims = json_decode((string) base64_decode(strtr(explode('.', $token->token)[1], '-_', '+/')), true);
+            self::assertIsArray($claims);
+            self::assertSame($admin, $claims['admin'], 'admin is a JSON boolean in the token.');
+            self::assertSame($admin, $this->tokens->verify($token->token)->admin);
+        }
+    }
+
+    public function testATokenWithoutTheAdminClaimIsRejected(): void
+    {
+        // As issued before the admin group existed (AG-07): the client logs in again.
+        $this->assertInvalid(self::sign($this->claims(['admin' => null])));
+    }
+
+    public function testAdminTrueAndFalseClaimsAreAccepted(): void
+    {
+        self::assertTrue($this->tokens->verify(self::sign($this->claims(['admin' => true])))->admin);
+        self::assertFalse($this->tokens->verify(self::sign($this->claims()))->admin);
     }
 
     // ---------------------------------------------------------------- TK-07, TK-08, TK-15

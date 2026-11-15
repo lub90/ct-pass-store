@@ -152,7 +152,8 @@ final class ErrorFormatApiTest extends ApiTestCase
     {
         $this->churchTools->clearValues($this->categoryIds[KvSchema::SETTINGS_CATEGORY]);
 
-        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('GET', '/v1/entries/' . self::OTHER, self::USER));
+        // A change needs the settings; a person's read doesn't since the admin role is in the token.
+        $body = $this->assertProblem(ProblemType::Misconfigured, $this->request('PUT', '/v1/entries/' . self::USER, self::USER, ['secondaryPwd' => 'Custom-pass12!']));
 
         self::assertStringContainsString('settings', (string) $body['detail']);
     }
@@ -360,7 +361,6 @@ final class ErrorFormatApiTest extends ApiTestCase
     public static function brokenSettings(): iterable
     {
         yield 'passwordLength' => ['passwordLength', 'VALUE-SECRET-1'];
-        yield 'adminUsers' => ['adminUsers', ['VALUE-SECRET-2']];
         yield 'requirePasswordForPasswordChange' => [KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD, 'VALUE-SECRET-3'];
         yield 'allowCustomPassword' => [KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD, 'VALUE-SECRET-4'];
     }

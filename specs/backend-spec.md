@@ -43,7 +43,7 @@ data.
 | Actor | Description |
 | --- | --- |
 | **User** | Any ChurchTools person with the extension's `view` permission. Manages their own entry. |
-| **Admin user** | A person listed in the `adminUsers` setting. May read, set and delete **any** entry. |
+| **Admin user** | A person who is an active member of the ChurchTools group configured in `access.groups.admins.groupId` (D9). The backend checks it at login and puts the answer in the token. May read, set and delete **any** entry. |
 | **Machine client** | An external system such as ct-radius that reads encrypted passwords without a human user. It authenticates with JWTs it signs itself (D5, 4.3). |
 | **Extension** | The ChurchTools extension. Logs the user in via OAuth and calls the backend on their behalf. |
 | **Service user** | The ChurchTools account the backend itself uses (`CT_API_TOKEN`). It's the only account allowed to write to `passwordStore`. It **may read persons** (to tell deleted and archived persons from active ones, D7), and it should have no other rights (see 4.8). |
@@ -54,7 +54,8 @@ Data lives in three KV categories of the `ctpassstore` module:
 | Category | Content | Written by |
 | --- | --- | --- |
 | `passwordStore` | One value per person: `{"personId": <int>, "secondaryPwd": "<base64 ciphertext>"}` | Backend (service user) only |
-| `settings` | One value: `requirePasswordForPasswordChange`, `allowCustomPassword`, `passwordLength`, `adminUsers`, `backendUrl`, `machineClients`. There's no `readAccessUsers` any more (Q23); machine clients replace it. | Extension admins |
+| `settings` | One value: `requirePasswordForPasswordChange`, `allowCustomPassword`, `passwordLength`, `backendUrl`. It may also hold `schema`, `revision`, `oauthClientId` and `texts`, which the backend ignores. There's no `adminUsers`, `machineClients` or `readAccessUsers` any more (D9, Q23). | Extension admins |
+| `access` | One value: `groups` (the backend reads only `groups.admins.groupId`) and `machineClients`. It may also hold `schema` and `revision`, which the backend ignores. | The admin group |
 | `encryptionSettings` | One value: `publicKey` (PEM) | Extension setup |
 
 - `backendUrl` in `settings` is read by the extension and currently also by ct-radius. Renaming or removing it is a
@@ -103,7 +104,6 @@ Data lives in three KV categories of the `ctpassstore` module:
 - They're cached (see [6.1](#61-performance-and-caching)).
 - Settings are validated when loaded:
   - `passwordLength` is an integer from **12 to 64** (Q7).
-  - `adminUsers` is a list of positive integers; missing means empty.
   - `requirePasswordForPasswordChange` and `allowCustomPassword` are JSON booleans and present. Strings (`"true"`),
     numbers (`0`, `1`) and `null` are rejected.
   - `backendUrl` is an `https://` URL. It's normalized by removing a trailing slash; a query, fragment or credentials
@@ -112,7 +112,18 @@ Data lives in three KV categories of the `ctpassstore` module:
     `/test`.
   - `publicKey` (in `encryptionSettings`, exactly one value) is a PEM-encoded **RSA** public key of at least 4096 bits.
     EC or Ed25519 keys, certificates and private keys are rejected. PEM with CRLF line endings is accepted.
-  - `machineClients` is a list of registered machine clients (D5):
+  - `access` is read like `settings` and cached the same way (6.1). The service user needs `view custom data` on it.
+    - `access.groups.admins.groupId` is a positive integer (a JSON integer, not a string such as `"12"`, `"012"` or
+      `12.0`). Missing or invalid means **no admins**, logged as `warning` (once per cache period, not on every request).
+      Users and machine clients aren't affected, and it never produces `500 misconfigured`: no admins is the safe side
+      (D9). `/v1/test` is for admins only, so it can show the cause only on an installation that has an admin; where
+      nobody is admin, the cause is in the log and in the extension's setup or migration.
+    - A missing `access` category or value, or a service user that may not read it (`403`, or `404` on its values),
+      means no admins and no machine clients, with the same reporting, and is remembered like a missing category.
+      Only a failing ChurchTools (unavailable, rate limited) is passed on.
+    - After uploading the backend, run the extension's migration at once. Until then ct-radius logins (machine clients)
+      are refused and nobody is admin.
+  - `access.machineClients` is a list of registered machine clients (D5; they used to live in `settings`):
 
     ```json
     [{ "id": "ct-radius", "name": "WiFi RADIUS", "publicKeys": ["<Ed25519 public key, base64>"],
@@ -123,9 +134,12 @@ Data lives in three KV categories of the `ctpassstore` module:
       registered client).
     - `publicKeys` is a non-empty list of valid Ed25519 public keys (the raw 32 bytes, base64 or base64url encoded, as
       Node.js exports them in a JWK's `x`). Several keys allow rotation without downtime.
+    - `name` is a non-empty string (after trimming) and `createdAt` a real `YYYY-MM-DD` date. Without them the client is
+      disabled and reported, because the extension couldn't list it (decided 2026-11-14). A missing `permissions`
+      field is valid and grants nothing.
     - `permissions` may contain only known values; today that's just `entries:read`. Unknown values (`entries:write`,
       `*`) grant nothing and are reported by `/test`.
-    - A missing `machineClients` setting means an empty list.
+    - A missing `machineClients` field means an empty list.
     - A client with an invalid entry (bad `id`, duplicate `id`, empty or invalid `publicKeys`) is disabled and reported
       by `/test`; it doesn't break the others. With a duplicate `id`, all entries with that `id` are disabled.
     - Every client has its own key pair. Clients that share a public key are all disabled: whoever holds the private
@@ -134,6 +148,37 @@ Data lives in three KV categories of the `ctpassstore` module:
       affected, because disabling machine clients never weakens security.
     - Every disabled client and ignored permission is logged as a `warning` when the settings are loaded. A disabled
       client only gets `401 invalid-token`, like an unknown one, so the log is where the admin finds the reason.
+    - **Objects and lists stay apart.** The `access` value is decoded keeping JSON objects and arrays distinct, and the
+      cache holds the JSON text (not a re-encoded structure). `machineClients`, `publicKeys` and `permissions` must be
+      JSON arrays, and every entry an object: `{"0": …}` is no list, and `"permissions": {}` is invalid
+      (`invalid-permissions`). A `machineClients` that isn't an array disables all clients; `publicKeys` that isn't a
+      non-empty array is `no-keys`.
+    - **Keys are canonical.** After trimming (below), a key is either standard base64 with padding
+      (`^[A-Za-z0-9+/]{43}=$`) or base64url with or without padding (`^[A-Za-z0-9_-]{43}=?$`, Node's JWK `x`), and
+      decoding then re-encoding must give the same text (no non-zero trailing bits). Mixed alphabets, inner whitespace
+      and a 44th character other than a single `=` are `invalid-key`. Two keys are the same if their 32 bytes are the
+      same, whatever the encoding.
+    - **Parity fixture** `shared/access-client-cases.json` pins these rules for the backend (`AccessParserTest`, AG-13,
+      also through the cache in `KvSettingsRepositoryTest`) and the extension's reader. It is a JSON list of cases,
+      each with a `name` and one of: `{ "client": <raw entry>, "valid": true|false, "reasons": [<codes>] }` (one
+      entry; `reasons` is empty if valid); `{ "clients": [<raw entries>], "enabled": [<ids>], "reasons": [[<codes>], …] }`
+      (several entries, `reasons` has one list per entry); `{ "machineClients": <raw value>, "enabled": [] }` (the raw
+      value of the field itself, for values that aren't a list). Reason codes, in the order they are reported:
+      `not-an-object`, `invalid-id`, `duplicate-id`, `missing-name`, `invalid-created-at`, `no-keys`, `invalid-key`,
+      `invalid-permissions`, `shared-key`. Every entry that shares its id with another entry gets `duplicate-id`,
+      the earlier ones as well, whether or not they are otherwise valid (all of them are disabled). Codes of one entry
+      are listed in the order above (so `["duplicate-id", "missing-name"]`).
+      `invalid-id` and `duplicate-id` exclude each other; `invalid-key` appears once per client however many keys are
+      bad; `shared-key` is given to every client that shares a key with another valid client. Trimming removes
+      exactly PHP's `trim()` default characters (space, tab, LF, CR, NUL, vertical tab) and nothing else: a key is
+      trimmed before decoding, a name before the emptiness check (and stored trimmed), and a non-breaking space
+      (U+00A0) is not trimmed (a key padded with it is `invalid-key`; a name of only U+00A0 is valid; a name of only
+      NUL is `missing-name`). `createdAt` must match `^\d{4}-\d{2}-\d{2}$` exactly (no time, no trailing newline) and be
+      a real calendar date: `2024-02-29` is valid; `2025-02-29`, `2026-02-30`, month or day `00` and year `0000` are
+      not. An `id` follows the pattern above literally: 3 to 40 characters, a leading hyphen and digits-only are
+      allowed. `permissions` missing or `null` is valid; non-string items inside the list grant nothing and don't
+      invalidate the client. An unpadded key of only letters and digits matches the base64url form and is valid; unpadded standard base64
+      containing `+` or `/` is invalid. Unknown permissions don't make a client invalid. Both sides must read the file; don't copy cases.
 - Invalid or missing settings produce `500 misconfigured` with a `detail` that names the setting, plus an
   `error` log entry. They must never produce a silent fallback that weakens security, such as a password length of `0`.
 
@@ -143,7 +188,7 @@ Users log in through ChurchTools' OAuth server (D4). Each ChurchTools instance n
 
 1. **An OAuth application** for the backend:
    - confidential (with client secret)
-   - redirect URI = the extension's page, `https://<instance>/ccm/ctpassstore/`
+   - redirect URI = `https://<instance>/ccm/ctpassstore/auth/callback`
    - The setup wizard can create it through `POST /api/oauthclients` (needs "administer settings"). ChurchTools
      returns the secret **only once**; the admin copies client ID and secret into `credentials.php`. **⏳ 4.6** The
      extension's setup wizard sends them to `POST /v1/setup` (4.10) instead, so nobody copies them.
@@ -258,11 +303,12 @@ The matrix for persons is the old backend's, minus the removed read-access users
   machine client with the `id` `123` isn't person 123 and has no "own" entry, and a user whose person ID equals a client
   `id` gets nothing of that client's permissions.
 
-- The admin role is taken from the **current settings** (cached, 6.1), not from the token. Changes to
-  the admin lists therefore apply within the settings cache TTL.
+- The admin role is taken from the **token claim `admin`** (4.4), not from the settings. It was set at login from the
+  membership in the admin group (D9). Removing someone from the group therefore takes effect when their token expires
+  (15 minutes), like revoking `view`.
 - **The extension's `view` permission is checked once, at login** (4.4), not on every request. Revoking it takes effect
   when the backend token expires.
-- These steps need **no call to ChurchTools**, apart from loading the settings (cached, 6.1).
+- These steps need **no call to ChurchTools**, apart from loading `access` for machine clients (cached, 6.1).
 
 ### 4.4 `POST /v1/auth/token` (login)
 
@@ -271,7 +317,7 @@ Exchanges an OAuth authorization code from ChurchTools for a backend access toke
 **Flow** (D4):
 
 1. The extension starts the OAuth authorization code flow with PKCE at `https://<instance>/oauth/authorize` with
-   `client_id`, `redirect_uri` (the extension page), `response_type=code`, **`scope=api`**, `state` and
+   `client_id`, `redirect_uri` (`https://<instance>/ccm/ctpassstore/auth/callback`), `response_type=code`, **`scope=api`**, `state` and
    `code_challenge` (S256). It keeps `state` and the code verifier in `sessionStorage`.
 2. ChurchTools redirects back to the extension with `code` and `state`. Once a user has given consent, this happens
    without any visible step.
@@ -280,7 +326,7 @@ Exchanges an OAuth authorization code from ChurchTools for a backend access toke
 **Request:**
 
 ```json
-{ "code": "<authorization code>", "codeVerifier": "<PKCE verifier>", "redirectUri": "https://<instance>/ccm/ctpassstore/" }
+{ "code": "<authorization code>", "codeVerifier": "<PKCE verifier>", "redirectUri": "https://<instance>/ccm/ctpassstore/auth/callback" }
 ```
 
 All three fields are required, non-empty strings of at most 2,048 characters.
@@ -290,6 +336,12 @@ All three fields are required, non-empty strings of at most 2,048 characters.
 1. `redirectUri` is **parsed**; its scheme must be `https` and its host and port must equal those of `CT_API_URL`.
    A string prefix check isn't enough (`https://<instance>.evil.com`, `https://<instance>@evil.com`). Otherwise
    `400 invalid-body`, without calling ChurchTools. ChurchTools additionally checks it against the registered URI.
+1a. **Before the code exchange,** the backend loads `settings` and `access` (cached, 6.1), because step 4 needs the
+   admin group. Invalid or missing `settings` → `500 misconfigured` (also for a code that is invalid anyway); a
+   ChurchTools failure while loading them → the usual upstream problem (`502 upstream-unavailable`,
+   `503 upstream-rate-limited`, …; an outage is remembered briefly, 6.2). Both happen before ChurchTools sees the
+   code, so the code isn't used up and the client can retry with it. Missing or invalid `access` content only means
+   no admins (3.2). Broken `settings` therefore block every login until fixed.
 2. The backend exchanges the code at `POST /oauth/access_token` with `grant_type=authorization_code`, its client ID and
    secret, `redirect_uri` and `code_verifier`.
    - Code invalid, expired or already used → `400 oauth-code-invalid`.
@@ -307,13 +359,20 @@ All three fields are required, non-empty strings of at most 2,048 characters.
      `1` or anything else → `403 no-service-access`.
    - The username (`cmsUserId`) from `whoami` goes into the backend token (claim `username`). It's needed later for
      the primary password check (5.5), because ChurchTools' login checks username and password, not a person ID.
+   - Only if `access.groups.admins.groupId` is set and valid (3.2): `GET /api/persons/{personId}/groups`. The person is
+     an admin if an entry has `group.domainIdentifier` equal to the group ID (compared as integers) and
+     `groupMemberStatus` `active`. `waiting`, `requested`, `to_delete` and other groups don't count. Otherwise
+     `admin` is `false`. `404` or `403` from ChurchTools means `admin: false` and a `warning` in the log; `5xx` or a
+     timeout → `502 upstream-unavailable`, so no token is issued with a guessed role.
 5. **The ChurchTools access and refresh tokens are discarded.** They're never stored or logged.
-6. It issues its own access token.
+6. It issues its own access token and logs at `info`: `User <id> logged in as admin.` for an admin, `User <id> logged in.`
+   otherwise. No token, code or username is in the line. The admin role comes from a group membership that others may
+   control (D9), so the log shows when it was used.
 
 **Response `200`:**
 
 ```json
-{ "accessToken": "<backend JWT>", "tokenType": "Bearer", "expiresIn": 900 }
+{ "accessToken": "<backend JWT>", "tokenType": "Bearer", "expiresIn": 900, "admin": false, "version": "1.0.0" }
 ```
 
 **The backend access token** (Q21):
@@ -324,8 +383,12 @@ All three fields are required, non-empty strings of at most 2,048 characters.
   - `aud`: the constant `ctpassstore-api`
   - `sub`: the person ID (as a string)
   - `username`: the person's ChurchTools username at login
+  - `admin`: a boolean, `true` if the person is an active member of the admin group (4.4 step 4)
   - `iat`, `nbf`, `exp` (15 minutes), `jti`
-- All of these claims are required; a token missing one is `invalid-token`.
+- All of these claims are required; a token missing one, or with `admin` that isn't a JSON boolean (`"true"`, `1`), is
+  `invalid-token`.
+- `version` in the response is the backend's version, `Version::current()` (6.5), so the extension can compare it with
+  its own (`versioning.md`).
 - Validation allows 30 seconds of clock skew.
 - Changing `JWT_SECRET` invalidates all issued tokens immediately (emergency revocation).
 
@@ -478,7 +541,10 @@ Deletes the entry of person `{id}`.
   - `credentials.php` is readable by PHP but not by other users (3.1, instead of requiring `0600`), and
     `logs/` is writable
   - all settings can be read
-  - the settings pass validation (3.2), including each machine client (disabled clients, unknown
+  - `access` (check name "access"): the service user can read the category, and `groups.admins.groupId` is a positive
+    integer (3.2). Whether the group exists isn't checked here: the extension's rights check does it (extension spec
+    16.4), and the service user gets no group right.
+  - the settings and `access` pass validation (3.2), including each machine client (disabled clients, unknown
     permissions and empty key lists are reported by name)
   - the cache folder is writable by PHP and not by other users
   - the cache folder supports the locking the security stores need (6.1): an exclusive lock on a test file can be
@@ -507,9 +573,8 @@ Deletes the entry of person `{id}`.
     docs/setup.md).", naming the missing parts (e.g. `churchdb view archive`, `churchdb view alldata for department 3`).
     The administrative rights stay forbidden. The service user also needs `view custom category` on the
     extension's categories; without it ChurchTools lists no category and the check can't find `passwordStore`.
-  - every person in `adminUsers` exists and isn't archived (`AdminUsersCheck`). It fails with "adminUsers contains
-    person 56, who is deleted or archived; remove them in the extension settings."; a failed lookup fails it with a
-    generic message and the details go to the log.
+  - ~~every person in `adminUsers` exists and isn't archived (`AdminUsersCheck`)~~ **Removed (D9):** membership lives in
+    ChurchTools, and a deleted or archived person can't log in, so there's nothing left to report.
   - `CLEANUP_TOKEN` (`CleanupTokenCheck`): not set → ok, "The web-cron endpoint is off."; set with fewer than 43
     characters → fail, and the endpoint stays off (4.12); otherwise ok. The token is never printed.
   - only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
@@ -703,18 +768,17 @@ php bin/cleanup.php --apply    # deletes the entries of gone persons
    - stderr, so cron mails it to the admin:
 
      ```
-     adminUsers contains person 12, who is deleted or archived; remove them in the extension settings
      could not delete the entry of person 58: <error>; the next run retries it
      ```
 
-   - Every printed line is also logged (6.4): the stdout lines at `info`, a gone admin or a failed delete at `warning`,
+   - Every printed line is also logged (6.4): the stdout lines at `info`, a failed delete at `warning`,
      every abort at `error`.
 4. **Exit codes:**
 
    | Code | Meaning |
    | --- | --- |
    | 0 | Done: nothing to do, or everything was deleted (in a dry run: would have been). |
-   | 1 | Done with findings: `adminUsers` contains gone persons, or a delete failed. |
+   | 1 | Done with findings: a delete failed. |
    | 2 | Aborted before deleting anything: wrong arguments, configuration, lock held or unavailable, missing persons right, failed lookup, unexpected error. |
 
 5. **Cron line**, in `backend/docs/setup.md`: `0 3 * * * php /path/to/backend/bin/cleanup.php --apply`. It must run as
@@ -757,7 +821,7 @@ Authorization: Bearer <CLEANUP_TOKEN>
 6. **Run:** `CleanupOrphans` (5.8.6) with a deadline of **20 seconds** after the request came in (5.8.4). `200`:
 
    ```json
-   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0, "goneAdmins": 0}
+   {"applied": true, "complete": true, "checked": 143, "gone": 1, "deleted": 1, "failedDeletes": 0}
    ```
 
    | Field | Meaning |
@@ -768,10 +832,9 @@ Authorization: Bearer <CLEANUP_TOKEN>
    | `gone` | Gone persons found (a dry run: that would be deleted) |
    | `deleted` | Entries actually deleted; always `0` in a dry run |
    | `failedDeletes` | Deletes that failed; the next run (after the cooldown) retries them |
-   | `goneAdmins` | Persons in `adminUsers` who are gone |
 
-   Gone admins and failed deletes still give `200`; the admin sees them in `/v1/test` and the log.
-7. **The response holds counts only,** no person IDs. The IDs go to the backend log; gone admins also show in `/v1/test`.
+   Failed deletes still give `200`; the admin sees them in the log.
+7. **The response holds counts only,** no person IDs. The IDs go to the backend log.
 8. **Aborts before deleting:** a service user without the persons right → `500 misconfigured`; ChurchTools problems →
    `502`/`503` as usual. Nothing was deleted. Web-cron services usually alert on these.
 9. **What a stolen token can do:** start the same harmless cleanup, at most once per 10 minutes. It deletes only persons
@@ -877,11 +940,15 @@ This covers the lookup and write logic in `KvPasswordRepository`.
 1. Settings and the public key are loaded lazily and at most once per request.
 2. They're cached across requests (6.1).
 3. They're validated according to 3.2 (`SettingsParser`).
-4. Missing optional lists (`adminUsers`, `machineClients`) mean "empty".
+4. Missing optional lists (`access.machineClients`) mean "empty".
+5. `access` is loaded and cached like `settings` (`SettingsParser` reads both). A missing `access` category or value, or a
+   missing or invalid `groups.admins.groupId`, or a category the service user can't read, gives "no admins" and "no
+   machine clients" with a `warning` (3.2); it never throws for content or rights. Only unavailable or rate-limited
+   ChurchTools propagates.
 
 ### 5.5 Authentication (`Login`, `UserTokens`, `MachineTokens`, `TokenRules`, `PrimaryPasswordVerifier`)
 
-1. **Token exchange** (`Login`): implements 4.4. It's the only place where a user's ChurchTools token exists, and only
+1. **Token exchange** (`Login`): implements 4.4, including the group check for the `admin` claim (step 4). It's the only place where a user's ChurchTools token exists, and only
    for the duration of the request.
 2. **Issuing and validating backend tokens:** implements the token format of 4.4 (and 4.4a for machine tokens). The
    rules (required claims, lifetimes, leeway, order of checks) live in the application layer (`TokenRules`,
@@ -979,7 +1046,7 @@ ChurchTools communication goes through it.
 3. **Auth middleware:** implements 4.3 and attaches the authenticated principal (person or machine client, typed) to
    the request.
 
-### 5.8 Gone persons and cleanup (`PersonDirectory`, `GonePersons`, `GoneAdmins`, `CleanupOrphans`)
+### 5.8 Gone persons and cleanup (`PersonDirectory`, `GonePersons`, `CleanupOrphans`)
 
 1. **`PersonDirectory`** (port): `exists(PersonId): bool` (true only for an active person; the authoritative single
    lookup), `confirmedActive(list<PersonId>): list<PersonId>` (may leave out active persons, never includes others) and
@@ -1004,14 +1071,13 @@ ChurchTools communication goes through it.
       `unchecked` instead. The pre-filter isn't bounded by the deadline.
 
    `GoneResult` has `gone` and `unchecked`. Any failure propagates.
-5. **`GoneAdmins::find(Settings): list<PersonId>`** is `GonePersons::find(adminUsers)->gone`, in `adminUsers` order. The
-   cleanup and `AdminUsersCheck` (4.8) use it. `adminUsers` is only **reported**, never changed: the service user only
-   reads the settings, and write access would let a leaked service token make anyone an admin. A gone person can't log in
-   to ChurchTools, so a gone admin can do nothing.
+5. ~~`GoneAdmins::find(Settings)`~~ **Removed (D9).** Admins are members of a ChurchTools group, not a list in the settings.
+   Membership lives in ChurchTools, and a deleted or archived person can't log in, so there's nothing to report. The
+   cleanup reads no admin list and the service user needs no group right.
 6. **`CleanupOrphans::run(bool $apply, ?DateTimeImmutable $deadline): CleanupReport`:**
    1. `assertReadable()`.
    2. Read the person IDs with entries (5.3.12) and the settings.
-   3. `GonePersons::find()` and `GoneAdmins::find()`.
+   3. `GonePersons::find()`.
    4. **Only after steps 1–3 succeeded,** and only with `$apply`: delete the entries of the gone persons with the
       repository's `deleteEntriesOf()`. It lists `passwordStore` **once** for all of them and, per person, removes
       every entry of that listing (like `delete()` of 5.3.5: duplicates and broken entries too); a person whose delete
@@ -1024,8 +1090,8 @@ ChurchTools communication goes through it.
       and sets a new password while the run is going on can lose that password (the new password updates the listed
       entry, which is then deleted). The window is the length of one run (seconds); the person just sets it again.
       Entries created after the listing are never touched.
-   5. Return the report: persons checked, gone IDs, unchecked IDs, failed deletes, gone admins. The exit code of 4.11 is
-      1 if there are failed deletes or gone admins, else 0.
+   5. Return the report: persons checked, gone IDs, unchecked IDs, failed deletes. The exit code of 4.11 is 1 if there
+      are failed deletes, else 0.
 
    If any lookup fails, the use case throws and **nothing is deleted**. A delete that fails in step 4 is logged
    (`warning`) and recorded; the run continues with the other persons, and the next run retries. Deletions and the summary
@@ -1054,14 +1120,14 @@ The security stores (`jti` replay cache, rate-limit counters;
   | --- | --- | --- |
   | Module ID, category IDs | 1 hour | These only change on reinstall |
   | Persons confirmed active | 10 minutes | A deleted or archived person is locked out of `GET` and `PUT` of their entry within 10 minutes (D7, 5.8.3). Only "exists" is cached, never "gone". |
-| Settings, public key | 5 minutes | Admin changes (admins, machine clients and their keys, the public key) take up to 5 minutes to apply. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
+| Settings, `access`, public key | 5 minutes | Changes to machine clients and their keys and to the public key take up to 5 minutes to apply. For admins: a new member is admin at their next login; a removed one stays admin until their token expires (up to 15 minutes); a changed `groupId` applies after up to 5 minutes (cache) plus a new login. Chosen 2026-11-11 over 60 s so that steady RADIUS traffic reloads the settings only once every 5 minutes. |
 
 - `passwordStore` values are **never** cached. Reads must always see the latest write.
 - **Cache backend:** a file cache outside the web root. No APCu, to keep the backend lean (Q3).
 - **Cache integrity:** cache files contain no secrets and are stored as JSON (never `serialize`/`unserialize`). Each
   entry is signed with an HMAC whose key is derived from `JWT_SECRET`, and each cache file records an identifier of
   that key (a hash, not the key). Files are created readable and writable only by PHP (`600`, folder `700`, or the group variant of 3.1), so
-  other users on shared hosting can't plant settings such as `adminUsers`. Cache keys are hashed before they're used as
+  other users on shared hosting can't plant settings such as the admin group in `access`. Cache keys are hashed before they're used as
   file names.
 - **Invalid entries** are handled differently for the two kinds of cache:
 
@@ -1184,7 +1250,7 @@ The security stores (`jti` replay cache, rate-limit counters;
 
   | Level | Events |
   | --- | --- |
-  | `warning` | Denied access, with person ID and IP address; a wrong `CLEANUP_TOKEN`; a gone admin or a failed delete in the cleanup |
+  | `warning` | Denied access, with person ID and IP address; a wrong `CLEANUP_TOKEN`; a failed delete in the cleanup; a missing or invalid admin group or machine-client setting; a `404` or `403` for a person's groups at login |
   | `info` | Logins, password changes and deletions, with person IDs; cleanup deletions and summaries |
   | `error` | Upstream errors, configuration problems |
 
@@ -1208,6 +1274,9 @@ The security stores (`jti` replay cache, rate-limit counters;
     setup wizard, which configures the backend through `/v1/setup` (4.10). The backend sets its own file modes
     (3.1), because uploads don't keep them.
   - Developers run `composer install`.
+- **Versioning** follows [`versioning.md`](versioning.md): backend and extension share `MAJOR.MINOR`; tags are
+  `backend-v*.*.*`. The release check fails if the backend's `MAJOR.MINOR` differs from `extension/package.json`. The
+  login answer (4.4) carries the version so the extension can compare.
 - The backend reports its version in the `/v1/test` response and in every `error` log entry: `x.y.z` for a tagged
   release, `x.y.z+<sha>` for other commits, `x.y.z+<sha>-dirty` for uncommitted changes.
 
@@ -1246,9 +1315,9 @@ The security stores (`jti` replay cache, rate-limit counters;
 
 ## 7. Open questions
 
-| # | Question | Proposal |
-| --- | --- | --- |
-| Q22 | Should admin and read access be granted via ChurchTools groups instead of person-ID lists in the settings? | Later. The consent includes group memberships, and the `api` scope can read them, so it's possible. |
+No open questions.
+
+**Answered 2026-11-13:** Q22 (admin role from a ChurchTools group, checked at login; `access` category; D9).
 
 **Answered 2026-11-12:** Q16 (cleanup of entries of deleted and archived persons: a CLI script for server cron, 4.11, and a
 web-cron endpoint protected by its own token, 4.12; plus the read check of 4.5 and 4.6; D7, D8).
@@ -1433,7 +1502,7 @@ it a hidden person would answer `403`, so it's required as a precaution. None of
 | --- | --- |
 | A separate admin token in `credentials.php` for the cleanup | A much more powerful credential on the server. |
 | Only delete when ChurchTools says `404`, ignore archived persons | An archived person's old password would keep working (e.g. for RADIUS). |
-| Remove gone persons from `adminUsers` | Write access to the settings would let a leaked service token make anyone an admin (5.8.5). |
+| Remove gone persons from `adminUsers` | Write access to the settings would let a leaked service token make anyone an admin. (Moot since D9: there's no `adminUsers` any more.) |
 
 **Cost:** existing installations must grant the service user the right, otherwise `/v1/test` fails and every read of
 another person's entry fails with `500 misconfigured` (RADIUS logins included).
@@ -1452,6 +1521,38 @@ the next run continues; the CLI has no deadline. (Refined 2026-11-12: single loo
 
 **Cost:** two code paths in the client, kept in line by shared contract cases against a real instance (6.6).
 
+### D9. Admin role from a ChurchTools group, checked at login
+
+**Decided 2026-11-13** (extension spec E4, E5, section 11; answers Q22). The admin role is membership in the ChurchTools
+group `access.groups.admins.groupId`. At login the backend asks ChurchTools with the user's own token
+(`GET /api/persons/{personId}/groups`) whether the person is an **active** member, and puts the answer in the token claim
+`admin` (4.4). Authorization reads only that claim (4.3). The category `access` holds the groups and the machine clients;
+`settings` keeps the policy, `backendUrl` and texts. `adminUsers` and `machineClients` are gone from `settings`.
+
+**Why:**
+
+- Membership is managed in ChurchTools, where admins already manage people, and it's visible only as ChurchTools allows.
+  Person-ID lists in a setting were a second place to maintain.
+- Users must read `settings` (the policy), but must not read who is an admin or which machine clients exist. A separate
+  category `access` lets ChurchTools rights keep these apart; changing the policy no longer implies controlling access.
+- The claim keeps 4.3 free of ChurchTools calls. The cost is delay: removing someone from the group takes effect when
+  their token expires (15 minutes), like revoking `view`.
+- Gone admins can't be reported or cleaned any more, and needn't be: membership lives in ChurchTools, and a deleted or
+  archived person can't log in.
+
+**Consequence:** whoever controls the membership of the admin group in ChurchTools holds the admin role. That includes
+leaders whose group role may edit members, holders of `edit group memberships` (also `of group` or `of grouptype`),
+`administer groups` or `administer persons`, and anyone who can join an open, auto-accepting or dynamic group. They
+become admin at their next login. The backend can't check this; the extension's rights check does (extension spec 16.4,
+rule 6) and `backend/docs/setup.md` tells the admin how to choose the group.
+
+**Fail closed:** a missing or invalid group ID means no admins; `404` or `403` for the groups means `admin: false`; a
+`5xx` or timeout refuses the login (`502`) rather than issue a token with a guessed role.
+
+**Cost:** the service user's rights need `view custom data` on `access` (extension spec 16.2). `/v1/test` doesn't check
+that the group exists; the extension's rights check does (extension spec 16.4, rule 5). Existing installations must
+migrate `adminUsers` and `machineClients` into `access` (the extension's migration).
+
 ## 9. Later (not part of the first release)
 
 - **Possible second step: ct-radius talks only to the backend.** A lookup endpoint for machine clients (e.g.
@@ -1468,7 +1569,6 @@ the next run continues; the CLI has no deadline. (Refined 2026-11-12: single loo
   If the new KV store offers ownership or per-entry permissions ("users may only write their own entry"), lookups by
   key, and read access for a dedicated account, the extension could encrypt in the browser (it already ships an RSA
   library) and write directly, and ct-radius could read directly. The backend would then no longer be needed.
-- Roles via ChurchTools groups (❓ Q22).
 - Backup and restore of extension data (an extension feature, not a backend feature).
 
 ## 10. Changes from the old backend

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace CtPassStore\Application\Cleanup;
 
-use CtPassStore\Application\GoneAdmins;
 use CtPassStore\Application\GonePersons;
 use CtPassStore\Application\Port\Clock;
 use CtPassStore\Application\Port\PasswordRepository;
@@ -25,7 +24,6 @@ final class CleanupOrphans
         private readonly SettingsRepository $settings,
         private readonly PersonDirectory $persons,
         private readonly GonePersons $gonePersons,
-        private readonly GoneAdmins $goneAdmins,
         private readonly Clock $clock,
         private readonly LoggerInterface $logger,
     ) {}
@@ -41,11 +39,12 @@ final class CleanupOrphans
 
         $this->persons->assertReadable();
 
+        // Invalid settings abort the run before anything is deleted (catalog GP-13).
+        $this->settings->settings();
+
         $personIds = $this->passwords->personIds();
-        $settings = $this->settings->settings();
 
         $result = $this->gonePersons->find($personIds, $lookupDeadline);
-        $goneAdmins = $this->goneAdmins->find($settings);
 
         $gone = $result->gone;
         $unchecked = $result->unchecked;
@@ -70,16 +69,15 @@ final class CleanupOrphans
             }
         }
 
-        $report = new CleanupReport($apply, count($personIds), $gone, $unchecked, $failed, $goneAdmins);
+        $report = new CleanupReport($apply, count($personIds), $gone, $unchecked, $failed);
         $this->logger->info(sprintf(
-            'Cleanup %s: %d persons checked, %d gone, %d deleted, %d failed, %d unchecked, %d gone admins.',
+            'Cleanup %s: %d persons checked, %d gone, %d deleted, %d failed, %d unchecked.',
             $apply ? 'applied' : 'dry run',
             $report->checked,
             count($report->gone),
             $report->deletedCount(),
             count($failed),
             count($report->unchecked),
-            count($goneAdmins),
         ));
 
         return $report;

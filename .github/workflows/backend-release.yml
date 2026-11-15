@@ -1,11 +1,11 @@
-# Builds the PHP backend release (spec 6.5, 6.6): runs the checks, verifies tag, VERSION and CHANGELOG, builds the
+# Builds the PHP backend release (spec 6.5, 6.6): runs the checks, verifies tag, VERSION, CHANGELOG and MAJOR.MINOR, builds the
 # upload-ready zip and publishes it as a GitHub release with the CHANGELOG section as notes.
 name: Backend release
 
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'backend-v*.*.*'
 
 # Needed to create the release; nothing else.
 permissions:
@@ -29,7 +29,7 @@ jobs:
           coverage: none
           tools: composer:v2
 
-      - name: Release check (tag, VERSION, CHANGELOG)
+      - name: Release check (tag, VERSION, CHANGELOG, MAJOR.MINOR with the extension)
         run: php bin/release-check.php "$GITHUB_REF_NAME" > "$RUNNER_TEMP/release-notes.md"
 
       - name: Install dependencies

@@ -48,7 +48,7 @@ final class CleanupCommandTest extends TestCase
             KvSchema::SETTINGS_CATEGORY,
             KvSchema::ENCRYPTION_CATEGORY,
         ]);
-        $this->setAdmins([10]);
+        $this->seedValidSettings();
         $this->log = new TestHandler();
         $logger = new Logger('test', [$this->log]);
         $config = new BackendConfig('https://example.church.tools/api', 'service-token', [], $this->cacheDir . '/credentials.php', $this->cacheDir, 'client', 'secret', 'jwt-secret-for-the-cli-tests-0123456789');
@@ -64,17 +64,12 @@ final class CleanupCommandTest extends TestCase
         rmdir($this->cacheDir);
     }
 
-    /**
-     * @param list<int> $admins
-     */
-    private function setAdmins(array $admins): void
+    private function seedValidSettings(): void
     {
-        $this->fake->clearValues($this->categories[KvSchema::SETTINGS_CATEGORY]);
         $this->fake->seedValue($this->categories[KvSchema::SETTINGS_CATEGORY], json_encode([
             KvSchema::SETTING_REQUIRE_PRIMARY_PASSWORD => true,
             KvSchema::SETTING_ALLOW_CUSTOM_PASSWORD => false,
             KvSchema::SETTING_PASSWORD_LENGTH => 16,
-            KvSchema::SETTING_ADMIN_USERS => $admins,
             KvSchema::SETTING_BACKEND_URL => 'https://backend.example.org/ctpassstore',
         ], JSON_THROW_ON_ERROR));
     }
@@ -115,7 +110,6 @@ final class CleanupCommandTest extends TestCase
 
     public function testEmptyStoreExitsZero(): void
     {
-        $this->setAdmins([]);
         $result = $this->execute([]);
 
         self::assertSame(0, $result['exit']);
@@ -126,7 +120,6 @@ final class CleanupCommandTest extends TestCase
 
     public function testEmptyStoreAppliedSaysDeleted(): void
     {
-        $this->setAdmins([]);
         $result = $this->execute(['--apply']);
 
         self::assertSame(0, $result['exit']);
@@ -166,17 +159,6 @@ final class CleanupCommandTest extends TestCase
         $result = $this->execute(['--apply']);
 
         self::assertStringContainsString("checked 1 person, deleted 1 entry\n", $result['out']);
-    }
-
-    public function testGoneAdminExitsOne(): void
-    {
-        $this->entry(10);
-
-        $result = $this->execute(['--apply']);
-
-        self::assertSame(1, $result['exit']);
-        self::assertSame("adminUsers contains person 10, who is deleted or archived; remove them in the extension settings\n", $result['err']);
-        self::assertStringContainsString('deleted entry of person 10', $result['out']);
     }
 
     public function testFailedDeleteExitsOne(): void
@@ -308,7 +290,6 @@ final class CleanupCommandTest extends TestCase
         }
         self::assertTrue($this->log->hasInfoThatContains('deleted entry of person '));
         self::assertTrue($this->log->hasInfoThatContains('checked '));
-        self::assertSame(Logger::WARNING, $levels['adminUsers contains person 10, who is deleted or archived; remove them in the extension settings']);
         self::assertTrue($this->log->hasWarningThatContains('could not delete the entry of person '));
 
         $this->log->clear();
@@ -319,7 +300,6 @@ final class CleanupCommandTest extends TestCase
 
     public function testLockIsReleasedAfterARunAndAfterAnAbort(): void
     {
-        $this->setAdmins([]);
         $this->fake->failNext('activePersonIds', new UnavailableException('POST: unreachable.'));
         $this->entry(56);
         self::assertSame(2, $this->execute([])['exit']);
@@ -354,7 +334,6 @@ final class CleanupCommandTest extends TestCase
         $formats = [
             '/^deleted entry of person \d+$/',
             '/^checked \d+ persons?, deleted \d+ entr(y|ies)$/',
-            '/^adminUsers contains person \d+, who is deleted or archived; remove them in the extension settings$/',
         ];
         $lines = array_filter(explode("\n", $result['out'] . $result['err']));
         self::assertNotEmpty($lines);

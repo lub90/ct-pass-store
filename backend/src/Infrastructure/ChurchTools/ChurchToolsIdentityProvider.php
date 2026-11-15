@@ -12,6 +12,8 @@ use CtPassStore\Application\Port\IdentityProvider;
 use CtPassStore\Domain\PersonId;
 use CtPassStore\Domain\PersonPrincipal;
 use CtPassStore\Infrastructure\ChurchTools\Exception\InvalidResponseException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotFoundException;
+use CtPassStore\Infrastructure\ChurchTools\Exception\NotPermittedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthClientRejectedException;
 use CtPassStore\Infrastructure\ChurchTools\Exception\OAuthCodeRejectedException;
 use CtPassStore\Infrastructure\Kv\KvSchema;
@@ -20,8 +22,8 @@ use Psr\Log\LoggerInterface;
 /**
  * Logs a person in through ChurchTools' OAuth server (spec 4.4, D4).
  *
- * The ChurchTools access token exists only inside authenticate(): it's used for `whoami` and `permissions/global` and
- * then dropped. It's never stored, logged or put into an exception message.
+ * The ChurchTools access token exists only inside authenticate(): it's used for `whoami`, `permissions/global` and the
+ * person's groups, and then dropped. It's never stored, logged or put into an exception message.
  */
 final class ChurchToolsIdentityProvider implements IdentityProvider
 {
@@ -39,6 +41,7 @@ final class ChurchToolsIdentityProvider implements IdentityProvider
         #[\SensitiveParameter]
         string $codeVerifier,
         string $redirectUri,
+        ?int $adminGroupId,
     ): PersonPrincipal {
         try {
             $accessToken = $this->client->exchangeAuthorizationCode($this->clientId, $this->clientSecret, $code, $redirectUri, $codeVerifier);
@@ -66,7 +69,26 @@ final class ChurchToolsIdentityProvider implements IdentityProvider
             throw new NoServiceAccessException('You don\'t have the right to use the CtPassStore extension.');
         }
 
-        return new PersonPrincipal(new PersonId($personId), $username);
+        return new PersonPrincipal(new PersonId($personId), $username, $this->isAdmin($credential, $personId, $adminGroupId));
+    }
+
+    /**
+     * Spec 4.4 step 4: an active membership in exactly the admin group, read with the user's own token. Asked only
+     * after the `view` check and only with a configured group. `404`/`403` mean "not an admin" (fail closed); every
+     * other error propagates, so no token is issued with a guessed role.
+     */
+    private function isAdmin(Credential $user, int $personId, ?int $adminGroupId): bool
+    {
+        if ($adminGroupId === null || $adminGroupId < 1) {
+            return false;
+        }
+        try {
+            return in_array($adminGroupId, $this->client->activeGroupIds($user, $personId), true);
+        } catch (NotFoundException|NotPermittedException) {
+            $this->logger->warning("Login: the admin group can't be read with the user's token; user $personId is treated as a user.");
+
+            return false;
+        }
     }
 
     /**
