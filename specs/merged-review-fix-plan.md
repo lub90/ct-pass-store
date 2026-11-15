@@ -44,11 +44,12 @@ The tasks touch separate areas, so each runs in its own worktree and branch and 
 
 ## Task M3 [security-critical]: cleanup guard and load-test safety
 
-- **Proposed risk #51, deletion cap:** the gone-persons cleanup refuses `apply` when the run would remove entries of more persons than `max(5, 10 % of the persons checked)`.
-  - On a refused run, nothing is deleted. The run is logged at warning and reported like a dry run with a reason.
-  - The command-line run can override with `--force`. The web cron can never override.
-  - Document the limit in the backend spec and in setup.md.
-  - Tests cover: just below the limit, at the limit, above the limit, `--force` on the CLI, and the web cron unable to force.
+- **Proposed risk #51, deletion cap: dropped (maintainer decision, 2026-11-15).**
+  - ChurchTools is trusted (proposed accepted risk #3).
+  - The cleanup deletes an entry only after ChurchTools explicitly answers "not found" or "archived" for that person, one by one.
+  - A fixed limit would block legitimate bulk cleanups by the office.
+  - #51 stays a proposed accepted risk.
+  - A TODO.md entry records an optional waiting period before deletion, against human mistakes in ChurchTools.
 - **Security M6:** the load test needs an explicit opt-in.
   - `backend/phpunit-example.xml` and `phpunit.xml.dist` default to `Unit,Api` (`defaultTestSuite`).
   - `LoadTest` refuses to start unless the env var `CPS_LOAD_TEST=1` is set. It marks itself skipped with a clear message, and creates nothing.
