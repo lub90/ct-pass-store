@@ -14,3 +14,9 @@
 
 # Local notes on the review process (experiment log, not part of the project)
 process-notes/
+
+# Local env files and logs at the repository root (credentials, browser logs such as log-firefox.txt)
+/.env
+/.env.*
+/*.log
+/log-*.txt
