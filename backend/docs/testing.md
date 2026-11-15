@@ -125,8 +125,10 @@ it never runs by accident, e.g. with `vendor/bin/phpunit -c phpunit.xml tests/` 
 
 A full run takes about 15 minutes; `composer test:load` turns off Composer's 300-second process timeout for it.
 
-It measures the backend under realistic data sizes and writes the results to STDERR and to a JSON file
-(`LOAD_RESULTS_FILE`, default `ctps-load-results.json` in the temp folder). The results name person IDs only. The
+It measures the backend under realistic data sizes and writes the results to STDERR and to a new JSON file with mode
+`600`, whose path it prints at the start (`[Load] Results file: …`). By default the file gets a random name in the temp
+folder (`ctps-load-results-<random>.json`); `LOAD_RESULTS_FILE` chooses the path instead, which **must not exist yet**:
+the run refuses an existing file or a symlink rather than overwrite or follow it. The results name person IDs only. The
 report of a run is in `specs/backend-load-test-*.md`.
 
 It needs everything the contract tests need, and:
