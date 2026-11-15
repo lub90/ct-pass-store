@@ -95,14 +95,75 @@ final class PhpIniTemplateTest extends TestCase
         return $patterns;
     }
 
-    public function testTheTemplateShipsAndEnablesOpcache(): void
+    public function testTheTemplateEnablesOpcache(): void
+    {
+        $settings = $this->template();
+
+        self::assertSame('opcache.so', $settings['zend_extension'] ?? null);
+        self::assertTrue($this->flag($settings, 'opcache.enable'));
+        self::assertSame(64, $settings['opcache.memory_consumption'] ?? null);
+        self::assertSame(8, $settings['opcache.interned_strings_buffer'] ?? null);
+        self::assertSame(4000, $settings['opcache.max_accelerated_files'] ?? null);
+        self::assertTrue($this->flag($settings, 'opcache.validate_timestamps'), 'Uploaded updates must take effect.');
+        self::assertSame(2, $settings['opcache.revalidate_freq'] ?? null, 'Uploaded updates take effect within seconds.');
+    }
+
+    /**
+     * Security M2: a folder php.ini may replace the host's whole configuration, so it sets the safe values itself.
+     */
+    public function testTheTemplateHardensErrorOutputAndSharedCaches(): void
+    {
+        $settings = $this->template();
+
+        self::assertFalse($this->flag($settings, 'display_errors'), 'Errors must not reach the client.');
+        self::assertFalse($this->flag($settings, 'display_startup_errors'));
+        self::assertTrue($this->flag($settings, 'log_errors'));
+        self::assertFalse($this->flag($settings, 'expose_php'));
+        self::assertTrue($this->flag($settings, 'opcache.validate_permission'));
+        self::assertTrue($this->flag($settings, 'opcache.validate_root'));
+    }
+
+    /**
+     * Security M3: no phpinfo() step; GET /v1/test reports the OPcache status instead.
+     */
+    public function testTheTemplateDoesNotAskForPhpinfo(): void
     {
         $template = (string) file_get_contents(self::BACKEND . '/config/php.ini-example');
-        $settings = parse_ini_string($template);
 
+        self::assertStringNotContainsStringIgnoringCase('phpinfo', $template);
+        self::assertStringContainsString('/v1/test', $template);
+    }
+
+    public function testSetupShipsTheTemplate(): void
+    {
+        $lines = file(self::BACKEND . '/setup/setup.sh', FILE_IGNORE_NEW_LINES) ?: [];
+
+        $copiesTemplate = preg_grep('~^cp "\$BACKEND_DIR/config/credentials-example\.php" "\$BACKEND_DIR/config/php\.ini-example" "\$BUILD_DIR/config"/$~', $lines);
+        $shipsConfig = preg_grep('~^cp -r .*"\$BUILD_DIR/config" .*"\$TARGET_DIR"/$~', $lines);
+
+        self::assertCount(1, $copiesTemplate ?: [], 'setup.sh must copy config/php.ini-example into the build.');
+        self::assertCount(1, $shipsConfig ?: [], 'setup.sh must copy the built config/ into the target.');
+    }
+
+    /**
+     * @param array<string, mixed> $settings
+     * @return bool|null null when the setting is missing or not a boolean
+     */
+    private function flag(array $settings, string $key): ?bool
+    {
+        $value = $settings[$key] ?? null;
+
+        return is_bool($value) || is_int($value) ? filter_var($value, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) : null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function template(): array
+    {
+        $settings = parse_ini_string((string) file_get_contents(self::BACKEND . '/config/php.ini-example'), false, INI_SCANNER_TYPED);
         self::assertIsArray($settings, 'config/php.ini-example is not valid INI.');
-        self::assertSame('1', $settings['opcache.enable'] ?? null);
-        self::assertSame('1', $settings['opcache.validate_timestamps'] ?? null, 'Uploaded updates must take effect.');
-        self::assertStringContainsString('config/php.ini-example', (string) file_get_contents(self::BACKEND . '/setup/setup.sh'));
+
+        return $settings;
     }
 }
