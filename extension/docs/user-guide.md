@@ -5,7 +5,8 @@ such as the Wi-Fi, independent of the ChurchTools password. You open it in Churc
 congregation may have named the card differently).
 
 This guide describes the extension version it belongs to; the „Über“ page links to the guide of exactly your version.
-The screen texts are quoted in German; with ChurchTools set to English the extension shows them in English.
+The screen texts are quoted in German. The extension follows the languages set in your browser, not ChurchTools'
+language setting: it shows German or English, whichever your browser lists first, and English if it lists neither.
 
 **Versions:** Install backend and extension with the same first two version numbers. (Extension `0.1.x` works with
 backend `0.1.x`; the third number may differ.) If they don't match, the extension says so and shows both versions.
@@ -92,6 +93,33 @@ right, or control over the admin group's members, to anyone who isn't trusted th
 „Backend & Status“ warns about exactly this as soon as the address field differs from the stored address, and saving
 asks again in a dialog naming the old and the new address. Normal users are not asked: they couldn't judge it. The
 new address takes effect when the page is loaded again.
+
+### When an admin leaves
+
+Remove the person from the admin group in ChurchTools; their admin role ends within 15 minutes (when their login to
+the backend expires). Then review „Zugriff“: a machine client stays valid when the person who added it leaves. Remove
+the clients nobody needs any more, and give a service whose private key the person knew a new key pair (add the new
+key, switch the service, remove the old key). Also check that the person no longer holds the ChurchTools rights on the
+extension's `settings` and `access` categories.
+
+### Several stored values
+
+ChurchTools can hold more than one value in a category the extension expects once (`settings` or `access`). The
+extension then uses none of them, users see „Der Dienst ist gerade nicht erreichbar“, and the settings pages list the
+values with their differences so you choose which one stays („Diesen Wert behalten“; the others are deleted). A value
+none of you created may have been planted: check its backend address and its machine clients.
+
+If the only value that can be kept is the newest one („zuletzt angelegt“) and nobody recognises it, don't keep it.
+Delete it through the ChurchTools REST API instead, with an account that has „delete custom data“ on the category,
+and repair the earlier value afterwards:
+
+```
+GET    https://<instance>/api/custommodules/ctpassstore                      → the module's id
+GET    https://<instance>/api/custommodules/<moduleId>/customdatacategories   → the category's id
+DELETE https://<instance>/api/custommodules/<moduleId>/customdatacategories/<categoryId>/customdatavalues/<valueId>
+```
+
+The value ID is the number on the value's card („Wert 123“).
 
 ## On a phone
 

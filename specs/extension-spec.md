@@ -1,8 +1,15 @@
 # CtPassStore Extension – Specification
 
-> **Status: DRAFT, agreed in brainstorming on 2026-11-12.** This document describes the ChurchTools extension
-> (`extension/`) after its rework: new backend API, new design, new architecture and a new rights model. It is the
-> reference for the implementation plan and the extension's tests.
+> **Status: describes version 0.1.0 as built (2026-11-15).** Agreed in brainstorming on 2026-11-12 and kept in line
+> with the code during the implementation. This document describes the ChurchTools extension (`extension/`) after its
+> rework: new backend API, new design, new architecture and a new rights model. It is the reference for the extension's
+> tests.
+>
+> **Deferred to the setup and migration assistant** (its own spec, section 12), marked „*Deferred*“ where they occur:
+> the setup and migration wizards and `src/setup/`, `src/migration/` (5.1, 12.3), the rights table in code with its
+> guide test, the rights check and the group change (13.4.6, 16.3, 16.4, 16.5), and the „Sicherung“ and „Einrichtung“
+> pages (3.1.3, 4.4). Until then the release of 0.1.0 waits: without the assistant a new installation can't be set up
+> and an old one can't be migrated. Also pending: a first run of the browser tests in WebKit (13.1).
 >
 > **Related documents:**
 > - [`backend-spec.md`](backend-spec.md): the backend's API. Section 11 of this spec lists the backend changes this
@@ -55,7 +62,7 @@
 | E12 | **No Pinia.** Local `ref`s and a few composables. | The app is small. |
 | E13 | **Versioning:** backend and extension share `MAJOR.MINOR` ([`versioning.md`](versioning.md)). | Compatibility is visible in the version number and checked at release and at runtime. |
 | E14 | **Rights model as one table** (section 16): each role maps to a ChurchTools group; the setup creates new groups or uses existing ones; the mapping can be changed later; a check compares the real rights with the table. | Least privilege that's verified, not just described; churches can reuse groups they already have. |
-| E15 | **The admin group is trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. Everyone with `edit custom data` on `settings` (normally the admin group), everyone who can grant that right, and everyone who controls the membership of a group holding it must therefore be as trustworthy as ChurchTools administrators. |
+| E15 | **The settings editors (normally the admin group) are trusted with `backendUrl`.** No prompt or display for normal users when it changes. | Whoever can change `backendUrl` can make users' browsers send their ChurchTools password (when `requirePasswordForPasswordChange` is on) and new secondary passwords to another server. Everyone with `edit custom data` on `settings` (normally the admin group), everyone who can grant that right, and everyone who controls the membership of a group holding it must therefore be as trustworthy as ChurchTools administrators. |
 
 ## 3. Roles and app states
 
@@ -74,7 +81,11 @@ Which ChurchTools rights each role's group gets, and why, is section 16.
    checked separately: one by the backend, one by ChurchTools.
 2. „Einstellungen“ is shown to admins **and** to settings editors, even when the backend login fails. So a broken
    `backendUrl` can always be fixed by someone with the right.
-3. „Sicherung“ (backup) and „Einrichtung“ (setup) are shown only to admins who are also setup-capable.
+3. „Sicherung“ (backup) and „Einrichtung“ (setup) are shown only to admins who are also setup-capable. *Deferred:*
+   until the setup assistant exists, the overview shows no card for them (for anyone); their reserved routes (12.4)
+   show the page title and „Diese Seite kommt mit dem Einrichtungsassistenten in der nächsten Version der
+   Erweiterung.“ Hints that would point there say instead that the setup assistant of the next version can repair
+   it.
 
 ### 3.2 App states
 
@@ -209,7 +220,7 @@ it's blocked, a banner „Deine Sitzung ist abgelaufen. Sitzung erneuern“ appe
 | Einrichtung | Rechte und Gruppen prüfen oder reparieren | wizard spec |
 
 Cards the person can't use are shown disabled with the missing right, not hidden, except Sicherung and Einrichtung
-(3.1.3). Sub-pages have a „‹ Einstellungen“ back link.
+(3.1.3; *deferred:* not shown until the setup assistant exists). Sub-pages have a „‹ Einstellungen“ back link.
 
 **Saving on every settings page:** Save and Discard are disabled until something changes; success shows as inline
 „Gespeichert“ (`role="status"`). A save compares `revision` (6.1) and reports a conflict instead of overwriting:
@@ -242,16 +253,16 @@ refused at the field and by the store (stored texts with them are dropped on rea
 | | Title | Explanation |
 | --- | --- | --- |
 | de | Mein Zweitpasswort | Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort. |
-| en | My secondary password | A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password. |
+| en | My secondary password | A separate password for connected services such as Wi-Fi. It’s independent of your ChurchTools password. |
 
 ### 4.7 Zugriff
 
 - A warning banner: „Wer hier etwas ändern kann, hat Zugriff auf alle Passwörter. Halt diesen Kreis sehr klein.“
-  The same holds for the admin group: whoever controls its membership is admin (16.1). The status dot of „Admins“
-  also shows the findings of rule 6 (16.4).
+  The same holds for the admin group: whoever controls its membership is admin (16.1). With the rights check
+  (*deferred*, 16.4), the status dot of „Admins“ also shows the findings of rule 6.
 - **Groups:** for the roles „Nutzer“ (users) and „Admins“, the mapped ChurchTools group with name, member count, a
-  status dot from the rights check (16.4), „Mitglieder verwaltest du in ChurchTools“ and a link „In ChurchTools öffnen
-  ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
+  status dot from the rights check (16.4; *deferred*, see the last rule of this list), „Mitglieder verwaltest du in
+  ChurchTools“ and a link „In ChurchTools öffnen ↗“. „Gruppe ändern“ starts the change flow of 16.5. A missing or deleted group is shown as an error with the fix.
   The service user's group is shown on „Einrichtung“, not here.
 - **Machine clients:** every stored entry the backend enables, with name (isolated, `<bdi>`), `id`, permissions
   („darf lesen“), number of keys, a fingerprint per key, `createdAt` (and who created it), and „Bearbeiten“ /
@@ -324,6 +335,9 @@ refused at the field and by the store (stored texts with them are dropped on rea
   runs it again. The write test (`?write=1`) is a separate button with a short explanation and never runs on its own.
   Both go to the address the app runs with. A read-only run also updates the overview's pill.
 - Shows the backend version.
+- **Rights:** the page needs `edit custom data` on `settings` (the right that changes `backendUrl`, E15), for admins
+  too; without it the page names the missing right and reads nothing, and the overview shows its card disabled. The
+  self-test needs the admin role as well (the backend answers it only for admins).
 
 ### 4.9 Über
 
@@ -353,8 +367,8 @@ extension/src/
   admin/       manage, settings pages logic, machine-clients.ts
   app/         app state (3.2), useSession, role, version check
   views/       route pages only
-  setup/       wizard (wizard spec); this spec: only the entry point and the state hook
-  migration/   migration (wizard spec); this spec: only the entry point and the state hook
+  setup/       wizard (wizard spec); this spec: only the entry point and the state hook (deferred: not there yet)
+  migration/   migration (wizard spec); this spec: only the entry point and the state hook (deferred: not there yet)
   dev/         demo mode: FakeChurchTools and FakeBackend for the dev server
 ```
 
@@ -643,6 +657,7 @@ This spec fixes only the interfaces:
 2. `isOldLayout()` (6.3) and the schemas of 6.1 are the shared definitions the wizards use.
 3. `src/setup/` and `src/migration/` each have their own entry view and use only `ct/`, `store/`, `model/` and the
    provisioning code; `migration/` doesn't import from `setup/`'s views or flow, only from its provisioning modules.
+   *Deferred:* neither folder exists in 0.1.0; `setup-needed` and `migration-needed` show the waiting text (5.2).
 4. Routes `/settings/backup` and `/settings/setup` are reserved.
 5. Who may run them: setup-capable people (3.1), and after setup only admins who are also setup-capable.
 6. The setup creates or assigns the role groups and grants their rights **exactly as section 16 says**. The
@@ -658,7 +673,7 @@ This spec fixes only the interfaces:
 | **Unit** | Vitest, jsdom | Pure modules (`password/rules`, `password/flow`, `model/`, layout detection, `backend/problems`, language detection, machine-client validation) and single `ui/` components (`@vue/test-utils`) | CI, every push |
 | **App** | Vitest, jsdom | The whole app mounted against `FakeChurchTools` and `FakeBackend`: every app state of 3.2, user and admin, every flow of section 4 (direct path, confirm dialogs, warning banner, re-login with retry, blocked popup, conflict on save), every problem type of 8.2 | CI, every push |
 | **Contract** | Vitest, Node | Only what a fake can't prove: ChurchTools and the real backend behave as the fakes assume (13.2) | By hand, before each release |
-| **Browser** | Playwright, Chromium and WebKit, demo mode | A few flows at desktop width and at 375 px: no horizontal scrolling, 44 px touch targets, 16 px inputs, focus and dialog behavior; also produces the user-guide screenshots | By hand |
+| **Browser** | Playwright, Chromium and WebKit, demo mode | A few flows at desktop width and at 375 px: no horizontal scrolling, 44 px touch targets, 16 px inputs, focus and dialog behavior; also produces the user-guide screenshots | By hand (WebKit pending: not run yet, its system libraries were missing; `extension/docs/development.md`) |
 
 Neither the unit nor the app layer needs network access.
 
@@ -668,13 +683,12 @@ Neither the unit nor the app layer needs network access.
   layer), as in backend spec 6.6.
 - **ChurchTools cases:** KV categories and values (create, read, update, delete; `400` for a missing module key),
   the shape of `permissions/global`, `whoami` (incl. anonymous), person search, group details and member count, group
-  membership read with an OAuth token, and the acceptance of the callback URI (13.7).
+  membership read with an OAuth token, and the acceptance of the callback URI (14.1).
 - **Backend cases:** `POST /v1/auth/token` (answer shape incl. `admin` and `version`), `GET/PUT/DELETE /v1/entries`
   (`200`, `204`, `404 entry-not-found`, `password-invalid` with `violations`, `primary-password-required`,
   `invalid-primary-password`), `GET /v1/test` (shape), and the Problem Details shape and CORS headers of error answers.
 - **The password rules** (`password/rules.ts`) run against a shared list of test passwords that the backend's
-  `PasswordPolicy` tests also use (a JSON file in `specs/fixtures/` or similar, decided in the plan), so the mirror
-  can't drift.
+  `PasswordPolicy` tests also use (`shared/password-policy-cases.json`), so the mirror can't drift.
 - Without its configuration (`CT_API_URL` and `CT_API_TOKEN` as in the backend's `phpunit.xml`, the backend's test-user
   fixtures; the backend itself runs as a local sandbox, see `extension/docs/development.md`), the contract layer aborts with a message
   naming what's missing; it's never reported as passed. Recorded responses come only from the test instance, are
@@ -694,7 +708,7 @@ Neither the unit nor the app layer needs network access.
 4. `ui/` imports nothing from outside `ui/`.
 5. Every slug in `backend/docs/problems.md` has a mapping in `backend/problems.ts`.
 6. Every right in the rights table (16.2, as code in `setup/rights.ts`) appears in the user guide's rights table, and
-   the other way round (as infoscreen's `rights-doc.test.ts`).
+   the other way round (as infoscreen's `rights-doc.test.ts`). *Deferred* with `setup/rights.ts` (16.3).
 
 ### 13.5 Build check (`scripts/check-dist.js`, after every build)
 
@@ -750,7 +764,9 @@ On the test instance, recorded in `ct-extension-info.md` and as contract cases:
 
 1. ~~ChurchTools accepts `https://<instance>/ccm/ctpassstore/auth/callback` as an OAuth redirect URI and redirects
    there.~~ **measured 2026-11-13:** yes; contract case AG-11.
-2. ChurchTools serves the extension's `index.html` for that deep path (history routing under `/ccm/<key>/`).
+2. ~~ChurchTools serves the extension's `index.html` for that deep path (history routing under `/ccm/<key>/`).~~
+   **measured 2026-11-14:** yes, `200` for `/ccm/ctpassstore/`, `/settings/rules` and `/auth/callback`
+   (`ct-extension-info.md` section 2).
 3. ~~With a user's OAuth token (`scope=api`), `GET /api/persons/{id}/groups` lists the person's groups including the
    admin group, and shows whether the membership is active.~~ **measured 2026-11-13:** yes, `200`, the same active
    memberships as with a session, `group.domainIdentifier` a string; contract case AG-10.
@@ -824,12 +840,16 @@ right on `encryptionSettings` (only the setup writes it, with the setup-capable 
 
 ### 16.3 Where the table lives
 
+*Deferred to the setup assistant (12):* none of this exists in 0.1.0.
+
 - In code, once: `src/setup/rights.ts`, as data. The setup, the check and the group change read it.
 - In the user guide, as a table generated from or checked against the code (13.4.6).
 - The backend's own check of the service user (backend spec 4.8) must agree with rows S1–S4; a contract case runs both
   against the test instance.
 
 ### 16.4 Rights check
+
+*Deferred to the setup assistant (12):* not built in 0.1.0; „Zugriff“ shows no status dots until then (4.7).
 
 `checkRights(table, loadedRights)` is a pure function; the loading code lives in `setup/` and `ct/`. It reports
 per group and role, with the traffic-light levels ok / warn / fail:
@@ -864,6 +884,8 @@ It runs on „Einrichtung“ (full list) and feeds the status pills of „Zugrif
 confirmation; rule-4 findings are only reported, never changed automatically.
 
 ### 16.5 Changing a group later
+
+*Deferred to the setup assistant (12):* „Gruppe ändern“ is shown disabled until then (4.7).
 
 On „Zugriff“ (users, admins) or „Einrichtung“ (service), „Gruppe ändern“ lets the admin pick an **existing group** or
 **create a new one**. Before anything is written, a plan shows:

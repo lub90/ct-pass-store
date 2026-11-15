@@ -154,7 +154,8 @@ file. Without any of the above, `tests/contract/setup.ts` aborts the run before 
     the instance. It refuses any write to the settings (or access) it overrides, and a malformed override keeps the
     sandbox from starting. Its own checks are `tests/contract/sandbox-overrides.unit.test.ts` (a fake inner client and
     the router with a dummy configuration; no network, no credentials). They run in `npm test` wherever PHP and
-    `backend/vendor` exist, and are skipped where they don't (the extension's CI job). `backend/src/Kernel.php`'s
+    `backend/vendor` exist, and are skipped where they don't (the extension's CI job); the backend's CI job
+    (`backend.yml`, after `composer install`) runs them and fails if any of them was skipped. `backend/src/Kernel.php`'s
     `bootstrap()` notes that the router mirrors its wiring.
   - "user" and "admin" are both the normal test user, logged in through the real OAuth flow and
     `POST /v1/auth/token`. The "user" sandbox reads `access` from the instance, which has none, so nobody is an
@@ -322,7 +323,8 @@ ask the maintainer first) and a test account; never a production instance.
 
 `.github/workflows/extension.yml` runs on every push and pull request with read-only permissions, on Node 24 LTS:
 `npm ci`, lint, typecheck, unit and app tests, `npm run build` (with `check-dist`) and `npm audit --audit-level=high`.
-The contract tests and the browser tests don't run in CI (see above).
+The contract tests and the browser tests don't run in CI (see above). `.github/workflows/backend.yml` also runs
+`tests/contract/sandbox-overrides.unit.test.ts` (it needs PHP and `backend/vendor`) and fails unless all of its tests ran.
 
 All four workflows (`extension.yml`, `extension-release.yml`, `backend.yml`, `backend-release.yml`) pin every action by
 its full commit SHA, with the release tag in a trailing comment (`uses: actions/checkout@<40-hex> # v7.0.1`): a moved or

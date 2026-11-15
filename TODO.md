@@ -13,10 +13,10 @@ Open issues and planned improvements, roughly ordered by severity.
 - [ ] **Missing error middleware**
   When ChurchTools is unreachable or the settings are malformed, callers get Slim's default HTML 500 page instead of a JSON error response.
 
-- [ ] **Extension & backend: be ready for required CSRF tokens**
-  ChurchTools currently accepts REST write requests without a CSRF token, but the JS client gained opt-in support for them (`setLoadCSRFForAPI()`, client 1.7.1) and the instance configuration has a `csrf_enabled` flag. If ChurchTools starts requiring them, our KV writes would fail.
-  - Extension: check the installed `@churchtools/churchtools-client` version and test writes with `setLoadCSRFForAPI()` enabled.
-  - Backend: decide whether our own ChurchTools client (D1 in [`specs/backend-spec.md`](specs/backend-spec.md)) needs to fetch `GET /api/csrftoken` for writes.
+- [ ] **Backend: be ready for required CSRF tokens**
+  ChurchTools currently accepts REST write requests without a CSRF token, but the instance configuration has a `csrf_enabled` flag. If ChurchTools starts requiring them, our KV writes could fail.
+  - Done in the extension: client `1.7.3` with `setLoadCSRFForAPI()` on, so every REST write sends a `CSRF-Token` (`extension/src/ct/client.ts`, tested).
+  - Open, backend: decide whether our own ChurchTools client (D1 in [`specs/backend-spec.md`](specs/backend-spec.md)) needs to fetch `GET /api/csrftoken` for writes made with the service user's login token.
 
 ## Performance
 
@@ -77,10 +77,10 @@ Open issues and planned improvements, roughly ordered by severity.
   [`extension/src/main.ts`](extension/src/main.ts) uses `window.settings?.base_url ?? import.meta.env.VITE_BASE_URL` (a pattern taken from the boilerplate). Vite inlines the `VITE_` value, so the URL of the development instance ends up in `dist/` and in the release ZIP. The dev password isn't in the bundle, but only because the code that reads it is removed as dead code.
   - Use the fallback only in development (`import.meta.env.DEV`), or replace it with a dev proxy that holds URL and credentials in non-`VITE_` variables.
   - Add a post-build check (like `check-dist.js` in the infoscreen project) that fails when `*.church.tools` or the dev username appears in `dist/`.
-  - Rebuild the existing release ZIP, and replace it wherever it was published.
+  - Still open: rebuild the old release ZIP (it holds the test instance URL), and replace it wherever it was published.
 
-- [ ] **Keep local credential files private**
-  The ignored files with credentials are readable by other users on the development machine (mode `664`):
+- [x] **Keep local credential files private** (all at mode `600`; `backend/docs/testing.md` and `extension/docs/development.md` say so, and the extension's contract recordings are written with `600`)
+  The ignored files with credentials were readable by other users on the development machine (mode `664`):
   - `backend/config/credentials.php`
   - `backend/phpunit.xml`
   - `extension/.env`
@@ -115,9 +115,9 @@ Open issues and planned improvements, roughly ordered by severity.
   Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). `adminUsers` is only reported, never changed.
 
 - [ ] **Backup & restore of the extension data**
-  Updating the extension in ChurchTools deletes all of its data: settings, encryption settings and every stored password.
+  Updating the extension (a new ZIP uploaded to the existing module) keeps its data (measured 2026-11-14, [`specs/ct-extension-info.md`](specs/ct-extension-info.md) section 2). Deleting and reinstalling it removes all of it: settings, encryption settings and every stored password. A backup also protects against mistakes and lost values.
   - Add a feature to export the whole extension data (all categories and their entries) to a backup file.
-  - Add a matching import so the data can be restored after an update.
+  - Add a matching import so the data can be restored. Planned as „Sicherung“ with the setup assistant (extension spec 12).
 
 ## Testing & Tooling
 

@@ -23,10 +23,11 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - The `access` category (`groups.admins.groupId`, `machineClients`) is new; the service user needs `view custom
   category` and `view custom data` on it, and no write right.
 - The login answer has `admin` and `version`.
-- **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the extension's setup or
-  migration has written the new `access` category. Run the extension's migration right after uploading the backend.
-  Until then nobody is an admin and ct-radius logins (machine clients) are refused; the cause is in the backend log
-  (`warning`) and in the extension's setup/migration. `GET /v1/test` (admins only) checks a working installation.
+- **Updating from the old version:** machine clients (e.g. ct-radius) and admins work only once the new `access`
+  category is written. Writing it is the job of the extension's setup and migration assistant, which isn't built yet;
+  this release waits for it (see above). Without `access`, nobody is an admin and ct-radius logins (machine clients)
+  are refused; the cause is in the backend log (`warning`). `GET /v1/test` (admins only) checks a working
+  installation.
 - Errors are RFC 9457 problem details; clients switch on `type` (see `docs/problems.md`). A wrong primary password is
   `403 invalid-primary-password`, an invalid custom password `400 password-invalid` with `violations`, a missing entry
   `404 entry-not-found`.

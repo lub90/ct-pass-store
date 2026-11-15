@@ -1163,6 +1163,8 @@ The security stores (`jti` replay cache, rate-limit counters;
     | `jti` replay cache | one per registered machine client | number of clients |
     | Primary-password attempts | one per **authenticated** person who entered a primary password | number of persons |
     | Per-address limit (6.3) | a **fixed** number of buckets (e.g. 256); the address is hashed into one, plus one global login record | fixed |
+    | Last seen settings (`audit:settings`, 6.4) | **one** record: the enabled machine clients (ID, sorted permissions, key fingerprints), the admin group ID and `backendUrl`, as last seen | one record, rewritten when they change; its size follows the configured clients |
+    | Machine-client usage (`usage`, 6.4) | **one** record with one entry per configured client that made a request (key `c:<id>`): start of its hour, request count, at most `MAX_ADDRESSES + 1` (11) addresses | entries only for authenticated clients; loading `access` drops the entries of clients no longer configured, and every write drops entries whose hour began 14 days ago or more (the log's retention), logging their pending summary first |
 
     Per-address records are never one file per address: IPv6 gives an attacker practically unlimited addresses, and
     lock files are never deleted (deleting one under a waiting process breaks the lock). Two addresses sharing a bucket
@@ -1258,11 +1260,16 @@ The security stores (`jti` replay cache, rate-limit counters;
 
   | Level | Events |
   | --- | --- |
-  | `warning` | Denied access, with person ID and IP address; a wrong `CLEANUP_TOKEN`; a failed delete in the cleanup; a missing or invalid admin group or machine-client setting; a `404` or `403` for a person's groups at login |
-  | `info` | Logins, password changes and deletions, with person IDs; cleanup deletions and summaries |
+  | `warning` | Denied access, with person ID and IP address; a wrong `CLEANUP_TOKEN`; a failed delete in the cleanup; a missing or invalid admin group or machine-client setting; a `404` or `403` for a person's groups at login; a security-store record for the change log or the usage summary that can't be used or fails its integrity check (both fail open: the request goes on) |
+  | `notice` | A change of what decides who may read every password, compared with the last seen values (`audit:settings`, 6.1) when settings or `access` are loaded from ChurchTools: the **enabled machine clients** (each as ID, sorted permissions and key fingerprints as the extension shows them, never a key or a name; „Added“, „Removed“, „Now enabled“), the **admin group** ID and the **backend address** (`backendUrl`), each with old and new value; the first load logs them once as „first seen“. The order of clients, keys and permissions is no change. |
+  | `info` | Logins; password changes and deletions, attributed: „User 100 set the password of person 10.“ / „… deleted the password of person 10.“ (the principal is a user or a machine client; a delete is logged as the request, also when nothing existed); cleanup deletions and summaries; per machine client a **usage summary** at most once per hour (3600 s): the first request after the hour logs the request count and up to 10 addresses (more: „more than 10 addresses“) since the last summary; the first request in 14 days logs „first request in the last 14 days“; entries dropped from the `usage` record (6.1) log their pending summary first, so no hour is lost |
   | `error` | Upstream errors, configuration problems |
 
-- Values written to the log are escaped, so control characters or newlines in input can't forge log lines.
+- Values written to the log are escaped, so control characters or newlines in input can't forge log lines: in the
+  message and in context strings, ASCII controls (newlines included) become `\xNN`; in valid UTF-8 the other Unicode
+  controls, format characters (`\p{Cc}`, `\p{Cf}`, e.g. the bidi override U+202E or U+200B) and U+2028/U+2029 become
+  `\u{XXXX}`, so they can't reorder or split what a reader sees (e.g. in a logged backend address). In invalid UTF-8
+  the byte sequences of the most important of them are escaped byte-wise.
 - The backend version is part of the context of every `error` entry (PHP has no single startup moment).
 - IP addresses and person IDs are personal data. They're logged only to detect abuse, and deleted with the rotated log
   files after 14 days. Document this for admins.
