@@ -66,7 +66,7 @@ describe('DuplicatesChooser', () => {
     it.each(['settings', 'access'] as const)('the dialog subject names the value and the category (%s)', async (category) => {
         const access = { schema: 2, revision: 1, groups: { users: { groupId: 1, createdBySetup: true }, admins: { groupId: 2, createdBySetup: true }, service: { groupId: 3, createdBySetup: true } }, machineClients: [] };
         const value = category === 'settings' ? settings : access;
-        const { wrapper, keep } = await chooser(category, value, { ...value, revision: 2 });
+        const { keep } = await chooser(category, value, { ...value, revision: 2 });
         await keep(2);
         expect(pendingConfirm.value?.subject).toEqual({ name: 'Wert 2', detail: category });
         answerConfirm({ confirmed: false });
