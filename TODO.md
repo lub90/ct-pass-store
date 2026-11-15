@@ -145,6 +145,9 @@ Open issues and planned improvements, roughly ordered by severity.
   - Compare texts through their translation keys, except where the spec fixes the exact wording.
   - Not urgent; do it before a larger UI restructuring.
 
+- [ ] **Re-review the privacy check's Task M6 follow-up tests**
+  Open: the Task M6 follow-up tests of scripts/check-private.mjs (round-4 findings I4, I5 and MINORs) were not re-reviewed by the test reviewer (maintainer decision 2026-11-15); include them in the next review round.
+
 ## Dependencies & Shared Code
 
 The subtree copies of `lub90/ct-utils` and `lub90/ct-extension-utils` were removed from the extension in its rework (extension spec 5.2). The extension's own `src/ui/` moves to `ct-extension-utils` once ct-radius uses it too (extension spec E2). The two items below concern the upstream repositories.
