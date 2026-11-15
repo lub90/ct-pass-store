@@ -30,9 +30,69 @@ final class PhpIniTemplateTest extends TestCase
         self::assertNotNull($deny, 'public/.htaccess has no deny rule for php.ini.');
         self::assertNotNull($routing, 'Slim routing rule not found.');
         self::assertLessThan($routing, $deny['line'], 'The php.ini deny rule must come before the routing rules.');
+        // A RewriteCond binds to the next RewriteRule and would make the deny conditional.
+        $previous = null;
+        for ($i = $deny['line'] - 1; $i >= 0; $i--) {
+            $trimmed = trim($lines[$i]);
+            if ($trimmed !== '' && !str_starts_with($trimmed, '#')) {
+                $previous = $trimmed;
+                break;
+            }
+        }
+        self::assertFalse(
+            $previous !== null && stripos($previous, 'RewriteCond') === 0,
+            'No RewriteCond may come directly before the php.ini deny rule.',
+        );
         self::assertSame(1, preg_match($deny['pattern'], 'PHP.INI'));
         self::assertSame(0, preg_match($deny['pattern'], 'index.php'));
         self::assertSame(0, preg_match($deny['pattern'], 'php.ini-example'));
+    }
+
+    /**
+     * Security M1: when `public/` is the web root, `../.htaccess` isn't read, so `public/.htaccess` must deny hidden
+     * files (`.user.ini`, `.htaccess`) and `php.ini` itself, also without mod_rewrite.
+     *
+     * @return iterable<string, array{string, bool}>
+     */
+    public static function publicFiles(): iterable
+    {
+        yield '.user.ini' => ['.user.ini', true];
+        yield '.htaccess' => ['.htaccess', true];
+        yield '.env' => ['.env', true];
+        yield 'php.ini' => ['php.ini', true];
+        yield 'PHP.INI' => ['PHP.INI', true];
+        yield 'index.php' => ['index.php', false];
+        yield 'php.ini-example' => ['php.ini-example', false];
+        yield 'my.php.ini' => ['my.php.ini', false];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('publicFiles')]
+    public function testPublicHtaccessDeniesHiddenFilesAndPhpIniWithoutRewrite(string $file, bool $denied): void
+    {
+        $matched = false;
+        foreach ($this->deniedFilesMatchPatterns() as $pattern) {
+            $matched = $matched || preg_match('~' . str_replace('~', '\\~', $pattern) . '~', $file) === 1;
+        }
+
+        self::assertSame($denied, $matched, "$file in public/.htaccess FilesMatch denies");
+    }
+
+    /**
+     * @return list<string> the patterns of `<FilesMatch>` blocks in public/.htaccess that deny access on Apache 2.4
+     *     (`Require all denied`) and on 2.2 (`Deny from all`)
+     */
+    private function deniedFilesMatchPatterns(): array
+    {
+        $htaccess = (string) file_get_contents(self::BACKEND . '/public/.htaccess');
+        preg_match_all('~^<FilesMatch "([^"]+)">\R(.*?)^</FilesMatch>~ms', $htaccess, $blocks, PREG_SET_ORDER);
+        $patterns = [];
+        foreach ($blocks as [, $pattern, $body]) {
+            if (preg_match('~^\s*Require all denied$~m', $body) === 1 && preg_match('~^\s*Deny from all$~m', $body) === 1) {
+                $patterns[] = $pattern;
+            }
+        }
+
+        return $patterns;
     }
 
     public function testTheTemplateShipsAndEnablesOpcache(): void
