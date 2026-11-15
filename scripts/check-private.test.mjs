@@ -364,8 +364,12 @@ test('"**/" in an allow pattern also matches zero directories', (t) => {
   stage(repo, 'docs/a/b/x.md', `${V.term2}\n`);
   assert.equal(check(repo).code, 0);
   stage(repo, 'docs/y.md', `${V.term2}\n`);
+  stage(repo, 'docs/ax.md', `${V.term2}\n`); // "**/" stands for whole folders only
   stage(repo, 'docsx.md', `${V.term2}\n`);
-  assert.equal(check(repo).out, 'docs/y.md:1: matches block list entry #1\ndocsx.md:1: matches block list entry #1\n');
+  assert.equal(
+    check(repo).out,
+    'docs/ax.md:1: matches block list entry #1\ndocs/y.md:1: matches block list entry #1\ndocsx.md:1: matches block list entry #1\n',
+  );
 });
 
 test('--all reports every hit with its entry number, also in allowed and other files', (t) => {
@@ -430,6 +434,25 @@ test('extension/.env: "export KEY=value" lines and unquoted values with a traili
     'a.txt:1: matches extension/.env VITE_EXPORTED entry #1\na.txt:2: matches extension/.env VITE_NOTED entry #2\n',
   );
   assert.doesNotMatch(r.all, /exportexport|notednoted/);
+});
+
+test('extension/.env: a "#" inside an unquoted value is part of the value, not a comment', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=abc#def-zz\n');
+  stage(repo, 'a.txt', 'abc#def-zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
+  assert.doesNotMatch(r.all, /def-zz/);
+});
+
+test('backend/phpunit.xml: "&amp;lt;" decodes to "&lt;", not to "<"', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_ONE" value="ampamp&amp;lt;zz"/>\n</php></phpunit>\n');
+  stage(repo, 'a.txt', 'ampamp<zz\nampamp&lt;zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:2: matches backend/phpunit.xml CT_ONE entry #2\n');
 });
 
 test('backend/phpunit.xml values are XML-decoded before matching', (t) => {
