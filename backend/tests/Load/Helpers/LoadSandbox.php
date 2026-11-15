@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Load\Helpers;
 
 use CtPassStore\Application\Cleanup\CleanupCooldown;
+use CtPassStore\Application\Port\Clock;
 use CtPassStore\Infrastructure\ChurchTools\CachedPersonDirectory;
 use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
 use CtPassStore\Infrastructure\Store\FileCooldownStore;
@@ -33,9 +34,13 @@ final class LoadSandbox
 
     /**
      * @param array<string, mixed> $credentials the complete content of the sandbox's credentials.php
+     * @param Clock $clock the clock of the cache records it writes (the system clock; a frozen one in its unit test)
      */
-    public function __construct(#[\SensitiveParameter] array $credentials, #[\SensitiveParameter] private readonly string $jwtSecret)
-    {
+    public function __construct(
+        #[\SensitiveParameter] array $credentials,
+        #[\SensitiveParameter] private readonly string $jwtSecret,
+        private readonly Clock $clock = new SystemClock(),
+    ) {
         $this->folder = sys_get_temp_dir() . '/ctps-load-' . bin2hex(random_bytes(6));
         foreach (['public', 'bin', 'logs'] as $dir) {
             mkdir($this->folder . '/' . $dir, 0o700, true);
@@ -129,7 +134,7 @@ final class LoadSandbox
 
     private function cache(): SignedFileCache
     {
-        return new SignedFileCache($this->folder . '/cache', new RecordSigner($this->jwtSecret, SignedFileCache::PURPOSE), new SystemClock(), new NullLogger());
+        return new SignedFileCache($this->folder . '/cache', new RecordSigner($this->jwtSecret, SignedFileCache::PURPOSE), $this->clock, new NullLogger());
     }
 
     private static function remove(string $path): void

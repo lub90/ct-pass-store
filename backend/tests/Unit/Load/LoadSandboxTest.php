@@ -27,9 +27,12 @@ final class LoadSandboxTest extends TestCase
 
     private LoadSandbox $sandbox;
 
+    private FrozenClock $clock;
+
     protected function setUp(): void
     {
-        $this->sandbox = new LoadSandbox(['JWT_SECRET' => self::SECRET], self::SECRET);
+        $this->clock = new FrozenClock();
+        $this->sandbox = new LoadSandbox(['JWT_SECRET' => self::SECRET], self::SECRET, $this->clock);
     }
 
     protected function tearDown(): void
@@ -39,7 +42,7 @@ final class LoadSandboxTest extends TestCase
 
     private function cache(): SignedFileCache
     {
-        return new SignedFileCache($this->sandbox->folder . '/cache', new RecordSigner(self::SECRET, SignedFileCache::PURPOSE), new FrozenClock(), new NullLogger());
+        return new SignedFileCache($this->sandbox->folder . '/cache', new RecordSigner(self::SECRET, SignedFileCache::PURPOSE), $this->clock, new NullLogger());
     }
 
     private function cooldown(): CleanupCooldown
@@ -52,6 +55,17 @@ final class LoadSandboxTest extends TestCase
         $this->sandbox->plantSettings(['backendUrl' => 'https://backend.example.org']);
 
         self::assertSame(['backendUrl' => 'https://backend.example.org'], $this->cache()->get(KvSettingsRepository::CACHE_SETTINGS));
+    }
+
+    /** Planted like the backend's own settings cache: valid for 300 s. */
+    public function testPlantedSettingsLastThreeHundredSeconds(): void
+    {
+        $this->sandbox->plantSettings(['backendUrl' => 'https://backend.example.org']);
+
+        $this->clock->advance(299);
+        self::assertNotNull($this->cache()->get(KvSettingsRepository::CACHE_SETTINGS), 'Still valid after 299 s.');
+        $this->clock->advance(1);
+        self::assertNull($this->cache()->get(KvSettingsRepository::CACHE_SETTINGS), 'Gone after 300 s.');
     }
 
     public function testClearPersonsCacheRemovesTheBackendsPersonsRecord(): void
