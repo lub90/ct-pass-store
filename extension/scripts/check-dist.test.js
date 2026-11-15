@@ -84,6 +84,20 @@ describe('checkDist', () => {
         expect(failures).toEqual([]);
     });
 
+    it('fails for an instance host in upper case (host names are case-insensitive)', () => {
+        const failures = checkDist(
+            makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), 'fetch("https://Gemeinde.CHURCH.Tools/api")')),
+        );
+        expect(failures).toEqual(['instance host "Gemeinde.CHURCH.Tools" in assets/index-abc.js']);
+    });
+
+    it('allows example.church.tools in upper case', () => {
+        const failures = checkDist(
+            makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'index-abc.js'), '"https://EXAMPLE.Church.Tools"')),
+        );
+        expect(failures).toEqual([]);
+    });
+
     it('fails for a @font-face with an external URL', () => {
         const failures = checkDist(
             makeDist((d) =>

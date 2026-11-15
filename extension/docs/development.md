@@ -339,8 +339,10 @@ For an annotated tag the second line (`^{}`) is the commit; use it, not the tag 
 `download-artifact` on majors that work together (today v7 and v8, both on the same artifact service; there is no
 upload-artifact v8); read both release notes before bumping either.
 
-`.github/CODEOWNERS` names the maintainer (`@lub90`) as owner of the workflows, `.gitleaks.toml`, `.gitleaksignore` and
-`CODEOWNERS` itself: a change to any of them needs the owner's review. That is enforced only when the branch protection
+`.github/CODEOWNERS` names the maintainer (`@lub90`) as owner of the workflows, `.gitleaks.toml`, `.gitleaksignore`,
+`CODEOWNERS` itself, the Claude Code setup in `.claude/` (agents, hooks, workflow rules), `docs/threat-model.md`, and
+the backend files that decide what the web server serves and what gets deployed (`backend/.htaccess`, `backend/public/`,
+`backend/setup/`, `backend/bin/check-deploy.php`): a change to any of them needs the owner's review. That is enforced only when the branch protection
 of `main` requires code owner reviews, which the maintainer sets on GitHub; without it, the file is only a reviewer hint.
 
 ### Secret scan (gitleaks)

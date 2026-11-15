@@ -429,12 +429,12 @@ describe('duplicate access values („Zugriff“)', () => {
         await router.push('/settings/rules');
         await settle();
         await keep(wrapper, SETTINGS_VALUE_ID);
+        expect(dialog()?.textContent).toContain(`Die anderen Werte werden gelöscht: Wert ${planted}.`);
         await answer(TEXT.confirm);
         expect(wrapper.text()).toContain(TEXT.done(SETTINGS_VALUE_ID));
         expect(wrapper.text()).not.toContain(TEXT.reloadNote);
         expect((await all('settings')).map((v) => v.id)).toEqual([SETTINGS_VALUE_ID]);
         expect((await all('access')).map((v) => v.id)).toEqual([ACCESS_VALUE_ID, 301]);
-        expect(planted).not.toBe(SETTINGS_VALUE_ID);
     });
 
     it('on „Zugriff“, a value that appeared meanwhile: conflict, nothing deleted; „Neu laden“ shows the new list', async () => {
@@ -469,11 +469,11 @@ describe('duplicate access values („Zugriff“)', () => {
         await click(wrapper, TEXT.save);
         await click(wrapper, TEXT.reload);
         await keep(wrapper, ACCESS_VALUE_ID);
+        expect(dialog()?.textContent).toContain(`Die anderen Werte werden gelöscht: Wert ${planted}.`);
         await answer(TEXT.confirm);
         expect(wrapper.text()).toContain(TEXT.done(ACCESS_VALUE_ID));
         expect(wrapper.text()).not.toContain(TEXT.reloadNote);
         expect((await all('access')).map((v) => v.id)).toEqual([ACCESS_VALUE_ID]);
-        expect(planted).not.toBe(ACCESS_VALUE_ID);
     });
 
     it('the client form shows the values to choose from too', async () => {

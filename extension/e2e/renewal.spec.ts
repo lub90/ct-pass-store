@@ -24,6 +24,8 @@ import { openDemo } from './demo';
 /** Longer than Chromium's transient activation (5 s): for the control test, whatever activation came before is gone. */
 const ACTIVATION_EXPIRED_MS = 5500;
 const PERSON = 4711;
+/** The popup login (open, authorize, code exchange) can take longer than the 5 s default of expect.poll on a busy machine. */
+const POPUP_LOGIN_TIMEOUT = 15_000;
 
 interface Harness {
     results: string[];
@@ -132,7 +134,7 @@ test.describe('renewal popup', () => {
         const popup = page.waitForEvent('popup');
         await page.locator('#e2e-fresh').click();
         await popup;
-        await expect.poll(() => results(page)).toEqual(['fresh']);
+        await expect.poll(() => results(page), { timeout: POPUP_LOGIN_TIMEOUT }).toEqual(['fresh']);
         expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.logins)).toBe(1);
         expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.expiresInMs())).toBeGreaterThan(50 * 60_000);
     });
@@ -170,7 +172,7 @@ test.describe('renewal popup', () => {
         const popup = page.waitForEvent('popup');
         await dialog.getByRole('button', { name: 'Fortfahren' }).click();
         await popup;
-        await expect.poll(() => results(page)).toEqual(['sent 2']);
+        await expect.poll(() => results(page), { timeout: POPUP_LOGIN_TIMEOUT }).toEqual(['sent 2']);
         expect(await page.evaluate(() => (window as unknown as E2eWindow).e2e.logins)).toBe(1);
     });
 

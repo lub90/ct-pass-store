@@ -1,5 +1,13 @@
 # Backend Tuning File Implementation Plan
 
+> **Status: approved 2026-11-13, needs revision.**
+>
+> **Needs revision before implementation.** The settings cache (`SETTINGS_CACHE_SECONDS`) also holds `access`: the
+> admin group and the machine clients with their keys. With the range up to 3600 s, removing a machine client or one of
+> its keys, or changing the admin group, could take up to an hour instead of 5 minutes (backend spec 4.4a
+> "Revocation", 6.1). Before building it, either cap `SETTINGS_CACHE_SECONDS` at 300 s, or give `access` its own
+> fixed cache time of at most 300 s.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let an installation override six operational timing values in an optional `config/tuning.php`, validated against fixed ranges, without being able to loosen any security promise.
@@ -8,7 +16,7 @@
 
 **Tech Stack:** PHP 8.x, Slim 4, Guzzle, PHPUnit, PHPStan, php-cs-fixer (all existing).
 
-**Spec:** [`specs/backend-tuning-design.md`](backend-tuning-design.md) (approved 2026-11-13). Threat model: [`docs/threat-model.md`](../docs/threat-model.md). Backend spec: [`specs/backend-spec.md`](backend-spec.md).
+**Spec:** [`specs/backend-tuning-design.md`](backend-tuning-design.md) (Draft). Threat model: [`docs/threat-model.md`](../docs/threat-model.md). Backend spec: [`specs/backend-spec.md`](backend-spec.md).
 
 All paths below are relative to `backend/` unless they start with `specs/` or `docs/threat-model.md`.
 
