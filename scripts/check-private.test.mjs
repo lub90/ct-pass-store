@@ -473,6 +473,46 @@ test('--range with an unknown revision is a usage error (exit 2)', (t) => {
   assert.equal(r.code, 2);
 });
 
+test('--range=<value> starting with "-" is a usage error and never reaches git as an option', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  for (const args of [['--range=--output=planted.txt'], ['--range', '--output=planted.txt']]) {
+    const r = check(repo, args);
+    assert.equal(r.code, 2, `exit code for ${args.join(' ')}`);
+    assert.match(r.err, /^usage: /);
+    assert.ok(!existsSync(join(repo, 'planted.txt')), `git wrote a file for ${args.join(' ')}`);
+  }
+});
+
+test('an internal error prints only the error name, never its message, a path or a value', (t) => {
+  if (process.getuid?.() === 0) return t.skip('root ignores file modes');
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  chmodSync(join(repo, '.private-terms'), 0o000);
+  t.after(() => existsSync(join(repo, '.private-terms')) && chmodSync(join(repo, '.private-terms'), 0o600));
+  stage(repo, 'a.txt', `${V.term1}\n`);
+  const r = check(repo);
+  assert.equal(r.code, 2);
+  assert.equal(r.out, '');
+  assert.match(r.err, /^check-private: internal error \(\w+\)\n$/);
+  assertNoValues(r.all);
+});
+
+test('an unreadable extension/.env gives a one-line note without its content and the check goes on', (t) => {
+  if (process.getuid?.() === 0) return t.skip('root ignores file modes');
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  write(repo, 'extension/.env', `VITE_PASSWORD=${V.envPassword}\n`);
+  chmodSync(join(repo, 'extension/.env'), 0o000);
+  t.after(() => existsSync(join(repo, 'extension/.env')) && chmodSync(join(repo, 'extension/.env'), 0o600));
+  stage(repo, 'a.txt', `${V.term1}\n`);
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches block list entry #1\n');
+  assert.equal(r.err, 'check-private: note: extension/.env can\'t be read; its values are not checked\n');
+  assertNoValues(r.all);
+});
+
 // ---------------------------------------------------------------------------------------------------------------
 // --all mode
 

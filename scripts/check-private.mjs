@@ -35,7 +35,7 @@ function parseArgs(argv) {
   if (argv.length === 2 && argv[0] === '--range' && argv[1] && !argv[1].startsWith('-')) {
     return { mode: 'range', range: argv[1] };
   }
-  if (argv.length === 1 && argv[0].startsWith('--range=') && argv[0].length > 8) {
+  if (argv.length === 1 && argv[0].startsWith('--range=') && argv[0].length > 8 && argv[0][8] !== '-') {
     return { mode: 'range', range: argv[0].slice(8) };
   }
   return usage('usage: check-private.mjs [--staged | --range <A..B> | --all]');
@@ -118,7 +118,7 @@ function unquote(v) {
   return m ? m[2] : v.replace(/\s+#.*$/, '');
 }
 
-function readEnvFiles(root, entries) {
+function readEnvFiles(root, entries, notes) {
   const dir = join(root, 'extension');
   if (!existsSync(dir)) return;
   const names = readdirSync(dir)
@@ -130,6 +130,8 @@ function readEnvFiles(root, entries) {
     try {
       text = readFileSync(join(dir, name), 'utf8');
     } catch {
+      // The error names only the file, never its content; say so instead of skipping silently.
+      notes.push(`check-private: note: ${rel} can't be read; its values are not checked`);
       continue;
     }
     text.split(/\r?\n/).forEach((raw, i) => {
@@ -214,7 +216,7 @@ function loadEntries(root) {
   if (termsRoot) readBlockList(termsRoot, entries);
   else notes.push('check-private: hint: no .private-terms block list found; copy .private-terms.example to fill one');
   const credRoot = roots.find((r) => existsSync(join(r, 'extension', '.env')) || existsSync(join(r, 'backend', 'phpunit.xml'))) || root;
-  readEnvFiles(credRoot, entries);
+  readEnvFiles(credRoot, entries, notes);
   readPhpunit(credRoot, entries);
   readFixtures(credRoot, entries, notes);
 
