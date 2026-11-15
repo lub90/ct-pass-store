@@ -52,9 +52,9 @@ final class CheckDeployTest extends TestCase
         yield 'phpunit in vendor' => ['vendor/phpunit/phpunit/composer.json', '{}', 'vendor/phpunit'];
         yield 'phpstan in vendor' => ['vendor/phpstan/phpstan/composer.json', '{}', 'vendor/phpstan'];
         yield 'friendsofphp in vendor' => ['vendor/friendsofphp/php-cs-fixer/composer.json', '{}', 'vendor/friendsofphp'];
-        yield 'instance URL' => ['src/Settings.php', "<?php\n// https://jeremia.church.tools/api\n", 'src/Settings.php'];
-        yield 'instance URL in a hidden file' => ['.htaccess', "# jeremia.church.tools\n", '.htaccess'];
-        yield 'login token' => ['config/notes.txt', str_repeat('aB3', 40), 'config/notes.txt'];
+        yield 'instance URL' => ['src/Settings.php', "<?php\n// https://jeremia.church.tools/api\n", 'in "src/Settings.php"'];
+        yield 'instance URL in a hidden file' => ['.htaccess', "# jeremia.church.tools\n", 'in ".htaccess"'];
+        yield 'login token' => ['config/notes.txt', str_repeat('aB3', 40), 'in "config/notes.txt"'];
     }
 
     #[DataProvider('forbiddenItems')]
@@ -139,6 +139,19 @@ final class CheckDeployTest extends TestCase
         self::assertSame(1, $result['exit'], $result['output']);
         self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "evil\\nDeploy check passed: x\\u202e.php"', $result['output']);
         self::assertStringNotContainsString("\nDeploy check passed", $result['output'], 'A name must not start a line of its own.');
+        self::assertStringNotContainsString("\u{202E}", $result['output']);
+    }
+
+    public function testAScannedPathIsPrintedEscaped(): void
+    {
+        $this->write("config/evil\nDeploy check passed: x\u{202E}.txt", "other.church.tools\n" . str_repeat('aB3', 40));
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Instance URL (church.tools) in "config/evil\\nDeploy check passed: x\\u202e.txt"', $result['output']);
+        self::assertStringContainsString('in a row) in "config/evil\\nDeploy check passed: x\\u202e.txt"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output'], 'A path must not start a line of its own.');
         self::assertStringNotContainsString("\u{202E}", $result['output']);
     }
 

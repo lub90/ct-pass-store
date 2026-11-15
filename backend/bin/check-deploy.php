@@ -43,9 +43,7 @@ function checkDeployFolder(string $folder): array
     foreach (is_dir("$folder/public") ? scandir("$folder/public") ?: [] : [] as $entry) {
         $path = "$folder/public/$entry";
         if ($entry !== '.' && $entry !== '..' && (!in_array($entry, PUBLIC_FILES, true) || is_link($path) || !is_file($path))) {
-            // A file name may hold control or format characters; JSON escapes them and everything non-ASCII.
-            $problems[] = 'Unexpected in public/ (only index.php, .htaccess and php.ini): '
-                . json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
+            $problems[] = 'Unexpected in public/ (only index.php, .htaccess and php.ini): ' . quotedName($entry);
         }
     }
 
@@ -94,15 +92,24 @@ function scanFiles(string $folder, iterable $files): array
         $content = (string) file_get_contents($file->getPathname());
         $relative = substr($file->getPathname(), strlen($folder) + 1);
         if (str_contains(str_replace(PLACEHOLDER_HOSTS, '', $content), 'church.tools')) {
-            $problems[] = "Instance URL (church.tools) in $relative";
+            $problems[] = 'Instance URL (church.tools) in ' . quotedName($relative);
         }
         // The token itself is never printed.
         if (preg_match('/[A-Za-z0-9]{' . TOKEN_LENGTH . ',}/', $content) === 1) {
-            $problems[] = 'Something that looks like a login token (' . TOKEN_LENGTH . "+ letters and digits in a row) in $relative";
+            $problems[] = 'Something that looks like a login token (' . TOKEN_LENGTH . '+ letters and digits in a row) in ' . quotedName($relative);
         }
     }
 
     return $problems;
+}
+
+/**
+ * A file name or path for the output. It may hold control or format characters, so it's JSON-encoded: that escapes
+ * them and everything non-ASCII, and a name can't fake a line of the check's output.
+ */
+function quotedName(string $name): string
+{
+    return json_encode($name, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
 }
 
 $folder = $argv[1] ?? '';
