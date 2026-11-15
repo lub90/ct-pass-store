@@ -666,3 +666,20 @@ the access/settings cache refresh, `.github/workflows/backend.yml`, backend test
 - [ ] Tidy-ups: one callback-path matcher; one trailing-slash helper; stale comments; stale TODO items; the
   `inlineDynamicImports` deprecation.
 - [ ] Commit: `"Docs and spec describe what 0.1.0 contains; texts and small tidy-ups"`.
+
+## Review point B, round 2 — follow-up task (2026-11-15)
+
+### Task 27: Point-B round-2 fixes [security-critical]
+
+**Files:** `extension/e2e/admin.spec.ts`, `src/backend/fake.contract.test.ts`, `shared/key-fingerprint-cases.json`
+and both fingerprint tests, `src/admin/duplicates*`, `src/store/repository*`, `src/views/settings/*`,
+`backend/src/Infrastructure/Logging/EscapeControlCharacters.php` tests, `FileMachineClientUsage` tests,
+`.github/workflows/backend.yml`, docs, `TODO.md`, `src/i18n/*`.
+
+- [ ] Browser suite green (isolated name in the replace description); order-independent wrongPrimaryPasswordCases test;
+  key-fingerprint vectors with `-` and two `_`, each character required separately on both sides.
+- [ ] Test gaps M1–M12 of the point-B round-2 test report; docs/text minors from the Task 26 review and the final
+  review (LOG_LEVEL info, „nächste Version“ wording, spec 3.2 markers, stale TODOs, „(Host: …)“, one CI matrix leg,
+  `bare()` helper).
+- [ ] `npm run check`, `npm run test:browser -- --project='chromium-*'`, `composer check`.
+- [ ] Commit: `"Point-B round-2 fixes: green browser suite, stronger fixtures, remaining gaps"`.
