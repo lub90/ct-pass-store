@@ -81,3 +81,33 @@ jobs:
       # are redacted in the log. A reviewed single false positive goes into .gitleaksignore (its fingerprint).
       - name: Scan the repository
         run: '"$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --no-banner --exit-code 1 .'
+
+  # The pre-commit privacy check (scripts/check-private.mjs, README.md "Pre-commit check"): its tests, and the check in
+  # range mode over the pushed or proposed commits. CI has none of the local sources (.private-terms, credential
+  # files), so the range run only proves the check works on real history; gitleaks above covers secret patterns.
+  private-check:
+    name: pre-commit privacy check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Tests of the check and the hook
+        run: node --test 'scripts/*.test.mjs'
+
+      - name: Check the commits of this push or pull request
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            node scripts/check-private.mjs --range "$BASE..$HEAD_SHA"
+          else
+            node scripts/check-private.mjs --all
+          fi

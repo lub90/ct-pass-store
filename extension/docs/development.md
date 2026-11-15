@@ -374,6 +374,15 @@ ChurchTools. Only then, if the history is not rewritten, add the findings' finge
 with the full commit SHA, the rule and the line exactly as gitleaks prints them in the `Fingerprint:` line (one line per
 finding; `--redact` hides only the value, not the fingerprint).
 
+### Pre-commit check (private terms and local credentials)
+
+Locally, a repository hook keeps private terms and the values of your credential files (`extension/.env`,
+`extension/.env.*`, `backend/phpunit.xml`, the contract fixtures) out of commits. Enable it once per clone with
+`sh scripts/install-hooks.sh` (sets `core.hooksPath` to `.githooks`), and fill the gitignored `.private-terms` from
+`.private-terms.example`. It checks only the lines a commit adds, prints only file, line and entry number (never a
+value), and also runs gitleaks on the staged changes if a `gitleaks` binary is installed. The CI job `private-check`
+runs its tests. Emergency bypass: `git commit --no-verify` (rare). Details: root `README.md`, "Pre-commit check".
+
 ### Releases
 
 The CHANGELOG section of the next version is headed `## [X.Y.Z] - Unreleased` until release day; the release check

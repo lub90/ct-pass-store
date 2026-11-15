@@ -8,3 +8,6 @@
 
 # Brainstorming mockups of the superpowers plugin
 .superpowers/
+
+# Local block list of the pre-commit check (.private-terms.example)
+.private-terms

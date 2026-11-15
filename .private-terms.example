@@ -1,0 +1,20 @@
+# Block list for the pre-commit check (scripts/check-private.mjs). Copy to .private-terms (gitignored, never commit
+# it; chmod 600 is a good idea) and replace these INVENTED examples with your own terms. The check refuses a commit
+# that adds a line containing any term, and never prints the term itself: only "<file>:<line>: matches block list
+# entry #<n>", where <n> is the term's line number in this file.
+#
+# Rules:
+# - One term per line; lines starting with # are comments; blank lines are ignored.
+# - Case-insensitive. Inside a term, any run of spaces, dots, hyphens or underscores matches any run of those or none:
+#   "ex ample" also matches "Ex-Ample", "EX_AMPLE", "ex.ample" and "example".
+# - Short terms match inside longer words; prefer distinctive terms (full names, host names, e-mail addresses).
+# - Intended occurrences: append "## allow: <glob>, <glob>" to a term. Hits in matching repo-relative paths are
+#   ignored. Globs are anchored at the repository root; * and ? stay within one directory, ** crosses directories.
+#
+# Categories worth listing: the organisation's (church's) name and abbreviations, real person names, ChurchTools
+# instance host names, e-mail addresses, internal group or room names, phone numbers, street addresses.
+
+Exemplary Chapel Riverside
+Jane Doe-Example ## allow: LICENSE, specs/*.md
+exampleparish.church.tools
+jane.doe@example.org
