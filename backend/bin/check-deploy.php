@@ -51,7 +51,7 @@ function checkDeployFolder(string $folder): array
         $problems[] = 'Forbidden: config/credentials.php (only credentials-example.php may be deployed)';
     }
     foreach (glob("$folder/phpunit.xml*") ?: [] as $file) {
-        $problems[] = 'Forbidden dev file: ' . basename($file);
+        $problems[] = 'Forbidden dev file: ' . quotedName(basename($file));
     }
     foreach (['tests', '.git'] as $forbiddenFolder) {
         if (file_exists("$folder/$forbiddenFolder")) {

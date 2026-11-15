@@ -45,8 +45,8 @@ final class CheckDeployTest extends TestCase
     public static function forbiddenItems(): iterable
     {
         yield 'real credentials.php' => ['config/credentials.php', "<?php\nreturn [];\n", 'config/credentials.php'];
-        yield 'phpunit.xml' => ['phpunit.xml', '<phpunit/>', 'phpunit.xml'];
-        yield 'phpunit.xml.dist' => ['phpunit.xml.dist', '<phpunit/>', 'phpunit.xml.dist'];
+        yield 'phpunit.xml' => ['phpunit.xml', '<phpunit/>', 'Forbidden dev file: "phpunit.xml"'];
+        yield 'phpunit.xml.dist' => ['phpunit.xml.dist', '<phpunit/>', 'Forbidden dev file: "phpunit.xml.dist"'];
         yield 'tests folder' => ['tests/Unit/FooTest.php', "<?php\n", 'tests'];
         yield '.git folder' => ['.git/HEAD', 'ref: refs/heads/main', '.git'];
         yield 'phpunit in vendor' => ['vendor/phpunit/phpunit/composer.json', '{}', 'vendor/phpunit'];
@@ -90,6 +90,9 @@ final class CheckDeployTest extends TestCase
     #[DataProvider('unexpectedPublicFiles')]
     public function testAnUnexpectedFileInPublicFails(string $path): void
     {
+        if (strtolower($path) !== $path && $this->folderIgnoresCase()) {
+            self::markTestSkipped("The temp filesystem ignores letter case, so $path would overwrite the lower-case file.");
+        }
         $this->write('public/.htaccess', "RewriteEngine On\n");
         $this->write($path, "<?php\n");
 
@@ -155,6 +158,17 @@ final class CheckDeployTest extends TestCase
         self::assertStringNotContainsString("\u{202E}", $result['output']);
     }
 
+    public function testADevFileNameIsPrintedEscaped(): void
+    {
+        $this->write("phpunit.xml\nDeploy check passed: x\u{202E}", '<phpunit/>');
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Forbidden dev file: "phpunit.xml\\nDeploy check passed: x\\u202e"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output']);
+    }
+
     public function testTheShippedPublicFolderPasses(): void
     {
         $this->remove($this->folder . '/public');
@@ -212,6 +226,16 @@ final class CheckDeployTest extends TestCase
     private function check(): array
     {
         return PhpProcess::run([dirname(__DIR__, 3) . '/bin/check-deploy.php', $this->folder], [], dirname(__DIR__, 3));
+    }
+
+    private function folderIgnoresCase(): bool
+    {
+        $probe = $this->folder . '/case-probe';
+        touch($probe);
+        $ignores = file_exists($this->folder . '/CASE-PROBE');
+        unlink($probe);
+
+        return $ignores;
     }
 
     private function write(string $relative, string $content): void
