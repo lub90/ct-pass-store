@@ -1,7 +1,14 @@
-# Changes to the CI, release and secret-scan configuration need the maintainer's review
+# Changes to the CI, release and secret-scan configuration, the Claude Code setup, the threat model and the backend's
+# deploy and web-server files need the maintainer's review
 # (extension/docs/development.md, „CI and releases“). Effective only with branch protection that requires code owner
 # reviews, which the maintainer sets on GitHub.
 /.github/workflows/ @lub90
 /.github/CODEOWNERS @lub90
 /.gitleaks.toml @lub90
 /.gitleaksignore @lub90
+/.claude/ @lub90
+/docs/threat-model.md @lub90
+/backend/.htaccess @lub90
+/backend/public/ @lub90
+/backend/setup/ @lub90
+/backend/bin/check-deploy.php @lub90
