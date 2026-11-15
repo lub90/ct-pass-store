@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Api;
 
+use CtPassStore\Application\Cleanup\CleanupCooldown;
 use CtPassStore\Http\Problem\ProblemType;
 use CtPassStore\Infrastructure\ChurchTools\Exception\UnavailableException;
+use CtPassStore\Infrastructure\Store\FileCooldownStore;
 use Psr\Http\Message\ResponseInterface;
 
 /**
@@ -313,8 +315,10 @@ final class CleanupApiTest extends ApiTestCase
     {
         self::assertSame(200, $this->cleanup()->getStatusCode());
         // The cooldown record; the settings change log (spec 6.4) has a record of its own.
-        $record = $this->cacheDir . '/sec-' . hash('sha256', 'cooldown:cleanup:web-cron') . '.json';
+        $record = $this->cacheDir . '/sec-' . hash('sha256', FileCooldownStore::RECORD_PREFIX . CleanupCooldown::NAME) . '.json';
         self::assertFileExists($record);
+        // The stored name itself is pinned too: renaming it would silently restart every installation's cooldown.
+        self::assertFileExists($this->cacheDir . '/sec-' . hash('sha256', 'cooldown:cleanup:web-cron') . '.json');
         file_put_contents($record, '{"broken": true}');
         $this->clock->advance(600);
         $calls = $this->callCount();

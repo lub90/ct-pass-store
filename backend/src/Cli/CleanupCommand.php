@@ -15,8 +15,10 @@ use Psr\Log\LoggerInterface;
 use Psr\Log\LogLevel;
 
 /**
- * `php bin/cleanup.php [--apply]` (cleanup design 4). Dry run by default. Exit codes: 0 done, 1 done but an admin
- * is gone or a delete failed, 2 aborted or misused. Output names person IDs only; every printed line is also logged.
+ * `php bin/cleanup.php [--apply]` (cleanup design 4, spec 4.11). Dry run by default. Exit codes: 0 done (nothing to
+ * do, or everything deleted), 1 done but a delete failed, 2 aborted before deleting anything (wrong argument, lock
+ * held or unavailable, missing persons right, invalid settings, failed lookup). Output names person IDs only; every
+ * printed line is also logged.
  */
 final class CleanupCommand
 {

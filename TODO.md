@@ -117,6 +117,9 @@ Open issues and planned improvements, roughly ordered by severity.
 - [x] **Clean up entries of deleted users**
   Done in the backend: `bin/cleanup.php` (server cron) and `POST /v1/cleanup` (web cron) delete the entries of deleted and archived persons; `GET` and `PUT` refuse such persons (spec 4.11, 4.12). Admins are members of a ChurchTools group (D9), so the cleanup reads no admin list.
 
+- [ ] **Optional: waiting period before the cleanup deletes entries of gone persons**
+  Protects against human mistakes in ChurchTools such as a mass archive by accident; reads already refuse gone persons, so waiting costs no security. Decided 2026-11-15 not to build it for now.
+
 - [ ] **Backup & restore of the extension data**
   Updating the extension (a new ZIP uploaded to the existing module) keeps its data (measured 2026-11-14, [`specs/ct-extension-info.md`](specs/ct-extension-info.md) section 2). Deleting and reinstalling it removes all of it: settings, encryption settings and every stored password. A backup also protects against mistakes and lost values.
   - Add a feature to export the whole extension data (all categories and their entries) to a backup file.

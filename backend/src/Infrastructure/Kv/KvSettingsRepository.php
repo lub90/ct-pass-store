@@ -39,7 +39,8 @@ final class KvSettingsRepository implements SettingsRepository
     /** How long an outage of ChurchTools is remembered at least (spec 6.2). */
     public const FAILURE_MIN_SECONDS = 10;
 
-    private const CACHE_SETTINGS = 'settings';
+    /** The settings cache record's name; public for the load test's sandbox. */
+    public const CACHE_SETTINGS = 'settings';
 
     private const CACHE_ACCESS = 'access';
 

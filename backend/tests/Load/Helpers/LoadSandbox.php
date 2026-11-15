@@ -4,6 +4,11 @@ declare(strict_types=1);
 
 namespace CtPassStore\Tests\Load\Helpers;
 
+use CtPassStore\Application\Cleanup\CleanupCooldown;
+use CtPassStore\Application\Port\Clock;
+use CtPassStore\Infrastructure\ChurchTools\CachedPersonDirectory;
+use CtPassStore\Infrastructure\Kv\KvSettingsRepository;
+use CtPassStore\Infrastructure\Store\FileCooldownStore;
 use CtPassStore\Infrastructure\Store\RecordSigner;
 use CtPassStore\Infrastructure\Store\SignedFileCache;
 use CtPassStore\Infrastructure\Time\SystemClock;
@@ -29,9 +34,15 @@ final class LoadSandbox
 
     /**
      * @param array<string, mixed> $credentials the complete content of the sandbox's credentials.php
+     * @param Clock $clock the clock of the cache records it writes (the system clock; a frozen one in its unit test)
      */
-    public function __construct(#[\SensitiveParameter] array $credentials, #[\SensitiveParameter] private readonly string $jwtSecret)
-    {
+    public function __construct(
+        #[\SensitiveParameter]
+        array $credentials,
+        #[\SensitiveParameter]
+        private readonly string $jwtSecret,
+        private readonly Clock $clock = new SystemClock(),
+    ) {
         $this->folder = sys_get_temp_dir() . '/ctps-load-' . bin2hex(random_bytes(6));
         foreach (['public', 'bin', 'logs'] as $dir) {
             mkdir($this->folder . '/' . $dir, 0o700, true);
@@ -77,13 +88,13 @@ final class LoadSandbox
      */
     public function plantSettings(array $rawSettings): void
     {
-        $this->cache()->put('settings', $rawSettings, 300);
+        $this->cache()->put(KvSettingsRepository::CACHE_SETTINGS, $rawSettings, 300);
     }
 
     /** Forgets which persons were confirmed active, so the next read asks ChurchTools again. */
     public function clearPersonsCache(): void
     {
-        $this->cache()->forget('persons-active');
+        $this->cache()->forget(CachedPersonDirectory::RECORD);
     }
 
     /**
@@ -93,7 +104,7 @@ final class LoadSandbox
      */
     public function clearCleanupCooldown(): bool
     {
-        $path = $this->folder . '/cache/sec-' . hash('sha256', 'cooldown:cleanup:web-cron') . '.json';
+        $path = $this->folder . '/cache/sec-' . hash('sha256', FileCooldownStore::RECORD_PREFIX . CleanupCooldown::NAME) . '.json';
         if (!is_file($path)) {
             return false;
         }
@@ -125,7 +136,7 @@ final class LoadSandbox
 
     private function cache(): SignedFileCache
     {
-        return new SignedFileCache($this->folder . '/cache', new RecordSigner($this->jwtSecret, SignedFileCache::PURPOSE), new SystemClock(), new NullLogger());
+        return new SignedFileCache($this->folder . '/cache', new RecordSigner($this->jwtSecret, SignedFileCache::PURPOSE), $this->clock, new NullLogger());
     }
 
     private static function remove(string $path): void

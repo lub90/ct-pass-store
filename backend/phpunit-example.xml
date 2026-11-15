@@ -1,9 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
     Local configuration for the end-to-end tests. Copy it to phpunit.xml (gitignored) and fill in your
-    test instance. Run with `composer test:contract` or `composer test:load`, only against a TEST instance. See docs/testing.md.
+    test instance. Run with `composer test:contract` or `CPS_LOAD_TEST=1 composer test:load`, only against a TEST instance.
+    Without a suite or path, phpunit runs only Unit and Api. See docs/testing.md.
 -->
 <phpunit bootstrap="vendor/autoload.php"
+         defaultTestSuite="Unit,Api"
          cacheDirectory=".phpunit.cache"
          colors="true">
 

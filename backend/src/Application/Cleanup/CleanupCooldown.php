@@ -16,7 +16,8 @@ final class CleanupCooldown
 {
     public const SECONDS = 600;
 
-    private const NAME = 'cleanup:web-cron';
+    /** The cooldown's name in the store; public for the load test's sandbox. */
+    public const NAME = 'cleanup:web-cron';
 
     public function __construct(private readonly CooldownStore $store) {}
 

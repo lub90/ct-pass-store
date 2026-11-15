@@ -603,14 +603,17 @@ final class GuzzleChurchToolsClientTest extends TestCase
         $client = $this->client();
         $this->respond($status, $body);
 
+        // Caught here and checked outside: a fail() inside the try would be caught by catch (\Throwable) itself.
+        $caught = null;
         try {
             $this->exchange($client);
-            self::fail('Expected ' . $exception);
         } catch (\Throwable $e) {
-            self::assertInstanceOf($exception, $e);
-            foreach ([self::CLIENT_SECRET, self::CODE, self::VERIFIER] as $secret) {
-                self::assertStringNotContainsString($secret, $e->getMessage());
-            }
+            $caught = $e;
+        }
+
+        self::assertInstanceOf($exception, $caught, 'Expected ' . $exception);
+        foreach ([self::CLIENT_SECRET, self::CODE, self::VERIFIER] as $secret) {
+            self::assertStringNotContainsString($secret, $caught->getMessage());
         }
     }
 

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Deletes the password entries of persons who are deleted or archived in ChurchTools (cleanup design 4), for a
-// server cron job. Dry run by default; `--apply` deletes. Exit codes: 0 done, 1 done with findings, 2 aborted.
+// server cron job. Dry run by default; `--apply` deletes. Exit codes: 0 done, 1 done but a delete failed, 2 aborted.
 // Usage: php bin/cleanup.php [--apply]
 
 if (PHP_SAPI !== 'cli') {

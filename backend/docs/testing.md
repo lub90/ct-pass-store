@@ -7,10 +7,11 @@ The backend has four test layers (see `specs/backend-spec.md`, section 6.6):
 | Unit tests | `Unit` | nothing | `composer test` |
 | API tests (the whole app with a fake ChurchTools) | `Api` | nothing | `composer test` |
 | Contract tests | `Contract` | a ChurchTools test instance, one fixture, local config | `composer test:contract` |
-| Load test | `Load` | a ChurchTools test instance, the fixtures, local config, an admin token | `composer test:load` |
+| Load test | `Load` | a ChurchTools test instance, the fixtures, local config, an admin token, the opt-in `CPS_LOAD_TEST=1` | `CPS_LOAD_TEST=1 composer test:load` |
 
 `composer test` runs the unit and API tests with the shared configuration `phpunit.xml.dist`. They need no network
-access and also run in the CI. `composer check` runs code style, PHPStan and these tests together, like the CI.
+access and also run in the CI. A plain `vendor/bin/phpunit -c <file>` without a suite or path also runs only `Unit` and
+`Api`: both `phpunit.xml.dist` and `phpunit-example.xml` set `defaultTestSuite="Unit,Api"`. `composer check` runs code style, PHPStan and these tests together, like the CI.
 
 The contract tests run only on demand, before each release, with your local `phpunit.xml`. They check only what a fake
 can't prove: that ChurchTools behaves as the backend assumes, and that the backend works against it. If something they
@@ -115,13 +116,22 @@ Machine tokens are signed with a test key. This only works for test systems whos
 > entries into `passwordStore`, archives and deletes persons, and runs the cleanup job, which deletes entries.
 
 ```bash
-composer test:load
+CPS_LOAD_TEST=1 composer test:load
 ```
+
+The environment variable `CPS_LOAD_TEST=1` is the explicit opt-in. Without it (or with any other value) the load test
+is skipped with a message, before it checks its prerequisites, reads `config/credentials.php` or sends any request, so
+it never runs by accident, e.g. with `vendor/bin/phpunit -c phpunit.xml tests/` or an IDE "run all". Set it on the
+command line for each run, never in the `<env>` block of your local `phpunit.xml`: there it would make the opt-in
+permanent.
 
 A full run takes about 15 minutes; `composer test:load` turns off Composer's 300-second process timeout for it.
 
-It measures the backend under realistic data sizes and writes the results to STDERR and to a JSON file
-(`LOAD_RESULTS_FILE`, default `ctps-load-results.json` in the temp folder). The results name person IDs only. The
+It measures the backend under realistic data sizes and writes the results to STDERR and to a new JSON file with mode
+`600`, whose path it prints at the start (`[Load] Results file: …`). By default the file gets a random name in the temp
+folder (`ctps-load-results-<random>.json`); `LOAD_RESULTS_FILE` chooses the path instead, which **must not exist yet**:
+the run refuses an existing file or a symlink rather than overwrite or follow it. Point it into a folder only you can
+write to (not a shared one such as `/tmp` itself). The results name person IDs only. The
 report of a run is in `specs/backend-load-test-*.md`.
 
 It needs everything the contract tests need, and:

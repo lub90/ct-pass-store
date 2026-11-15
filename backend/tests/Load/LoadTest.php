@@ -11,7 +11,9 @@ use CtPassStore\Infrastructure\Auth\FirebaseTokenCodec;
 use CtPassStore\Infrastructure\Time\SystemClock;
 use CtPassStore\Tests\Contract\Helpers\ContractPrerequisites;
 use CtPassStore\Tests\Load\Helpers\ChurchToolsCalls;
+use CtPassStore\Tests\Load\Helpers\LoadOptIn;
 use CtPassStore\Tests\Load\Helpers\LoadSandbox;
+use CtPassStore\Tests\Load\Helpers\ResultsFile;
 use CtPassStore\Tests\Load\Helpers\Stats;
 use GuzzleHttp\Client;
 use GuzzleHttp\RequestOptions;
@@ -30,8 +32,12 @@ use Random\Randomizer;
  * load persons. All requests are sequential. Values that existed before the run (the baseline) are never changed;
  * teardown deletes exactly what the run created and checks that the baseline is what remains.
  *
- * Results go to STDERR and to a JSON file (env `LOAD_RESULTS_FILE`, default in the temp folder). They name person IDs
- * only, never names, tokens or the instance URL.
+ * It runs only with the explicit opt-in `CPS_LOAD_TEST=1` ({@see LoadOptIn}); without it the class is skipped before
+ * anything is read or sent.
+ *
+ * Results go to STDERR and to a new JSON file ({@see ResultsFile}: env `LOAD_RESULTS_FILE`, which must not exist yet,
+ * or a random name in the temp folder; mode 600; its path is printed). They name person IDs only, never names, tokens
+ * or the instance URL.
  */
 final class LoadTest extends TestCase
 {
@@ -47,6 +53,7 @@ final class LoadTest extends TestCase
 
     private static ChurchToolsCalls $ct;
     private static ?LoadSandbox $sandbox = null;
+    private static ?ResultsFile $resultsFile = null;
     private static string $serviceToken = '';
     private static string $adminLoginToken = '';
     private static string $jwtSecret = '';
@@ -80,6 +87,11 @@ final class LoadTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        // First: without the explicit opt-in nothing is read, created or sent.
+        $skip = LoadOptIn::skipReason(getenv(LoadOptIn::VARIABLE));
+        if ($skip !== null) {
+            self::markTestSkipped($skip);
+        }
         ContractPrerequisites::assertMet();
         if (!is_readable(self::FIXTURES . 'admin_users.json')) {
             throw new \RuntimeException('The load test needs tests/Contract/fixtures/admin_users.json. See docs/testing.md.');
@@ -113,6 +125,9 @@ final class LoadTest extends TestCase
 
     private function prepare(): void
     {
+        // First, so an existing or planted results file stops the run before anything is created.
+        self::$resultsFile = ResultsFile::create(getenv('LOAD_RESULTS_FILE'), sys_get_temp_dir());
+        fwrite(STDERR, "\n[Load] Results file: " . self::$resultsFile->path . "\n");
         $apiUrl = (string) getenv('CT_API_URL');
         self::$serviceToken = (string) getenv('CT_API_TOKEN');
         /** @var array<string, mixed> $real */
@@ -663,6 +678,7 @@ final class LoadTest extends TestCase
         self::$results['events'] = self::$ct->events;
         self::$results['finished'] = date('c');
         self::writeResults();
+        self::$resultsFile?->close();
         fwrite(STDERR, "\n[Load] teardown: " . json_encode($teardown) . "\n");
         if (!$teardown['verified']) {
             fwrite(STDERR, "\n[Load] !!! TEARDOWN VERIFICATION FAILED: passwordStore doesn't equal the baseline. Check it by hand. !!!\n");
@@ -697,7 +713,6 @@ final class LoadTest extends TestCase
 
     private static function writeResults(): void
     {
-        $file = (string) (getenv('LOAD_RESULTS_FILE') ?: sys_get_temp_dir() . '/ctps-load-results.json');
-        file_put_contents($file, json_encode(self::$results, JSON_PRETTY_PRINT | JSON_THROW_ON_ERROR));
+        self::$resultsFile?->write(self::$results);
     }
 }
