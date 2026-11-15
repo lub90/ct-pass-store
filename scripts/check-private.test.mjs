@@ -225,6 +225,96 @@ test('a file path that contains a term is reported without printing the path', (
   assertNoValues(r.all);
 });
 
+// Git prints no "+++" header for empty files, binary files and renames of them; their paths are checked anyway.
+const PATH_HIT = '(path withheld): file path matches block list entry #1\n';
+
+test('the path of an empty new file is checked from its header: quoted (non-ASCII), and with " b/" inside', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term2]);
+  stage(repo, `d/ä ${V.term2} empty.txt`, '');
+  assert.equal(check(repo).out, PATH_HIT);
+  git(repo, 'reset', '-q');
+  stage(repo, `d/${V.term2} b/x.txt`, ''); // header "diff --git a/d/<term> b/x.txt b/d/<term> b/x.txt"
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('the paths of consecutive empty files are each checked', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1, V.term2]);
+  stage(repo, `d/a-${V.term1}.txt`, '');
+  stage(repo, `d/b-${V.term2}.txt`, '');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    '(path withheld): file path matches block list entry #1\n(path withheld): file path matches block list entry #2\n',
+  );
+  assertNoValues(r.all);
+});
+
+test('an allow glob applies to the path from the header of an empty file', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [`${V.term2} ## allow: docs/*.md`]);
+  stage(repo, `docs/${V.term2}.md`, '');
+  const r = check(repo);
+  assert.equal(r.code, 0);
+  assert.equal(r.all, '');
+});
+
+test('a mode-only change of a file whose path contains a term is reported', (t) => {
+  const repo = makeRepo(t);
+  write(repo, `bin/${V.term2}.sh`, 'echo hi\n');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'script');
+  blockList(repo, [V.term2]);
+  chmodSync(join(repo, `bin/${V.term2}.sh`), 0o755);
+  git(repo, 'add', '.');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('the path of a binary file is checked', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term2]);
+  write(repo, `d/${V.term2} scan.bin`, Buffer.from([0, 1, 2, 0, 3]));
+  git(repo, 'add', '.');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('a pure rename of an empty file into a path that contains a term is reported', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'e/plain.txt', '');
+  git(repo, 'add', 'e/plain.txt');
+  git(repo, 'commit', '-q', '-m', 'empty');
+  blockList(repo, [V.term2]);
+  git(repo, 'mv', 'e/plain.txt', `e/${V.term2}-moved.txt`);
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, PATH_HIT);
+  assertNoValues(r.all);
+});
+
+test('deleting a file whose path contains a term is not a hit', (t) => {
+  const repo = makeRepo(t);
+  write(repo, `e/${V.term2}.txt`, 'content\n');
+  write(repo, `e/${V.term2}-empty.txt`, '');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'files');
+  blockList(repo, [V.term2]);
+  git(repo, 'rm', '-q', `e/${V.term2}.txt`, `e/${V.term2}-empty.txt`);
+  const r = check(repo);
+  assert.equal(r.code, 0);
+  assert.equal(r.out, '');
+});
+
 test('a pure rename into a path that contains a term is reported (no rename detection)', (t) => {
   const repo = makeRepo(t);
   write(repo, 'docs/plain.txt', 'clean content\n');
@@ -314,8 +404,12 @@ test('"**/" in an allow pattern also matches zero directories', (t) => {
   stage(repo, 'docs/a/b/x.md', `${V.term2}\n`);
   assert.equal(check(repo).code, 0);
   stage(repo, 'docs/y.md', `${V.term2}\n`);
+  stage(repo, 'docs/ax.md', `${V.term2}\n`); // "**/" stands for whole folders only
   stage(repo, 'docsx.md', `${V.term2}\n`);
-  assert.equal(check(repo).out, 'docs/y.md:1: matches block list entry #1\ndocsx.md:1: matches block list entry #1\n');
+  assert.equal(
+    check(repo).out,
+    'docs/ax.md:1: matches block list entry #1\ndocs/y.md:1: matches block list entry #1\ndocsx.md:1: matches block list entry #1\n',
+  );
 });
 
 test('--all reports every hit with its entry number, also in allowed and other files', (t) => {
@@ -380,6 +474,25 @@ test('extension/.env: "export KEY=value" lines and unquoted values with a traili
     'a.txt:1: matches extension/.env VITE_EXPORTED entry #1\na.txt:2: matches extension/.env VITE_NOTED entry #2\n',
   );
   assert.doesNotMatch(r.all, /exportexport|notednoted/);
+});
+
+test('extension/.env: a "#" inside an unquoted value is part of the value, not a comment', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=abc#def-zz\n');
+  stage(repo, 'a.txt', 'abc#def-zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
+  assert.doesNotMatch(r.all, /def-zz/);
+});
+
+test('backend/phpunit.xml: "&amp;lt;" decodes to "&lt;", not to "<"', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_ONE" value="ampamp&amp;lt;zz"/>\n</php></phpunit>\n');
+  stage(repo, 'a.txt', 'ampamp<zz\nampamp&lt;zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:2: matches backend/phpunit.xml CT_ONE entry #2\n');
 });
 
 test('backend/phpunit.xml values are XML-decoded before matching', (t) => {
@@ -566,17 +679,112 @@ test("linked worktree: the worktree's own block list wins over the main checkout
   assertNoValues(r.all);
 });
 
-test("linked worktree: the worktree's own extension/.env wins over the main checkout's credential files", (t) => {
+test("linked worktree: its own extension/.env and the main checkout's are both read; its own comes first", (t) => {
   const repo = makeRepo(t);
   credentialFiles(repo);
   const wt = makeWorktree(t, repo);
-  write(wt, 'extension/.env', 'VITE_PASSWORD=ownown-wt-zz\n');
-  stage(wt, 'a.txt', `ownown-wt-zz\n${V.envPassword}\n`);
+  write(wt, 'extension/.env', `VITE_PASSWORD=ownown-wt-zz\nVITE_SAME=${V.envPassword}\n`);
+  stage(wt, 'a.txt', `ownown-wt-zz\n${V.envPassword}\n${V.envUser}\n`);
   const r = check(wt);
   assert.equal(r.code, 1);
-  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
+  assert.equal(
+    r.out,
+    [
+      'a.txt:1: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:2: matches extension/.env VITE_SAME entry #2', // the worktree's entry, not the main checkout's #5
+      'a.txt:3: matches extension/.env VITE_USERNAME entry #4',
+      '',
+    ].join('\n'),
+  );
   assert.doesNotMatch(r.all, /ownown/);
   assertNoValues(r.all);
+});
+
+test("linked worktree: its own extension/.env.local doesn't hide the main checkout's extension/.env", (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=mainenv-zz\n');
+  const wt = makeWorktree(t, repo);
+  write(wt, 'extension/.env.local', 'VITE_OTHER=wtlocal-zz\n');
+  stage(wt, 'a.txt', 'wtlocal-zz\nmainenv-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches extension/.env.local VITE_OTHER entry #1\na.txt:2: matches extension/.env VITE_PASSWORD entry #1\n',
+  );
+  assert.doesNotMatch(r.all, /wtlocal|mainenv/);
+});
+
+test("linked worktree: one fixture of its own doesn't hide the main checkout's fixtures", (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/tests/Contract/fixtures/main.json', JSON.stringify({ pwd: 'mainfix-zz' }));
+  const wt = makeWorktree(t, repo);
+  write(wt, 'backend/tests/Contract/fixtures/own.json', JSON.stringify({ pwd: 'ownfix-zz' }));
+  stage(wt, 'a.txt', 'ownfix-zz\nmainfix-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches backend/tests/Contract/fixtures/own.json pwd entry #1\n' +
+      'a.txt:2: matches backend/tests/Contract/fixtures/main.json pwd entry #1\n',
+  );
+  assert.doesNotMatch(r.all, /ownfix|mainfix/);
+});
+
+test('linked worktree: a main checkout with only extension/.env.local is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env.local', 'VITE_OTHER=localonly-zz\n');
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'localonly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env.local VITE_OTHER entry #1\n');
+  assert.doesNotMatch(r.all, /localonly/);
+});
+
+test('linked worktree: a main checkout with only backend/phpunit.xml is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="phponly-zz"/>\n</php></phpunit>\n');
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'phponly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches backend/phpunit.xml CT_API_TOKEN entry #2\n');
+  assert.doesNotMatch(r.all, /phponly/);
+});
+
+test('linked worktree: a main checkout with only contract fixtures is used', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'backend/tests/Contract/fixtures/users.json', JSON.stringify({ pwd: 'fixonly-zz' }));
+  const wt = makeWorktree(t, repo);
+  stage(wt, 'a.txt', 'fixonly-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches backend/tests/Contract/fixtures/users.json pwd entry #1\n');
+  assert.doesNotMatch(r.all, /fixonly/);
+});
+
+test('linked worktree: every kind of credential file is read from the worktree and from the main checkout', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=mainenv-zz\n');
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="mainphp-zz"/>\n</php></phpunit>\n');
+  const wt = makeWorktree(t, repo);
+  write(wt, 'extension/.env', 'VITE_PASSWORD=wtenv-zz\n');
+  write(wt, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_API_TOKEN" value="wtphp-zz"/>\n</php></phpunit>\n');
+  stage(wt, 'a.txt', 'wtenv-zz\nmainenv-zz\nmainphp-zz\nwtphp-zz\n');
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    [
+      'a.txt:1: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:2: matches extension/.env VITE_PASSWORD entry #1',
+      'a.txt:3: matches backend/phpunit.xml CT_API_TOKEN entry #2',
+      'a.txt:4: matches backend/phpunit.xml CT_API_TOKEN entry #2',
+      '',
+    ].join('\n'),
+  );
+  assert.doesNotMatch(r.all, /wtenv|mainenv|mainphp|wtphp/);
 });
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -709,6 +917,49 @@ test('a failing git command is named by its subcommand, not by its leading -c op
   assert.equal(r.code, 2);
   assert.equal(r.out, '');
   assert.equal(r.err, 'check-private: git diff failed\n');
+});
+
+test('--range checks the path of a binary file, once per commit', (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, `${V.term2}-photo.png`, Buffer.from([0x89, 0x50, 0, 0, 1]));
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'photo');
+  const first = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  write(repo, `${V.term2}-photo.png`, Buffer.from([0x89, 0x50, 0, 0, 2]));
+  git(repo, 'commit', '-q', '-am', 'photo again');
+  const second = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, [V.term2]);
+  const r = check(repo, ['--range', 'main..HEAD']);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    `(path withheld): file path matches block list entry #1 (commit ${first})\n` +
+      `(path withheld): file path matches block list entry #1 (commit ${second})\n`,
+  );
+  assertNoValues(r.all);
+});
+
+test('--range checks the paths of a binary and an empty file that a merge adds itself', (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, 'x.txt', 'x\n');
+  git(repo, 'add', 'x.txt');
+  git(repo, 'commit', '-q', '-m', 'feature');
+  git(repo, 'checkout', '-q', 'main');
+  git(repo, 'merge', '-q', '--no-ff', '--no-commit', 'feature');
+  // A non-ASCII term: the quoted "diff --cc" header must be unquoted to match. The binary file has no "+++" line.
+  write(repo, 'ä Müllmüll scan.bin', Buffer.from([0, 1, 2]));
+  write(repo, 'Müllmüll empty.txt', '');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'merge');
+  const merge = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, ['Müllmüll']);
+  const r = check(repo, ['--range', 'main~1..HEAD']);
+  assert.equal(r.code, 1);
+  const hit = `(path withheld): file path matches block list entry #1 (commit ${merge})`;
+  assert.equal(r.out, `${hit}\n${hit}\n`);
+  assert.doesNotMatch(r.all, /müll/i);
 });
 
 test('--range=<A..B> checks the range like --range <A..B>', (t) => {

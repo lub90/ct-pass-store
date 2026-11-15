@@ -25,6 +25,9 @@ sh scripts/install-hooks.sh      # or: git config core.hooksPath .githooks
   more characters, plus the host name of URL values), the `<env value>`s of `backend/phpunit.xml`, and the
   pwd/password/token/secret/username fields of `backend/tests/Contract/fixtures/*.json`.
 
+In a linked worktree (`git worktree add` doesn't copy these gitignored files), the block list is the worktree's own
+`.private-terms` if it has one, else the main checkout's; the credential files are read from both.
+
 Harmless words that coincide with such values (`ctpassstore`, `churchtools`) never block. A hit prints only
 `<file>:<line>: matches <source> entry #<n>` (the term's line in `.private-terms`, or the key and line in the credential
 file), **never the value**; the commit is refused. Without `.private-terms` the hook prints a one-line hint and still
@@ -46,8 +49,10 @@ from a parent are checked in that parent's commit when it is in the range, not a
 
 - **Content of binary files:** this script doesn't check it. A file with a NUL byte shows up in a diff only as
   `Binary files differ`, and `--all` skips files with a NUL byte in their first 8000 bytes. Only gitleaks scans such
-  content: in CI, or locally in the hook if a `gitleaks` binary is installed. The **paths** of binary files are still
-  checked against the block list and the credential values.
+  content: in CI, or locally in the hook if a `gitleaks` binary is installed. The **paths** of binary files, like those
+  of empty files and of renamed files, are still checked against the block list and the credential values: in
+  `--staged` and `--range` mode from the `diff --git` (or `diff --cc`) header, in `--all` mode from `git ls-files`.
+  The path of a deleted file is not a hit; the path of a file whose mode alone changes (e.g. `chmod +x`) is.
 
 ### Emergency bypass
 

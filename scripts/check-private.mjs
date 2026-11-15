@@ -217,10 +217,11 @@ function loadEntries(root) {
   const termsRoot = roots.find((r) => existsSync(join(r, '.private-terms')));
   if (termsRoot) readBlockList(termsRoot, entries);
   else notes.push('check-private: hint: no .private-terms block list found; copy .private-terms.example to fill one');
-  const credRoot = roots.find((r) => existsSync(join(r, 'extension', '.env')) || existsSync(join(r, 'backend', 'phpunit.xml'))) || root;
-  readEnvFiles(credRoot, entries, notes);
-  readPhpunit(credRoot, entries);
-  readFixtures(credRoot, entries, notes);
+  // Credential files are read from the worktree and from the main checkout, so a file of the worktree's own never
+  // hides one of the main checkout; the worktree's come first, so a value in both is reported under its entry.
+  for (const r of roots) readEnvFiles(r, entries, notes);
+  for (const r of roots) readPhpunit(r, entries);
+  for (const r of roots) readFixtures(r, entries, notes);
 
   // The first source of a value wins; a value that is itself an allowlisted word never blocks.
   const seen = new Set();
@@ -307,28 +308,51 @@ function unquotePath(p) {
 
 const COMMIT_MARK = '\u0001commit ';
 
+// The path of a "diff --git a/<p> b/<p>" header (the same path twice under --no-renames, quoted alike), or of a
+// "diff --cc <p>" header. Empty and binary files have no "+++" line, so their path comes only from here.
+function headerPath(line) {
+  const combined = /^diff --(?:cc|combined) (.*)$/.exec(line);
+  if (combined) return unquotePath(combined[1]);
+  const rest = line.slice('diff --git '.length);
+  const half = (rest.length - 1) / 2;
+  return Number.isInteger(half) ? unquotePath(rest.slice(half + 1)).replace(/^b\//, '') : null;
+}
+
 // Walks a unified diff (-U0) and checks every added line; "commit" markers come from `git log --format`.
 // A merge commit comes as a combined diff (--cc): one prefix column per parent, "@@@" hunks for two parents. Only
 // lines added against every parent ("++") are the merge's own; the others come from a parent and are checked there.
+// The path of each file is checked once per file and commit, from its header, unless the file is deleted.
 function checkDiff(diff, check) {
   let file = null;
   let lineNo = 0;
   let inHunk = false;
   let parents = 1;
   let suffix = '';
+  let pendingPath = null; // header path, checked before the file's first line or at the next file
+  const flushPath = () => {
+    if (pendingPath !== null) check.path(pendingPath, suffix);
+    pendingPath = null;
+  };
   for (const line of diff.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
+      flushPath();
       suffix = ` (commit ${line.slice(COMMIT_MARK.length).trim()})`;
       inHunk = false;
       file = null;
     } else if (/^diff --(?:git|cc|combined) /.test(line)) {
+      flushPath();
       inHunk = false;
       file = null;
+      pendingPath = headerPath(line); // null for an unexpected header: the "+++" line then gives the path
+    } else if (!inHunk && line.startsWith('deleted file mode ')) {
+      pendingPath = null; // removing a path is fine
     } else if (!inHunk && line.startsWith('+++ ')) {
       const p = line.slice(4).replace(/\t$/, '');
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
-      if (file) check.path(file, suffix);
+      if (pendingPath === null && file) check.path(file, suffix);
+      flushPath();
     } else if (/^@@+ /.test(line)) {
+      flushPath();
       const m = /^(@@+) (?:-\d+(?:,\d+)? )+\+(\d+)(?:,\d+)? \1/.exec(line);
       parents = m ? m[1].length - 1 : 1;
       lineNo = m ? Number(m[2]) : 0;
@@ -340,6 +364,7 @@ function checkDiff(diff, check) {
       lineNo++;
     }
   }
+  flushPath();
 }
 
 const DIFF_OPTS = ['-c', 'core.quotePath=true', '-c', 'diff.noprefix=false'];
