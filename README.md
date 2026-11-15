@@ -112,8 +112,9 @@ checks the credential files. If a `gitleaks` binary is on `PATH`, the hook also 
 `.gitleaks.toml` and `--redact`; otherwise it prints a one-line hint (CI runs gitleaks on the whole history anyway).
 
 Other modes: `node scripts/check-private.mjs --range main..HEAD` (every line added by every commit in the range, also
-lines a later commit removed again) and `--all` (every tracked file). Tests: `node --test 'scripts/*.test.mjs'`
-(also run in CI, `.github/workflows/extension.yml`, job `private-check`).
+lines a later commit removed again, and the lines a merge commit adds itself, e.g. in a conflict resolution) and `--all`
+(every tracked file). Tests: `node --test 'scripts/*.test.mjs'` (also run in CI, `.github/workflows/extension.yml`, job
+`private-check`).
 
 **Emergency bypass:** `git commit --no-verify` skips the hook. It should be rare and deliberate: prefer fixing the line
 or adding a reviewed `## allow:` exception; never bypass for a real credential.

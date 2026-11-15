@@ -604,6 +604,42 @@ test('--range with an unknown revision is exit 2 also without any sources (as in
   assert.match(r.err, /check-private: git rev-list failed/);
 });
 
+test("--range checks a merge commit's own changes, not again the lines it takes from its parents", (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'f.txt', 'a\nb\nc\n');
+  git(repo, 'add', 'f.txt');
+  git(repo, 'commit', '-q', '-m', 'base');
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, 'f.txt', `a\nb\nc\nfeature ${V.term1}\n`);
+  git(repo, 'commit', '-q', '-am', 'feature');
+  const feature = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  git(repo, 'checkout', '-q', 'main');
+  write(repo, 'g.txt', 'main\n');
+  git(repo, 'add', 'g.txt');
+  git(repo, 'commit', '-q', '-m', 'main');
+  git(repo, 'merge', '-q', '--no-ff', '--no-commit', 'feature');
+  // Changes of the merge itself, in two files; the merged line sits next to a line from the feature parent.
+  write(repo, 'f.txt', `a\nb\nc\nmerged ${V.term2}\nfeature ${V.term1}\n`);
+  write(repo, 'g.txt', `main\nmerged ${V.term2}\n`);
+  git(repo, 'add', 'f.txt', 'g.txt');
+  git(repo, 'commit', '-q', '-m', 'merge');
+  const merge = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, [V.term1, V.term2]);
+  const r = check(repo, ['--range', `${base}..HEAD`]);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    [
+      `f.txt:4: matches block list entry #1 (commit ${feature})`,
+      `f.txt:4: matches block list entry #2 (commit ${merge})`,
+      `g.txt:2: matches block list entry #2 (commit ${merge})`,
+      '',
+    ].join('\n'),
+  );
+  assertNoValues(r.all);
+});
+
 test('--range=<A..B> checks the range like --range <A..B>', (t) => {
   const repo = makeRepo(t);
   git(repo, 'checkout', '-q', '-b', 'feature');

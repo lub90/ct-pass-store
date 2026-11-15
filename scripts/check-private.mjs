@@ -2,7 +2,7 @@
 // Privacy and secrets check for commits (run by .githooks/pre-commit; docs: README.md, "Pre-commit check").
 //
 //   node scripts/check-private.mjs [--staged]     lines added in the staged diff (default)
-//   node scripts/check-private.mjs --range A..B   lines added by every commit in the range
+//   node scripts/check-private.mjs --range A..B   lines added by every commit in the range (merges: their own lines)
 //   node scripts/check-private.mjs --all          every line of every tracked file
 //
 // Forbidden values come from local files only, and are NEVER printed (not even in error messages):
@@ -306,31 +306,35 @@ function unquotePath(p) {
 const COMMIT_MARK = '\u0001commit ';
 
 // Walks a unified diff (-U0) and checks every added line; "commit" markers come from `git log --format`.
+// A merge commit comes as a combined diff (--cc): one prefix column per parent, "@@@" hunks for two parents. Only
+// lines added against every parent ("++") are the merge's own; the others come from a parent and are checked there.
 function checkDiff(diff, check) {
   let file = null;
   let lineNo = 0;
   let inHunk = false;
+  let parents = 1;
   let suffix = '';
   for (const line of diff.split('\n')) {
     if (line.startsWith(COMMIT_MARK)) {
       suffix = ` (commit ${line.slice(COMMIT_MARK.length).trim()})`;
       inHunk = false;
       file = null;
-    } else if (line.startsWith('diff --git ')) {
+    } else if (/^diff --(?:git|cc|combined) /.test(line)) {
       inHunk = false;
       file = null;
     } else if (!inHunk && line.startsWith('+++ ')) {
       const p = line.slice(4).replace(/\t$/, '');
       file = p === '/dev/null' ? null : unquotePath(p).replace(/^b\//, '');
       if (file) check.path(file, suffix);
-    } else if (line.startsWith('@@ ')) {
-      const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/.exec(line);
-      lineNo = m ? Number(m[1]) : 0;
+    } else if (/^@@+ /.test(line)) {
+      const m = /^(@@+) (?:-\d+(?:,\d+)? )+\+(\d+)(?:,\d+)? \1/.exec(line);
+      parents = m ? m[1].length - 1 : 1;
+      lineNo = m ? Number(m[2]) : 0;
       inHunk = true;
-    } else if (inHunk && file && line.startsWith('+')) {
-      check.line(file, lineNo, line.slice(1), suffix);
-      lineNo++;
-    } else if (inHunk && line.startsWith(' ')) {
+    } else if (inHunk) {
+      const columns = line.slice(0, parents);
+      if (columns.length < parents || /[^ +-]/.test(columns) || columns.includes('-')) continue; // removed, or "\ No newline"
+      if (file && columns === '+'.repeat(parents)) check.line(file, lineNo, line.slice(parents), suffix);
       lineNo++;
     }
   }
@@ -376,7 +380,7 @@ function main() {
       checkDiff(git([...DIFF_OPTS, 'diff', '--cached', ...DIFF_FLAGS], root), check);
     } else if (opts.mode === 'range') {
       const log = git(
-        [...DIFF_OPTS, 'log', '--reverse', '-p', ...DIFF_FLAGS, `--format=${COMMIT_MARK}%h`, opts.range, '--'],
+        [...DIFF_OPTS, 'log', '--reverse', '-p', '--cc', ...DIFF_FLAGS, `--format=${COMMIT_MARK}%h`, opts.range, '--'],
         root,
       );
       checkDiff(log, check);
