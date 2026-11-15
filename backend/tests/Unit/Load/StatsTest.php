@@ -26,6 +26,8 @@ final class StatsTest extends TestCase
         yield '20 values' => [array_map('floatval', range(20, 1)), ['n' => 20, 'min' => 1.0, 'median' => 10.5, 'p95' => 19.0, 'max' => 20.0]];
         // ceil(0.95 * 21) = 20.
         yield '21 values' => [array_map('floatval', range(1, 21)), ['n' => 21, 'min' => 1.0, 'median' => 11.0, 'p95' => 20.0, 'max' => 21.0]];
+        // ceil(0.95 * 12) = ceil(11.4) = 12, the maximum; round() would give rank 11.
+        yield '12 values' => [array_map('floatval', range(1, 12)), ['n' => 12, 'min' => 1.0, 'median' => 6.5, 'p95' => 12.0, 'max' => 12.0]];
         // ceil(0.95 * 100) = 95.
         yield '100 values' => [array_map('floatval', range(1, 100)), ['n' => 100, 'min' => 1.0, 'median' => 50.5, 'p95' => 95.0, 'max' => 100.0]];
         yield 'rounded to one decimal' => [[1.26, 1.24], ['n' => 2, 'min' => 1.2, 'median' => 1.3, 'p95' => 1.3, 'max' => 1.3]];
