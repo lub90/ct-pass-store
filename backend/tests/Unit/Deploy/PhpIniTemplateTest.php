@@ -50,7 +50,7 @@ final class PhpIniTemplateTest extends TestCase
 
     /**
      * Security M1: when `public/` is the web root, `../.htaccess` isn't read, so `public/.htaccess` must deny hidden
-     * files (`.user.ini`, `.htaccess`) and `php.ini` itself, also without mod_rewrite.
+     * files (`.user.ini`, `.htaccess`) and `php.ini` itself, independent of the rewrite rules.
      *
      * @return iterable<string, array{string, bool}>
      */

@@ -134,8 +134,10 @@ value).
 
 Upload the folder's contents to your hosting and make **`public/`** the web root. Everything outside `public/` must
 not be readable over HTTP; the `.htaccess` file takes care of that on Apache. `public/.htaccess` denies hidden files
-(such as `.user.ini`) and `php.ini` on its own, so this holds whether the web root is `public/` or the folder above
-it. Nginx needs its own rules (not yet tested).
+(such as `.user.ini`) and `php.ini` on its own, independent of the rewrite rules, so this holds whether the web root
+is `public/` or the folder above it. These deny blocks need `AllowOverride AuthConfig Limit` (or `All`) for
+`public/`; if every request answers `500` right after the upload, the host doesn't allow them, which its error log
+shows. Nginx needs its own rules (not yet tested).
 
 **Uploads do not keep file modes**, so set them again on the server. Which modes are right depends on who runs PHP:
 

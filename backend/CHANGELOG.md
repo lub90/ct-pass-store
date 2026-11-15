@@ -67,7 +67,7 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
 - `GET /v1/test` reports whether OPcache is on and checks for changed files (check "OPcache", never fails), so no
   `phpinfo()` page is needed.
 - `public/.htaccess` denies hidden files (such as `.user.ini`) and `php.ini` itself, also when `public/` is the web
-  root and without `mod_rewrite`.
+  root, independent of the rewrite rules.
 - `bin/check-deploy.php` refuses anything in `public/` besides `index.php`, `.htaccess` and `php.ini`.
 
 ### Fixed
