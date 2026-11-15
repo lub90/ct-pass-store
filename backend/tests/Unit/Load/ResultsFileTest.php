@@ -173,6 +173,11 @@ final class ResultsFileTest extends TestCase
         }
     }
 
+    /**
+     * The check that `create()` runs after its open. Its use inside `create()` is not tested through `create()`: it
+     * only fails when a link or another file replaces the path between the `is_link()` check and the `fopen()`, a race
+     * that a unit test can't set up reliably. So the check itself is tested here, on every case it must refuse.
+     */
     public function testTheOpenHandleMustBeTheFileAtThePath(): void
     {
         $path = $this->dir . '/a.json';
