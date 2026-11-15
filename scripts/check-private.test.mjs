@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync, execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, chmodSync, existsSync, readdirSync, statSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, rmSync, chmodSync, existsSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir, devNull } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -212,6 +212,33 @@ test('a file path that contains a term is reported without printing the path', (
   assertNoValues(r.all);
 });
 
+test('a pure rename into a path that contains a term is reported (no rename detection)', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'docs/plain.txt', 'clean content\n');
+  git(repo, 'add', 'docs/plain.txt');
+  git(repo, 'commit', '-q', '-m', 'plain');
+  blockList(repo, [V.term2]);
+  git(repo, 'mv', 'docs/plain.txt', `docs/${V.term2}.txt`);
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, '(path withheld): file path matches block list entry #1\n');
+  assertNoValues(r.all);
+});
+
+test('quoted paths (non-ASCII, tab) are unquoted: path terms and allow globs see the real path', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, ['Müllmüll', `${V.term1} ## allow: docs/*.md`]);
+  stage(repo, 'notes/Müllmüll.txt', 'clean content\n');
+  stage(repo, 'docs/ä-notes.md', `${V.term1}\n`); // allowed
+  stage(repo, 'docs/tab\there.md', `${V.term1}\n`); // allowed
+  stage(repo, 'other/ö\tö.txt', `${V.term1}\n`); // not allowed: reported under its real name
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, '(path withheld): file path matches block list entry #1\nother/ö\tö.txt:1: matches block list entry #2\n');
+  assertNoValues(r.all);
+  assert.doesNotMatch(r.all, /müll/i);
+});
+
 test('separators inside a term match any run of separators or none', (t) => {
   const repo = makeRepo(t);
   blockList(repo, ['zq   kx', 'ab-cd.ef']);
@@ -267,6 +294,17 @@ test('"**" in an allow pattern crosses directories; the exception text is not pa
   assert.equal(check(repo).out, 'y.txt:1: matches block list entry #1\n');
 });
 
+test('"**/" in an allow pattern also matches zero directories', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [`${V.term2} ## allow: docs/**/x.md`]);
+  stage(repo, 'docs/x.md', `${V.term2}\n`);
+  stage(repo, 'docs/a/b/x.md', `${V.term2}\n`);
+  assert.equal(check(repo).code, 0);
+  stage(repo, 'docs/y.md', `${V.term2}\n`);
+  stage(repo, 'docsx.md', `${V.term2}\n`);
+  assert.equal(check(repo).out, 'docs/y.md:1: matches block list entry #1\ndocsx.md:1: matches block list entry #1\n');
+});
+
 test('--all reports every hit with its entry number, also in allowed and other files', (t) => {
   const repo = makeRepo(t);
   write(repo, 'LICENSE', `${V.term1}\n`);
@@ -306,6 +344,53 @@ test('extension/.env.* files are sources too', (t) => {
   stage(repo, 'a.txt', `x ${V.envLocal.toUpperCase()}\n`);
   const r = check(repo);
   assert.equal(r.out, 'a.txt:1: matches extension/.env.local VITE_OTHER entry #1\n');
+});
+
+test('an extension/.env value of exactly 6 characters is blocked', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_SIX=sixsix\nVITE_FIVE=fivef\n');
+  stage(repo, 'a.txt', 'x sixsix y\nfivef\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_SIX entry #1\n');
+  assert.doesNotMatch(r.all, /sixsix/);
+});
+
+test('extension/.env: "export KEY=value" lines and unquoted values with a trailing " # comment" are read', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'export VITE_EXPORTED=exportexport-zz\nVITE_NOTED=notednoted-zz   # a note\n');
+  stage(repo, 'a.txt', 'exportexport-zz\nnotednoted-zz\nzz   # a note\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(
+    r.out,
+    'a.txt:1: matches extension/.env VITE_EXPORTED entry #1\na.txt:2: matches extension/.env VITE_NOTED entry #2\n',
+  );
+  assert.doesNotMatch(r.all, /exportexport|notednoted/);
+});
+
+test('backend/phpunit.xml values are XML-decoded before matching', (t) => {
+  const repo = makeRepo(t);
+  write(
+    repo,
+    'backend/phpunit.xml',
+    '<phpunit><php>\n  <env name="CT_ONE" value="ampamp&amp;zz&#45;zz"/>\n  <env name=\'CT_TWO\' value=\'hexhex&#x2D;&lt;zz&gt;\'/>\n</php></phpunit>\n',
+  );
+  stage(repo, 'a.txt', 'ampamp&zz-zz\nhexhex-<zz>\nampamp&amp;zz&#45;zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches backend/phpunit.xml CT_ONE entry #2\na.txt:2: matches backend/phpunit.xml CT_TWO entry #3\n');
+  assert.doesNotMatch(r.all, /ampamp|hexhex/);
+});
+
+test('a value found in two sources is reported once, under the first source', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'extension/.env', 'VITE_PASSWORD=dupdup-zz\n');
+  write(repo, 'backend/phpunit.xml', '<phpunit><php>\n  <env name="CT_PASSWORD" value="DupDup-ZZ"/>\n</php></phpunit>\n');
+  stage(repo, 'a.txt', 'dupdup-zz\n');
+  const r = check(repo);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches extension/.env VITE_PASSWORD entry #1\n');
 });
 
 test('the host name of a URL value is blocked on its own', (t) => {
@@ -431,6 +516,44 @@ test('missing block list: credential-file values are still checked', (t) => {
 });
 
 // ---------------------------------------------------------------------------------------------------------------
+// Linked worktrees: `git worktree add` doesn't copy the gitignored local files, so they come from the main checkout
+
+function makeWorktree(t, repo) {
+  const parent = mkdtempSync(join(tmpdir(), 'check-private-wt-'));
+  t.after(() => rmSync(parent, { recursive: true, force: true }));
+  const wt = join(parent, 'wt');
+  git(repo, 'worktree', 'add', '-q', '--detach', wt);
+  return wt;
+}
+
+test('linked worktree: the block list and the credential files of the main checkout are used', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  credentialFiles(repo);
+  const wt = makeWorktree(t, repo);
+  assert.ok(!existsSync(join(wt, '.private-terms')) && !existsSync(join(wt, 'extension')));
+  stage(wt, 'a.txt', `${V.term1}\n${V.envPassword}\n`);
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:1: matches block list entry #1\na.txt:2: matches extension/.env VITE_PASSWORD entry #5\n');
+  assert.equal(r.err, '');
+  assertNoValues(r.all);
+});
+
+test("linked worktree: the worktree's own block list wins over the main checkout's", (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  credentialFiles(repo);
+  const wt = makeWorktree(t, repo);
+  blockList(wt, ['# own list', V.term2]);
+  stage(wt, 'a.txt', `${V.term1}\n${V.term2}\n${V.phpToken}\n`);
+  const r = check(wt);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, 'a.txt:2: matches block list entry #2\na.txt:3: matches backend/phpunit.xml CT_API_TOKEN entry #3\n');
+  assertNoValues(r.all);
+});
+
+// ---------------------------------------------------------------------------------------------------------------
 // Range mode
 
 test('--range checks every commit in the range, also lines a later commit removed again', (t) => {
@@ -471,6 +594,27 @@ test('--range with an unknown revision is a usage error (exit 2)', (t) => {
   blockList(repo, [V.term1]);
   const r = check(repo, ['--range', 'nope..HEAD']);
   assert.equal(r.code, 2);
+});
+
+test('--range with an unknown revision is exit 2 also without any sources (as in CI)', (t) => {
+  const repo = makeRepo(t);
+  const r = check(repo, ['--range', 'nope..HEAD']);
+  assert.equal(r.code, 2);
+  assert.equal(r.out, '');
+  assert.match(r.err, /check-private: git rev-list failed/);
+});
+
+test('--range=<A..B> checks the range like --range <A..B>', (t) => {
+  const repo = makeRepo(t);
+  git(repo, 'checkout', '-q', '-b', 'feature');
+  write(repo, 'f.txt', `${V.term2}\n`);
+  git(repo, 'add', 'f.txt');
+  git(repo, 'commit', '-q', '-m', 'add');
+  const head = git(repo, 'rev-parse', '--short', 'HEAD').trim();
+  blockList(repo, [V.term2]);
+  const r = check(repo, ['--range=main..HEAD']);
+  assert.equal(r.code, 1);
+  assert.equal(r.out, `f.txt:1: matches block list entry #1 (commit ${head})\n`);
 });
 
 test('--range=<value> starting with "-" is a usage error and never reaches git as an option', (t) => {
@@ -533,6 +677,20 @@ test('--all checks every tracked file, not untracked ones, and skips binary file
 
 test('--all on a clean tree exits 0 quietly', (t) => {
   const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  const r = check(repo, ['--all']);
+  assert.equal(r.code, 0);
+  assert.equal(r.all, '');
+});
+
+test('--all never follows a tracked symlink, e.g. to a file outside the repository', (t) => {
+  const repo = makeRepo(t);
+  const outside = mkdtempSync(join(tmpdir(), 'check-private-out-'));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  writeFileSync(join(outside, 'target.txt'), `${V.term1}\n`);
+  symlinkSync(join(outside, 'target.txt'), join(repo, 'link.txt'));
+  git(repo, 'add', 'link.txt');
+  git(repo, 'commit', '-q', '-m', 'link');
   blockList(repo, [V.term1]);
   const r = check(repo, ['--all']);
   assert.equal(r.code, 0);
@@ -615,6 +773,34 @@ test('hook: a gitleaks finding fails the hook', (t) => {
   assert.equal(runHook(repo, env).code, 1);
 });
 
+test('hook: without node the commit is refused (fails closed)', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  stage(repo, 'a.txt', 'clean\n');
+  const bin = mkdtempSync(join(tmpdir(), 'check-private-nonode-'));
+  t.after(() => rmSync(bin, { recursive: true, force: true }));
+  for (const tool of ['sh', 'git', 'dirname']) {
+    const found = execFileSync('sh', ['-c', `command -v ${tool}`], { encoding: 'utf8' }).trim();
+    symlinkSync(found, join(bin, tool));
+  }
+  const r = runHook(repo, { ...baseEnv, PATH: bin });
+  assert.equal(r.code, 1);
+  assert.match(r.err, /node not found/);
+});
+
+test('hook: checks only the staged changes, not hits that are already committed', (t) => {
+  const repo = makeRepo(t);
+  write(repo, 'old.txt', `${V.term1}\n`);
+  git(repo, 'add', 'old.txt');
+  git(repo, 'commit', '-q', '-m', 'old');
+  blockList(repo, [V.term1]);
+  stage(repo, 'a.txt', 'clean\n');
+  const { env } = hookEnv(t);
+  const r = runHook(repo, env);
+  assert.equal(r.code, 0);
+  assert.doesNotMatch(r.all, /matches/);
+});
+
 test('hook: git commit is refused through core.hooksPath when a term is staged', (t) => {
   const repo = makeRepo(t);
   blockList(repo, [V.term1]);
@@ -667,7 +853,12 @@ test('install-hooks.sh refuses to replace a different core.hooksPath', (t) => {
 });
 
 test('the shipped example block list only holds comments and invented example terms', () => {
-  const example = join(HERE, '..', '.private-terms.example');
-  assert.ok(existsSync(example));
-  assert.ok(readdirSync(join(HERE, '..')).includes('.private-terms.example'));
+  const example = readFileSync(join(HERE, '..', '.private-terms.example'), 'utf8');
+  const terms = example
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => l.replace(/\s*##\s*allow:.*$/i, ''));
+  assert.ok(terms.length > 0, 'the example shows at least one term');
+  for (const term of terms) assert.match(term, /ex[ae]mpl/i, 'every term in the example is an invented example');
 });
