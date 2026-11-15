@@ -506,6 +506,9 @@ normal case names it ("→ PV-05").
 - [x] **TS-11** (! · A) "Web cron token": absent → `ok` (off); shorter than 43 → `fail`, token not printed; usable →
   `ok` (on) — cleanup design 3.7, 5.1
 - [x] **TS-12** (! · U) "Service user rights" keeps `churchdb` narrow: each writing, creating, deleting, exporting or administering `churchdb` right (`create person`, `write access`, … `edit group memberships`, design 9.1) that isn't exactly `false` or `[]` (`true`, `[3]`, `"false"`, `null`, `0`) is listed as excess; `security level person` with a value above 1 is excess, `[1]` and the default read values of the minimal user are not — spec 4.8, cleanup design 9.1
+- [x] **TS-13** (! · U, A) "OPcache": on/off and `validate_timestamps` on/off/unknown, always `ok`; the message holds
+  only these two values (no path, memory or statistics from the status); admins only, a user, a token with
+  `admin: false` and a machine client get `403` without it — spec 4.8, merged-review fix M2
 
 ## 9. Error format (spec 4.9)
 

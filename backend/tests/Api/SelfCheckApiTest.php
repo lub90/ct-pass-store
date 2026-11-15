@@ -65,7 +65,7 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('0.1.0+test', $body['version']);
         self::assertIsString($body['summary']);
         self::assertSame(
-            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'access', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Web cron token'],
+            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'access', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Web cron token', 'OPcache'],
             array_keys($this->checks($response)),
         );
         foreach ($this->checks($response) as $name => $test) {
@@ -391,6 +391,35 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame('The web-cron endpoint is on.', $this->checks($response)['Web cron token']['message']);
         self::assertStringNotContainsString(str_repeat('c', 64), (string) $response->getBody());
+    }
+
+    /** Security M3: an admin sees whether OPcache is on and checks for changes, and nothing else about the host. */
+    public function testAdminSeesTheOpcacheStatusWithoutHostDetails(): void
+    {
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $check = $this->checks($response)['OPcache'];
+        self::assertSame('ok', $check['status'], 'OPcache is optional, so the check never fails.');
+        self::assertContains($check['message'], [
+            'OPcache is off (see docs/setup.md to turn it on).',
+            'OPcache is on; validate_timestamps is on.',
+            'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.',
+            'OPcache is on; validate_timestamps is unknown.',
+        ]);
+        self::assertSame(['name', 'status', 'message'], array_keys($check));
+    }
+
+    /** Security M3: the OPcache status is for admins only. */
+    public function testNonAdminsGetNoOpcacheStatus(): void
+    {
+        $notAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::ADMIN, admin: false)];
+        foreach (['user' => $this->request('GET', '/v1/test', self::USER), 'admin: false' => $this->request('GET', '/v1/test', headers: $notAdmin), 'machine client' => $this->request('GET', '/v1/test', self::READER_CLIENT)] as $caller => $response) {
+            $body = (string) $response->getBody();
+
+            self::assertSame(403, $response->getStatusCode(), $caller);
+            self::assertStringNotContainsStringIgnoringCase('opcache', $body, $caller);
+            self::assertStringNotContainsString('validate_timestamps', $body, $caller);
+        }
     }
 
     /** TS-02 */
