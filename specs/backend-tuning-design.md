@@ -4,6 +4,12 @@
 > allowlist, security values locked). Points marked *(builder's call)* or *(Claude's call)* were not decided by the
 > maintainer and may be corrected.
 
+> **Needs revision before implementation.** The settings cache (`SETTINGS_CACHE_SECONDS`) also holds `access`: the
+> admin group and the machine clients with their keys. With the range up to 3600 s, removing a machine client or one of
+> its keys, or changing the admin group, could take up to an hour instead of 5 minutes (backend spec 4.4a
+> "Revocation", 6.1). Before building it, either cap `SETTINGS_CACHE_SECONDS` at 300 s, or give `access` its own
+> fixed cache time of at most 300 s.
+
 ## 1. Intent
 
 Today every tuning value of the backend (timeouts, cache times, cooldowns) is a constant in the class that uses it,
