@@ -186,6 +186,8 @@ final class LoginApiTest extends ApiTestCase
         yield 'trailing newline' => ["https://example.church.tools/ccm/ctpassstore/\n"];
         yield 'user' => ['https://user@example.church.tools/'];
         yield 'user and password' => ['https://u:p@example.church.tools/'];
+        yield 'empty user' => ['https://@example.church.tools/'];
+        yield 'password with empty user' => ['https://:p@example.church.tools/'];
     }
 
     #[DataProvider('ambiguousInstanceRedirectUris')]
