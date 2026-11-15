@@ -82,6 +82,9 @@ final class CheckDeployTest extends TestCase
         yield 'the template' => ['public/php.ini-example'];
         yield 'a backup' => ['public/index.php~'];
         yield 'a file in a subfolder' => ['public/assets/app.js'];
+        // The names are compared exactly: a host may serve Index.php as its own script.
+        yield 'index.php in another case' => ['public/Index.php'];
+        yield 'php.ini in another case' => ['public/PHP.INI'];
     }
 
     #[DataProvider('unexpectedPublicFiles')]
@@ -94,7 +97,7 @@ final class CheckDeployTest extends TestCase
 
         self::assertSame(1, $result['exit'], $result['output']);
         $top = explode('/', $path)[1];
-        self::assertStringContainsString("Unexpected in public/ (only index.php, .htaccess and php.ini): $top", $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "' . $top . '"', $result['output']);
     }
 
     public function testPublicMayHoldIndexHtaccessAndPhpIni(): void
@@ -114,7 +117,7 @@ final class CheckDeployTest extends TestCase
         $result = $this->check();
 
         self::assertSame(1, $result['exit'], $result['output']);
-        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): php.ini', $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "php.ini"', $result['output']);
     }
 
     public function testALinkInPublicFailsEvenWithAnAllowedName(): void
@@ -124,7 +127,19 @@ final class CheckDeployTest extends TestCase
         $result = $this->check();
 
         self::assertSame(1, $result['exit'], $result['output']);
-        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): php.ini', $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "php.ini"', $result['output']);
+    }
+
+    public function testAnUnexpectedNameIsPrintedEscaped(): void
+    {
+        $this->write("public/evil\nDeploy check passed: x\u{202E}.php", "<?php\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "evil\\nDeploy check passed: x\\u202e.php"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output'], 'A name must not start a line of its own.');
+        self::assertStringNotContainsString("\u{202E}", $result['output']);
     }
 
     public function testTheShippedPublicFolderPasses(): void

@@ -43,7 +43,9 @@ function checkDeployFolder(string $folder): array
     foreach (is_dir("$folder/public") ? scandir("$folder/public") ?: [] : [] as $entry) {
         $path = "$folder/public/$entry";
         if ($entry !== '.' && $entry !== '..' && (!in_array($entry, PUBLIC_FILES, true) || is_link($path) || !is_file($path))) {
-            $problems[] = "Unexpected in public/ (only index.php, .htaccess and php.ini): $entry";
+            // A file name may hold control or format characters; JSON escapes them and everything non-ASCII.
+            $problems[] = 'Unexpected in public/ (only index.php, .htaccess and php.ini): '
+                . json_encode($entry, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
         }
     }
 
