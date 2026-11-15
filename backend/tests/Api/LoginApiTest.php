@@ -169,6 +169,38 @@ final class LoginApiTest extends ApiTestCase
         yield 'relative' => ['/ccm/ctpassstore/'];
     }
 
+    /**
+     * URLs whose host is the instance, but which URL parsers read differently (backslash, percent-encoding, whitespace;
+     * PHP's parse_url() even turns control characters into `_`) or which carry credentials. parse_url() alone would
+     * accept each of them as the instance, so the pre-check and the user/pass check are what rejects them.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function ambiguousInstanceRedirectUris(): iterable
+    {
+        yield 'percent in path' => ['https://example.church.tools/ccm/%2e%2e/ctpassstore/'];
+        yield 'percent in query' => ['https://example.church.tools/ccm/ctpassstore/?next=%2F%2Fevil.com'];
+        yield 'backslash in path' => ['https://example.church.tools/ccm\\ctpassstore/'];
+        yield 'space in path' => ['https://example.church.tools/ccm ctpassstore/'];
+        yield 'tab in path' => ["https://example.church.tools/ccm\t/ctpassstore/"];
+        yield 'trailing newline' => ["https://example.church.tools/ccm/ctpassstore/\n"];
+        yield 'user' => ['https://user@example.church.tools/'];
+        yield 'user and password' => ['https://u:p@example.church.tools/'];
+        yield 'empty user' => ['https://@example.church.tools/'];
+        yield 'password with empty user' => ['https://:p@example.church.tools/'];
+    }
+
+    #[DataProvider('ambiguousInstanceRedirectUris')]
+    public function testAmbiguousRedirectUrisOfTheInstanceAreRejectedWithoutCallingChurchTools(string $redirectUri): void
+    {
+        $this->grant();
+
+        $response = $this->login(['code' => self::CODE, 'codeVerifier' => self::VERIFIER, 'redirectUri' => $redirectUri]);
+
+        $this->assertProblem(ProblemType::InvalidBody, $response);
+        self::assertSame([], $this->churchTools->calls());
+    }
+
     public function testTheRedirectUriMayUseAnotherPathOrCase(): void
     {
         // ChurchTools checks the exact registered URI; the backend only pins the instance.
@@ -270,7 +302,35 @@ final class LoginApiTest extends ApiTestCase
         yield 'sub with letters' => [['sub' => '42a']];
         yield 'sub as float' => [['sub' => 42.5]];
         yield 'sub 0' => [['sub' => '0']];
+        yield 'sub as integer 0' => [['sub' => 0]];
+        yield 'sub as integer -1' => [['sub' => -1]];
+        yield 'sub -1' => [['sub' => '-1']];
         yield 'no sub' => [['sub' => null]];
+    }
+
+    /**
+     * @return iterable<string, array{int|string}>
+     */
+    public static function nonPositiveSubs(): iterable
+    {
+        yield 'integer 0' => [0];
+        yield 'integer -1' => [-1];
+        yield 'string 0' => ['0'];
+    }
+
+    /**
+     * A non-positive sub that whoami confirms (so the whoami match can't catch it) is still an invalid upstream answer,
+     * never a person ID 0 or below (which would be a 500).
+     */
+    #[DataProvider('nonPositiveSubs')]
+    public function testANonPositiveSubConfirmedByWhoamiIsUpstreamInvalid(int|string $sub): void
+    {
+        $this->grant(self::churchToolsToken(['sub' => $sub]), ['id' => (int) $sub, 'cmsUserId' => 'alice']);
+
+        $response = $this->login();
+
+        $this->assertProblem(ProblemType::UpstreamInvalid, $response);
+        $this->assertNoTokenIssued($response);
     }
 
     public function testSubAsNumberMatchesWhoami(): void

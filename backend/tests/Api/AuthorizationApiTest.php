@@ -258,6 +258,36 @@ final class AuthorizationApiTest extends ApiTestCase
         $this->assertProblem(ProblemType::TokenExpired, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $token]));
     }
 
+    // ---------------------------------------------------------------- token size limit
+
+    /**
+     * A correctly signed machine token padded with an extra claim to exactly $length bytes, or the shortest one above.
+     */
+    private function machineTokenOfLength(int $length): string
+    {
+        for ($pad = 0; ; ++$pad) {
+            $token = $this->machineTokenOf(self::READER_CLIENT, ['pad' => str_repeat('p', $pad)]);
+            if (strlen($token) >= $length) {
+                return $token;
+            }
+        }
+    }
+
+    public function testACorrectlySignedTokenOver8192BytesIsRejected(): void
+    {
+        $this->seedEntry(self::USER);
+        $atLimit = $this->machineTokenOfLength(8192);
+        $tooLong = $this->machineTokenOfLength(8193);
+        self::assertSame(8192, strlen($atLimit));
+        self::assertGreaterThan(8192, strlen($tooLong));
+
+        $response = $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $tooLong]);
+        self::assertSame(401, $response->getStatusCode());
+        $this->assertProblem(ProblemType::InvalidToken, $response);
+
+        self::assertSame(200, $this->request('GET', '/v1/entries/' . self::USER, headers: ['Authorization' => 'Bearer ' . $atLimit])->getStatusCode());
+    }
+
     // ---------------------------------------------------------------- machine tokens at the API (MC-09, MC-20)
 
     public function testAMachineTokenWorksOnlyOnce(): void

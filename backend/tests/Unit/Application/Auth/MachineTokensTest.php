@@ -377,6 +377,29 @@ final class MachineTokensTest extends TestCase
         $this->assertInvalid($this->sign($this->claims(['jti' => 12345678901234567])));
     }
 
+    /**
+     * @return iterable<string, array{int, bool}>
+     */
+    public static function jtiLengths(): iterable
+    {
+        yield '15 bytes' => [15, false];
+        yield '16 bytes' => [16, true];
+        yield '128 bytes' => [128, true];
+        yield '129 bytes' => [129, false];
+    }
+
+    #[DataProvider('jtiLengths')]
+    public function testJtiLengthBounds(int $length, bool $accepted): void
+    {
+        $token = $this->sign($this->claims(['jti' => str_repeat('j', $length)]));
+        if (!$accepted) {
+            $this->assertInvalid($token);
+
+            return;
+        }
+        self::assertSame('ct-radius', $this->verifier()->verify($token)->clientId);
+    }
+
     // ---------------------------------------------------------------- MC-09, MC-10, MC-17, MC-19, MC-20
 
     public function testTheSameTokenIsAcceptedOnlyOnce(): void

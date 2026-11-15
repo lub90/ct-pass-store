@@ -140,6 +140,23 @@ final class FileAddressLimiterTest extends TestCase
         self::assertStringNotContainsString('192.0.2.1', $e->getMessage());
     }
 
+    /**
+     * Hits dated after now (the clock was set back, e.g. by NTP) are dropped: they would otherwise block for longer than
+     * the 60-second window promises. The bucket and the global record both start over.
+     */
+    public function testFutureDatedHitsAreDropped(): void
+    {
+        $this->hits(AddressLimit::Login, '192.0.2.1', 30);
+        $this->hits(AddressLimit::Login, '198.51.100.1', 30);
+        $this->hits(AddressLimit::Login, '203.0.113.1', 30);
+        $this->clock->advance(-30);
+
+        $this->hits(AddressLimit::Login, '192.0.2.1', 30);
+        $this->hits(AddressLimit::Login, '198.51.100.2', 30);
+        $e = $this->assertRefused(fn() => $this->limiter->hit(AddressLimit::Login, '192.0.2.1'));
+        self::assertSame(60, $e->retryAfterSeconds, 'only the hits after the clock change count');
+    }
+
     public function testRejectedTokenLimitIsSixty(): void
     {
         $this->hits(AddressLimit::RejectedToken, '192.0.2.1', 60);
