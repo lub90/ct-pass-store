@@ -26,7 +26,8 @@ final class OpcacheCheck implements Check
      */
     public function __construct(?\Closure $status = null, ?\Closure $ini = null)
     {
-        // Without the extension there's no function; with `opcache.restrict_api` it returns false and warns.
+        // Without the extension there's no function; with `opcache.restrict_api` it returns false and warns, so "off"
+        // also covers "not readable".
         $this->status = $status ?? static fn(): array|false => function_exists('opcache_get_status') ? @opcache_get_status(false) : false;
         $this->ini = $ini ?? static fn(string $name): string|false => ini_get($name);
     }
@@ -40,7 +41,7 @@ final class OpcacheCheck implements Check
     {
         $status = ($this->status)();
         if (!is_array($status) || ($status['opcache_enabled'] ?? false) !== true) {
-            return CheckOutcome::ok('OPcache is off (see docs/setup.md to turn it on).');
+            return CheckOutcome::ok('OPcache is off or its status is not readable (see docs/setup.md to turn it on).');
         }
 
         $validate = ($this->ini)('opcache.validate_timestamps');

@@ -195,7 +195,8 @@ service user may write.
 
 The check "OPcache" only reports whether OPcache is on and whether it checks for changed files
 (`validate_timestamps`); it never fails, since OPcache is optional. With `validate_timestamps` off, uploaded updates
-take effect only after an OPcache reset or a PHP restart.
+take effect only after an OPcache reset or a PHP restart. "Off or its status is not readable" also appears when the
+host restricts the OPcache functions (`opcache.restrict_api`); OPcache may still run then.
 
 ## 7. Clean up entries of gone persons (optional)
 

@@ -31,20 +31,31 @@ final class OpcacheCheckTest extends TestCase
         ];
     }
 
+    private const OFF = 'OPcache is off or its status is not readable (see docs/setup.md to turn it on).';
+    private const ON = 'OPcache is on; validate_timestamps is on.';
+    private const NO_VALIDATE = 'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.';
+    private const UNKNOWN = 'OPcache is on; validate_timestamps is unknown.';
+
+    /** Every message the check can give; the API test checks against this list. */
+    public const MESSAGES = [self::OFF, self::ON, self::NO_VALIDATE, self::UNKNOWN];
+
     /**
      * @return iterable<string, array{array<string, mixed>|false, string|false, string}>
      */
     public static function states(): iterable
     {
-        yield 'on, checks for changes' => [self::opcacheStatus(true), '1', 'OPcache is on; validate_timestamps is on.'];
-        yield 'on, no checks for changes' => [
-            self::opcacheStatus(true),
-            '0',
-            'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.',
-        ];
-        yield 'on, setting unreadable' => [self::opcacheStatus(true), false, 'OPcache is on; validate_timestamps is unknown.'];
-        yield 'loaded but off' => [self::opcacheStatus(false), '1', 'OPcache is off (see docs/setup.md to turn it on).'];
-        yield 'not loaded or status restricted' => [false, false, 'OPcache is off (see docs/setup.md to turn it on).'];
+        // ini_get() gives the value as written: "1"/"0" from a php.ini, "On"/"Off" or "" from other sources.
+        yield 'on, "1"' => [self::opcacheStatus(true), '1', self::ON];
+        yield 'on, "On"' => [self::opcacheStatus(true), 'On', self::ON];
+        yield 'on, "0"' => [self::opcacheStatus(true), '0', self::NO_VALIDATE];
+        yield 'on, "Off"' => [self::opcacheStatus(true), 'Off', self::NO_VALIDATE];
+        yield 'on, ""' => [self::opcacheStatus(true), '', self::NO_VALIDATE];
+        yield 'on, setting unreadable' => [self::opcacheStatus(true), false, self::UNKNOWN];
+        yield 'on, setting garbage' => [self::opcacheStatus(true), 'maybe', self::UNKNOWN];
+        yield 'loaded but off' => [self::opcacheStatus(false), '1', self::OFF];
+        yield 'status without opcache_enabled' => [array_diff_key(self::opcacheStatus(true), ['opcache_enabled' => true]), '1', self::OFF];
+        yield 'opcache_enabled not a bool' => [['opcache_enabled' => 1] + self::opcacheStatus(true), '1', self::OFF];
+        yield 'not loaded or restrict_api' => [false, false, self::OFF];
     }
 
     /**
@@ -71,12 +82,11 @@ final class OpcacheCheckTest extends TestCase
         self::assertSame([], array_diff($asked, ['opcache.validate_timestamps']), 'Only validate_timestamps is read from the configuration.');
     }
 
-    public function testTheDefaultReadersWorkWhereOpcacheIsOffForTheCli(): void
+    public function testTheDefaultReadersGiveOneOfTheFixedMessages(): void
     {
         $outcome = (new OpcacheCheck())->run();
 
         self::assertTrue($outcome->ok);
-        self::assertMatchesRegularExpression('~^OPcache is (on|off)~', $outcome->message);
-        self::assertStringNotContainsString('/', str_replace('docs/setup.md', '', str_replace('config/credentials.php', '', $outcome->message)));
+        self::assertContains($outcome->message, self::MESSAGES);
     }
 }

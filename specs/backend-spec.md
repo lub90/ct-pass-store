@@ -578,7 +578,8 @@ Deletes the entry of person `{id}`.
   - `CLEANUP_TOKEN` (`CleanupTokenCheck`): not set → ok, "The web-cron endpoint is off."; set with fewer than 43
     characters → fail, and the endpoint stays off (4.12); otherwise ok. The token is never printed.
   - OPcache (`OpcacheCheck`): whether OPcache is on and, if so, whether `opcache.validate_timestamps` is on (from
-    `opcache_get_status(false)` and `ini_get`). Always ok, since OPcache is optional (setup.md). It replaces a
+    `opcache_get_status(false)` and `ini_get`). A status that can't be read (no extension, `opcache.restrict_api`, no
+    `opcache_enabled` key) reads as "off or not readable". Always ok, since OPcache is optional (setup.md). It replaces a
     `phpinfo()` page and reports these two values only: no paths, memory figures, versions or other host details.
   - only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
     (Q11). The test value uses the **reserved `personId` `0`** (5.3.11), which can never belong to a real person (4.1).

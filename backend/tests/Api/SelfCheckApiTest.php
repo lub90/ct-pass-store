@@ -393,19 +393,17 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertStringNotContainsString(str_repeat('c', 64), (string) $response->getBody());
     }
 
-    /** Security M3: an admin sees whether OPcache is on and checks for changes, and nothing else about the host. */
-    public function testAdminSeesTheOpcacheStatusWithoutHostDetails(): void
+    /**
+     * Security M3: the OPcache check is registered for admins and has the shape of every check. Which messages it can
+     * give (and that they hold no host details) is pinned in OpcacheCheckTest.
+     */
+    public function testTheOpcacheCheckIsRegisteredAndNeverFails(): void
     {
         $response = $this->request('GET', '/v1/test', self::ADMIN);
 
         $check = $this->checks($response)['OPcache'];
         self::assertSame('ok', $check['status'], 'OPcache is optional, so the check never fails.');
-        self::assertContains($check['message'], [
-            'OPcache is off (see docs/setup.md to turn it on).',
-            'OPcache is on; validate_timestamps is on.',
-            'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.',
-            'OPcache is on; validate_timestamps is unknown.',
-        ]);
+        self::assertContains($check['message'], \CtPassStore\Tests\Unit\Infrastructure\SelfCheck\OpcacheCheckTest::MESSAGES);
         self::assertSame(['name', 'status', 'message'], array_keys($check));
     }
 
