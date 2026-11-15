@@ -124,3 +124,19 @@ The source is the test review at full depth of `main..fdf67e6` plus `a618f6b`. I
   - test that the hook checks only the staged changes. A mutant replacing `--staged` with `--all` must fail.
 - **M-N4, `backend/tests/Unit/Load/StatsTest.php`:** add a case with n = 12 to tell `round` from `ceil` in the p95 rank.
 - **M-N5, `backend/tests/Load/Helpers/ResultsFile.php:47`:** the docblock of the post-open check's test says why its use inside `create()` can't be unit-tested (a race).
+
+---
+
+## Task M6 [security-critical]: file paths of empty, binary and renamed files (review point B round 3)
+
+The source is the test review at full depth of `main..d587c60`. Its full report is in the controller's scratchpad (`final/test-report-b3.md`). The maintainer decided on 2026-11-15 to fix it, followed by one scoped round 4 of both reviewers on the delta.
+
+- **I3 (IMPORTANT, real defect):** `scripts/check-private.mjs:327-330`. In `--staged` and `--range` mode, a path is checked only on a `+++ ` header. Git prints none for empty files, binary files, or renames of either, so those paths are never checked.
+  - Write failing tests first, in staged mode, for an empty file, a binary file and a rename of an empty file into a path that holds a term. Each must exit 1, print `(path withheld): file path matches block list entry #1`, and print no value.
+  - Add one test in `--range` mode with a binary file.
+  - Then take the paths from the `diff --git` header (with correct unquoting) or from a separate `--name-only -z` / `--name-status -z` listing. Check each path once per file and commit, and don't report the same path twice when a `+++` header also appears.
+  - Then correct `CONTRIBUTING.md` "Known gaps" so it matches what is actually checked.
+- **M-R3-1 (code gap):** `check-private.mjs:220`. In a linked worktree, the folder the credentials come from is chosen only by whether `extension/.env` exists. If the main checkout has only `backend/phpunit.xml` or only fixtures, those are never read. Choose the credential sources file by file, or by any of the three, and add worktree tests for "only phpunit.xml" and "only fixtures" in the main checkout.
+- **M-R3-2:** add a negative glob case: `docs/**/x.md` must not allow `docs/ax.md`.
+- **M-R3-3:** add an unquoted `.env` value with an inner `#`, such as `abc#def-zz`. It must still block as a whole value.
+- **M-R3-4:** `&amp;lt;` in `phpunit.xml` must decode to `&lt;`, not `<`. Decode `&amp;` last.
