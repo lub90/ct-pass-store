@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Privacy and secrets check for commits (run by .githooks/pre-commit; docs: README.md, "Pre-commit check").
+// Privacy and secrets check for commits (run by .githooks/pre-commit; docs: CONTRIBUTING.md, "Pre-commit check").
 //
 //   node scripts/check-private.mjs [--staged]     lines added in the staged diff (default)
 //   node scripts/check-private.mjs --range A..B   lines added by every commit in the range (merges: their own lines)

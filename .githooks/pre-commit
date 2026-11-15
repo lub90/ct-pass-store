@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pre-commit privacy and secrets check (README.md, "Pre-commit check"). Enable per clone:
+# Pre-commit privacy and secrets check (CONTRIBUTING.md, "Pre-commit check"). Enable per clone:
 #   sh scripts/install-hooks.sh        (or: git config core.hooksPath .githooks)
 # Emergency bypass, rare and deliberate: git commit --no-verify
 #

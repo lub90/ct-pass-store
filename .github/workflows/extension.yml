@@ -82,9 +82,10 @@ jobs:
       - name: Scan the repository
         run: '"$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --no-banner --exit-code 1 .'
 
-  # The pre-commit privacy check (scripts/check-private.mjs, README.md "Pre-commit check"): its tests, and the check in
-  # range mode over the pushed or proposed commits. CI has none of the local sources (.private-terms, credential
-  # files), so the range run only proves the check works on real history; gitleaks above covers secret patterns.
+  # The pre-commit privacy check (scripts/check-private.mjs, CONTRIBUTING.md "Pre-commit check"): its tests, and the
+  # check in range mode over the pushed or proposed commits. CI has none of the local sources (.private-terms,
+  # credential files), so the range run only proves the check works on real history; gitleaks above covers secret
+  # patterns.
   private-check:
     name: pre-commit privacy check
     runs-on: ubuntu-latest

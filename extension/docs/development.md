@@ -383,7 +383,7 @@ Locally, a repository hook keeps private terms and the values of your credential
 `sh scripts/install-hooks.sh` (sets `core.hooksPath` to `.githooks`), and fill the gitignored `.private-terms` from
 `.private-terms.example`. It checks only the lines a commit adds, prints only file, line and entry number (never a
 value), and also runs gitleaks on the staged changes if a `gitleaks` binary is installed. The CI job `private-check`
-runs its tests. Emergency bypass: `git commit --no-verify` (rare). Details: root `README.md`, "Pre-commit check".
+runs its tests. Emergency bypass: `git commit --no-verify` (rare). Details: root `CONTRIBUTING.md`, "Pre-commit check".
 
 ### Releases
 
