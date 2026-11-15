@@ -14,6 +14,14 @@ use PHPUnit\Framework\TestCase;
  */
 final class OpcacheCheckTest extends TestCase
 {
+    private const OFF = 'OPcache is off or its status is not readable (see docs/setup.md to turn it on).';
+    private const ON = 'OPcache is on; validate_timestamps is on.';
+    private const NO_VALIDATE = 'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.';
+    private const UNKNOWN = 'OPcache is on; validate_timestamps is unknown.';
+
+    /** Every message the check can give; the API test checks against this list. */
+    public const MESSAGES = [self::OFF, self::ON, self::NO_VALIDATE, self::UNKNOWN];
+
     /**
      * A status as `opcache_get_status(false)` returns it, with the host details the check must not pass on.
      *
@@ -30,14 +38,6 @@ final class OpcacheCheckTest extends TestCase
             'jit' => ['enabled' => false],
         ];
     }
-
-    private const OFF = 'OPcache is off or its status is not readable (see docs/setup.md to turn it on).';
-    private const ON = 'OPcache is on; validate_timestamps is on.';
-    private const NO_VALIDATE = 'OPcache is on; validate_timestamps is off, so uploaded updates and a changed config/credentials.php take effect only after an OPcache reset or a PHP restart.';
-    private const UNKNOWN = 'OPcache is on; validate_timestamps is unknown.';
-
-    /** Every message the check can give; the API test checks against this list. */
-    public const MESSAGES = [self::OFF, self::ON, self::NO_VALIDATE, self::UNKNOWN];
 
     /**
      * @return iterable<string, array{array<string, mixed>|false, string|false, string}>
