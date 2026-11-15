@@ -108,6 +108,7 @@ Open issues and planned improvements, roughly ordered by severity.
 - [ ] **No key-rotation story**
   Stored passwords can't be re-encrypted under a new key, because nobody holds the plaintext. Rotating the key (or recovering from a leaked private key) means every user has to reset their password.
   - Document the procedure and support it in the UI (e.g. a "key rotated, please reset your password" state).
+  - Build a wizard for replacing the key pair, as a separate, explicit operator action with a warning that every stored password is lost. Not part of the setup wizard: setup, re-arm, migration and restore keep an existing key (decided 2026-11-15).
 
 - [ ] **Mail all admins when the backend address (`backendUrl`) changes**
   A changed address redirects users' passwords to another server, so every admin should notice at once.
