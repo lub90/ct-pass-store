@@ -1,5 +1,5 @@
 /** The chooser alone: a list read again while the question is open is never resolved with the old list (C1). */
-import { flushPromises, mount } from '@vue/test-utils';
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SERVICES_KEY, type Services } from '../../app/services';
 import { createAppI18n } from '../../i18n';
@@ -9,7 +9,13 @@ import { ExtensionStore, type StoredValue } from '../../store/repository';
 import { answerConfirm, pendingConfirm } from '../../ui/useConfirm';
 import DuplicatesChooser from './DuplicatesChooser.vue';
 
-afterEach(() => answerConfirm({ confirmed: false }));
+/** Every mounted chooser, unmounted after each test even when an assertion failed. */
+const mounted: VueWrapper[] = [];
+
+afterEach(() => {
+    answerConfirm({ confirmed: false });
+    while (mounted.length) mounted.pop()!.unmount();
+});
 
 const settings = { schema: 2, revision: 1, requirePasswordForPasswordChange: true, allowCustomPassword: false, passwordLength: 16, backendUrl: 'https://pw.example' };
 
@@ -24,6 +30,7 @@ describe('DuplicatesChooser', () => {
             props: { category: 'settings', values: read.values as StoredValue<unknown>[] },
             global: { plugins: [createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: { store } as unknown as Services } },
         });
+        mounted.push(wrapper);
         await wrapper.findAll('button').find((b) => b.text() === 'Diesen Wert behalten')!.trigger('click');
         await wrapper.setProps({ values: [...read.values] as StoredValue<unknown>[] });
         answerConfirm({ confirmed: true });
@@ -31,7 +38,6 @@ describe('DuplicatesChooser', () => {
         expect(resolve).not.toHaveBeenCalled();
         expect(kv.writes).toEqual([]);
         expect(wrapper.emitted('resolved')).toBeUndefined();
-        wrapper.unmount();
     });
 
     async function chooser(category: 'settings' | 'access', ...texts: unknown[]) {
@@ -43,6 +49,7 @@ describe('DuplicatesChooser', () => {
             props: { category, values: read.values as StoredValue<unknown>[] },
             global: { plugins: [createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: { store } as unknown as Services } },
         });
+        mounted.push(wrapper);
         const keep = async (id: number) => {
             const card = wrapper.find(`.cps-duplicates__value[data-value-id="${id}"]`);
             await card.findAll('button').find((b) => b.text() === 'Diesen Wert behalten')!.trigger('click');
@@ -54,7 +61,6 @@ describe('DuplicatesChooser', () => {
         const { wrapper } = await chooser('settings', { ...settings, passwordLength: 5 }, { ...settings, passwordLength: 5, allowCustomPassword: 'x' });
         expect(wrapper.find('.cps-duplicates__value[data-value-id="1"]').text()).toContain('ungültig (ein Problem)');
         expect(wrapper.find('.cps-duplicates__value[data-value-id="2"]').text()).toContain('ungültig (2 Probleme)');
-        wrapper.unmount();
     });
 
     it.each(['settings', 'access'] as const)('the dialog subject names the value and the category (%s)', async (category) => {
@@ -65,7 +71,6 @@ describe('DuplicatesChooser', () => {
         expect(pendingConfirm.value?.subject).toEqual({ name: 'Wert 2', detail: category });
         answerConfirm({ confirmed: false });
         await flushPromises();
-        wrapper.unmount();
     });
 
     it('an error from a failed try is gone once the next try starts, also when that one is cancelled', async () => {
@@ -79,6 +84,5 @@ describe('DuplicatesChooser', () => {
         answerConfirm({ confirmed: false });
         await flushPromises();
         expect(wrapper.find('.cps-duplicates__error').exists()).toBe(false);
-        wrapper.unmount();
     });
 });
