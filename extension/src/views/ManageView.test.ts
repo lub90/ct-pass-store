@@ -38,6 +38,9 @@ const OUTSIDER = 5;
 /** Two members with the same name. */
 const TWIN_A = 6;
 const TWIN_B = 7;
+/** A name with a right-to-left override (U+202E). */
+const BIDI = 8;
+const BIDI_LAST = '\u202Enamffoh';
 const USERS_GROUP = 40;
 const ADMINS_GROUP = 41;
 const SETTINGS_ID = 11;
@@ -63,8 +66,9 @@ const TEXT = {
     proceed: 'Fortfahren',
     primaryLabel: 'Dein ChurchTools-Passwort (zur Bestätigung)',
     forName: (name: string) => `Du legst gerade das Passwort für ${name} fest.`,
-    replaceText: (name: string) => `Das bisherige Passwort von ${name} funktioniert danach nicht mehr. Fortfahren?`,
-    deleteText: (name: string) => `Das Passwort von ${name} wird gelöscht und funktioniert danach nicht mehr.`,
+    /** Names in dialog texts are isolated: U+2068 … U+2069. */
+    replaceText: (name: string) => `Das bisherige Passwort von \u2068${name}\u2069 funktioniert danach nicht mehr. Fortfahren?`,
+    deleteText: (name: string) => `Das Passwort von \u2068${name}\u2069 wird gelöscht und funktioniert danach nicht mehr.`,
     notInGroup: 'Diese Person ist nicht in der Nutzergruppe. Such eine Person über das Suchfeld.',
     missingGroupRight: 'Dir fehlt in ChurchTools das Recht „view group“ auf die Nutzergruppe. Ohne dieses Recht kannst du hier niemanden suchen.',
     personNotFound: 'Diese Person gibt es in ChurchTools nicht mehr.',
@@ -165,9 +169,10 @@ function fakes(o: Options) {
             { id: OUTSIDER, firstName: 'Otto', lastName: 'Außen' },
             { id: TWIN_A, firstName: 'Anna', lastName: 'Müller' },
             { id: TWIN_B, firstName: 'Anna', lastName: 'Müller' },
+            { id: BIDI, firstName: 'Rafa', lastName: BIDI_LAST },
         ],
         groups: [
-            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: [...(o.meInUsers === false ? [] : [ME]), MUELLER, MULDE, ODD, ...(o.twins ? [TWIN_A, TWIN_B] : [])] },
+            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: [...(o.meInUsers === false ? [] : [ME]), MUELLER, MULDE, ODD, BIDI, ...(o.twins ? [TWIN_A, TWIN_B] : [])] },
             { id: ADMINS_GROUP, name: 'CtPassStore Admins', memberIds: [ME] },
             { id: 50, name: 'Other', memberIds: [OUTSIDER] },
         ],
@@ -197,7 +202,7 @@ function fakes(o: Options) {
     const fakeBackend = createFakeBackend({
         personId: ME,
         admin: o.admin ?? true,
-        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER, TWIN_A, TWIN_B],
+        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER, TWIN_A, TWIN_B, BIDI],
         ctOrigin: ORIGIN,
         primaryPassword: CT_PASSWORD,
         requirePasswordForPasswordChange: settings.requirePasswordForPasswordChange,
@@ -1117,6 +1122,25 @@ describe('ChurchTools names are plain text', () => {
         await click(wrapper, TEXT.generate);
         expect(dialogText()).toBe(TEXT.replaceText(name));
         expect(dialog()!.querySelector('b')).toBeNull();
+    });
+
+    it('names are isolated against bidi controls: <bdi> in the list, the card and the banner, U+2068/U+2069 in both dialogs', async () => {
+        const name = `Rafa ${BIDI_LAST}`;
+        const { wrapper } = await start({ entries: { [BIDI]: VALID } });
+        await search(wrapper, 'rafa');
+        const option = wrapper.findAll('[role="option"]').find((o) => o.text().includes('Rafa'))!;
+        expect(option.find('bdi.cps-picker__name').text()).toBe(name);
+        await option.trigger('click');
+        await settle();
+        expect(card(wrapper).find('bdi.cps-manage__name').text()).toBe(name);
+        await click(wrapper, TEXT.delete);
+        expect(dialogText()).toBe(TEXT.deleteText(name));
+        await answer(TEXT.cancel);
+        await click(wrapper, TEXT.newPassword);
+        expect(wrapper.find('.cps-flow-for strong bdi').text()).toBe(name);
+        expect(wrapper.find('.cps-flow-for').text()).toBe(TEXT.forName(name));
+        await click(wrapper, TEXT.generate);
+        expect(dialogText()).toBe(TEXT.replaceText(name));
     });
 
 

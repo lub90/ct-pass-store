@@ -80,6 +80,18 @@ describe('usePasswordEntry', () => {
         expect(entry().status.value).toBe(expected);
     });
 
+    it.each(ACTIONS)('%s decides over a read still pending, also where no read follows the change (load: false)', async (_name, act, expected) => {
+        const { entry, reads } = setup({ load: false });
+        void entry().reload();
+        expect(reads).toHaveLength(1);
+        await act(entry());
+        expect(entry().status.value).toBe(expected);
+        reads[0]!.resolve(expected === 'set' ? 'none' : 'set');
+        await flushPromises();
+        expect(reads).toHaveLength(1);
+        expect(entry().status.value).toBe(expected);
+    });
+
     it('a stale read failing after a newer change sets no error', async () => {
         const { entry, reads } = setup();
         await entry().generate();

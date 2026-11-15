@@ -38,6 +38,8 @@ const TEXT = {
     selfTest: 'Selbsttest',
     adminsOnly: 'Den Selbsttest dürfen nur Admins ausführen, die beim Backend angemeldet sind.',
     runAgain: 'Erneut prüfen',
+    running: 'Prüft …',
+    renew: 'Sitzung erneuern',
     runWrite: 'Schreibtest ausführen',
     writeHelp: 'Der Schreibtest legt einen Testwert im Passwortspeicher an, liest ihn und löscht ihn wieder. Echte Passwörter bleiben unberührt.',
     withWrite: 'Mit Schreibtest.',
@@ -405,6 +407,57 @@ describe('Backend & Status: self-test (spec 4.8)', () => {
         session.needsRenewal.value = needsRenewal;
         await click(wrapper, TEXT.runAgain);
         expect(wrapper.find('.cps-backend__error').exists()).toBe(shown);
+    });
+
+    it('invalid-token on a click while the address is changed: the renewal banner instead of a page login, the input kept, „Prüft …“ settles', async () => {
+        let calls = 0;
+        const { wrapper, auth } = await start({
+            path: '/settings/backend',
+            selfTest: () => (++calls === 1 ? result(TESTS)() : Promise.reject(new BackendProblem('invalid-token', 401))),
+        });
+        const pageLogin = vi.spyOn(auth, 'startPageLogin');
+        await type(wrapper, NEW);
+        await click(wrapper, TEXT.runAgain);
+        expect(pageLogin).not.toHaveBeenCalled();
+        expect(button(wrapper, TEXT.renew)).toBeDefined();
+        expect(input(wrapper).element.value).toBe(NEW);
+        expect(wrapper.text()).not.toContain(TEXT.running);
+        expect(disabled(wrapper, TEXT.runAgain)).toBe(false);
+        expect(wrapper.find('.cps-backend__error').exists()).toBe(false);
+    });
+
+    it('invalid-token on a click with nothing changed: the session’s page login; refused by the loop guard, „Prüft …“ settles', async () => {
+        let calls = 0;
+        const { wrapper, auth } = await start({
+            path: '/settings/backend',
+            selfTest: () => (++calls === 1 ? result(TESTS)() : Promise.reject(new BackendProblem('invalid-token', 401))),
+        });
+        // A page login just completed: the session refuses a second one (loop guard) instead of leaving the page.
+        const pageLogin = vi.spyOn(auth, 'startPageLogin');
+        vi.spyOn(auth, 'recentPageLogin').mockReturnValue(true);
+        await click(wrapper, TEXT.runAgain);
+        expect(pageLogin).not.toHaveBeenCalled();
+        expect(button(wrapper, TEXT.renew)).toBeUndefined();
+        expect(wrapper.text()).not.toContain(TEXT.running);
+    });
+
+    it('stops reporting unsaved input once the page is left with it discarded', async () => {
+        let calls = 0;
+        const { wrapper, auth, router } = await start({
+            path: '/settings/backend',
+            selfTest: () => (++calls === 1 ? result(TESTS)() : Promise.reject(new BackendProblem('invalid-token', 401))),
+        });
+        const pageLogin = vi.spyOn(auth, 'startPageLogin').mockReturnValue(new Promise<never>(() => undefined));
+        await type(wrapper, NEW);
+        // Left with the address still typed: the leave question, answered „Verwerfen“.
+        void router.push('/settings');
+        await settle();
+        await answer(TEXT.discard);
+        expect(router.currentRoute.value.path).toBe('/settings');
+        await router.push('/settings/backend');
+        await settle();
+        await click(wrapper, TEXT.runAgain);
+        expect(pageLogin).toHaveBeenCalledTimes(1);
     });
 
     it('runs on open only once, even when the role comes and goes again', async () => {

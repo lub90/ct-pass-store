@@ -15,6 +15,7 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { I18nT, useI18n } from 'vue-i18n';
+import { isolate } from '../admin/machine-clients';
 import { isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
@@ -202,7 +203,7 @@ async function confirmed(): Promise<boolean> {
     if (props.forName === undefined || !props.hasEntry) return true;
     const answer = await confirm({
         title: t('manage.replaceTitle'),
-        text: t('manage.replaceText', { name: props.forName }),
+        text: t('manage.replaceText', { name: isolate(props.forName) }),
         subject: { name: props.forName, detail: t('manage.personId', { id: String(props.personId) }) },
         confirmLabel: t('manage.replaceConfirm'),
         cancelLabel: t('common.cancel'),
@@ -286,7 +287,7 @@ onBeforeUnmount(() => {
             tag="p"
         >
             <template #name>
-                <strong>{{ forName }}</strong>
+                <strong><bdi>{{ forName }}</bdi></strong>
             </template>
         </I18nT>
     </Banner>

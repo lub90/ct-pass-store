@@ -835,6 +835,32 @@ describe('session (spec 7.2)', () => {
         expect(customInput(wrapper).element.value).toBe(VALID);
     });
 
+    it('after a successful „Sitzung erneuern“ the banner goes and the next submit is sent with the input kept', async () => {
+        const { wrapper, calls, clock, auth, puts, fakeBackend } = await start({ requirePrimary: true });
+        await click(wrapper, TEXT.setPassword);
+        await primaryInput(wrapper).setValue(CT_PASSWORD);
+        await chooseCustom(wrapper, VALID);
+        clock.now += 540_000; // 60 s left: the submit renews first, and the popup is blocked.
+        await click(wrapper, TEXT.submitCustom);
+        expect(button(wrapper, TEXT.renew)).toBeDefined();
+        expect(calls.put).toBe(0);
+        // This time the popup opens and the login completes: a fresh token.
+        const renewed = vi.spyOn(auth, 'loginInPopup').mockImplementation(async () => {
+            clock.now -= 540_000;
+        });
+        await click(wrapper, TEXT.renew);
+        expect(renewed).toHaveBeenCalledTimes(1);
+        expect(button(wrapper, TEXT.renew)).toBeUndefined();
+        expect(wrapper.text()).not.toContain(TEXT.sessionExpired);
+        expect(customInput(wrapper).element.value).toBe(VALID);
+        expect(primaryInput(wrapper).element.value).toBe(CT_PASSWORD);
+        await click(wrapper, TEXT.submitCustom);
+        expect(renewed).toHaveBeenCalledTimes(1);
+        expect(puts).toEqual([{ secondaryPwd: VALID, primaryPwd: CT_PASSWORD }]);
+        expect(fakeBackend.entries.get(ME)).toBe(VALID);
+        expect(wrapper.text()).toContain(TEXT.saved);
+    });
+
     it('token-expired again right after a successful renewal is not silent', async () => {
         const { wrapper, fakeBackend, auth, calls } = await start();
         vi.spyOn(auth, 'loginInPopup').mockResolvedValue(undefined);

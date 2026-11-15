@@ -12,6 +12,7 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
+import { isolate } from '../admin/machine-clients';
 import { parsePersonId, searchUsers } from '../admin/manage';
 import { isSettingsEditor } from '../app/app-state';
 import { useServices } from '../app/services';
@@ -231,7 +232,7 @@ async function removeFor(person: PersonOption, requirePrimary: boolean): Promise
     }
     const question: ConfirmOptions = {
         title: t('manage.deleteTitle'),
-        text: t('manage.deleteText', { name: person.name }),
+        text: t('manage.deleteText', { name: isolate(person.name) }),
         subject: { name: person.name, detail: personIdText(person.id) },
         confirmLabel: t('manage.delete'),
         cancelLabel: t('common.cancel'),
@@ -339,7 +340,7 @@ function initials(name: string): string {
                         aria-hidden="true"
                     >{{ initials(selected.name) }}</span>
                     <span class="cps-manage__ident">
-                        <span class="cps-manage__name">{{ selected.name }}</span>
+                        <bdi class="cps-manage__name">{{ selected.name }}</bdi>
                         <!-- Read as „name, ID 123“; drawn as a small second line. -->
                         <span class="cps-manage__sep">{{ ', ' }}</span>
                         <span class="cps-manage__id">{{ personIdText(selected.id) }}</span>

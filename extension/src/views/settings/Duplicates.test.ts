@@ -276,6 +276,26 @@ describe('duplicate settings at startup', () => {
         await answer(TEXT.cancel);
     });
 
+    it('only the oldest value can be kept: no only-newest note, neither on a card nor in the dialog (N1)', async () => {
+        const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: '{nope' }] });
+        expect(keepButton(wrapper, 301)).toBeUndefined();
+        expect(keepButton(wrapper, SETTINGS_VALUE_ID)).toBeDefined();
+        expect(wrapper.find('.cps-duplicates__only-newest').exists()).toBe(false);
+        await keep(wrapper, SETTINGS_VALUE_ID);
+        expect(dialog()?.textContent).not.toContain(TEXT.onlyNewest('settings'));
+        await answer(TEXT.cancel);
+    });
+
+    it('an address the browser uses as written: its host under „– Host:“, never as „tatsächlicher Host“ (H3, H5)', async () => {
+        const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: PLANTED }] });
+        for (const [id, host] of [[SETTINGS_VALUE_ID, 'pw.example'], [301, 'evil.example']] as const) {
+            const field = card(wrapper, id).find('[data-field="backendUrl"]');
+            expect(field.find('.cps-duplicates__host').text()).toBe(`– Host: ${host}`);
+            expect(field.find('.cps-duplicates__host bdi').text()).toBe(host);
+            expect(field.text()).not.toContain('tatsächlicher Host');
+        }
+    });
+
     it('when no value can be kept, the page says so and how to fix it in ChurchTools (task 1)', async () => {
         const { wrapper } = await start({ path: '/settings/rules', settings: '{nope', extra: [{ category: 'settings', value: { ...SETTINGS, schema: 3 } }] });
         expect(wrapper.findAll('.cps-duplicates__value button')).toHaveLength(0);
@@ -312,6 +332,13 @@ describe('duplicate access values („Zugriff“)', () => {
         expect(client.text()).toContain('darf lesen');
         expect(client.find('code').text()).toMatch(/^[A-Za-z0-9_-]{16}$/);
         expect(card(wrapper, ACCESS_VALUE_ID).text()).toContain('keine aktiven Maschinen-Clients');
+    });
+
+    it('when only the newest access value can be kept, its card says so, naming „access“ (N8)', async () => {
+        const { wrapper } = await start({ path: '/settings/access', access: { ...ACCESS, revision: 2 ** 53 }, extra: [{ category: 'access', value: plantedAccess }] });
+        expect(keepButton(wrapper, ACCESS_VALUE_ID)).toBeUndefined();
+        expect(card(wrapper, 301).find('.cps-duplicates__only-newest').text()).toBe(TEXT.onlyNewest('access'));
+        expect(card(wrapper, ACCESS_VALUE_ID).find('.cps-duplicates__only-newest').exists()).toBe(false);
     });
 
     it('the dialog of the planted value names its other admin group and its active clients (S1)', async () => {

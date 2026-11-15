@@ -103,6 +103,23 @@ describe('ConfirmDialog', () => {
         expect(document.activeElement).toBe(opener);
     });
 
+    it('Escape stops there: a page handler behind the dialog (e.g. the person search) never sees it', async () => {
+        const seen: string[] = [];
+        const onPage = (event: Event) => seen.push((event as KeyboardEvent).key);
+        document.body.addEventListener('keydown', onPage);
+        opener.addEventListener('keydown', onPage);
+        try {
+            const { result: p, shown } = open();
+            await shown;
+            key('Escape');
+            await expect(p).resolves.toEqual({ confirmed: false });
+            expect(seen).toEqual([]);
+        } finally {
+            document.body.removeEventListener('keydown', onPage);
+            opener.removeEventListener('keydown', onPage);
+        }
+    });
+
     describe('an opener that is disabled while its action runs (found by the browser tests)', () => {
         /**
          * A browser blurs a focused button that becomes disabled; the page's focus is then on body. (jsdom doesn't, and

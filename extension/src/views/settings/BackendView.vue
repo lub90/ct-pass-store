@@ -83,6 +83,11 @@ const form = useSettingsForm<SettingsV2>(
     },
 );
 
+// A changed address is unsaved input (spec 7.2): a token problem then asks for „Sitzung erneuern“ instead of a page
+// login, so the typed address stays and a clicked self-test settles.
+const untrack = session.trackUnsaved(() => form.dirty.value);
+onBeforeUnmount(untrack);
+
 // No repair here: this page writes the address only into a valid value (spec 4.4 „Stored problems“).
 const unrepairable = computed(() => ({ text: app.setupCapable.value ? t('settings.noRepairVersion') : t('settings.noRepairAsk') }));
 

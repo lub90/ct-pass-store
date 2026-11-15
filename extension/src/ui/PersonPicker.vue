@@ -3,7 +3,8 @@
  * Search a person: a text input with a listbox of hits (ARIA combobox pattern). The search is debounced (250 ms), the
  * list opens with the hits, Up/Down move the active option (`aria-activedescendant`), Enter selects it, Escape closes.
  * `search` is the caller's lookup; it may reject, which shows the `error` slot (or `errorText`). Texts are props.
- * A stale answer (an older search finishing after a newer one) is dropped.
+ * A stale answer (an older search finishing after a newer one) is dropped. Names and details are stored text, shown
+ * isolated (`<bdi>`), so bidi controls in them cannot reorder the line.
  */
 import { computed, onBeforeUnmount, ref, useId, watch } from 'vue';
 
@@ -155,16 +156,16 @@ onBeforeUnmount(() => clearTimeout(timer));
                 @mousedown.prevent
                 @click="choose(person)"
             >
-                <span class="cps-picker__name">{{ person.name }}</span>
+                <bdi class="cps-picker__name">{{ person.name }}</bdi>
                 <!-- Read as „name, detail“; drawn as two lines. -->
                 <span
                     v-if="person.detail"
                     class="cps-picker__sep"
                 >, </span>
-                <span
+                <bdi
                     v-if="person.detail"
                     class="cps-picker__detail"
-                >{{ person.detail }}</span>
+                >{{ person.detail }}</bdi>
             </li>
         </ul>
         <div

@@ -606,6 +606,47 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
         expect(wrapper.find('main .cps-banner--warning').text()).toBe(TEXT.needsAdmin);
     });
 
+    /** The start of the missing-rights banner of every settings page. */
+    const MISSING_RIGHT = 'Dir fehlt in ChurchTools das Recht';
+    /** A settings editor whose login failed (unreachable backend): row 7, backend-error. */
+    const editorInBackendError = () => startWithStorage(seedLogin('/'), { path: '/auth/callback?code=good-code&state=state-1', perms: EDITOR, login: unreachable });
+    const storedSettings = (fakeCt: { dumpValues(): { dataCategoryId: number; value: string }[] }) =>
+        fakeCt.dumpValues().filter((v) => v.dataCategoryId === SETTINGS_ID).map((v) => JSON.parse(v.value) as Record<string, unknown>);
+
+    it('in backend-error, a settings editor can repair the address on „Backend & Status“ (3.1.2): form, danger dialog, saved, reload note, no self-test', async () => {
+        const { wrapper, router, fakeCt, backendCalls } = await editorInBackendError();
+        expect(wrapper.find('main a[href="/settings/backend"]').exists()).toBe(true);
+        await router.push('/settings/backend');
+        await settle();
+        expect(wrapper.text()).not.toContain(MISSING_RIGHT);
+        const input = wrapper.find<HTMLInputElement>('#cps-backend-url');
+        expect(input.element.value).toBe(BACKEND);
+        await input.setValue('https://pw-new.example');
+        await settle();
+        const save = wrapper.findAll('button').find((b) => b.text() === 'Speichern')!;
+        save.element.click();
+        await settle();
+        const dialog = document.querySelector<HTMLElement>('.cps-confirm__dialog')!;
+        expect(dialog.querySelector('.cps-confirm__title')?.textContent?.trim()).toBe('Backend-Adresse ändern?');
+        [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.trim() === 'Adresse ändern')!.click();
+        await settle();
+        expect(storedSettings(fakeCt)).toEqual([{ ...SETTINGS, backendUrl: 'https://pw-new.example', revision: 2 }]);
+        expect(wrapper.find('.cps-backend__reload').text()).toContain('Die neue Adresse gilt erst, wenn die Seite neu geladen ist.');
+        expect(backendCalls).not.toContain('selfTest');
+    });
+
+    it.each([
+        ['/settings/rules', 'Passwortregeln', 'main form .cps-rules__length'],
+        ['/settings/access', 'Zugriff', 'main .cps-access__section .cps-access__heading'],
+    ])('in backend-error, a settings editor gets the page with its values on %s', async (path, title, marker) => {
+        const { wrapper, router } = await editorInBackendError();
+        await router.push(path);
+        await settle();
+        expect(wrapper.find('h1').text()).toBe(title);
+        expect(wrapper.text()).not.toContain(MISSING_RIGHT);
+        expect(wrapper.find(marker).exists()).toBe(true);
+    });
+
     it('in backend-error, users do not get the settings pages', async () => {
         const seededLogin = seedLogin('/settings/backend');
         const { wrapper } = await startWithStorage(seededLogin, {

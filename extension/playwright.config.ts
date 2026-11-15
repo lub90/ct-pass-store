@@ -17,6 +17,12 @@ function freePort(): string {
 }
 process.env.CPS_E2E_PORT ??= freePort();
 const port = process.env.CPS_E2E_PORT;
+/**
+ * Each run writes its traces and artifacts into its own folder under `test-results/`: Playwright empties the output
+ * folder when a run starts, so two runs in one worktree would otherwise delete each other's files. Chosen once by the
+ * runner like the port; `CPS_E2E_RUN` set by hand (or `--output`) wins.
+ */
+process.env.CPS_E2E_RUN ??= `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}`;
 const origin = `http://127.0.0.1:${port}`;
 
 const desktop = { viewport: { width: 1280, height: 800 } };
@@ -49,7 +55,7 @@ const projects: Project[] = [
 
 export default defineConfig({
     testDir: './e2e',
-    outputDir: './test-results',
+    outputDir: `./test-results/${process.env.CPS_E2E_RUN}`,
     fullyParallel: true,
     forbidOnly: !!process.env.CI,
     retries: 0,

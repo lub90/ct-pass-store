@@ -184,7 +184,9 @@ out.json`.
 `npm run test:browser` runs Playwright (`playwright.config.ts`, specs in `e2e/`) against the **demo mode** of
 `npm run dev`: Playwright starts the dev server itself on a free port of `127.0.0.1` (`CPS_E2E_PORT` picks one by
 hand) and stops it afterwards. Only the invented demo data is used; the tests never start `--mode real` and never
-touch the test instance or `.env`.
+touch the test instance or `.env`. Each run keeps its traces in its own folder `test-results/run-<time>-<pid>/`
+(`CPS_E2E_RUN` names it by hand, `--output` replaces it), so parallel runs in one worktree don't delete each other's
+files; old run folders can be deleted at any time.
 
 Once per machine:
 

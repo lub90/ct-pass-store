@@ -57,6 +57,15 @@ describe('PersonPicker', () => {
         expect(option.element.textContent).toBe('Anna Beck, anna@example.org');
     });
 
+    it('isolates names and details (<bdi>), so a right-to-left override in a name cannot reorder the line', async () => {
+        const name = 'Eva \u202Enamffoh';
+        const w = mount(PersonPicker, { props: { ...props, search: vi.fn().mockResolvedValue([{ id: 9, name, detail: 'ID 9' }]) } });
+        await type(w, 'e');
+        const option = w.findAll('[role="option"]')[0]!;
+        expect(option.find('bdi.cps-picker__name').text()).toBe(name);
+        expect(option.find('bdi.cps-picker__detail').text()).toBe('ID 9');
+    });
+
     it('Down/Up move aria-activedescendant, Enter selects', async () => {
         const w = mount(PersonPicker, { props: { ...props, search: vi.fn().mockResolvedValue(people) } });
         await type(w, 'An');

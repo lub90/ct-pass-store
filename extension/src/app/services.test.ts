@@ -82,9 +82,15 @@ describe('createServices (the wiring the app runs with)', () => {
         }
     });
 
-    /** Settles to 'pending' while a page login has left (a navigation never resolves), or to what it rejected with. */
-    const outcome = (p: Promise<unknown>) =>
-        Promise.race([p.then(() => 'resolved', (e: unknown) => e), new Promise((resolve) => setTimeout(() => resolve('pending'), 50))]);
+    /** How a promise has settled so far: 'pending', 'resolved', or what it rejected with. */
+    function track(p: Promise<unknown>): { now: unknown } {
+        const state: { now: unknown } = { now: 'pending' };
+        p.then(
+            () => (state.now = 'resolved'),
+            (e: unknown) => (state.now = e),
+        );
+        return state;
+    }
 
     it.each([
         ['backendLogin: true', { backendLogin: true }],
@@ -100,7 +106,13 @@ describe('createServices (the wiring the app runs with)', () => {
             await expect(services.auth.loginInPopup()).rejects.toBeInstanceOf(PopupBlocked);
             expect(open).toHaveBeenCalledTimes(1);
             expect(open.mock.calls[0]![0]).toBe('about:blank');
-            expect(await outcome(services.auth.startPageLogin('/'))).toBe('pending');
+            window.sessionStorage.removeItem(LOGIN_KEY);
+            const login = track(services.auth.startPageLogin('/'));
+            // The login record is written right before the navigation, in the same step: wait for it (or for the
+            // login to settle) however long PKCE (crypto.subtle) takes, then give a late rejection a chance to arrive.
+            await vi.waitFor(() => expect(login.now !== 'pending' || window.sessionStorage.getItem(LOGIN_KEY) !== null).toBe(true), { timeout: 5_000 });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            expect(login.now).toBe('pending');
             expect(window.sessionStorage.getItem(LOGIN_KEY)).not.toBeNull();
         } finally {
             open.mockRestore();

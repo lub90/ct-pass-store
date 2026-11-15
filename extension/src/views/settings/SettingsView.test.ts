@@ -243,3 +243,30 @@ describe('self-test cache key', () => {
         wrapper.unmount();
     });
 });
+
+describe('the page checks its own rights, on top of the frame (spec 4.1)', () => {
+    it.each(['user', 'backend-error', 'no-access'] as const)('mounted alone in %s, without settings rights: the banner, no card, nothing read or asked', async (state) => {
+        const readAccess = vi.fn();
+        const backend = vi.fn();
+        const app = {
+            state: computed(() => state),
+            failure: computed(() => null),
+            settingsEditor: ref({ settings: false, access: false }),
+            setupCapable: ref(true),
+            settings: ref({ ...SETTINGS }),
+            selfTestCache: ref(null),
+        } as unknown as AppStateHandle;
+        const services = { store: { readAccess }, backend } as unknown as Services;
+        const router = createAppRouter(createMemoryHistory());
+        await router.push('/settings');
+        const wrapper = mount(SettingsView, {
+            global: { plugins: [router, createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: services, [APP_STATE_KEY as symbol]: app } },
+        });
+        await settle();
+        expect(wrapper.find('.cps-banner--warning').text()).toBe('Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.');
+        expect(wrapper.findAll('.cps-linkcard')).toHaveLength(0);
+        expect(readAccess).not.toHaveBeenCalled();
+        expect(backend).not.toHaveBeenCalled();
+        wrapper.unmount();
+    });
+});

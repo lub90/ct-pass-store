@@ -248,6 +248,11 @@ describe('responses', () => {
         await expect(api().putEntry(1, {})).rejects.toBeInstanceOf(UnexpectedResponse);
     });
 
+    it.each(['text/plain', 'text/html', 'application/problem+json', null])('a 2xx with a valid JSON body but content type %s is unexpected', async (type) => {
+        fetchMock.mockResolvedValueOnce(type === null ? respond(200, '{"secondaryPwd":"Gen3rated!pw"}') : json(200, { secondaryPwd: 'Gen3rated!pw' }, type));
+        await expect(api().putEntry(1, {})).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 200 });
+    });
+
     it('deleteEntry: 204 resolves, 200 is unexpected', async () => {
         fetchMock.mockResolvedValueOnce(respond(204, null));
         await expect(api().deleteEntry(1)).resolves.toBeUndefined();

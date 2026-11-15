@@ -39,6 +39,11 @@ describe('checkDist', () => {
         expect(failures.join('\n')).toMatch(/exactly one JavaScript bundle/);
     });
 
+    it('fails without any JavaScript bundle (exactly one, spec 13.5)', () => {
+        const failures = checkDist(makeDist((d) => fs.rmSync(path.join(d, 'assets', 'index-abc.js'))));
+        expect(failures.join('\n')).toMatch(/exactly one JavaScript bundle, found 0/);
+    });
+
     it('counts an .mjs file as a second bundle', () => {
         const failures = checkDist(makeDist((d) => fs.writeFileSync(path.join(d, 'assets', 'chunk.mjs'), '1;')));
         expect(failures.join('\n')).toMatch(/exactly one JavaScript bundle/);
@@ -178,6 +183,11 @@ describe('checkDist', () => {
             env('.env', 'OTHER_TOKEN=long-enough-value\nCT_CONTRACT_RECORD=1\nCT_LOGIN_TOKEN=   \nCT_PATH=/api\n#CT_X=commented-out-value\n');
             env('.env-example', 'CT_LOGIN_TOKEN=example-value-long\n');
             expect(localSecrets(envDir)).toEqual([]);
+        });
+
+        it('keeps a value of exactly 8 characters, skips one of 7 (the boundary)', () => {
+            env('.env', 'CT_EIGHT=12345678\nCT_SEVEN=1234567\n');
+            expect(localSecrets(envDir)).toEqual([{ name: 'CT_EIGHT', file: '.env', value: '12345678' }]);
         });
 
         it('is empty without any .env file', () => {
