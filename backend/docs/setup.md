@@ -314,6 +314,18 @@ format characters (such as bidi overrides) in logged values appear escaped as `\
 | Machine client private key | Only on the machine client | Register a second public key, switch the client to the new key, remove the old one. |
 | `CLEANUP_TOKEN` | `credentials.php` and the web-cron service | Generate a new one (step 7) and change it in both places. Do it if it may have leaked. |
 
+**After changing `credentials.php`, reset OPcache or restart PHP.** The backend loads `credentials.php` with
+`require`, so OPcache may keep serving the old values. PHP notices a changed file only if OPcache checks timestamps
+(`opcache.validate_timestamps=1`, as in `config/php.ini-example`) and the file's modification time changed. An upload
+that keeps the old time, or a host that turns the check off, leaves the old secrets in use. So after every change,
+and above all when you rotate a secret that may have leaked:
+
+1. Restart PHP (or PHP-FPM), or reset OPcache, in the hosting control panel. If the host offers neither, upload
+   `credentials.php` again without keeping its old modification time.
+2. Check that `GET /v1/test` passes.
+3. Check that the old secret no longer works, for example a call to `POST /v1/cleanup` with the old `CLEANUP_TOKEN`,
+   or a backend token issued before a `JWT_SECRET` change, answers `401 invalid-token`.
+
 ## Troubleshooting
 
 ### Every request answers `502 upstream-unavailable`, and the log says "cURL error 60"
