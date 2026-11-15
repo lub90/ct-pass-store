@@ -9,7 +9,7 @@ describe('pageTexts', () => {
         });
         expect(pageTexts({}, 'en')).toEqual({
             title: 'My secondary password',
-            intro: "A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password.",
+            intro: 'A separate password for connected services such as Wi-Fi. It’s independent of your ChurchTools password.',
         });
     });
     it('falls back when a field is empty or blank', () => {

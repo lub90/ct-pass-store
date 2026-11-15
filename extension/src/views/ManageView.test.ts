@@ -417,6 +417,12 @@ describe('page head and search (spec 4.3)', () => {
         expect(card(wrapper).find('.cps-manage__avatar').attributes('aria-hidden')).toBe('true');
     });
 
+    it('the avatar skips invisible format characters (a bidi control is never an initial)', async () => {
+        // „Rafa ‮namffoh“: the last word starts with U+202E; its first letter is „n“.
+        const { wrapper } = await start({ path: `/manage/${BIDI}` });
+        expect(card(wrapper).find('.cps-manage__avatar').text()).toBe('RN');
+    });
+
     it('clearing the search drops the selection: back to /manage and the empty state', async () => {
         const { wrapper, router } = await start({ path: `/manage/${MUELLER}` });
         await wrapper.find('input[role="combobox"]').setValue('');
@@ -638,6 +644,18 @@ describe('„Neues Passwort“ for another person', () => {
         // Above the flow.
         const html = wrapper.html();
         expect(html.indexOf('cps-flow-for')).toBeLessThan(html.indexOf(TEXT.generate));
+    });
+
+    it('the banner takes its text from the app’s messages without an i18n scope warning', async () => {
+        const warn = vi.spyOn(console, 'warn');
+        try {
+            const { wrapper } = await start({ path: `/manage/${MUELLER}` });
+            await click(wrapper, TEXT.newPassword);
+            expect(wrapper.find('.cps-flow-for').text()).toBe(TEXT.forName('Jürgen Müller'));
+            expect(warn.mock.calls.flat().join('\n')).not.toContain('[intlify]');
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     it('without an entry: sends without a dialog and shows the generated password', async () => {

@@ -265,7 +265,11 @@ const newLabel = computed(() => {
 
 /** Up to two letters for the avatar: the first of the first and of the last name part. */
 function initials(name: string): string {
-    const words = name.split(/\s+/u).filter((w) => w !== '');
+    // Invisible format characters (bidi controls, zero-width spaces) are never an initial.
+    const words = name
+        .replace(/\p{Cf}/gu, '')
+        .split(/\s+/u)
+        .filter((w) => w !== '');
     const first = Array.from(words[0] ?? '')[0] ?? '';
     const last = words.length > 1 ? (Array.from(words[words.length - 1]!)[0] ?? '') : '';
     return (first + last).toLocaleUpperCase('de');

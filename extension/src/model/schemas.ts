@@ -7,6 +7,11 @@ export const SCHEMA_VERSION = 2;
 /** Why a `backendUrl` is refused; `null` if it is fine. */
 export type BackendUrlProblem = 'not-https' | 'credentials' | 'query' | 'fragment' | 'invalid';
 
+/** `backendUrl` without trailing slashes: the one normalization the store, the form and the backend apply (spec 3.2). */
+export function withoutTrailingSlashes(url: string): string {
+    return url.replace(/\/+$/, '');
+}
+
 /**
  * `https://` (compared case-sensitively), a host, no credentials (not even empty ones), no query, no fragment, no
  * whitespace, control characters or backslashes — the same as the backend's `parse_url` check (backend spec 3.2).

@@ -30,9 +30,9 @@ const TEXT = {
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairNote: 'Prüf die Werte unten und speichere, um sie zu reparieren. Ungültige Regeln sind mit sicheren Werten vorbelegt.',
     noRepair: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist.',
-    noRepairBackend: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Einrichtung“.',
+    noRepairBackend: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
     noRepairBackendAsk: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Wende dich an jemanden, der die Einrichtung ausführen darf.',
-    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     retry: 'Erneut versuchen',
     unavailable: 'ChurchTools antwortet gerade nicht. Versuch es gleich noch einmal.',
@@ -408,7 +408,7 @@ describe('what the stored value lacks', () => {
         expect(writes).toEqual([]);
     });
 
-    it('an invalid value without a usable revision: no repair here; a setup-capable editor is pointed to „Einrichtung“', async () => {
+    it('an invalid value without a usable revision: no repair here; a setup-capable editor learns the setup assistant can repair it', async () => {
         const { wrapper, writes, openWith } = await start({ path: '/settings', setupCapable: true });
         await openWith({ ...SETTINGS, revision: 'x', passwordLength: 99 }, '/settings/rules');
         const banner = wrapper.find('.cps-settings-form__issues');

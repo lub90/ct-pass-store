@@ -285,6 +285,7 @@ onBeforeUnmount(() => {
         <I18nT
             keypath="manage.forName"
             tag="p"
+            scope="global"
         >
             <template #name>
                 <strong><bdi>{{ forName }}</bdi></strong>

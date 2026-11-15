@@ -1,7 +1,7 @@
 /**
  * All routes of spec 4.1, below `/ccm/ctpassstore/`. There are no route guards: `App.vue` draws a page only when the
- * app state and the route's `requires` allow it (`routeView`), and each page checks the rights it needs. Pages of
- * later steps (backup, setup) are placeholders until then.
+ * app state and the route's `requires` allow it (`routeView`), and each page checks the rights it needs. Backup and
+ * setup are reserved for the setup assistant (spec 12.4) and show a placeholder until then.
  */
 import { createRouter, createWebHistory, type RouteRecordRaw, type RouterHistory } from 'vue-router';
 import type { RouteRequirement } from './app/app-state';

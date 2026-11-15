@@ -25,7 +25,7 @@ import { useSession } from '../../app/useSession';
 import type { SelfTestResult } from '../../backend/api';
 import { PopupBlocked, PopupClosed } from '../../backend/auth';
 import { BackendProblem, problemMessageKey, problemParams } from '../../backend/problems';
-import { connectedHost, type SettingsV2 } from '../../model/schemas';
+import { connectedHost, withoutTrailingSlashes, type SettingsV2 } from '../../model/schemas';
 import Banner from '../../ui/Banner.vue';
 import Field from '../../ui/Field.vue';
 import Pill from '../../ui/Pill.vue';
@@ -44,7 +44,7 @@ const admin = computed(() => app.state.value === 'admin');
 /** The address the app runs with (startup); the only one ever asked. */
 const runningUrl = computed(() => app.settings.value?.backendUrl ?? null);
 /** Addresses compare without trailing slashes, as the store and the backend normalize them. */
-const bare = (url: string | null | undefined): string | null => (url == null ? null : url.replace(/\/+$/, ''));
+const bare = (url: string | null | undefined): string | null => (url == null ? null : withoutTrailingSlashes(url));
 /**
  * A stored address may be written with a host the browser rewrites (`%2e`, an IDN look-alike): the backend keeps the
  * text, the browser connects to `URL.host`. Then both are shown. A new address can't be like that (the field refuses it).

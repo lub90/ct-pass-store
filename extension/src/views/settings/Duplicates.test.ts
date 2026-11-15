@@ -295,11 +295,11 @@ describe('duplicate settings at startup', () => {
         await answer(TEXT.cancel);
     });
 
-    it('an address the browser uses as written: its host under „– Host:“, never as „tatsächlicher Host“ (H3, H5)', async () => {
+    it('an address the browser uses as written: its host under „– verbindet zu:“, never as „tatsächlicher Host“ (H3, H5)', async () => {
         const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: PLANTED }] });
         for (const [id, host] of [[SETTINGS_VALUE_ID, 'pw.example'], [301, 'evil.example']] as const) {
             const field = card(wrapper, id).find('[data-field="backendUrl"]');
-            expect(field.find('.cps-duplicates__host').text()).toBe(`– Host: ${host}`);
+            expect(field.find('.cps-duplicates__host').text()).toBe(`– verbindet zu: ${host}`);
             expect(field.find('.cps-duplicates__host bdi').text()).toBe(host);
             expect(field.text()).not.toContain('tatsächlicher Host');
         }

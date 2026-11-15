@@ -1,3 +1,4 @@
+import { withoutTrailingSlashes } from '../model/schemas';
 import { BackendUnreachable, UnexpectedResponse, isProgrammingError, problemFromBody } from './problems';
 
 /** Per request, covering the answer's body too (spec 7.3). */
@@ -5,7 +6,7 @@ export const TIMEOUT_MS = 15_000;
 
 /** `settings.backendUrl` without trailing slashes, plus `/v1`. */
 export function backendBase(url: string): string {
-    return `${url.trim().replace(/\/+$/, '')}/v1`;
+    return `${withoutTrailingSlashes(url.trim())}/v1`;
 }
 
 export interface RequestOptions {

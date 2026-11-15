@@ -15,6 +15,7 @@ import {
     TOKEN_KEY,
     callbackWindow,
     forwardPopupCallback,
+    isCallbackPath,
     safeReturnPath,
     windowEnv,
     type AuthEnv,
@@ -156,6 +157,15 @@ async function startLogin(auth: Auth, h: Harness, returnPath = '/manage/5') {
     await vi.waitFor(() => expect(h.assigned).toHaveLength(1));
     return { stored: storedLogin(h), url: new URL(h.assigned[0]!) };
 }
+
+describe('isCallbackPath', () => {
+    it('matches the callback route like vue-router does: case-insensitive, trailing slashes optional', () => {
+        for (const path of ['/auth/callback', '/auth/callback/', '/auth/callback//', '/AUTH/Callback']) expect(isCallbackPath(path), path).toBe(true);
+    });
+    it('matches nothing else', () => {
+        for (const path of ['/', '/auth', '/auth/callbackx', '/auth/callback/x', 'auth/callback', '/x/auth/callback', '']) expect(isCallbackPath(path), path).toBe(false);
+    });
+});
 
 describe('safeReturnPath', () => {
     it.each(['/', '/manage/5', '/settings/access/clients/new', '/manage?q=a%20b', '/about#top'])('keeps the app path %s', (p) => {

@@ -4,8 +4,8 @@ import { tokenPerson } from './jwt';
 import { BackendProblem } from './problems';
 
 /**
- * What a contract run needs. The cases are written once and run against the fake now and against the real test
- * backend in Task 18, so they keep the fake honest. Optional members mark what a subject cannot offer; the cases
+ * What a contract run needs. The cases are written once and run against the fake (unit suite) and against the real
+ * backend (contract suite, `tests/contract/`), so they keep the fake honest. Optional members mark what a subject cannot offer; the cases
  * that need them are skipped.
  */
 export type BackendContractSubject = BackendApi & {

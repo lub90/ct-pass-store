@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * The settings overview (spec 4.4): one card per settings page. A card the person can't use is shown disabled with
- * the missing ChurchTools right; „Sicherung“ and „Einrichtung“ are left out unless the person is an admin who is also
- * setup-capable (spec 3.1.3). Display only: ChurchTools and the backend decide every request.
+ * the missing ChurchTools right. „Sicherung“ and „Einrichtung“ (spec 3.1.3) get their cards with the setup assistant.
+ * Display only: ChurchTools and the backend decide every request.
  *
  * Two pills, each read only when the person may read it: the number of machine clients (`access`, for
  * editors of `access`) and the self-test (`GET /v1/test`, admins only — the backend answers it for admins only), sent
@@ -124,13 +124,7 @@ const cards = computed<Card[]>(() => {
             disabledReason: canSettings.value ? undefined : missing('settings'),
         },
     ];
-    // Spec 3.1.3: only for admins who are also setup-capable; hidden (not disabled) for everyone else.
-    if (admin.value && app.setupCapable.value) {
-        list.push(
-            { to: '/settings/backup', icon: 'backup', title: t('pages.backup'), text: t('settings.cards.backup') },
-            { to: '/settings/setup', icon: 'wrench', title: t('pages.setup'), text: t('settings.cards.setup') },
-        );
-    }
+    // „Sicherung“ and „Einrichtung“ (spec 3.1.3) come with the setup assistant; until then no card leads to them.
     return list;
 });
 </script>

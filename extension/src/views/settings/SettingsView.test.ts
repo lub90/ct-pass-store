@@ -21,8 +21,6 @@ const CARDS = {
     texts: ['Texte', 'Titel und Erklärung pro Sprache', '/settings/texts'],
     access: ['Zugriff', 'Admin-Gruppe und Maschinen-Clients', '/settings/access'],
     backend: ['Backend & Status', 'Adresse und Selbsttest', '/settings/backend'],
-    backup: ['Sicherung', 'Daten sichern und wiederherstellen', '/settings/backup'],
-    setup: ['Einrichtung', 'Rechte und Gruppen prüfen oder reparieren', '/settings/setup'],
 } as const;
 
 const missing = (category: string) => `Dir fehlt in ChurchTools das Recht „edit custom data“ auf die Kategorie „${category}“.`;
@@ -54,7 +52,7 @@ const failing = (n: number): (() => Promise<{ version: string; summary: string; 
     });
 
 describe('settings overview (spec 4.4)', () => {
-    it('shows the header and, for a setup-capable admin with all rights, the six cards in order with their sentences', async () => {
+    it('shows the header and, for a setup-capable admin with all rights, the four cards in order with their sentences', async () => {
         const { wrapper } = await start({ path: '/settings', setupCapable: true });
         expect(wrapper.find('h1').text()).toBe('Einstellungen');
         expect(titles(wrapper)).toEqual(Object.values(CARDS).map(([title]) => title));
@@ -64,6 +62,12 @@ describe('settings overview (spec 4.4)', () => {
             expect(c.element.tagName).toBe('A');
             expect(c.attributes('href')).toBe(to);
         }
+    });
+
+    it('hides Sicherung and Einrichtung for everyone until the setup assistant exists, even a setup-capable admin', async () => {
+        const { wrapper } = await start({ path: '/settings', setupCapable: true });
+        expect(titles(wrapper)).not.toContain('Sicherung');
+        expect(titles(wrapper)).not.toContain('Einrichtung');
     });
 
     it('hides Sicherung and Einrichtung for an admin who is not setup-capable', async () => {

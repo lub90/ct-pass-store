@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Stands in for a page built in a later step (Tasks 12 to 16): its title only, no content and no requests. */
+/** Stands in for „Sicherung“ and „Einrichtung“ until the setup assistant exists: title and one note, no requests. */
 import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import StatusLine from '../ui/StatusLine.vue';

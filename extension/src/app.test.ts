@@ -222,7 +222,7 @@ const TEXT = {
     unavailable: 'Der Dienst ist gerade nicht erreichbar. Versuch es später noch einmal.',
     loginFailed: 'Die Anmeldung hat nicht geklappt. Lade die Seite neu.',
     updating: 'Der Dienst wird gerade aktualisiert. Versuch es später noch einmal.',
-    page: 'Diese Seite folgt mit einem späteren Schritt.',
+    page: 'Diese Seite kommt mit dem Einrichtungsassistenten in der nächsten Version der Erweiterung.',
     needsAdmin: 'Diese Seite ist nur für Admins.',
     needsEditor: 'Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.',
     /** „Mein Passwort“ shows the title of the settings texts (default of spec 4.6). */
@@ -316,6 +316,11 @@ describe('routes (spec 4.1)', () => {
     ])('%s is a page (%s)', async (path, title) => {
         const { wrapper } = await start({ token: { admin: true }, path });
         expect(wrapper.find('h1').text()).toBe(title);
+    });
+
+    it.each(['/settings/backup', '/settings/setup'])('%s says for whom it is: it comes with the setup assistant', async (path) => {
+        const { wrapper } = await start({ token: { admin: true }, path });
+        expect(wrapper.find('main .cps-status--empty').text()).toBe(TEXT.page);
     });
 
     it.each(['/manage', '/manage/5', '/settings', '/settings/rules', '/settings/texts', '/settings/access', '/settings/access/clients/new', '/settings/access/clients/x', '/settings/backend', '/settings/backup', '/settings/setup'])(

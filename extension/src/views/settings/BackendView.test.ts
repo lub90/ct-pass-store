@@ -34,7 +34,7 @@ const TEXT = {
         'host-encoding': 'Gib den Host so ein, wie der Browser ihn verwendet: nur ASCII-Zeichen ohne „%“, Domains mit Umlauten in der xn--Form.',
     },
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
-    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
     selfTest: 'Selbsttest',
     adminsOnly: 'Den Selbsttest dürfen nur Admins ausführen, die beim Backend angemeldet sind.',
     runAgain: 'Erneut prüfen',

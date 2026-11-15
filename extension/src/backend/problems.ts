@@ -86,7 +86,7 @@ const RATE_LIMITED = 'problems.rateLimited';
  * fails for a documented slug that is missing here. Unknown slugs fall back to `problems.generic`.
  */
 export const PROBLEM_KEYS: Readonly<Record<string, string>> = {
-    'entry-not-found': 'problems.entryNotFound',
+    'entry-not-found': 'password.none',
     'primary-password-required': 'problems.primaryPasswordRequired',
     'invalid-primary-password': 'problems.invalidPrimaryPassword',
     'password-invalid': 'problems.passwordInvalid',

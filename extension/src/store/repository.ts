@@ -2,7 +2,7 @@ import * as v from 'valibot';
 import { decodeKey, phpTrim, readMachineClients, type ClientReason, type UnusableClient } from '@/model/machine-clients';
 import { isOldLayout } from '@/model/layout';
 import { InvalidValueError, ConflictError, ValueTooLargeError } from '@/model/errors';
-import { AccessSchema, BIDI_CONTROLS, isUsableRevision, newBackendUrlProblem, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
+import { AccessSchema, BIDI_CONTROLS, isUsableRevision, newBackendUrlProblem, RETIRED_KEYS, SCHEMA_VERSION, SettingsSchema, SettingsTextsSchema, withoutTrailingSlashes, type AccessV2, type MachineClient, type SettingsV2 } from '@/model/schemas';
 import type { CtValue } from '@/ct/types';
 import type { KvBackend } from './kv';
 
@@ -106,7 +106,7 @@ function repairOf(raw: Record<string, unknown>): Repair<SettingsV2> {
 /** Removes trailing slashes of `backendUrl` (backend spec 3.2). */
 function normalize<T>(value: T): T {
     const url = (value as { backendUrl?: unknown }).backendUrl;
-    return typeof url === 'string' ? { ...value, backendUrl: url.replace(/\/+$/, '') } : value;
+    return typeof url === 'string' ? { ...value, backendUrl: withoutTrailingSlashes(url) } : value;
 }
 
 const MAX_ISSUE = 200;
@@ -403,7 +403,7 @@ export class ExtensionStore {
             // A new or changed address must not carry invisible characters nor a host other than the one the browser
             // connects to; a stored one is kept (the backend reads it).
             const url = (checked.output as SettingsV2).backendUrl;
-            const before = typeof stored.backendUrl === 'string' ? stored.backendUrl.replace(/\/+$/, '') : undefined;
+            const before = typeof stored.backendUrl === 'string' ? withoutTrailingSlashes(stored.backendUrl) : undefined;
             const problem = url === undefined || url === before ? null : newBackendUrlProblem(url);
             if (problem) throw new InvalidValueError([`backendUrl: ${problem === 'invisible' ? 'contains invisible characters' : 'the host must be written as the browser uses it'}`]);
         }

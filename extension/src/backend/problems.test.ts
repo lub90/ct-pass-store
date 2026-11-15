@@ -98,7 +98,7 @@ describe('error classes', () => {
 });
 
 const KEYS: Record<string, string> = {
-    'entry-not-found': 'problems.entryNotFound',
+    'entry-not-found': 'password.none',
     'primary-password-required': 'problems.primaryPasswordRequired',
     'invalid-primary-password': 'problems.invalidPrimaryPassword',
     'password-invalid': 'problems.passwordInvalid',
@@ -157,7 +157,7 @@ describe('problemMessageKey', () => {
     });
 
     it('uses the texts of spec 8.2 verbatim', () => {
-        expect(de.problems.entryNotFound).toBe('Noch kein Passwort');
+        expect(de.password.none).toBe('Noch kein Passwort');
         expect(de.problems.primaryPasswordRequired).toBe('Bitte gib dein ChurchTools-Passwort ein.');
         expect(de.problems.invalidPrimaryPassword).toBe('Das ChurchTools-Passwort stimmt nicht.');
         expect(de.problems.customPasswordNotAllowed).toBe('Eigene Passwörter sind gerade nicht erlaubt.');

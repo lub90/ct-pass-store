@@ -6,18 +6,12 @@ const de = {
     common: {
         save: 'Speichern',
         cancel: 'Abbrechen',
-        close: 'Schließen',
-        back: 'Zurück',
-        loading: 'Lädt …',
     },
     // Page text of „Mein Passwort“ when the settings hold no custom text (spec 4.6).
     password: {
         defaultTitle: 'Mein Zweitpasswort',
         defaultIntro:
             'Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort.',
-        primaryRequired: 'Bitte gib dein ChurchTools-Passwort ein.',
-        customNotAllowed: 'Eigene Passwörter sind gerade nicht erlaubt.',
-        invalidCustom: 'Das Passwort erfüllt die Regeln nicht.',
         // State 1 (spec 4.2).
         isSet: '✓ Passwort ist gesetzt',
         none: 'Noch kein Passwort',
@@ -102,8 +96,6 @@ const de = {
             texts: 'Titel und Erklärung pro Sprache',
             access: 'Admin-Gruppe und Maschinen-Clients',
             backend: 'Adresse und Selbsttest',
-            backup: 'Daten sichern und wiederherstellen',
-            setup: 'Rechte und Gruppen prüfen oder reparieren',
         },
         clients: 'Keine Clients | {n} Client | {n} Clients',
         selfTestOk: '✓',
@@ -127,10 +119,10 @@ const de = {
         issuesNote: 'Beim nächsten Speichern wird er entfernt.',
         invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
         repairNote: 'Prüf die Werte unten und speichere, um sie zu reparieren. Ungültige Regeln sind mit sicheren Werten vorbelegt.',
-        noRepairBackend: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Prüf sie unter „Einrichtung“.',
+        noRepairBackend: 'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
         noRepairBackendAsk:
             'Hier lassen sie sich nicht reparieren, weil die Backend-Adresse oder die OAuth-Client-ID ungültig ist. Wende dich an jemanden, der die Einrichtung ausführen darf.',
-        noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+        noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
         noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
         repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
         rules: {
@@ -190,7 +182,7 @@ const de = {
         no: 'Nein',
         notKeepableAddress: 'Kann nicht behalten werden: Die Backend-Adresse enthält unsichtbare Zeichen oder einen Host, den der Browser anders schreibt.',
         confirmField: '{field} dieses Werts: {value}.',
-        host: '– Host:',
+        host: '– verbindet zu:',
         confirmFieldHost: '{field} dieses Werts: {value} (Host: {host}).',
         onlyNewest: 'Nur der zuletzt angelegte Wert lässt sich behalten. Kennt ihn niemand von euch, behalte ihn nicht: Lass ihn in ChurchTools löschen (Recht „delete custom data“ auf „{category}“) und reparier den bisherigen Wert.',
         noneKeepable: 'Keiner dieser Werte lässt sich hier behalten. Lass in ChurchTools die falschen Werte löschen oder einen reparieren (Rechte „delete custom data“ und „edit custom data“ auf „{category}“); danach zeigt diese Seite den verbliebenen Wert.',
@@ -222,7 +214,7 @@ const de = {
         changeGroup: 'Gruppe ändern',
         changeGroupLater: 'Kommt mit dem Einrichtungsassistenten.',
         groupGone: 'Die Gruppe mit der ID {id} gibt es in ChurchTools nicht mehr.',
-        groupFixSetup: 'Ordne unter „Einrichtung“ eine andere Gruppe zu.',
+        groupFixSetup: 'Eine andere Gruppe ordnest du mit dem Einrichtungsassistenten zu, der mit der nächsten Version der Erweiterung kommt.',
         groupFixAsk: 'Wende dich an jemanden, der die Einrichtung ausführen darf.',
         groupHidden: 'Dir fehlt in ChurchTools das Recht „view group“ auf die Gruppe mit der ID {id}.',
         clientsTitle: 'Maschinen-Clients',
@@ -365,7 +357,7 @@ const de = {
         backend: 'Backend & Status',
         backup: 'Sicherung',
         setup: 'Einrichtung',
-        comingSoon: 'Diese Seite folgt mit einem späteren Schritt.',
+        comingSoon: 'Diese Seite kommt mit dem Einrichtungsassistenten in der nächsten Version der Erweiterung.',
     },
     // App states (spec 3.2, 3.3, versioning.md 3).
     state: {
@@ -396,7 +388,6 @@ const de = {
         finishing: 'Anmeldung wird abgeschlossen …',
     },
     problems: {
-        entryNotFound: 'Noch kein Passwort',
         primaryPasswordRequired: 'Bitte gib dein ChurchTools-Passwort ein.',
         invalidPrimaryPassword: 'Das ChurchTools-Passwort stimmt nicht.',
         passwordInvalid: 'Das Passwort erfüllt die Regeln nicht.',

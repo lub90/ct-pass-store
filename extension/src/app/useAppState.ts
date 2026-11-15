@@ -14,7 +14,7 @@
  */
 import { computed, inject, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { Router } from 'vue-router';
-import { forwardPopupCallback, LoginStateError, type CallbackWindow } from '../backend/auth';
+import { forwardPopupCallback, isCallbackPath, LoginStateError, type CallbackWindow } from '../backend/auth';
 import { BackendProblem } from '../backend/problems';
 import { CALLBACK_PATH, EXTENSION_KEY } from '../config';
 import { NotAuthenticatedError } from '../ct/errors';
@@ -74,8 +74,6 @@ export interface AppStateDeps {
     callbackWindow: CallbackWindow;
     appVersion: string;
 }
-
-const isCallbackPath = (path: string): boolean => path.toLowerCase().replace(/\/+$/, '') === `/${CALLBACK_PATH}`;
 
 export function createAppState(deps: AppStateDeps): AppStateHandle {
     const { services, router, session } = deps;

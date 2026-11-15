@@ -9,7 +9,7 @@
  *   our own origin, with the expected state is taken.
  * - The token lives in memory and in `sessionStorage['cps-token']`, bound to the backend it was issued for and to the
  *   ChurchTools person (`sub`). The app calls `configure()` with the settings and `bindPerson()` with whoami's id at
- *   startup (Task 11), before it decides on a page login; until both are done no token is handed out.
+ *   startup (`useAppState`), before it decides on a page login; until both are done no token is handed out.
  *
  * Code, verifier, state and token never go into an error, a log line or a URL other than the authorize URL.
  */
@@ -172,6 +172,11 @@ const nonEmpty = (v: unknown): v is string => typeof v === 'string' && v !== '';
 const usableCode = (v: unknown): v is string => nonEmpty(v) && v.length <= MAX_CODE_LENGTH;
 const personId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
 
+/** Whether a router path is the callback route, matched like vue-router does: case-insensitive, trailing slash optional. */
+export function isCallbackPath(path: string): boolean {
+    return path.toLowerCase().replace(/\/+$/, '') === `/${CALLBACK_PATH}`.toLowerCase();
+}
+
 /**
  * A path of this app (router path, below `BASE_PATH`) to return to after the login, or `/`. Accepts printable ASCII
  * only (router `fullPath`s are percent-encoded), so no whitespace, control, format or look-alike characters. Refuses
@@ -188,7 +193,7 @@ export function safeReturnPath(path: unknown): string {
     } catch {
         return '/';
     }
-    if (pathname.toLowerCase().replace(/\/+$/, '') === `/${CALLBACK_PATH}`.toLowerCase()) return '/';
+    if (isCallbackPath(pathname)) return '/';
     return path;
 }
 

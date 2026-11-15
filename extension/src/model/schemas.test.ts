@@ -1,7 +1,7 @@
 import * as v from 'valibot';
 import { describe, expect, it } from 'vitest';
 import type { PageTextsInput } from '@/i18n/custom-texts';
-import { AccessSchema, MachineClientSchema, SettingsSchema, type SettingsTexts } from './schemas';
+import { AccessSchema, MachineClientSchema, SettingsSchema, withoutTrailingSlashes, type SettingsTexts } from './schemas';
 
 const key32 = btoa('a'.repeat(32));
 const client = { id: 'ct-radius', name: 'Radius', publicKeys: [key32], permissions: ['entries:read'], createdAt: '2026-01-01' };
@@ -64,5 +64,16 @@ describe('schemas', () => {
             const value = { schema: 2, revision: 1, groups: { users: g, admins: g, service: g }, machineClients: [{ ...client, publicKeys: [bad] }, { ...client, id: 'other', publicKeys: [bad] }] };
             expect(v.safeParse(AccessSchema, value).success).toBe(false);
         }
+    });
+});
+
+describe('withoutTrailingSlashes (backend spec 3.2: the one normalization of backendUrl)', () => {
+    it('removes every trailing slash and nothing else', () => {
+        expect(withoutTrailingSlashes('https://pw.example/')).toBe('https://pw.example');
+        expect(withoutTrailingSlashes('https://pw.example/api///')).toBe('https://pw.example/api');
+        expect(withoutTrailingSlashes('https://pw.example/a/b')).toBe('https://pw.example/a/b');
+        expect(withoutTrailingSlashes('https://pw.example/ ')).toBe('https://pw.example/ ');
+        expect(withoutTrailingSlashes('///')).toBe('');
+        expect(withoutTrailingSlashes('')).toBe('');
     });
 });

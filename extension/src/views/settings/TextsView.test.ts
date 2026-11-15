@@ -19,11 +19,11 @@ const TEXT = {
     deTitle: 'Mein Zweitpasswort',
     deIntro: 'Ein eigenes Passwort für angebundene Dienste wie das WLAN. Es ist unabhängig von deinem ChurchTools-Passwort.',
     enTitle: 'My secondary password',
-    enIntro: "A separate password for connected services such as Wi-Fi. It's independent of your ChurchTools password.",
+    enIntro: 'A separate password for connected services such as Wi-Fi. It’s independent of your ChurchTools password.',
     issuesTitle: 'Ein Teil der gespeicherten Einstellungen ist ungültig und wird nicht verwendet:',
     invalidTitle: 'Die gespeicherten Einstellungen sind ungültig:',
     repairOnRules: 'Repariere sie zuerst unter „Passwortregeln“.',
-    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    noRepairVersion: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
     noRepairAsk: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     bidi: 'Steuerzeichen für die Schreibrichtung (wie U+202E) sind nicht erlaubt.',
 };

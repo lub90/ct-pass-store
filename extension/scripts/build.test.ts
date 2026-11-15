@@ -105,3 +105,25 @@ describe('only production builds (spec 13.7, a release must never ship a develop
         expect(bundleOf(await buildInto('production', 'production'))).not.toBe('');
     }, 60_000);
 });
+
+describe('one bundle (spec 13.5, ChurchTools’ CSP)', () => {
+    it('the app’s config inlines a dynamic import into the one bundle instead of splitting it off', async () => {
+        const src = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-split-'));
+        dirs.push(src);
+        fs.writeFileSync(path.join(src, 'lazy.js'), 'export const lazy = "lazy-module-text";\n');
+        fs.writeFileSync(path.join(src, 'main.js'), 'import("./lazy.js").then((m) => console.log(m.lazy));\n');
+        const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'cps-build-'));
+        dirs.push(outDir);
+        process.env.NODE_ENV = 'production';
+        await build({
+            root: ROOT,
+            configFile: path.join(ROOT, 'vite.config.ts'),
+            mode: 'production',
+            logLevel: 'silent',
+            build: { outDir, emptyOutDir: true, rolldownOptions: { input: path.join(src, 'main.js') } },
+        });
+        const js = fs.readdirSync(path.join(outDir, 'assets')).filter((f) => f.endsWith('.js'));
+        expect(js).toHaveLength(1);
+        expect(bundleOf(outDir)).toContain('lazy-module-text');
+    }, 60_000);
+});

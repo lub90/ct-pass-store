@@ -99,7 +99,8 @@ export function appConfig({ mode, command, isPreview }: ConfigEnv, envDir: strin
         server: { proxy },
         build: {
             modulePreload: { polyfill: false },
-            rollupOptions: { output: { inlineDynamicImports: true } },
+            // One bundle (spec 13.5): dynamic imports stay inline.
+            rolldownOptions: { output: { codeSplitting: false } },
         },
     };
 }

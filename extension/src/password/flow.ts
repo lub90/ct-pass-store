@@ -27,11 +27,11 @@ export function nextAfterOverview(settings: Pick<FlowSettings, 'allowCustomPassw
  */
 export function canSubmit(state: Extract<FlowState, { step: 'choose' }>, input: FlowInput, settings: FlowSettings): { ok: boolean; reason?: string } {
     if (settings.requirePasswordForPasswordChange && input.primaryPassword === '') {
-        return { ok: false, reason: 'password.primaryRequired' };
+        return { ok: false, reason: 'problems.primaryPasswordRequired' };
     }
     if (state.mode === 'custom') {
-        if (!settings.allowCustomPassword) return { ok: false, reason: 'password.customNotAllowed' };
-        if (checkPassword(input.password, settings.passwordLength).length > 0) return { ok: false, reason: 'password.invalidCustom' };
+        if (!settings.allowCustomPassword) return { ok: false, reason: 'problems.customPasswordNotAllowed' };
+        if (checkPassword(input.password, settings.passwordLength).length > 0) return { ok: false, reason: 'problems.passwordInvalid' };
     }
     return { ok: true };
 }

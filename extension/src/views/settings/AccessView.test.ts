@@ -30,7 +30,7 @@ const TEXT = {
     reload: 'Neu laden',
     removed: '✓ Entfernt. Wirkt innerhalb von 5 Minuten.',
     dupHint: 'Diese ID kommt mehrmals vor. Ist keiner dieser Einträge gewollt, entferne alle mit dieser ID.',
-    setupFix: 'Hier lassen sie sich nicht reparieren. Prüf sie unter „Einrichtung“.',
+    setupFix: 'Hier lassen sie sich nicht reparieren. Reparieren lässt sich das mit dem Einrichtungsassistenten, der mit der nächsten Version der Erweiterung kommt.',
     askFix: 'Hier lassen sie sich nicht reparieren. Wende dich an jemanden, der die Einrichtung ausführen darf.',
     edit: 'Bearbeiten',
     remove: 'Entfernen',
@@ -119,13 +119,13 @@ describe('Zugriff (spec 4.7)', () => {
         }
     });
 
-    it('a deleted group shows the error with the fix (setup-capable: on „Einrichtung“)', async () => {
+    it('a deleted group shows the error with the fix (setup-capable: with the setup assistant)', async () => {
         const { wrapper } = await open({ path: '/settings/access', groups: GROUPS.filter((g) => g.id !== 41), setupCapable: true });
         const admins = group(wrapper, 'admins');
         const error = admins.find('.cps-access__group-error');
         expect(error.attributes('role')).toBe('alert');
         expect(error.text()).toContain('Die Gruppe mit der ID 41 gibt es in ChurchTools nicht mehr.');
-        expect(error.text()).toContain('Ordne unter „Einrichtung“ eine andere Gruppe zu.');
+        expect(error.text()).toContain('Eine andere Gruppe ordnest du mit dem Einrichtungsassistenten zu, der mit der nächsten Version der Erweiterung kommt.');
         expect(admins.find('.cps-access__group-count').exists()).toBe(false);
         // The other group still shows.
         expect(group(wrapper, 'users').find('.cps-access__group-name').text()).toBe('CtPassStore Nutzer');
