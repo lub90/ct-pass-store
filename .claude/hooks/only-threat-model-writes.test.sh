@@ -6,7 +6,7 @@ set -uo pipefail
 hook="$(cd "$(dirname "$0")" && pwd)/only-threat-model-writes.sh"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
-export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null GIT_CEILING_DIRECTORIES="$tmp"
 
 g() { git -c user.name=t -c user.email=t@example.invalid "$@" >/dev/null 2>&1; }
 main="$tmp/main"; wt="$tmp/wt"; other="$tmp/other"
@@ -17,6 +17,14 @@ g -C "$main" worktree add -q --detach "$wt"
 echo x > "$other/docs/threat-model.md"
 g -C "$other" init -q; g -C "$other" add -A; g -C "$other" commit -qm init
 ln -s "$main/README.md" "$wt/docs/link.md"
+# Worktrees of this repository whose threat model path is a symlink: Write would follow it.
+for w in wt-file wt-other wt-dir-other wt-dir-same; do g -C "$main" worktree add -q --detach "$tmp/$w"; done
+ln -sf "$tmp/wt-file/README.md" "$tmp/wt-file/docs/threat-model.md"                 # the file, to another file
+ln -sf "$other/docs/threat-model.md" "$tmp/wt-other/docs/threat-model.md"           # the file, to another repo
+rm -rf "$tmp/wt-dir-other/docs"; ln -s "$other/docs" "$tmp/wt-dir-other/docs"       # docs/, to another repo
+mkdir -p "$tmp/wt-dir-same/notes"; echo x > "$tmp/wt-dir-same/notes/threat-model.md"
+rm -rf "$tmp/wt-dir-same/docs"; ln -s "$tmp/wt-dir-same/notes" "$tmp/wt-dir-same/docs" # docs/, to another folder
+plain="$tmp/plain"; mkdir -p "$plain"                                               # not a git repository
 
 pass=0; fail=0
 # expect <want-exit> <name> <json> [env assignments...]
@@ -41,11 +49,22 @@ expect 2 "threat model outside any repo"         "$(fp "$tmp/docs/threat-model.m
 expect 2 "nested docs folder"                    "$(fp "$wt/sub/docs/threat-model.md")"
 expect 2 "no file_path"                          '{"tool_input":{}}'
 expect 2 "invalid JSON"                          'not json'
+expect 2 "threat model is a symlink to a file"   "$(fp "$tmp/wt-file/docs/threat-model.md")"
+expect 2 "threat model is a symlink to a repo"   "$(fp "$tmp/wt-other/docs/threat-model.md")"
+expect 2 "docs/ is a symlink to another repo"    "$(fp "$tmp/wt-dir-other/docs/threat-model.md")"
+expect 2 "docs/ is a symlink to another folder"  "$(fp "$tmp/wt-dir-same/docs/threat-model.md")"
+expect 2 "project folder is not a git repo"      "$(fp "$main/docs/threat-model.md")" CLAUDE_PROJECT_DIR="$plain"
 
 # jq missing: PATH with every tool the hook needs except jq.
 bin="$tmp/bin"; mkdir -p "$bin"
 for t in bash env git realpath dirname cat; do ln -s "$(command -v "$t")" "$bin/$t"; done
 expect 2 "jq missing"                            "$(fp "$main/docs/threat-model.md")" PATH="$bin"
+
+# An unexpected failure of an unguarded command (here: realpath) must still block, through the ERR trap.
+failbin="$tmp/failbin"; mkdir -p "$failbin"
+for t in bash env git dirname cat jq; do ln -s "$(command -v "$t")" "$failbin/$t"; done
+printf '#!/bin/sh\nexit 1\n' > "$failbin/realpath"; chmod +x "$failbin/realpath"
+expect 2 "unexpected failure exits 2 (ERR trap)" "$(fp "$main/docs/threat-model.md")" PATH="$failbin"
 
 echo "$pass passed, $fail failed"
 [[ $fail == 0 ]]
