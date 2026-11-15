@@ -99,6 +99,30 @@ final class CachedPersonDirectoryTest extends TestCase
         self::assertSame(['99'], array_map('strval', array_keys($record)));
     }
 
+    /**
+     * The record as a whole lives on (a later write renews its TTL), so each entry's own expiry must still end it:
+     * person 10 cached at t0 is no longer trusted at t0+600, although person 11 (cached at t0+500) kept the record alive.
+     */
+    public function testAnEntryExpiresInsideARecordThatALaterWriteKeptAlive(): void
+    {
+        $this->fake->addPerson(10);
+        $this->fake->addPerson(11);
+        $this->fake->addPerson(12);
+        self::assertTrue($this->directory->exists(new PersonId(10)));
+        $this->clock->advance(500);
+        self::assertTrue($this->directory->exists(new PersonId(11)));
+
+        $this->fake->removePerson(10);
+        $this->clock->advance(100);
+        self::assertFalse($this->directory->exists(new PersonId(10)), 'person 10 expired at t0+600');
+        self::assertSame(3, $this->fake->countCalls(['personStatus']));
+
+        self::assertTrue($this->directory->exists(new PersonId(12)));
+        $record = $this->cache->get('persons-active');
+        self::assertNotNull($record);
+        self::assertSame(['11', '12'], array_map('strval', array_keys($record)), 'the rewritten record dropped person 10');
+    }
+
     public function testBrokenCacheIsAMiss(): void
     {
         $this->fake->addPerson(10);
