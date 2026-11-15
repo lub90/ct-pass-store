@@ -8,10 +8,34 @@ SetEnvIf Authorization "(.*)" HTTP_AUTHORIZATION=$1
 RewriteCond %{HTTPS} off
 RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-# Never serve an optional php.ini (see config/php.ini-example). Hidden files like .user.ini are denied in ../.htaccess.
+# Never serve an optional php.ini (see config/php.ini-example). The FilesMatch blocks below deny it and hidden files
+# like .user.ini again, independent of the rewrite rules, so both hold when public/ is the web root and ../.htaccess
+# isn't read.
 RewriteRule ^php\.ini$ - [F,L,NC]
 
 # Slim routing
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.php [QSA,L]
+
+# Security: deny access to hidden files (.user.ini, .htaccess, etc.). Apache 2.4 and 2.2.
+<FilesMatch "^\.">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Security: deny access to an optional php.ini, in any letter case.
+<FilesMatch "^(?i:php\.ini)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>

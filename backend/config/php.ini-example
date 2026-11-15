@@ -1,19 +1,26 @@
-; OPcache for the ct-pass-store backend (optional)
+; OPcache and safe error output for the ct-pass-store backend (optional)
 ;
 ; Only for hosts that read a php.ini from the folder of the running script (many shared hosts with PHP as
 ; CGI/FastCGI). Hosts with PHP-FPM or mod_php ignore this file; there, use the hosting control panel instead.
 ;
 ; How to use it:
 ;   1. Copy this file to public/php.ini (the folder that holds index.php; a php.ini elsewhere has no effect).
-;   2. Check it: put a file with <?php phpinfo(); into public/, open it, and look for "Zend OPcache" with
-;      "Opcode Caching: Up and Running". Then delete that file again.
-;   3. Check that the backend still answers (GET /v1/test). Some hosts REPLACE their whole configuration with a
-;      folder php.ini instead of merging it. If the backend breaks, remove public/php.ini again.
+;   2. Check it: call GET /v1/test as an admin. The check "OPcache" says whether OPcache is on and whether it checks
+;      for changed files (validate_timestamps).
+;   3. Check that the backend still answers at all. Some hosts REPLACE their whole configuration with a folder
+;      php.ini instead of merging it. If the backend breaks, remove public/php.ini again.
 ;
 ; If your host already loads OPcache, PHP logs "Cannot load Zend OPcache - it was already loaded". Then remove the
 ; zend_extension line.
 ;
 ; public/.htaccess keeps this file from being served.
+
+; Because a folder php.ini can replace the host's configuration, it sets safe error output itself: errors go to the
+; server's error log, never into a response, and PHP doesn't announce its version in a header.
+display_errors=Off
+display_startup_errors=Off
+log_errors=On
+expose_php=Off
 
 zend_extension=opcache.so
 opcache.enable=1
@@ -27,3 +34,9 @@ opcache.max_accelerated_files=4000
 ; Keep checking for changed files, so uploaded updates take effect within a few seconds.
 opcache.validate_timestamps=1
 opcache.revalidate_freq=2
+
+; These help when one OPcache is shared by several hosting accounts (one PHP process pool for many customers):
+; validate_permission serves a cached script only to an account that may read the file, and validate_root keeps
+; accounts in different chroots from getting each other's scripts. With a cache of your own they cost almost nothing.
+opcache.validate_permission=1
+opcache.validate_root=1

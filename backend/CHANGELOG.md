@@ -61,8 +61,14 @@ A rewrite of the old backend (spec section 10). The API is not compatible with t
   14 days). Unicode control and format characters in log lines are escaped.
 - Daily rotated logs (14 files), the version in every error log entry, `setup/setup.sh` with permissions and a check of
   the deploy folder (`bin/check-deploy.php`), and a release workflow with `bin/release-check.php`.
-- Optional OPcache template `config/php.ini-example` for hosts that read a `php.ini` per folder; `public/.htaccess`
-  denies `php.ini`.
+- Optional OPcache template `config/php.ini-example` for hosts that read a `php.ini` per folder. It also turns
+  `display_errors` and `display_startup_errors` off, `log_errors` on and `expose_php` off, and sets
+  `opcache.validate_permission` and `opcache.validate_root` for caches shared between hosting accounts.
+- `GET /v1/test` reports whether OPcache is on and checks for changed files (check "OPcache", never fails), so no
+  `phpinfo()` page is needed.
+- `public/.htaccess` denies hidden files (such as `.user.ini`) and `php.ini` itself, also when `public/` is the web
+  root, independent of the rewrite rules.
+- `bin/check-deploy.php` refuses anything in `public/` besides `index.php`, `.htaccess` and `php.ini`.
 
 ### Fixed
 

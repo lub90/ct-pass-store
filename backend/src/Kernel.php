@@ -60,6 +60,7 @@ use CtPassStore\Infrastructure\SelfCheck\CredentialsFileCheck;
 use CtPassStore\Infrastructure\SelfCheck\LogFolderCheck;
 use CtPassStore\Infrastructure\SelfCheck\OAuthClientCheck;
 use CtPassStore\Infrastructure\SelfCheck\OAuthConfigurationCheck;
+use CtPassStore\Infrastructure\SelfCheck\OpcacheCheck;
 use CtPassStore\Infrastructure\SelfCheck\PasswordStoreReadCheck;
 use CtPassStore\Infrastructure\SelfCheck\PublicKeyCheck;
 use CtPassStore\Infrastructure\SelfCheck\ServiceUserRightsCheck;
@@ -134,6 +135,7 @@ final class Kernel
             new ServiceUserRightsCheck($churchTools, $extensionData),
             new OAuthClientCheck($churchTools, $config),
             new CleanupTokenCheck($config),
+            new OpcacheCheck(),
         ], $logger, [
             new WriteRoundTripCheck($passwords, new RsaPasswordCipher($settings)),
         ]), $version);

@@ -15,9 +15,12 @@ home or mobile internet connection, the same read took 1–2.5 s in tests.
 **Turn on OPcache if your host offers it.** Without it, PHP compiles the backend's files on every request, which adds
 roughly 30–40 ms. Some hosts have a switch for it in the PHP settings of the hosting control panel. Others read a
 `php.ini` from the folder of the running script (common with PHP as CGI/FastCGI): there, copy
-`config/php.ini-example` to `public/php.ini` and follow the steps in the file. It explains how to check that OPcache
-runs and what to do if the host rejects the file. `public/.htaccess` keeps that `php.ini` from being served. Hosts
-with PHP-FPM or `mod_php` ignore a folder `php.ini`.
+`config/php.ini-example` to `public/php.ini` and follow the steps in the file. It explains what to do if the host
+rejects the file. Because a folder `php.ini` can replace the host's whole configuration, the template also keeps
+error messages out of responses (`display_errors` and `display_startup_errors` off, `log_errors` on) and hides the PHP
+version (`expose_php` off). The check "OPcache" in `GET /v1/test` (section 6) shows whether OPcache runs; you don't
+need a `phpinfo()` page for that. `public/.htaccess` keeps that `php.ini` from being served. Hosts with PHP-FPM or
+`mod_php` ignore a folder `php.ini`.
 
 ## 1. Create the service user
 
@@ -91,8 +94,9 @@ Without the argument the script asks for the folder. It installs the dependencie
 copy** (your own `backend/vendor` stays untouched), assembles the upload-ready folder, writes `version.txt`, sets the
 permissions (files `640`, folders `750`, `config/`, `cache/` and `logs/` `700`) and runs the deploy check. The check
 (`php bin/check-deploy.php <folder>`) refuses a folder with a real `credentials.php`, dev files, a ChurchTools
-instance URL or something that looks like a login token, or with parts of the layout missing. It also works on any
-folder you built another way.
+instance URL or something that looks like a login token, with anything in `public/` besides `index.php`,
+`.htaccess` and an optional `php.ini`, or with parts of the layout missing. It also works on any folder you built
+another way. Don't add other files to `public/` after the check: everything there can be served.
 
 ## 4. Configure `config/credentials.php`
 
@@ -129,8 +133,11 @@ value).
 ## 5. Upload and set permissions
 
 Upload the folder's contents to your hosting and make **`public/`** the web root. Everything outside `public/` must
-not be readable over HTTP; the `.htaccess` file takes care of that on Apache. Nginx needs its own rules (not yet
-tested).
+not be readable over HTTP; the `.htaccess` file takes care of that on Apache. `public/.htaccess` denies hidden files
+(such as `.user.ini`) and `php.ini` on its own, independent of the rewrite rules, so this holds whether the web root
+is `public/` or the folder above it. These deny blocks need `AllowOverride AuthConfig Limit` (or `All`) for
+`public/`; if every request answers `500` right after the upload, the host doesn't allow them, which its error log
+shows. Nginx needs its own rules (not yet tested).
 
 **Uploads do not keep file modes**, so set them again on the server. Which modes are right depends on who runs PHP:
 
@@ -187,6 +194,11 @@ Log in to the extension as a member of the admin group (admins are the active me
 If something fails the status is `207` and each failed check names what to fix. `GET /v1/test?write=1` additionally
 creates, reads and deletes a test value in `passwordStore` (with the reserved person ID `0`) to prove that the
 service user may write.
+
+The check "OPcache" only reports whether OPcache is on and whether it checks for changed files
+(`validate_timestamps`); it never fails, since OPcache is optional. With `validate_timestamps` off, uploaded updates
+take effect only after an OPcache reset or a PHP restart. "Off or its status is not readable" also appears when the
+host restricts the OPcache functions (`opcache.restrict_api`); OPcache may still run then.
 
 ## 7. Clean up entries of gone persons (optional)
 

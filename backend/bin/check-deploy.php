@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 // Checks a deploy folder before upload (spec 6.6, catalog DP-01): no real credentials.php, no dev files, no instance
-// URL or login token, and the expected layout. Prints one line per problem; exits 0 when the folder is clean, else 1.
+// URL or login token, nothing in public/ besides index.php, .htaccess and php.ini, and the expected layout. Prints
+// one line per problem; exits 0 when the folder is clean, else 1.
 // Independent of setup.sh and of the autoloader, so it also runs on a release zip that was unpacked (spec 6.5).
 // Usage: php bin/check-deploy.php <folder>
 
@@ -19,6 +20,9 @@ const PLACEHOLDER_HOSTS = ['your.church.tools', 'example.church.tools'];
 
 /** A run of this many letters and digits looks like a login token (ChurchTools tokens are 64+ characters). */
 const TOKEN_LENGTH = 100;
+
+/** public/ is the web root: everything in it can be served or run, so only these files may be there (php.ini optional). */
+const PUBLIC_FILES = ['index.php', '.htaccess', 'php.ini'];
 
 /**
  * @return list<string> one message per problem, with paths relative to the folder
@@ -36,11 +40,18 @@ function checkDeployFolder(string $folder): array
         $problems[] = 'Missing required folder: src';
     }
 
+    foreach (is_dir("$folder/public") ? scandir("$folder/public") ?: [] : [] as $entry) {
+        $path = "$folder/public/$entry";
+        if ($entry !== '.' && $entry !== '..' && (!in_array($entry, PUBLIC_FILES, true) || is_link($path) || !is_file($path))) {
+            $problems[] = 'Unexpected in public/ (only index.php, .htaccess and php.ini): ' . quotedName($entry);
+        }
+    }
+
     if (file_exists("$folder/config/credentials.php")) {
         $problems[] = 'Forbidden: config/credentials.php (only credentials-example.php may be deployed)';
     }
     foreach (glob("$folder/phpunit.xml*") ?: [] as $file) {
-        $problems[] = 'Forbidden dev file: ' . basename($file);
+        $problems[] = 'Forbidden dev file: ' . quotedName(basename($file));
     }
     foreach (['tests', '.git'] as $forbiddenFolder) {
         if (file_exists("$folder/$forbiddenFolder")) {
@@ -81,15 +92,24 @@ function scanFiles(string $folder, iterable $files): array
         $content = (string) file_get_contents($file->getPathname());
         $relative = substr($file->getPathname(), strlen($folder) + 1);
         if (str_contains(str_replace(PLACEHOLDER_HOSTS, '', $content), 'church.tools')) {
-            $problems[] = "Instance URL (church.tools) in $relative";
+            $problems[] = 'Instance URL (church.tools) in ' . quotedName($relative);
         }
         // The token itself is never printed.
         if (preg_match('/[A-Za-z0-9]{' . TOKEN_LENGTH . ',}/', $content) === 1) {
-            $problems[] = 'Something that looks like a login token (' . TOKEN_LENGTH . "+ letters and digits in a row) in $relative";
+            $problems[] = 'Something that looks like a login token (' . TOKEN_LENGTH . '+ letters and digits in a row) in ' . quotedName($relative);
         }
     }
 
     return $problems;
+}
+
+/**
+ * A file name or path for the output. It may hold control or format characters, so it's JSON-encoded: that escapes
+ * them and everything non-ASCII, and a name can't fake a line of the check's output.
+ */
+function quotedName(string $name): string
+{
+    return json_encode($name, JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR);
 }
 
 $folder = $argv[1] ?? '';

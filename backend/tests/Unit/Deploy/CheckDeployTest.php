@@ -45,16 +45,16 @@ final class CheckDeployTest extends TestCase
     public static function forbiddenItems(): iterable
     {
         yield 'real credentials.php' => ['config/credentials.php', "<?php\nreturn [];\n", 'config/credentials.php'];
-        yield 'phpunit.xml' => ['phpunit.xml', '<phpunit/>', 'phpunit.xml'];
-        yield 'phpunit.xml.dist' => ['phpunit.xml.dist', '<phpunit/>', 'phpunit.xml.dist'];
+        yield 'phpunit.xml' => ['phpunit.xml', '<phpunit/>', 'Forbidden dev file: "phpunit.xml"'];
+        yield 'phpunit.xml.dist' => ['phpunit.xml.dist', '<phpunit/>', 'Forbidden dev file: "phpunit.xml.dist"'];
         yield 'tests folder' => ['tests/Unit/FooTest.php', "<?php\n", 'tests'];
         yield '.git folder' => ['.git/HEAD', 'ref: refs/heads/main', '.git'];
         yield 'phpunit in vendor' => ['vendor/phpunit/phpunit/composer.json', '{}', 'vendor/phpunit'];
         yield 'phpstan in vendor' => ['vendor/phpstan/phpstan/composer.json', '{}', 'vendor/phpstan'];
         yield 'friendsofphp in vendor' => ['vendor/friendsofphp/php-cs-fixer/composer.json', '{}', 'vendor/friendsofphp'];
-        yield 'instance URL' => ['src/Settings.php', "<?php\n// https://jeremia.church.tools/api\n", 'src/Settings.php'];
-        yield 'instance URL in a hidden file' => ['.htaccess', "# jeremia.church.tools\n", '.htaccess'];
-        yield 'login token' => ['config/notes.txt', str_repeat('aB3', 40), 'config/notes.txt'];
+        yield 'instance URL' => ['src/Settings.php', "<?php\n// https://jeremia.church.tools/api\n", 'in "src/Settings.php"'];
+        yield 'instance URL in a hidden file' => ['.htaccess', "# jeremia.church.tools\n", 'in ".htaccess"'];
+        yield 'login token' => ['config/notes.txt', str_repeat('aB3', 40), 'in "config/notes.txt"'];
     }
 
     #[DataProvider('forbiddenItems')]
@@ -67,6 +67,121 @@ final class CheckDeployTest extends TestCase
         self::assertSame(1, $result['exit'], $result['output']);
         self::assertStringContainsString($named, $result['output']);
         self::assertStringNotContainsString(str_repeat('aB3', 40), $result['output'], 'the output must not echo a token');
+    }
+
+    /**
+     * Security M5: public/ is the web root, so anything there besides index.php, .htaccess and an optional php.ini
+     * could be served or run.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function unexpectedPublicFiles(): iterable
+    {
+        yield 'a PHP file' => ['public/info.php'];
+        yield 'a hidden file' => ['public/.user.ini'];
+        yield 'the template' => ['public/php.ini-example'];
+        yield 'a backup' => ['public/index.php~'];
+        yield 'a file in a subfolder' => ['public/assets/app.js'];
+        // The names are compared exactly: a host may serve Index.php as its own script.
+        yield 'index.php in another case' => ['public/Index.php'];
+        yield 'php.ini in another case' => ['public/PHP.INI'];
+    }
+
+    #[DataProvider('unexpectedPublicFiles')]
+    public function testAnUnexpectedFileInPublicFails(string $path): void
+    {
+        if (strtolower($path) !== $path && $this->folderIgnoresCase()) {
+            self::markTestSkipped("The temp filesystem ignores letter case, so $path would overwrite the lower-case file.");
+        }
+        $this->write('public/.htaccess', "RewriteEngine On\n");
+        $this->write($path, "<?php\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        $top = explode('/', $path)[1];
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "' . $top . '"', $result['output']);
+    }
+
+    public function testPublicMayHoldIndexHtaccessAndPhpIni(): void
+    {
+        $this->write('public/.htaccess', "RewriteEngine On\n");
+        $this->write('public/php.ini', "opcache.enable=1\n");
+
+        $result = $this->check();
+
+        self::assertSame(0, $result['exit'], $result['output']);
+    }
+
+    public function testAPhpIniFolderInPublicFails(): void
+    {
+        $this->write('public/php.ini/x', "\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "php.ini"', $result['output']);
+    }
+
+    public function testALinkInPublicFailsEvenWithAnAllowedName(): void
+    {
+        symlink($this->folder . '/config/credentials-example.php', $this->folder . '/public/php.ini');
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "php.ini"', $result['output']);
+    }
+
+    public function testAnUnexpectedNameIsPrintedEscaped(): void
+    {
+        $this->write("public/evil\nDeploy check passed: x\u{202E}.php", "<?php\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): "evil\\nDeploy check passed: x\\u202e.php"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output'], 'A name must not start a line of its own.');
+        self::assertStringNotContainsString("\u{202E}", $result['output']);
+    }
+
+    public function testAScannedPathIsPrintedEscaped(): void
+    {
+        $this->write("config/evil\nDeploy check passed: x\u{202E}.txt", "other.church.tools\n" . str_repeat('aB3', 40));
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Instance URL (church.tools) in "config/evil\\nDeploy check passed: x\\u202e.txt"', $result['output']);
+        self::assertStringContainsString('in a row) in "config/evil\\nDeploy check passed: x\\u202e.txt"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output'], 'A path must not start a line of its own.');
+        self::assertStringNotContainsString("\u{202E}", $result['output']);
+    }
+
+    public function testADevFileNameIsPrintedEscaped(): void
+    {
+        $this->write("phpunit.xml\nDeploy check passed: x\u{202E}", '<phpunit/>');
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Forbidden dev file: "phpunit.xml\\nDeploy check passed: x\\u202e"', $result['output']);
+        self::assertStringNotContainsString("\nDeploy check passed", $result['output']);
+    }
+
+    public function testTheShippedPublicFolderPasses(): void
+    {
+        $this->remove($this->folder . '/public');
+        mkdir($this->folder . '/public', 0o700);
+        foreach (scandir(dirname(__DIR__, 3) . '/public') ?: [] as $entry) {
+            if ($entry !== '.' && $entry !== '..') {
+                copy(dirname(__DIR__, 3) . '/public/' . $entry, $this->folder . '/public/' . $entry);
+            }
+        }
+
+        $result = $this->check();
+
+        self::assertSame(0, $result['exit'], $result['output']);
     }
 
     /**
@@ -111,6 +226,16 @@ final class CheckDeployTest extends TestCase
     private function check(): array
     {
         return PhpProcess::run([dirname(__DIR__, 3) . '/bin/check-deploy.php', $this->folder], [], dirname(__DIR__, 3));
+    }
+
+    private function folderIgnoresCase(): bool
+    {
+        $probe = $this->folder . '/case-probe';
+        touch($probe);
+        $ignores = file_exists($this->folder . '/CASE-PROBE');
+        unlink($probe);
+
+        return $ignores;
     }
 
     private function write(string $relative, string $content): void

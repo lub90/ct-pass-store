@@ -65,7 +65,7 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame('0.1.0+test', $body['version']);
         self::assertIsString($body['summary']);
         self::assertSame(
-            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'access', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Web cron token'],
+            ['Credentials file', 'Log folder', 'Cache folder', 'OAuth and token configuration', 'Settings', 'access', 'Public key', 'Password store readable', 'Service user rights', 'OAuth client', 'Web cron token', 'OPcache'],
             array_keys($this->checks($response)),
         );
         foreach ($this->checks($response) as $name => $test) {
@@ -391,6 +391,33 @@ final class SelfCheckApiTest extends ApiTestCase
         self::assertSame(200, $response->getStatusCode(), (string) $response->getBody());
         self::assertSame('The web-cron endpoint is on.', $this->checks($response)['Web cron token']['message']);
         self::assertStringNotContainsString(str_repeat('c', 64), (string) $response->getBody());
+    }
+
+    /**
+     * Security M3: the OPcache check is registered for admins and has the shape of every check. Which messages it can
+     * give (and that they hold no host details) is pinned in OpcacheCheckTest.
+     */
+    public function testTheOpcacheCheckIsRegisteredAndNeverFails(): void
+    {
+        $response = $this->request('GET', '/v1/test', self::ADMIN);
+
+        $check = $this->checks($response)['OPcache'];
+        self::assertSame('ok', $check['status'], 'OPcache is optional, so the check never fails.');
+        self::assertContains($check['message'], \CtPassStore\Tests\Unit\Infrastructure\SelfCheck\OpcacheCheckTest::MESSAGES);
+        self::assertSame(['name', 'status', 'message'], array_keys($check));
+    }
+
+    /** Security M3: the OPcache status is for admins only. */
+    public function testNonAdminsGetNoOpcacheStatus(): void
+    {
+        $notAdmin = ['Authorization' => 'Bearer ' . $this->tokenOf(self::ADMIN, admin: false)];
+        foreach (['user' => $this->request('GET', '/v1/test', self::USER), 'admin: false' => $this->request('GET', '/v1/test', headers: $notAdmin), 'machine client' => $this->request('GET', '/v1/test', self::READER_CLIENT)] as $caller => $response) {
+            $body = (string) $response->getBody();
+
+            self::assertSame(403, $response->getStatusCode(), $caller);
+            self::assertStringNotContainsStringIgnoringCase('opcache', $body, $caller);
+            self::assertStringNotContainsString('validate_timestamps', $body, $caller);
+        }
     }
 
     /** TS-02 */

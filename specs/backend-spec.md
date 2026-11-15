@@ -577,6 +577,10 @@ Deletes the entry of person `{id}`.
     ChurchTools, and a deleted or archived person can't log in, so there's nothing left to report.
   - `CLEANUP_TOKEN` (`CleanupTokenCheck`): not set → ok, "The web-cron endpoint is off."; set with fewer than 43
     characters → fail, and the endpoint stays off (4.12); otherwise ok. The token is never printed.
+  - OPcache (`OpcacheCheck`): whether OPcache is on and, if so, whether `opcache.validate_timestamps` is on (from
+    `opcache_get_status(false)` and `ini_get`). A status that can't be read (no extension, `opcache.restrict_api`, no
+    `opcache_enabled` key) reads as "off or not readable". Always ok, since OPcache is optional (setup.md). It replaces a
+    `phpinfo()` page and reports these two values only: no paths, memory figures, versions or other host details.
   - only with `?write=1`: the service user can create, read and delete a test value in `passwordStore`
     (Q11). The test value uses the **reserved `personId` `0`** (5.3.11), which can never belong to a real person (4.1).
     Before writing, the self-test removes test values left over from an earlier run (e.g. after a timeout); after
@@ -1322,7 +1326,8 @@ The security stores (`jti` replay cache, rate-limit counters;
   - unit and API tests
 - **An architecture test:** `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
 - **A post-build check of the deploy folder** (`bin/check-deploy.php`): no real `credentials.php`, no instance URL or token, no dev files
-  (tests, `phpunit.xml`, fixtures), and the expected layout.
+  (tests, `phpunit.xml`, fixtures), nothing in `public/` (the web root) besides `index.php`, `.htaccess` and an
+  optional `php.ini` (regular files, no links or folders), and the expected layout.
 - **A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
 - The contract suite isn't part of the default test run or the CI. Run without its configuration (`phpunit.xml`,

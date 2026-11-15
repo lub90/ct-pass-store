@@ -506,6 +506,10 @@ normal case names it ("→ PV-05").
 - [x] **TS-11** (! · A) "Web cron token": absent → `ok` (off); shorter than 43 → `fail`, token not printed; usable →
   `ok` (on) — cleanup design 3.7, 5.1
 - [x] **TS-12** (! · U) "Service user rights" keeps `churchdb` narrow: each writing, creating, deleting, exporting or administering `churchdb` right (`create person`, `write access`, … `edit group memberships`, design 9.1) that isn't exactly `false` or `[]` (`true`, `[3]`, `"false"`, `null`, `0`) is listed as excess; `security level person` with a value above 1 is excess, `[1]` and the default read values of the minimal user are not — spec 4.8, cleanup design 9.1
+- [x] **TS-13** (! · U, A) "OPcache": on, off or not readable (no status, no `opcache_enabled` key) and
+  `validate_timestamps` on (`1`, `On`), off (`0`, `Off`, empty) or unknown, always `ok`; the message holds
+  only these two values (no path, memory or statistics from the status); admins only, a user, a token with
+  `admin: false` and a machine client get `403` without it — spec 4.8, merged-review fix M2
 
 ## 9. Error format (spec 4.9)
 
@@ -761,7 +765,8 @@ tester has; it's documented in `backend/docs/testing.md`.
 ## 15. Deployment and build (spec 6.5, 6.6)
 
 - [x] **DP-01** (! · U) The deploy check fails if the deploy folder contains a real `credentials.php`, `phpunit.xml`,
-  fixtures, tests or an instance URL — 6.6
+  fixtures, tests or an instance URL, or anything in `public/` besides `index.php`, `.htaccess` and `php.ini` (also
+  a link or folder with an allowed name); the shipped `public/` passes — 6.6
 - [x] **DP-02** (N · U) The version string is `x.y.z`, `x.y.z+<sha>` or `x.y.z+<sha>-dirty` as appropriate — 6.5
 - [x] **DP-03** (N · U) The release check fails if tag, version and dated CHANGELOG section disagree — 6.6
 
