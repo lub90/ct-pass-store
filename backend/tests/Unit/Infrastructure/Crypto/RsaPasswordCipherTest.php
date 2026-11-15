@@ -137,20 +137,24 @@ final class RsaPasswordCipherTest extends TestCase
         // Hosts with a development php.ini record arguments in traces; check that case too.
         $previous = ini_set('zend.exception_ignore_args', '0');
 
+        // Caught here and checked outside: a fail() inside the try would be caught by catch (\Throwable) itself.
+        $caught = null;
         try {
             $this->cipher()->encrypt($plaintext);
-            self::fail('Expected the encryption to fail.');
         } catch (\Throwable $e) {
-            for ($current = $e; $current !== null; $current = $current->getPrevious()) {
-                self::assertStringNotContainsString('SECRET-', $current->getMessage());
-                foreach ($current->getTrace() as $frame) {
-                    foreach ($frame['args'] ?? [] as $arg) {
-                        self::assertNotSame($plaintext, $arg, 'The plaintext is in the trace arguments.');
-                    }
-                }
-            }
+            $caught = $e;
         } finally {
             ini_set('zend.exception_ignore_args', (string) $previous);
+        }
+
+        self::assertInstanceOf(\RuntimeException::class, $caught, 'Expected the encryption to fail.');
+        for ($current = $caught; $current !== null; $current = $current->getPrevious()) {
+            self::assertStringNotContainsString('SECRET-', $current->getMessage());
+            foreach ($current->getTrace() as $frame) {
+                foreach ($frame['args'] ?? [] as $arg) {
+                    self::assertNotSame($plaintext, $arg, 'The plaintext is in the trace arguments.');
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CtPassStore\Tests\Unit\Load;
 
 use CtPassStore\Tests\Load\Helpers\ResultsFile;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -51,19 +52,38 @@ final class ResultsFileTest extends TestCase
         return array_values(array_diff(scandir($this->dir) ?: [], ['.', '..']));
     }
 
-    public function testDefaultIsANewFileWithMode600InTheTempFolder(): void
+    /**
+     * @return iterable<string, array{string|false}>
+     */
+    public static function noConfiguredPath(): iterable
     {
-        foreach ([false, ''] as $configured) {
-            $file = ResultsFile::create($configured, $this->dir);
+        yield 'unset' => [false];
+        yield 'empty' => [''];
+    }
 
-            self::assertSame($this->dir, dirname($file->path));
-            self::assertMatchesRegularExpression('/^ctps-load-results-[0-9a-f]{16}\.json$/', basename($file->path));
-            self::assertFileExists($file->path);
-            self::assertFalse(is_link($file->path));
-            self::assertSame(0o600, self::mode($file->path));
-            $file->close();
-        }
-        self::assertCount(2, $this->files(), 'Every run gets a file of its own.');
+    #[DataProvider('noConfiguredPath')]
+    public function testDefaultIsANewFileWithMode600InTheTempFolder(string|false $configured): void
+    {
+        $file = ResultsFile::create($configured, $this->dir);
+        $file->close();
+
+        self::assertSame($this->dir, dirname($file->path));
+        self::assertMatchesRegularExpression('/^ctps-load-results-[0-9a-f]{16}\.json$/', basename($file->path));
+        self::assertFileExists($file->path);
+        self::assertFalse(is_link($file->path));
+        self::assertSame(0o600, self::mode($file->path));
+        self::assertSame([basename($file->path)], $this->files());
+    }
+
+    public function testEveryRunGetsAFileOfItsOwn(): void
+    {
+        $first = ResultsFile::create(false, $this->dir);
+        $second = ResultsFile::create(false, $this->dir);
+        $first->close();
+        $second->close();
+
+        self::assertNotSame($first->path, $second->path);
+        self::assertCount(2, $this->files());
     }
 
     public function testWritesReplaceTheWholeContent(): void
@@ -96,35 +116,81 @@ final class ResultsFileTest extends TestCase
         $path = $this->dir . '/existing.json';
         file_put_contents($path, 'keep me');
 
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("The results file {$path} already exists; remove it or choose another LOAD_RESULTS_FILE.");
         try {
             ResultsFile::create($path, $this->dir);
-            self::fail('Expected an exception.');
-        } catch (\RuntimeException $e) {
-            self::assertStringContainsString('already exists', $e->getMessage());
+        } finally {
+            self::assertSame('keep me', file_get_contents($path));
+            self::assertSame(['existing.json'], $this->files());
         }
-
-        self::assertSame('keep me', file_get_contents($path));
     }
 
-    public function testAPlantedSymlinkIsNotFollowed(): void
+    /**
+     * @return iterable<string, array{bool}>
+     */
+    public static function plantedLinks(): iterable
+    {
+        yield 'link to an existing file' => [true];
+        yield 'dangling link' => [false];
+    }
+
+    #[DataProvider('plantedLinks')]
+    public function testAPlantedSymlinkIsNotFollowed(bool $targetExists): void
     {
         $target = $this->dir . '/target.txt';
-        file_put_contents($target, 'victim');
+        if ($targetExists) {
+            file_put_contents($target, 'victim');
+        }
         $link = $this->dir . '/link.json';
         symlink($target, $link);
-        $dangling = $this->dir . '/dangling.json';
-        symlink($this->dir . '/created-through-the-link.txt', $dangling);
 
-        foreach ([$link, $dangling] as $path) {
-            try {
-                ResultsFile::create($path, $this->dir);
-                self::fail('Expected an exception for ' . basename($path));
-            } catch (\RuntimeException) {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("The results file {$link} is a link; remove it or choose another LOAD_RESULTS_FILE.");
+        try {
+            ResultsFile::create($link, $this->dir);
+        } finally {
+            if ($targetExists) {
+                self::assertSame('victim', file_get_contents($target));
+            } else {
+                self::assertFileDoesNotExist($target, 'Nothing was created through the link.');
             }
+            self::assertSame($target, readlink($link));
         }
+    }
 
-        self::assertSame('victim', file_get_contents($target));
-        self::assertFileDoesNotExist($this->dir . '/created-through-the-link.txt');
+    public function testAPathInAMissingFolderCreatesNothing(): void
+    {
+        $path = $this->dir . '/missing/results.json';
+
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessage("Can't create the results file {$path}.");
+        try {
+            ResultsFile::create($path, $this->dir);
+        } finally {
+            self::assertDirectoryDoesNotExist($this->dir . '/missing');
+            self::assertSame([], $this->files());
+        }
+    }
+
+    public function testTheOpenHandleMustBeTheFileAtThePath(): void
+    {
+        $path = $this->dir . '/a.json';
+        $other = $this->dir . '/b.json';
+        $link = $this->dir . '/link-to-a.json';
+        file_put_contents($path, '');
+        file_put_contents($other, '');
+        symlink($path, $link);
+        $handle = fopen($path, 'r');
+        self::assertIsResource($handle);
+        try {
+            self::assertTrue(ResultsFile::isFileAt($handle, $path));
+            self::assertFalse(ResultsFile::isFileAt($handle, $other), 'Another file at the path.');
+            self::assertFalse(ResultsFile::isFileAt($handle, $link), 'A link to the same file is still a link.');
+            self::assertFalse(ResultsFile::isFileAt($handle, $this->dir . '/missing.json'), 'Nothing at the path.');
+        } finally {
+            fclose($handle);
+        }
     }
 
     public function testTheUmaskIsRestored(): void

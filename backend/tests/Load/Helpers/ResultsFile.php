@@ -44,15 +44,27 @@ final class ResultsFile
                 : "Can't create the results file $path.");
         }
 
-        $opened = fstat($handle);
-        clearstatcache();
-        $atPath = @lstat($path);
-        if ($opened === false || $atPath === false || is_link($path) || $opened['ino'] !== $atPath['ino'] || $opened['dev'] !== $atPath['dev']) {
+        if (!self::isFileAt($handle, $path)) {
             fclose($handle);
             throw new \RuntimeException("The results file $path changed while it was created (a link?); nothing was written.");
         }
 
         return new self($path, $handle);
+    }
+
+    /**
+     * Whether the open handle is the file at the path itself: same inode and device, and the path is no link.
+     *
+     * @param resource $handle
+     */
+    public static function isFileAt($handle, string $path): bool
+    {
+        $opened = fstat($handle);
+        clearstatcache();
+        $atPath = @lstat($path);
+
+        return $opened !== false && $atPath !== false && !is_link($path)
+            && $opened['ino'] === $atPath['ino'] && $opened['dev'] === $atPath['dev'];
     }
 
     /**
