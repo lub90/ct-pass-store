@@ -35,6 +35,15 @@ expect() {
   got=$?
   if [[ $got == "$want" ]]; then pass=$((pass+1)); else fail=$((fail+1)); echo "FAIL: $name (exit $got, want $want)"; fi
 }
+# expect_err <want-exit> <name> <json> <stderr substring> [env assignments...]: pins the branch that blocked.
+expect_err() {
+  local want=$1 name=$2 json=$3 msg=$4; shift 4
+  local got err
+  err=$(printf '%s' "$json" | env CLAUDE_PROJECT_DIR="$main" "$@" bash "$hook" 2>&1 >/dev/null)
+  got=$?
+  if [[ $got == "$want" && $err == *"$msg"* ]]; then pass=$((pass+1)); else
+    fail=$((fail+1)); echo "FAIL: $name (exit $got, want $want; stderr: $err)"; fi
+}
 fp() { printf '{"tool_input":{"file_path":"%s"}}' "$1"; }
 
 expect 0 "main checkout threat model"            "$(fp "$main/docs/threat-model.md")"
@@ -45,7 +54,7 @@ expect 2 "other file in worktree"                "$(fp "$wt/README.md")"
 expect 2 "threat model of an unrelated repo"     "$(fp "$other/docs/threat-model.md")"
 expect 2 "dot-dot escape to another file"        "$(fp "$wt/docs/../README.md")"
 expect 2 "symlink to another file"               "$(fp "$wt/docs/link.md")"
-expect 2 "threat model outside any repo"         "$(fp "$tmp/docs/threat-model.md")"
+expect_err 2 "threat model outside any repo"     "$(fp "$tmp/docs/threat-model.md")" "(not in a git worktree)"
 expect 2 "nested docs folder"                    "$(fp "$wt/sub/docs/threat-model.md")"
 expect 2 "no file_path"                          '{"tool_input":{}}'
 expect 2 "invalid JSON"                          'not json'
@@ -53,7 +62,8 @@ expect 2 "threat model is a symlink to a file"   "$(fp "$tmp/wt-file/docs/threat
 expect 2 "threat model is a symlink to a repo"   "$(fp "$tmp/wt-other/docs/threat-model.md")"
 expect 2 "docs/ is a symlink to another repo"    "$(fp "$tmp/wt-dir-other/docs/threat-model.md")"
 expect 2 "docs/ is a symlink to another folder"  "$(fp "$tmp/wt-dir-same/docs/threat-model.md")"
-expect 2 "project folder is not a git repo"      "$(fp "$main/docs/threat-model.md")" CLAUDE_PROJECT_DIR="$plain"
+expect_err 2 "project folder is not a git repo"  "$(fp "$main/docs/threat-model.md")" \
+  "the project folder is not a git repository." CLAUDE_PROJECT_DIR="$plain"
 
 # jq missing: PATH with every tool the hook needs except jq.
 bin="$tmp/bin"; mkdir -p "$bin"
