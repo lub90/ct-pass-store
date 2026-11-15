@@ -212,7 +212,8 @@ out.json`.
 hand) and stops it afterwards. Only the invented demo data is used; the tests never start `--mode real` and never
 touch the test instance or `.env`. Each run keeps its traces in its own folder `test-results/run-<time>-<pid>/`
 (`CPS_E2E_RUN` names it by hand, `--output` replaces it), so parallel runs in one worktree don't delete each other's
-files; old run folders can be deleted at any time.
+files; old run folders can be deleted at any time. The folder choice has no automated test of its own: it is two
+lines of `playwright.config.ts`, and a mistake shows on the next browser run (traces land elsewhere or runs collide).
 
 Once per machine:
 

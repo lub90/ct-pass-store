@@ -12,7 +12,6 @@
 import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
-import { isolate } from '../admin/machine-clients';
 import { parsePersonId, searchUsers } from '../admin/manage';
 import { isSettingsEditor } from '../app/app-state';
 import { useServices } from '../app/services';
@@ -29,6 +28,7 @@ import PersonPicker, { type PersonOption } from '../ui/PersonPicker.vue';
 import Pill from '../ui/Pill.vue';
 import StatusLine from '../ui/StatusLine.vue';
 import { useConfirm, type ConfirmOptions } from '../ui/useConfirm';
+import { isolate } from '../ui/text';
 
 const { t } = useI18n();
 const services = useServices();

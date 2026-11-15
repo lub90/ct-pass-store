@@ -41,6 +41,9 @@ const TWIN_B = 7;
 /** A name with a right-to-left override (U+202E). */
 const BIDI = 8;
 const BIDI_LAST = '\u202Enamffoh';
+/** A name that tries to close the isolate around it (U+2069) and override the rest of the sentence (U+202E). */
+const ESCAPE = 9;
+const ESCAPE_LAST = 'Beck\u2069\u202E';
 const USERS_GROUP = 40;
 const ADMINS_GROUP = 41;
 const SETTINGS_ID = 11;
@@ -170,9 +173,10 @@ function fakes(o: Options) {
             { id: TWIN_A, firstName: 'Anna', lastName: 'Müller' },
             { id: TWIN_B, firstName: 'Anna', lastName: 'Müller' },
             { id: BIDI, firstName: 'Rafa', lastName: BIDI_LAST },
+            { id: ESCAPE, firstName: 'Ida', lastName: ESCAPE_LAST },
         ],
         groups: [
-            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: [...(o.meInUsers === false ? [] : [ME]), MUELLER, MULDE, ODD, BIDI, ...(o.twins ? [TWIN_A, TWIN_B] : [])] },
+            { id: USERS_GROUP, name: 'CtPassStore Nutzer', memberIds: [...(o.meInUsers === false ? [] : [ME]), MUELLER, MULDE, ODD, BIDI, ESCAPE, ...(o.twins ? [TWIN_A, TWIN_B] : [])] },
             { id: ADMINS_GROUP, name: 'CtPassStore Admins', memberIds: [ME] },
             { id: 50, name: 'Other', memberIds: [OUTSIDER] },
         ],
@@ -202,7 +206,7 @@ function fakes(o: Options) {
     const fakeBackend = createFakeBackend({
         personId: ME,
         admin: o.admin ?? true,
-        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER, TWIN_A, TWIN_B, BIDI],
+        existingPersonIds: [ME, MUELLER, MULDE, ODD, OUTSIDER, TWIN_A, TWIN_B, BIDI, ESCAPE],
         ctOrigin: ORIGIN,
         primaryPassword: CT_PASSWORD,
         requirePasswordForPasswordChange: settings.requirePasswordForPasswordChange,
@@ -1124,8 +1128,10 @@ describe('ChurchTools names are plain text', () => {
         expect(dialog()!.querySelector('b')).toBeNull();
     });
 
-    it('names are isolated against bidi controls: <bdi> in the list, the card and the banner, U+2068/U+2069 in both dialogs', async () => {
+    it('names are isolated against bidi controls: <bdi> in the list, the card and the banner, U+2068/U+2069 (controls neutralised) in both dialogs', async () => {
         const name = `Rafa ${BIDI_LAST}`;
+        /** In the dialogs' plain text the override itself is neutralised as well. */
+        const inDialog = 'Rafa \uFFFDnamffoh';
         const { wrapper } = await start({ entries: { [BIDI]: VALID } });
         await search(wrapper, 'rafa');
         const option = wrapper.findAll('[role="option"]').find((o) => o.text().includes('Rafa'))!;
@@ -1134,15 +1140,28 @@ describe('ChurchTools names are plain text', () => {
         await settle();
         expect(card(wrapper).find('bdi.cps-manage__name').text()).toBe(name);
         await click(wrapper, TEXT.delete);
-        expect(dialogText()).toBe(TEXT.deleteText(name));
+        expect(dialogText()).toBe(TEXT.deleteText(inDialog));
         await answer(TEXT.cancel);
         await click(wrapper, TEXT.newPassword);
         expect(wrapper.find('.cps-flow-for strong bdi').text()).toBe(name);
         expect(wrapper.find('.cps-flow-for').text()).toBe(TEXT.forName(name));
         await click(wrapper, TEXT.generate);
-        expect(dialogText()).toBe(TEXT.replaceText(name));
+        expect(dialogText()).toBe(TEXT.replaceText(inDialog));
     });
 
+
+    it('a name cannot close its isolate in the dialogs: its own bidi controls become U+FFFD there', async () => {
+        const name = `Ida ${ESCAPE_LAST}`;
+        const shown = 'Ida Beck\uFFFD\uFFFD';
+        const { wrapper } = await start({ entries: { [ESCAPE]: VALID } });
+        await pick(wrapper, 'ida', name);
+        await click(wrapper, TEXT.delete);
+        expect(dialogText()).toBe(TEXT.deleteText(shown));
+        await answer(TEXT.cancel);
+        await click(wrapper, TEXT.newPassword);
+        await click(wrapper, TEXT.generate);
+        expect(dialogText()).toBe(TEXT.replaceText(shown));
+    });
 
     it('the ChurchTools ID is shown under every name: list, card and both dialogs', async () => {
         const { wrapper } = await start({ twins: true, entries: { [TWIN_B]: VALID } });

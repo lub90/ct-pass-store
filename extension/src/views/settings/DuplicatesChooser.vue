@@ -12,13 +12,13 @@
 import { computed, onBeforeUnmount, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { describeDuplicates, type ShownField, type ShownValue } from '../../admin/duplicates';
-import { isolate } from '../../admin/machine-clients';
 import { settingsErrorText } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { ConflictError } from '../../model/errors';
 import type { StoredValue } from '../../store/repository';
 import Banner from '../../ui/Banner.vue';
 import { useConfirm } from '../../ui/useConfirm';
+import { isolate } from '../../ui/text';
 
 const props = defineProps<{
     category: 'settings' | 'access';

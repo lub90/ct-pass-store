@@ -245,14 +245,15 @@ describe('self-test cache key', () => {
 });
 
 describe('the page checks its own rights, on top of the frame (spec 4.1)', () => {
-    it.each(['user', 'backend-error', 'no-access'] as const)('mounted alone in %s, without settings rights: the banner, no card, nothing read or asked', async (state) => {
-        const readAccess = vi.fn();
-        const backend = vi.fn();
+    type State = 'admin' | 'user' | 'backend-error' | 'no-access';
+    async function mountAlone(state: State, editor: { settings: boolean; access: boolean }) {
+        const readAccess = vi.fn(async () => ({ state: 'ok', value: ACCESS }));
+        const backend = vi.fn(() => ({ selfTest: async () => ({ version: '0.1.0', summary: '', tests: [] }) }) as unknown as BackendApi);
         const app = {
             state: computed(() => state),
             failure: computed(() => null),
-            settingsEditor: ref({ settings: false, access: false }),
-            setupCapable: ref(true),
+            settingsEditor: ref(editor),
+            setupCapable: ref(false),
             settings: ref({ ...SETTINGS }),
             selfTestCache: ref(null),
         } as unknown as AppStateHandle;
@@ -263,9 +264,38 @@ describe('the page checks its own rights, on top of the frame (spec 4.1)', () =>
             global: { plugins: [router, createAppI18n('de')], provide: { [SERVICES_KEY as symbol]: services, [APP_STATE_KEY as symbol]: app } },
         });
         await settle();
-        expect(wrapper.find('.cps-banner--warning').text()).toBe('Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.');
+        return { wrapper, readAccess, backend };
+    }
+    const BANNER = 'Diese Seite ist nur für Admins und für Personen, die die Einstellungen ändern dürfen.';
+    const titlesOf = (w: VueWrapper) => w.findAll('.cps-linkcard').map((c) => c.find('.cps-linkcard__title').text());
+
+    it.each(['user', 'backend-error', 'no-access'] as const)('mounted alone in %s, without settings rights: the banner, no card, nothing read or asked', async (state) => {
+        const { wrapper, readAccess, backend } = await mountAlone(state, { settings: false, access: false });
+        expect(wrapper.find('.cps-banner--warning').text()).toBe(BANNER);
         expect(wrapper.findAll('.cps-linkcard')).toHaveLength(0);
         expect(readAccess).not.toHaveBeenCalled();
+        expect(backend).not.toHaveBeenCalled();
+        wrapper.unmount();
+    });
+
+    it('an admin without settings rights gets the cards (disabled, naming the right) and no banner', async () => {
+        const { wrapper, readAccess, backend } = await mountAlone('admin', { settings: false, access: false });
+        expect(wrapper.text()).not.toContain(BANNER);
+        expect(titlesOf(wrapper)).toEqual([CARDS.rules[0], CARDS.texts[0], CARDS.access[0], CARDS.backend[0]]);
+        expect(wrapper.text()).toContain(missing('settings'));
+        expect(readAccess).not.toHaveBeenCalled();
+        expect(backend).toHaveBeenCalledWith(BACKEND);
+        wrapper.unmount();
+    });
+
+    it.each([
+        ['settings', { settings: true, access: false }],
+        ['access', { settings: false, access: true }],
+    ] as const)('a user who may edit only %s gets the cards and no banner', async (_name, editor) => {
+        const { wrapper, readAccess, backend } = await mountAlone('user', editor);
+        expect(wrapper.text()).not.toContain(BANNER);
+        expect(titlesOf(wrapper)).toEqual([CARDS.rules[0], CARDS.texts[0], CARDS.access[0], CARDS.backend[0]]);
+        expect(readAccess).toHaveBeenCalledTimes(editor.access ? 1 : 0);
         expect(backend).not.toHaveBeenCalled();
         wrapper.unmount();
     });

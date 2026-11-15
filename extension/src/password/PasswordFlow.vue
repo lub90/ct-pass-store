@@ -15,7 +15,6 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { I18nT, useI18n } from 'vue-i18n';
-import { isolate } from '../admin/machine-clients';
 import { isSettingsEditor } from '../app/app-state';
 import { useAppState } from '../app/useAppState';
 import { useSession } from '../app/useSession';
@@ -27,6 +26,7 @@ import Pill from '../ui/Pill.vue';
 import SecretField from '../ui/SecretField.vue';
 import StatusLine from '../ui/StatusLine.vue';
 import { useConfirm } from '../ui/useConfirm';
+import { isolate } from '../ui/text';
 import { canSubmit, nextAfterOverview, type FlowSettings, type FlowState } from './flow';
 import { MAX_LENGTH, SYMBOLS, checkPassword, type Rule } from './rules';
 import { usePasswordEntry } from './usePasswordEntry';

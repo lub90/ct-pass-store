@@ -185,8 +185,6 @@ export function newlyEnabled(list: readonly unknown[], drop: readonly number[]):
         .filter((i) => !before.has(i));
 }
 
-/** Wraps a text in U+2068 … U+2069 (first-strong isolate): the plain-text form of `<bdi>`, for dialog texts. */
-export const isolate = (text: string): string => `⁨${text}⁩`;
 
 /**
  * The empty client the form starts from: no permission until it is turned on, `createdAt` today (local),

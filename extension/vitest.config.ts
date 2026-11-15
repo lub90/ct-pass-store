@@ -10,7 +10,7 @@ export default defineConfig({
     test: {
         environment: 'jsdom',
         include: ['src/**/*.test.ts', 'scripts/**/*.test.{js,ts}', 'tests/contract/**/*.unit.test.ts'],
-        // A broken `include` must fail, not pass silently (only the contract config may find no tests).
+        // A broken `include` must fail, not pass silently (vitest.contract.config.ts sets the same).
         passWithNoTests: false,
     },
 });

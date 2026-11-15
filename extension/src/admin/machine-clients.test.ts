@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
-import { describeEntry, draftClient, finalizeClient, groupPageUrl, isolate, keyFingerprint, newlyEnabled, parsePublicKey, sha256, slugFromName, todayIso, validateClients } from './machine-clients';
+import { describeEntry, draftClient, finalizeClient, groupPageUrl, keyFingerprint, newlyEnabled, parsePublicKey, sha256, slugFromName, todayIso, validateClients } from './machine-clients';
 
 // The parity fixture shared with the backend (spec backend 3.2): the form checks with the same rules.
 interface Single { name: string; client: unknown; valid: boolean; reasons: string[] }
@@ -239,12 +239,6 @@ describe('newlyEnabled: entries a removal would turn on (F2)', () => {
         expect(newlyEnabled([c('same', 1), c('same', 2)], [0, 1])).toEqual([]);
         expect(newlyEnabled([c('one', 1), c('two', 2), 'text'], [2])).toEqual([]);
         expect(newlyEnabled([c('same', 1), c('same', 2), c('same', 3)], [0])).toEqual([]);
-    });
-});
-
-describe('isolate', () => {
-    it('wraps a text in first-strong isolate and pop isolate (the text form of <bdi>)', () => {
-        expect(isolate('a\u202Eb')).toBe('\u2068a\u202Eb\u2069');
     });
 });
 

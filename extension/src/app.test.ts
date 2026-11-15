@@ -609,13 +609,22 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
     /** The start of the missing-rights banner of every settings page. */
     const MISSING_RIGHT = 'Dir fehlt in ChurchTools das Recht';
     /** A settings editor whose login failed (unreachable backend): row 7, backend-error. */
-    const editorInBackendError = () => startWithStorage(seedLogin('/'), { path: '/auth/callback?code=good-code&state=state-1', perms: EDITOR, login: unreachable });
+    async function editorInBackendError(o: Options = {}) {
+        const started = await startWithStorage(seedLogin('/'), { path: '/auth/callback?code=good-code&state=state-1', perms: EDITOR, login: unreachable, ...o });
+        // Row 7 as a settings editor sees it: the problem with its link to „Backend & Status“, the editor's navigation.
+        expect(started.wrapper.find('main h1').exists()).toBe(false);
+        expect(started.wrapper.find('main a[href="/settings/backend"]').exists()).toBe(true);
+        expect(navLinks(started.wrapper)).toEqual([
+            ['Mein Passwort', '/'],
+            ['Einstellungen', '/settings'],
+        ]);
+        return started;
+    }
     const storedSettings = (fakeCt: { dumpValues(): { dataCategoryId: number; value: string }[] }) =>
         fakeCt.dumpValues().filter((v) => v.dataCategoryId === SETTINGS_ID).map((v) => JSON.parse(v.value) as Record<string, unknown>);
 
     it('in backend-error, a settings editor can repair the address on „Backend & Status“ (3.1.2): form, danger dialog, saved, reload note, no self-test', async () => {
         const { wrapper, router, fakeCt, backendCalls } = await editorInBackendError();
-        expect(wrapper.find('main a[href="/settings/backend"]').exists()).toBe(true);
         await router.push('/settings/backend');
         await settle();
         expect(wrapper.text()).not.toContain(MISSING_RIGHT);
@@ -635,16 +644,22 @@ describe('/auth/callback (spec 7.1, 8.2)', () => {
         expect(backendCalls).not.toContain('selfTest');
     });
 
-    it.each([
-        ['/settings/rules', 'Passwortregeln', 'main form .cps-rules__length'],
-        ['/settings/access', 'Zugriff', 'main .cps-access__section .cps-access__heading'],
-    ])('in backend-error, a settings editor gets the page with its values on %s', async (path, title, marker) => {
-        const { wrapper, router } = await editorInBackendError();
-        await router.push(path);
+    it('in backend-error, a settings editor gets „Passwortregeln“ with the stored length', async () => {
+        const { wrapper, router } = await editorInBackendError({ settings: { ...SETTINGS, passwordLength: 23 } });
+        await router.push('/settings/rules');
         await settle();
-        expect(wrapper.find('h1').text()).toBe(title);
+        expect(wrapper.find('h1').text()).toBe('Passwortregeln');
         expect(wrapper.text()).not.toContain(MISSING_RIGHT);
-        expect(wrapper.find(marker).exists()).toBe(true);
+        expect(wrapper.find<HTMLInputElement>('main form .cps-rules__length').element.value).toBe('23');
+    });
+
+    it('in backend-error, a settings editor gets „Zugriff“ with the stored groups', async () => {
+        const { wrapper, router } = await editorInBackendError({ access: { ...ACCESS, groups: { ...ACCESS.groups, admins: { groupId: 4711, createdBySetup: true } } } });
+        await router.push('/settings/access');
+        await settle();
+        expect(wrapper.find('h1').text()).toBe('Zugriff');
+        expect(wrapper.text()).not.toContain(MISSING_RIGHT);
+        expect(wrapper.find('main [data-role="admins"] .cps-access__group-link').attributes('href')).toContain('4711');
     });
 
     it('in backend-error, users do not get the settings pages', async () => {

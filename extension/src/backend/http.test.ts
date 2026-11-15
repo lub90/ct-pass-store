@@ -248,8 +248,16 @@ describe('responses', () => {
         await expect(api().putEntry(1, {})).rejects.toBeInstanceOf(UnexpectedResponse);
     });
 
-    it.each(['text/plain', 'text/html', 'application/problem+json', null])('a 2xx with a valid JSON body but content type %s is unexpected', async (type) => {
-        fetchMock.mockResolvedValueOnce(type === null ? respond(200, '{"secondaryPwd":"Gen3rated!pw"}') : json(200, { secondaryPwd: 'Gen3rated!pw' }, type));
+    it.each(['text/plain', 'text/html', 'application/problem+json'])('a 2xx with a valid JSON body but content type %s is unexpected', async (type) => {
+        fetchMock.mockResolvedValueOnce(json(200, { secondaryPwd: 'Gen3rated!pw' }, type));
+        await expect(api().putEntry(1, {})).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 200 });
+    });
+
+    it('a 2xx with a valid JSON body and no content type at all is unexpected', async () => {
+        // Bytes, not a string: a string body would get text/plain from the Response itself.
+        const typeless = new Response(new TextEncoder().encode('{"secondaryPwd":"Gen3rated!pw"}'), { status: 200 });
+        expect(typeless.headers.get('Content-Type')).toBeNull();
+        fetchMock.mockResolvedValueOnce(typeless);
         await expect(api().putEntry(1, {})).rejects.toMatchObject({ name: 'UnexpectedResponse', status: 200 });
     });
 

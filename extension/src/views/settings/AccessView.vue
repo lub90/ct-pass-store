@@ -22,7 +22,7 @@
 import { computed, onBeforeUnmount, ref, shallowRef, useId, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
-import { cut, describeEntry, groupPageUrl, isolate, newlyEnabled, type EntryInfo } from '../../admin/machine-clients';
+import { cut, describeEntry, groupPageUrl, newlyEnabled, type EntryInfo } from '../../admin/machine-clients';
 import { settingsErrorText } from '../../admin/useSettingsForm';
 import { useServices } from '../../app/services';
 import { useAppState } from '../../app/useAppState';
@@ -35,6 +35,7 @@ import Banner from '../../ui/Banner.vue';
 import PageHeader from '../../ui/PageHeader.vue';
 import StatusLine from '../../ui/StatusLine.vue';
 import { useConfirm } from '../../ui/useConfirm';
+import { isolate } from '../../ui/text';
 import DuplicatesChooser from './DuplicatesChooser.vue';
 
 type Role = 'users' | 'admins';

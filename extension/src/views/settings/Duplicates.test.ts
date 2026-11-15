@@ -234,6 +234,15 @@ describe('duplicate settings at startup', () => {
         expect(wrapper.text()).toContain(TEXT.reloadNote);
     });
 
+    it('a planted text cannot close its isolate in the dialog: its own bidi controls become U+FFFD there', async () => {
+        const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: { ...PLANTED, oauthClientId: 'evil\u2069\u202Eclient' } }] });
+        await keep(wrapper, 301);
+        const text = dialog()?.textContent ?? '';
+        expect(text).toContain('\u2068evil\uFFFD\uFFFDclient\u2069');
+        expect(text).not.toContain('\u202E');
+        await answer(TEXT.cancel);
+    });
+
     it('a long planted host shows its ending on the card and in the dialog, though the address is cut (round 2)', async () => {
         const host = `pw.gemeinde.de.${'a'.repeat(50)}.${'b'.repeat(50)}.attacker.example`;
         const { wrapper } = await start({ path: '/settings/rules', extra: [{ category: 'settings', value: { ...SETTINGS, backendUrl: `https://${host}/api` } }] });
