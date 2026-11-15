@@ -169,6 +169,36 @@ final class LoginApiTest extends ApiTestCase
         yield 'relative' => ['/ccm/ctpassstore/'];
     }
 
+    /**
+     * URLs whose host is the instance, but which URL parsers read differently (backslash, percent-encoding, whitespace;
+     * PHP's parse_url() even turns control characters into `_`) or which carry credentials. parse_url() alone would
+     * accept each of them as the instance, so the pre-check and the user/pass check are what rejects them.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function ambiguousInstanceRedirectUris(): iterable
+    {
+        yield 'percent in path' => ['https://example.church.tools/ccm/%2e%2e/ctpassstore/'];
+        yield 'percent in query' => ['https://example.church.tools/ccm/ctpassstore/?next=%2F%2Fevil.com'];
+        yield 'backslash in path' => ['https://example.church.tools/ccm\\ctpassstore/'];
+        yield 'space in path' => ['https://example.church.tools/ccm ctpassstore/'];
+        yield 'tab in path' => ["https://example.church.tools/ccm\t/ctpassstore/"];
+        yield 'trailing newline' => ["https://example.church.tools/ccm/ctpassstore/\n"];
+        yield 'user' => ['https://user@example.church.tools/'];
+        yield 'user and password' => ['https://u:p@example.church.tools/'];
+    }
+
+    #[DataProvider('ambiguousInstanceRedirectUris')]
+    public function testAmbiguousRedirectUrisOfTheInstanceAreRejectedWithoutCallingChurchTools(string $redirectUri): void
+    {
+        $this->grant();
+
+        $response = $this->login(['code' => self::CODE, 'codeVerifier' => self::VERIFIER, 'redirectUri' => $redirectUri]);
+
+        $this->assertProblem(ProblemType::InvalidBody, $response);
+        self::assertSame([], $this->churchTools->calls());
+    }
+
     public function testTheRedirectUriMayUseAnotherPathOrCase(): void
     {
         // ChurchTools checks the exact registered URI; the backend only pins the instance.
