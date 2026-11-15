@@ -8,6 +8,15 @@
 
 Design: [`specs/backend-tuning-design.md`](../specs/backend-tuning-design.md).
 
+> **Status 2026-11-15 (merged review): designed, not built; the plan needs revision before implementation.** The
+> design allows `SETTINGS_CACHE_SECONDS` up to 3600, but the same TTL (`KvSettingsRepository::SETTINGS_TTL`, used for
+> `settings`, `access` and the "access missing" record, `KvSettingsRepository.php:37,130,214,231`) now also caches
+> `access`: the admin group ID and the machine clients. 3600 would stretch machine-client revocation ("within 5
+> minutes", `specs/backend-spec.md` machine-client "Revocation" rule, about line 448) to about 1 h, and accepted risk #2 (admin-group change up to 20 min)
+> to about 75 min. Before implementation: cap the settings/access cache at 300 s (can only be lowered), or give
+> `access` its own locked TTL of at most 300 s. The scenarios and accepted risks below are **not** approved for the
+> built feature until that revision; the earlier "approved with the design" note applies only to the draft.
+
 ### Assets
 
 - The spec's security promises that depend on timing values:
@@ -702,11 +711,117 @@ Design: [`specs/backend-tuning-design.md`](../specs/backend-tuning-design.md).
 - **Proposed 2026-11-15 (Task 25): runner image, Node 24 and Composer v2 float.** Only actions (by SHA) and gitleaks (by
   sha256) are pinned.
 
-## Proposed accepted risks awaiting the maintainer (index, updated 2026-11-15, point B round 2)
+## Hosting, deploy configuration and developer tooling (merged `feature/backend-cleanup`)
+
+> **New 2026-11-15** (security review of the merged result `main..47c296e`). Covers what the per-branch reviews didn't
+> see: the optional OPcache `php.ini` template and its denial in `public/`, the web-server rules of the release folder,
+> the load-test suite and its HTTPS router, the Claude Code review workflow (`.claude/`), and how they meet the
+> admin-group backend and the extension. The tuning file (first section) is **designed, not built**; nothing of it is
+> in the code yet.
+
+### Assets
+
+- `config/credentials.php` (service-user token, `JWT_SECRET`, `OAUTH_CLIENT_SECRET`, `CLEANUP_TOKEN`) and the
+  ability to rotate them after an incident (the emergency answer of several accepted risks above is "rotate
+  `JWT_SECRET`").
+- The production ChurchTools instance's persons and `passwordStore` (the load test writes, archives and deletes).
+- The developer's real credentials (`backend/config/credentials.php`, `backend/phpunit.xml`, `extension/.env`) and
+  the fixtures.
+- The review gates themselves (`.claude/agents/*`, `.claude/hooks/*`, `docs/threat-model.md`).
+
+### Attackers
+
+| Attacker | Can do |
+| --- | --- |
+| Anonymous internet user | Request any path of the deployed folder; read whatever the web server serves as a file |
+| Other webspace user on shared hosting | Share the PHP master or OPcache memory on some hosts; read world-readable files and `/tmp` |
+| Mistaken developer | Run `vendor/bin/phpunit` with a local `phpunit.xml`, point it at the wrong instance, `git add -A` an untracked log |
+| Contributor or tool with write access to the repo | Change `.claude/` agents and hooks, the threat model or the deploy rules in a PR |
+
+### Scenarios and mitigations
+
+| Scenario | Mitigation |
+| --- | --- |
+| **New 2026-11-15.** `public/php.ini` (OPcache template) is downloaded | `public/.htaccess` denies `^php\.ini$` (NC) before the routing rules (`PhpIniTemplateTest`); the template holds no secret. Hidden files (`.user.ini`, `.htaccess`) are denied only by the **root** `.htaccess`, which doesn't apply when `public/` is the web root as `setup.sh` recommends (MINOR, review 2026-11-15). |
+| **New 2026-11-15.** A host that *replaces* its PHP configuration with a folder `php.ini` falls back to PHP's built-in defaults (`display_startup_errors=1`, `expose_php=1`, no `open_basedir` of the host) | `index.php` sets `display_errors=0` first; startup warnings (e.g. "Cannot load Zend OPcache") could still reach the response. Template doesn't set `display_errors`, `display_startup_errors`, `log_errors`, `expose_php` (MINOR, review 2026-11-15). |
+| **New 2026-11-15.** The admin follows the template's check step, puts a `phpinfo()` file into `public/` and forgets it | Template says "delete that file again"; nothing checks it (no self-check for OPcache, `check-deploy.php` doesn't allow-list `public/`). Leaks PHP/host configuration and the caller's request headers (MINOR, review 2026-11-15). |
+| **New 2026-11-15.** After an incident the operator rotates `JWT_SECRET`/tokens in `credentials.php`, but a host-level OPcache with `validate_timestamps=0` keeps serving the old compiled file | The template sets `validate_timestamps=1`, `revalidate_freq=2` (tested). Control-panel OPcache settings aren't under the backend's control; `setup.md` doesn't say to reset OPcache/restart PHP after a rotation (MINOR, review 2026-11-15). |
+| **New 2026-11-15.** Another tenant reads or poisons compiled scripts through a shared OPcache | Only possible where the host shares one PHP master across accounts; `opcache.validate_permission`/`validate_root` aren't set by the template (cheap hardening, MINOR). |
+| **New 2026-11-15.** A developer builds a deploy folder with `setup.sh` from a working copy that has extra files in `public/` (a local `php.ini`, a `phpinfo` probe) | `setup.sh` copies `public/` whole; `check-deploy.php` scans for instance URLs and tokens but doesn't allow-list `public/`. CI releases build from a clean checkout (not affected). |
+| **New 2026-11-15.** The load suite runs against a production instance (wrong `phpunit.xml`, or plain `vendor/bin/phpunit`, which runs every suite of the local config) | `CT_API_URL` of `phpunit.xml` must equal the one in `credentials.php`; a STDERR reminder; baseline values are checked and teardown verifies them. No hard opt-in and no test-instance marker: on production it would create 20 persons, give up to 500 real persons a secondary password the run knows, and run the cleanup with `apply` (MINOR, review 2026-11-15). |
+| **New 2026-11-15.** Load-test sandbox or results leak on a shared machine | Sandbox folder `0700`, `credentials.php` `0600`, removed in teardown; results name person IDs only, but go to a predictable `/tmp/ctps-load-results.json` (umask permissions, followed symlink). |
+| **New 2026-11-15.** The test server's HTTPS router (`BackendSandboxManager`) is reachable from the network | Binds `localhost`/`127.0.0.1`; test-only, never shipped (`check-deploy.php` forbids `tests/`). |
+| **New 2026-11-15.** A probe script with the service user's token stays on the shared web host used for the load-test follow-up | Not in the repository; whether it was removed is unknown to the review. Maintainer to confirm (and rotate the token if it was web-reachable). |
+| **New 2026-11-15.** The security-reviewer subagent edits code despite its role | `only-threat-model-writes.sh` blocks `Write`/`Edit` outside `docs/threat-model.md` (realpath, `..`, symlinks). It doesn't cover `Bash` (which the agent has), and fails open when `jq` is missing (exit 127 isn't a blocking exit code). Process guard, not a product control (MINOR). |
+| **New 2026-11-15.** A PR weakens the review gates (`.claude/`), the threat model or the deploy rules unnoticed | `CODEOWNERS` covers workflows, `CODEOWNERS`, `.gitleaks.toml`, `.gitleaksignore` only (MINOR: add `.claude/`, `docs/threat-model.md`, `backend/.htaccess`, `backend/public/`, `backend/setup/`, `backend/bin/check-deploy.php`). |
+| **New 2026-11-15.** A secret file at the repository root is committed (`.env` from the old layout, an untracked browser log) | Root `.gitignore` ignores neither `.env` nor `*.log`/`*.txt` logs (the sub-folder ignores don't apply at the root); CI's full-history gitleaks scan catches it only after the push; a pre-commit hook is being added (2026-11-15). |
+
+### Accepted risks
+
+- **Proposed 2026-11-15 (merged review): host PHP configuration is outside the backend's control.** Whether a folder
+  `php.ini` merges or replaces, and the host's OPcache settings, are the host's; the template and `setup.md` document
+  the checks.
+- **Proposed 2026-11-15 (merged review): developer tooling trusts the developer's machine.** The load test and the
+  contract suites read the real `credentials.php`/`phpunit.xml` and write to the instance they name; the protection
+  is the documented "test instance only" rule plus the URL equality check.
+
+## Gone-persons cleanup (deleted and archived persons, `bin/cleanup.php` and `POST /v1/cleanup`)
+
+> **New 2026-11-15** (merged review; the feature was built and reviewed on `feature/backend-cleanup` before the
+> admin-group branch, but had no section here). Design: cleanup design (Q16) in `specs/`. Code:
+> `Application/Cleanup/CleanupOrphans.php`, `Application/GonePersons.php`, `GuzzleChurchToolsClient::personStatus()`
+> and `activePersonIds()`, `KvPasswordRepository::deleteEntriesOf()`, `Http/Controller/CleanupController.php`,
+> `bin/cleanup.php`, `Infrastructure/SelfCheck/ServiceUserRightsCheck.php`.
+
+### Assets
+
+- Every person's `passwordStore` entries: a cleanup deletes them for good (no undo; the person must set a new
+  secondary password, RADIUS/WiFi stops working for them until then).
+- The promise that a deleted or archived person's secondary password stops working within 10 minutes (read check
+  with the positive person cache, 600 s) and that their entry is eventually removed (data minimisation).
+- `CLEANUP_TOKEN` (in `credentials.php`; opens only `POST /v1/cleanup`).
+- The ChurchTools API budget shared with logins and RADIUS reads.
+- Person IDs of deleted persons in the logs (personal data, 14 daily files).
+
+### Attackers
+
+| Attacker | Can do |
+| --- | --- |
+| Anonymous internet user | Call `POST /v1/cleanup` with guessed tokens; the route exists only when `CLEANUP_TOKEN` is set (else `404`) |
+| Holder of a stolen `CLEANUP_TOKEN` (web-cron service, its logs, a leaked `credentials.php`) | Start a dry run or `apply=1` run |
+| ChurchTools (bug, maintenance, restore) or something between backend and ChurchTools (proxy, WAF, captive page) | Answer a person lookup wrongly |
+| Admin who changes the service user's rights | Make persons invisible to the service user |
+| Shell user on the host | Run `php bin/cleanup.php --apply` (same trust as the operator; can read `credentials.php` anyway) |
+| Concurrent writers | A person (or admin) setting a password while a cleanup runs; a second cleanup |
+
+### Scenarios and mitigations
+
+| Scenario | Mitigation (verified in code 2026-11-15) |
+| --- | --- |
+| **New 2026-11-15.** ChurchTools (or a proxy/maintenance page) misreports existing persons as gone → bulk deletion | Only the single lookup can make a person gone (`GonePersons`); the batch call can only confirm "active" and fails closed on a wrong `total` or an unrequested ID. A `404` counts as gone only with `application/json` and `message` exactly `Person [<id>] not found.` for this ID; any other `404` is an `InvalidResponseException` (`isPersonNotFound`). A `200` must name the same ID and carry a boolean `isArchived`. Every run first checks that the service user can read **all** persons (`assertReadable`: `view`, `view alldata` for every department, `view archive`, `view hidden persons`) and that `settings` are valid; any lookup failure before the first delete aborts the run. Dry run is the default (CLI without `--apply`, web without `apply=1`). **Residual:** nothing caps how many entries one run deletes; a ChurchTools defect that returns its genuine "not found" for existing persons (or a visibility rule the right check doesn't know) would delete them all in one run. Cooldown (600 s) and the web deadline (20 s, lookups only in the first half) bound the *rate* and ChurchTools load, not this outcome; the CLI has neither. Cheap mitigation (MINOR): refuse `apply` when the gone share exceeds a threshold (e.g. > 20 % of entries or > N persons) unless forced on the CLI, and log the count at `warning`. Proposed accepted risk #51 until then. |
+| **New 2026-11-15.** The `churchdb` deny-list is mistaken for a deletion guard | It isn't one: `ServiceUserRightsCheck` (self-check `/v1/test` only) fails when the service user has write/export/admin rights in `churchdb` or a security level above 1, which keeps a stolen service-user token read-only for persons (least privilege). It doesn't run in the cleanup. |
+| **New 2026-11-15.** Stolen or guessed `CLEANUP_TOKEN` | Minimum 43 characters (`BackendConfig::MIN_CLEANUP_TOKEN_LENGTH`), shorter → route not registered; exactly one `Authorization: Bearer` header, compared with `hash_equals`; a `token` query parameter is rejected; rejected tokens count against the address (60 per 60 s, then `429`) and are logged at `warning` with the IP; the token opens nothing else (outside JWT auth). A thief gains: at most one run per 600 s (cooldown taken after authentication, before the lock, also for runs that fail), each web run bounded by the 20 s deadline; the outcome is only what the honest cron would do anyway (delete entries of gone persons). Response holds counts only. Rotation: change `CLEANUP_TOKEN` in `credentials.php` and the cron service. |
+| **New 2026-11-15.** Unauthorised CLI or web caller | `bin/cleanup.php` answers `404` outside the CLI SAPI, and `bin/` is denied by the root `.htaccess` and outside `public/`; the web route needs the token. CLI runs ignore the cooldown and the deadline by design (operator trust). |
+| **New 2026-11-15.** Two cleanups at once (cron + web, two web calls) | Exclusive non-blocking `flock` (`CleanupLock`, file `600`), released by the OS on crash; the second gets `cleanup-running`. |
+| **New 2026-11-15.** Partial run (deadline, timeout, crash) | No delete starts after the deadline; persons not started go to `unchecked` and the next run continues; failed deletes are reported and logged at `warning`; a `404` on delete counts as done (concurrent delete). A crash leaves some persons deleted and others not, which is safe (the next run repeats the check). |
+| **New 2026-11-15.** Race with a concurrent write | `deleteEntriesOf` deletes only the value IDs of one listing taken after the lookups; entries written after that listing survive. **Residual (tiny window):** a person restored (un-archived) between their lookup and that listing who sets a new password in the same seconds loses it. GET/PUT refuse gone persons independently (read check), so a gone person can't re-create an entry. |
+| **New 2026-11-15.** Logs keep the IDs of deleted persons | Per-entry and per-person `info` lines name person and value IDs only (no names, no ciphertext); daily rotation, 14 files, `600`/folder `700`. Kept for audit ("who was removed when"); a deleted person's ID stays up to 14 days. Proposed accepted risk #52. |
+
+### Accepted risks
+
+- **Proposed 2026-11-15 (merged review): no cap on the number of entries one cleanup deletes.** A ChurchTools defect
+  that reports existing persons as not found with its own error shape would remove all their entries in one run;
+  recovery is that the persons set new secondary passwords. Replace by a gone-share threshold (MINOR above) if cheap.
+- **Proposed 2026-11-15 (merged review): deleted persons' IDs stay in the logs for up to 14 days** as the audit trail
+  of the cleanup (data minimisation vs. traceability).
+
+## Proposed accepted risks awaiting the maintainer (index, updated 2026-11-15, after point B round 3 and the merged review)
 
 Every risk marked **Proposed** above, in one place (this is the only index; section lists above are the details).
-Only E15 (`backendUrl` trust, „Backend channel“) is confirmed by the maintainer. The tuning-file risks were part of
-that design's approval. Status after point B round 3 (ebc3fa1): no open IMPORTANT or CRITICAL scenario; #11 withdrawn; #47 and
+Only E15 (`backendUrl` trust, „Backend channel“) is confirmed by the maintainer. **The tuning-file risks are not
+approved for the built feature:** the tuning design is "designed, not built" and its plan needs revision first
+(settings/access cache max 300 s or a separate `access` TTL, see the tuning section); only the draft was discussed.
+**Merged review 2026-11-15 (47c296e):** #49–#52 new; no open IMPORTANT or CRITICAL scenario. Status after point B round 3 (ebc3fa1): no open IMPORTANT or CRITICAL scenario; #11 withdrawn; #47 and
 #48 new in round 2; nothing new in round 3. **Not recommended for
 confirmation:** "the extension and the backend read duplicates differently" (KV section), because of the cross-site
 create scenario in the point-B section; it should be replaced by a fail-closed rule. **Done 2026-11-15 (Task 21,
@@ -762,3 +877,7 @@ a8b95a3):** #11 is withdrawn.
 | 45 | Point B (Task 21) | A keepable planted duplicate with `revision` = `MAX_REVISION` blocks resolving in the extension; delete it via the ChurchTools REST API (user guide) (availability only) |
 | 47 | Point B round 2 (M9) | „Zugriff“ reads every member of the users and admin groups to count them (availability, admin session) |
 | 48 | Point B round 2 (M8) | Moderate advisories in dev-only npm dependencies tolerated while CI gates on `high` |
+| 49 | Hosting and dev tooling (merged review) | Host PHP configuration (folder `php.ini` merge vs. replace, host OPcache settings) is outside the backend's control |
+| 50 | Hosting and dev tooling (merged review) | Developer tooling (load test, contract suites) trusts the developer's machine and writes to the instance its config names |
+| 51 | Gone-persons cleanup (merged review) | No cap on how many entries one cleanup run deletes (a ChurchTools defect reporting existing persons as not found removes them all) |
+| 52 | Gone-persons cleanup (merged review) | Deleted persons' IDs stay in the logs for up to 14 days (audit trail of the cleanup) |
