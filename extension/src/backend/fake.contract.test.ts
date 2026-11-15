@@ -28,7 +28,29 @@ const subject = (over: FakeBackendOptions = {}): BackendContractSubject => {
     };
 };
 
-defineBackendContract('fake, user', async () => subject());
+/** Calls that carried a deliberately wrong primary password (`…-wrong`), per subject; checked after the contracts. */
+const wrongSent = new Map<string, number>();
+const counting = (label: string, s: BackendContractSubject): BackendContractSubject => {
+    wrongSent.set(label, wrongSent.get(label) ?? 0);
+    const count = (pwd?: string) => {
+        if (pwd !== undefined && pwd !== PRIMARY && pwd.endsWith('-wrong')) wrongSent.set(label, (wrongSent.get(label) ?? 0) + 1);
+    };
+    return {
+        ...s,
+        putEntry: (id, body) => (count(body.primaryPwd), s.putEntry(id, body)),
+        deleteEntry: (id, pwd) => (count(pwd), s.deleteEntry(id, pwd)),
+    };
+};
+
+defineBackendContract('fake, user', async () => counting('default', subject()));
+defineBackendContract('fake, user, without the wrong-primary-password cases', async () => counting('off', { ...subject(), wrongPrimaryPasswordCases: false }));
+
+describe('wrongPrimaryPasswordCases', () => {
+    it('false skips both wrong-primary-password cases; unset runs them (3 wrong passwords: PUT, DELETE, order of checks)', () => {
+        expect(wrongSent.get('off')).toBe(0);
+        expect(wrongSent.get('default')).toBe(3);
+    });
+});
 defineBackendContract('fake, admin', async () => subject({ admin: true }));
 defineBackendContract('fake, user, custom passwords, length 20', async () => subject({ passwordLength: 20 }));
 defineBackendContract('fake, admin, length 64', async () => subject({ admin: true, passwordLength: 64 }));

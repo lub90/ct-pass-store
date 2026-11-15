@@ -29,6 +29,11 @@ describe('patiently', () => {
         waits.length = 0;
         await patiently(failing(rateLimited(3600)), async (s) => void waits.push(s));
         expect(waits).toEqual([90]);
+
+        // retryAfter 0 means "now", not "unknown".
+        waits.length = 0;
+        await patiently(failing(rateLimited(0)), async (s) => void waits.push(s));
+        expect(waits).toEqual([0]);
     });
 
     it('gives up after 3 attempts and passes the last error on unchanged', async () => {
@@ -54,23 +59,26 @@ describe('patiently', () => {
 describe('patientApi', () => {
     const fakeApi = (error: unknown) => {
         const calls: string[] = [];
-        const fail = async (name: string): Promise<never> => {
+        /** The arguments of each call, as the inner API got them. */
+        const args: unknown[][] = [];
+        const fail = async (name: string, ...given: unknown[]): Promise<never> => {
             calls.push(name);
+            args.push(given);
             throw error;
         };
         const api: BackendApi = {
-            login: () => fail('login'),
-            getEntry: () => fail('get'),
-            putEntry: () => fail('put'),
-            deleteEntry: () => fail('delete'),
-            selfTest: () => fail('selfTest'),
+            login: (...a) => fail('login', ...a),
+            getEntry: (...a) => fail('get', ...a),
+            putEntry: (...a) => fail('put', ...a),
+            deleteEntry: (...a) => fail('delete', ...a),
+            selfTest: (...a) => fail('selfTest', ...a),
         };
-        return { api, calls };
+        return { api, calls, args };
     };
     const noWait = async () => undefined;
 
     it('resends entry and self-test calls without a primary password or with the right one', async () => {
-        const { api, calls } = fakeApi(rateLimited(1));
+        const { api, calls, args } = fakeApi(rateLimited(1));
         const patient = patientApi(api, 'right', noWait);
         await expect(patient.getEntry(1)).rejects.toBeInstanceOf(BackendProblem);
         await expect(patient.putEntry(1, {})).rejects.toBeInstanceOf(BackendProblem);
@@ -79,16 +87,27 @@ describe('patientApi', () => {
         await expect(patient.deleteEntry(1, 'right')).rejects.toBeInstanceOf(BackendProblem);
         await expect(patient.selfTest()).rejects.toBeInstanceOf(BackendProblem);
         expect(calls).toEqual(['get', 'get', 'get', 'put', 'put', 'put', 'put', 'put', 'put', 'delete', 'delete', 'delete', 'delete', 'delete', 'delete', 'selfTest', 'selfTest', 'selfTest']);
+        const each = (a: unknown[]) => [a, a, a];
+        expect(args).toEqual([
+            ...each([1]),
+            ...each([1, {}]),
+            ...each([1, { primaryPwd: 'right', secondaryPwd: 'x' }]),
+            ...each([1, undefined]),
+            ...each([1, 'right']),
+            ...each([undefined]),
+        ]);
     });
 
     it('sends a call with a deliberately wrong primary password once, and login once', async () => {
-        const { api, calls } = fakeApi(rateLimited(1));
+        const { api, calls, args } = fakeApi(rateLimited(1));
         const patient = patientApi(api, 'right', noWait);
         await expect(patient.putEntry(1, { primaryPwd: 'right-wrong' })).rejects.toBeInstanceOf(BackendProblem);
         await expect(patient.putEntry(1, { primaryPwd: '' })).rejects.toBeInstanceOf(BackendProblem);
         await expect(patient.deleteEntry(1, 'right-wrong')).rejects.toBeInstanceOf(BackendProblem);
         await expect(patient.login('c', 'v', 'r')).rejects.toBeInstanceOf(BackendProblem);
         expect(calls).toEqual(['put', 'put', 'delete', 'login']);
+        // Forwarded exactly as given: a wrong password is never swapped for the right one.
+        expect(args).toEqual([[1, { primaryPwd: 'right-wrong' }], [1, { primaryPwd: '' }], [1, 'right-wrong'], ['c', 'v', 'r']]);
 
         // Without a required primary password, any primary password sent is one the backend doesn't expect: once too.
         const other = fakeApi(rateLimited(1));

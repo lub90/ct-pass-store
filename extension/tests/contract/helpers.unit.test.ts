@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { inspect } from 'node:util';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { sandboxChildEnv, sandboxOverrideEnv, sweepStaleDirs } from './backend-sandbox';
+import { BackendSandbox, sandboxChildEnv, sandboxOverrideEnv, sweepStaleDirs } from './backend-sandbox';
 import { Cleanup } from './cleanup';
 import { CtSession, ctApiFor, retryAfterSeconds, scrubAxiosError } from './ct-session';
 import { record } from './record';
@@ -294,19 +294,19 @@ describe('sandboxOverrideEnv', () => {
 
 describe('sandboxChildEnv', () => {
     it('gives the PHP process its configuration and its override, and nothing of the test process', () => {
-        const options = { oauthClientId: 'cid', oauthClientSecret: 'csecret', settings: { variant: { requirePasswordForPasswordChange: true, allowCustomPassword: false }, categoryId: 406 }, adminGroupId: 7 };
-        const child = sandboxChildEnv(env, options, '/tmp/x/cache', 'jwt');
+        const options = { oauthClientId: 'cid-51c8', oauthClientSecret: 'csecret-e07d', settings: { variant: { requirePasswordForPasswordChange: true, allowCustomPassword: false }, categoryId: 406 }, adminGroupId: 7 };
+        const child = sandboxChildEnv(env, options, '/tmp/cps-unit-7f3a/cache', 'jwt-4b9e2c71d0a5');
         expect(child).toEqual({
             PATH: process.env.PATH,
             PHP_CLI_SERVER_WORKERS: '4',
             CPS_SANDBOX_BACKEND_DIR: expect.stringMatching(/backend$/),
-            CPS_SANDBOX_CACHE_DIR: '/tmp/x/cache',
+            CPS_SANDBOX_CACHE_DIR: '/tmp/cps-unit-7f3a/cache',
             CPS_SANDBOX_CT_API_URL: env.apiUrl,
             CPS_SANDBOX_CT_API_TOKEN: TOKEN,
             CPS_SANDBOX_CORS_ORIGIN: env.root,
-            CPS_SANDBOX_OAUTH_CLIENT_ID: 'cid',
-            CPS_SANDBOX_OAUTH_CLIENT_SECRET: 'csecret',
-            CPS_SANDBOX_JWT_SECRET: 'jwt',
+            CPS_SANDBOX_OAUTH_CLIENT_ID: 'cid-51c8',
+            CPS_SANDBOX_OAUTH_CLIENT_SECRET: 'csecret-e07d',
+            CPS_SANDBOX_JWT_SECRET: 'jwt-4b9e2c71d0a5',
             ...sandboxOverrideEnv(options),
         });
         expect(child.CPS_SANDBOX_SETTINGS).toBe('{"requirePasswordForPasswordChange":true,"allowCustomPassword":false}');
@@ -325,5 +325,18 @@ describe('retryAfterSeconds', () => {
         expect(retryAfterSeconds('a7')).toBe(60);
         expect(retryAfterSeconds(null)).toBe(60);
         expect(retryAfterSeconds('91')).toBe(90);
+    });
+});
+
+describe('BackendSandbox.folderExists', () => {
+    it('is false before a start, true while the folder is there, false once it is deleted', () => {
+        const box = new BackendSandbox(env, { oauthClientId: 'c', oauthClientSecret: 's' });
+        expect(box.folderExists()).toBe(false);
+        const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'contract-folder-'));
+        // The folder start() would create, without starting PHP.
+        (box as unknown as { dir: string }).dir = dir;
+        expect(box.folderExists()).toBe(true);
+        fs.rmSync(dir, { recursive: true, force: true });
+        expect(box.folderExists()).toBe(false);
     });
 });
