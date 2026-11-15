@@ -45,7 +45,9 @@ function git(args, cwd) {
   try {
     return execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1 << 30, stdio: ['ignore', 'pipe', 'pipe'] });
   } catch {
-    return usage(`check-private: git ${args[0]} failed`);
+    let i = 0;
+    while (args[i] === '-c') i += 2; // name the subcommand, not the leading "-c key=value" options
+    return usage(`check-private: git ${args[i]} failed`);
   }
 }
 

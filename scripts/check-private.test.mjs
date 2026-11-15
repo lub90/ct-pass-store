@@ -701,6 +701,16 @@ test('--range reads the combined diff of an octopus merge (three parents)', (t) 
   assertNoValues(r.all);
 });
 
+test('a failing git command is named by its subcommand, not by its leading -c options', (t) => {
+  const repo = makeRepo(t);
+  blockList(repo, [V.term1]);
+  write(repo, 'broken-index', 'not an index\n');
+  const r = check(repo, [], { ...baseEnv, GIT_INDEX_FILE: join(repo, 'broken-index') });
+  assert.equal(r.code, 2);
+  assert.equal(r.out, '');
+  assert.equal(r.err, 'check-private: git diff failed\n');
+});
+
 test('--range=<A..B> checks the range like --range <A..B>', (t) => {
   const repo = makeRepo(t);
   git(repo, 'checkout', '-q', '-b', 'feature');
