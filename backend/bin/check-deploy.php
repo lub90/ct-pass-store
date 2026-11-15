@@ -3,7 +3,8 @@
 declare(strict_types=1);
 
 // Checks a deploy folder before upload (spec 6.6, catalog DP-01): no real credentials.php, no dev files, no instance
-// URL or login token, and the expected layout. Prints one line per problem; exits 0 when the folder is clean, else 1.
+// URL or login token, nothing in public/ besides index.php, .htaccess and php.ini, and the expected layout. Prints
+// one line per problem; exits 0 when the folder is clean, else 1.
 // Independent of setup.sh and of the autoloader, so it also runs on a release zip that was unpacked (spec 6.5).
 // Usage: php bin/check-deploy.php <folder>
 
@@ -20,6 +21,9 @@ const PLACEHOLDER_HOSTS = ['your.church.tools', 'example.church.tools'];
 /** A run of this many letters and digits looks like a login token (ChurchTools tokens are 64+ characters). */
 const TOKEN_LENGTH = 100;
 
+/** public/ is the web root: everything in it can be served or run, so only these files may be there (php.ini optional). */
+const PUBLIC_FILES = ['index.php', '.htaccess', 'php.ini'];
+
 /**
  * @return list<string> one message per problem, with paths relative to the folder
  */
@@ -34,6 +38,13 @@ function checkDeployFolder(string $folder): array
     }
     if (!is_dir("$folder/src")) {
         $problems[] = 'Missing required folder: src';
+    }
+
+    foreach (is_dir("$folder/public") ? scandir("$folder/public") ?: [] : [] as $entry) {
+        $path = "$folder/public/$entry";
+        if ($entry !== '.' && $entry !== '..' && (!in_array($entry, PUBLIC_FILES, true) || is_link($path) || !is_file($path))) {
+            $problems[] = "Unexpected in public/ (only index.php, .htaccess and php.ini): $entry";
+        }
     }
 
     if (file_exists("$folder/config/credentials.php")) {

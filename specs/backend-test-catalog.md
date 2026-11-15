@@ -764,7 +764,8 @@ tester has; it's documented in `backend/docs/testing.md`.
 ## 15. Deployment and build (spec 6.5, 6.6)
 
 - [x] **DP-01** (! · U) The deploy check fails if the deploy folder contains a real `credentials.php`, `phpunit.xml`,
-  fixtures, tests or an instance URL — 6.6
+  fixtures, tests or an instance URL, or anything in `public/` besides `index.php`, `.htaccess` and `php.ini` (also
+  a link or folder with an allowed name); the shipped `public/` passes — 6.6
 - [x] **DP-02** (N · U) The version string is `x.y.z`, `x.y.z+<sha>` or `x.y.z+<sha>-dirty` as appropriate — 6.5
 - [x] **DP-03** (N · U) The release check fails if tag, version and dated CHANGELOG section disagree — 6.6
 

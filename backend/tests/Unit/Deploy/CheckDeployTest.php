@@ -70,6 +70,79 @@ final class CheckDeployTest extends TestCase
     }
 
     /**
+     * Security M5: public/ is the web root, so anything there besides index.php, .htaccess and an optional php.ini
+     * could be served or run.
+     *
+     * @return iterable<string, array{string}>
+     */
+    public static function unexpectedPublicFiles(): iterable
+    {
+        yield 'a PHP file' => ['public/info.php'];
+        yield 'a hidden file' => ['public/.user.ini'];
+        yield 'the template' => ['public/php.ini-example'];
+        yield 'a backup' => ['public/index.php~'];
+        yield 'a file in a subfolder' => ['public/assets/app.js'];
+    }
+
+    #[DataProvider('unexpectedPublicFiles')]
+    public function testAnUnexpectedFileInPublicFails(string $path): void
+    {
+        $this->write('public/.htaccess', "RewriteEngine On\n");
+        $this->write($path, "<?php\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        $top = explode('/', $path)[1];
+        self::assertStringContainsString("Unexpected in public/ (only index.php, .htaccess and php.ini): $top", $result['output']);
+    }
+
+    public function testPublicMayHoldIndexHtaccessAndPhpIni(): void
+    {
+        $this->write('public/.htaccess', "RewriteEngine On\n");
+        $this->write('public/php.ini', "opcache.enable=1\n");
+
+        $result = $this->check();
+
+        self::assertSame(0, $result['exit'], $result['output']);
+    }
+
+    public function testAPhpIniFolderInPublicFails(): void
+    {
+        $this->write('public/php.ini/x', "\n");
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): php.ini', $result['output']);
+    }
+
+    public function testALinkInPublicFailsEvenWithAnAllowedName(): void
+    {
+        symlink($this->folder . '/config/credentials-example.php', $this->folder . '/public/php.ini');
+
+        $result = $this->check();
+
+        self::assertSame(1, $result['exit'], $result['output']);
+        self::assertStringContainsString('Unexpected in public/ (only index.php, .htaccess and php.ini): php.ini', $result['output']);
+    }
+
+    public function testTheShippedPublicFolderPasses(): void
+    {
+        $this->remove($this->folder . '/public');
+        mkdir($this->folder . '/public', 0o700);
+        foreach (scandir(dirname(__DIR__, 3) . '/public') ?: [] as $entry) {
+            if ($entry !== '.' && $entry !== '..') {
+                copy(dirname(__DIR__, 3) . '/public/' . $entry, $this->folder . '/public/' . $entry);
+            }
+        }
+
+        $result = $this->check();
+
+        self::assertSame(0, $result['exit'], $result['output']);
+    }
+
+    /**
      * @return iterable<string, array{string}>
      */
     public static function requiredItems(): iterable

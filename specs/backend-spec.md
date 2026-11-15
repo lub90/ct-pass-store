@@ -1325,7 +1325,8 @@ The security stores (`jti` replay cache, rate-limit counters;
   - unit and API tests
 - **An architecture test:** `Domain` and `Application` import nothing from `Infrastructure`, `Http` or `Config`.
 - **A post-build check of the deploy folder** (`bin/check-deploy.php`): no real `credentials.php`, no instance URL or token, no dev files
-  (tests, `phpunit.xml`, fixtures), and the expected layout.
+  (tests, `phpunit.xml`, fixtures), nothing in `public/` (the web root) besides `index.php`, `.htaccess` and an
+  optional `php.ini` (regular files, no links or folders), and the expected layout.
 - **A release workflow on tags `vX.Y.Z`:** a release check verifies that the tag, the version and a dated CHANGELOG
   section agree; the CHANGELOG section becomes the release notes.
 - The contract suite isn't part of the default test run or the CI. Run without its configuration (`phpunit.xml`,
